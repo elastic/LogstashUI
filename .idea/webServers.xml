@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="f26ac7e5-48af-4424-af10-381e1680a08f" name="KibanaDev">
+        <fileTransfer rootFolder="/home/ubuntu" accessType="SFTP" host="192.168.4.107" port="22" sshConfigId="2813b16c-81a1-4e7c-8d4a-288e9a68c4d6" sshConfig="ubuntu@192.168.4.107:22 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
