@@ -1,14 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" serverName="KibanaDev" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData">
     <serverData>
-      <paths name="KibanaDev">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/ubuntu/" local="$PROJECT_DIR$/logstash_ui" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
       <paths name="ubuntu@192.168.5.254:22 password">
         <serverdata>
           <mappings>

@@ -9,6 +9,9 @@ import type {
 import type { LogstashUiPluginSetup, LogstashUiPluginStart } from './types';
 import { defineRoutes } from './routes';
 
+
+
+
 export class LogstashUiPlugin implements Plugin<LogstashUiPluginSetup, LogstashUiPluginStart> {
   private readonly logger: Logger;
 
@@ -16,18 +19,32 @@ export class LogstashUiPlugin implements Plugin<LogstashUiPluginSetup, LogstashU
     this.logger = initializerContext.logger.get();
   }
 
-  public setup(core: CoreSetup) {
-    this.logger.debug('logstashUI: Setup');
-    const router = core.http.createRouter();
+setup(core: CoreSetup) {
+  core.capabilities.registerProvider(() => ({
+    logstashUi: {
+      show: true,
+      save: true,
+    },
+  }));
 
-    // Register server side APIs
-    defineRoutes(router);
-
-    return {};
-  }
+  core.http.createRouter().get(
+    {
+      path: '/api/logstash_ui/pipelines',
+      validate: false,
+      options: {
+        tags: ['access:logstashUi'],
+      },
+    },
+    async (context, req, res) => {
+      const esClient = context.core.elasticsearch.client.asCurrentUser;
+      const result = await esClient.search({ index: '.logstash', size: 50 });
+      return res.ok({ body: result.hits.hits.map(h => h._source) });
+    }
+  );
+}
 
   public start(core: CoreStart) {
-    this.logger.debug('logstashUI: Started');
+    this.logger.debug('logstashUi: Started');
     return {};
   }
 

@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "kibanaVersion": "kibana",
   "owner": {
-    "name": "Cody Jackson, SA at Elastic",
+    "name": "Cody Jackson - SA @ Elastic",
     "githubTeam": ""
   },
-  "description": "A user interface for creating, configuring, simulating, and testing Logstash pipelines.",
+  "description": "A UI for building and testing Logstash pipelines",
   "server": true,
   "ui": true,
-  "requiredPlugins": ["navigation"],
+  "requiredPlugins": ["navigation", "data", "unifiedSearch"],
   "optionalPlugins": []
 }

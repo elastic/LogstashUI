@@ -1,4 +1,4 @@
-# logstashUI
+# logstashUi
 
 A Kibana plugin
 

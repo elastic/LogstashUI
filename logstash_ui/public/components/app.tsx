@@ -1,96 +1,28 @@
-import React, { useState } from 'react';
-import { i18n } from '@kbn/i18n';
-import { FormattedMessage, I18nProvider } from '@kbn/i18n-react';
-import { BrowserRouter as Router } from '@kbn/shared-ux-router';
-import { EuiButton, EuiHorizontalRule, EuiPageTemplate, EuiTitle, EuiText } from '@elastic/eui';
+import React from 'react';
+import { PipelinesPage } from '../pages/pipelines';
 import type { CoreStart } from '@kbn/core/public';
-import type { NavigationPublicPluginStart } from '@kbn/navigation-plugin/public';
 
-import { PLUGIN_ID, PLUGIN_NAME } from '../../common';
-
-interface LogstashUiAppDeps {
+interface LogstashUiAppProps {
   basename: string;
-  notifications: CoreStart['notifications'];
+  history: any;
   http: CoreStart['http'];
-  navigation: NavigationPublicPluginStart;
+  notifications: CoreStart['notifications'];
 }
 
-export const LogstashUiApp = ({ basename, notifications, http, navigation }: LogstashUiAppDeps) => {
-  // Use React hooks to manage state.
-  const [timestamp, setTimestamp] = useState<string | undefined>();
+export const LogstashUiApp: React.FC<LogstashUiAppProps> = ({
+  basename,
+  history,
+  http,
+  notifications,
+}) => {
+  console.log('HITTING APP! LogstashUiApp props:', basename);
 
-  const onClickHandler = () => {
-    // Use the core http service to make a response to the server API.
-    http.get('/api/logstash_ui/example').then((res) => {
-      setTimestamp(res.time);
-      // Use the core notifications service to display a success message.
-      notifications.toasts.addSuccess(
-        i18n.translate('logstashUi.dataUpdated', {
-          defaultMessage: 'Data updated',
-        })
-      );
-    });
-  };
+  const path = window.location.pathname;
+  const subPath = path.replace(/^.*\/app\/logstashUi/, '');
 
-  // Render the application DOM.
-  // Note that `navigation.ui.TopNavMenu` is a stateful component exported on the `navigation` plugin's start contract.
-  return (
-    <Router basename={basename}>
-      <I18nProvider>
-        <>
-          <navigation.ui.TopNavMenu
-            appName={PLUGIN_ID}
-            showSearchBar={true}
-            useDefaultBehaviors={true}
-          />
-          <EuiPageTemplate restrictWidth="1000px">
-            <EuiPageTemplate.Header>
-              <EuiTitle size="l">
-                <h1>
-                  <FormattedMessage
-                    id="logstashUi.helloWorldText"
-                    defaultMessage="{name}"
-                    values={{ name: PLUGIN_NAME }}
-                  />
-                </h1>
-              </EuiTitle>
-            </EuiPageTemplate.Header>
-            <EuiPageTemplate.Section>
-              <EuiTitle>
-                <h2>
-                  <FormattedMessage
-                    id="logstashUi.congratulationsTitle"
-                    defaultMessage="Congratulations, you have successfully created a new Kibana Plugin!"
-                  />
-                </h2>
-              </EuiTitle>
-              <EuiText>
-                <p>
-                  <FormattedMessage
-                    id="logstashUi.content"
-                    defaultMessage="Look through the generated code and check out the plugin development documentation."
-                  />
-                </p>
-                <EuiHorizontalRule />
-                <p>
-                  <FormattedMessage
-                    id="logstashUi.timestampText"
-                    defaultMessage="Last timestamp: {time}"
-                    values={{ time: timestamp ? timestamp : 'Unknown' }}
-                  />
-                </p>
-                <EuiButton type="primary" size="s" onClick={onClickHandler}>
-                  <FormattedMessage
-                    id="logstashUi.buttonText"
-                    defaultMessage="Get data"
-                    ignoreTag
-                  />
-                </EuiButton>
-              </EuiText>
-            </EuiPageTemplate.Section>
-          </EuiPageTemplate>
-        </>
-      </I18nProvider>
-    </Router>
-  );
+  if (subPath.startsWith('/test')) {
+    return <h2>Hit TEST route</h2>;
+  }
+
+  return <PipelinesPage http={http} notifications={notifications} />;
 };
