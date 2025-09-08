@@ -1,30 +1,32 @@
-import type { IRouter } from '@kbn/core/server';
+import { IRouter } from '@kbn/core/server';
 
 export function defineRoutes(router: IRouter) {
-  router.get(
-    {
-      path: '/api/logstash_ui/configs',
-      validate: false,
-    },
-    async (context, req, res) => {
-      const esClient = (await context.core).elasticsearch.client;
+    router.get(
+      {
+        path: '/api/logstash_ui/pipelines',
+        validate: false,
+        options: {
+          authRequired: false,   // ⬅ disables Kibana authz check for this route
+        },
+      },
+      async (context, req, res) => {
+        try {
+          const esClient = context.core.elasticsearch.client.asCurrentUser;
 
-      try {
-        // query the .logstash index
-        const result = await esClient.asCurrentUser.search({
-          index: '.logstash',
-          size: 1000
-        });
+          const result = await esClient.search({
+            index: '.logstash',
+            size: 50,
+          });
 
-        return res.ok({
-          body: result.hits.hits.map((h) => h._source),
-        });
-      } catch (e) {
-        return res.customError({
-          statusCode: 500,
-          body: { message: e.message },
-        });
+          const pipelines = result.hits.hits.map((h: any) => h._source);
+          return res.ok({ body: pipelines });
+        } catch (err: any) {
+          return res.customError({
+            statusCode: 500,
+            body: { message: err.message },
+          });
+        }
       }
-    }
-  );
+    );
+
 }
