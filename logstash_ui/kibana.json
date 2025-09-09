@@ -9,6 +9,7 @@
   "description": "A UI for building and testing Logstash pipelines",
   "server": true,
   "ui": true,
-  "requiredPlugins": ["navigation", "data", "unifiedSearch"],
+  "requiredPlugins": ["navigation", "data", "unifiedSearch", "security"],
   "optionalPlugins": []
+
 }
