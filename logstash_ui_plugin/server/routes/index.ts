@@ -3,7 +3,7 @@ import { IRouter } from '@kbn/core/server';
 export function defineRoutes(router: IRouter) {
   router.get(
     {
-      path: '/api/logstash_ui/pipelines',
+      path: '/api/logstash_ui_plugin/pipelines',
       validate: false,
       options: {
         authRequired: false,

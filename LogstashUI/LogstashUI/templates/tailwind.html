@@ -1,0 +1,161 @@
+<style type="text/tailwindcss">
+      @layer components {
+        .nav-container {
+          @apply w-64 h-screen flex-shrink-0 border-r border-gray-900 bg-gray-900;
+        }
+
+        .nav-header {
+          @apply flex h-12 items-center border-b border-gray-800 px-4;
+        }
+
+        .brand-icon {
+          @apply inline-flex h-7 w-7 items-center justify-center rounded-md bg-sky-500/20 ring-1 ring-inset ring-sky-500/30;
+        }
+
+        .nav-title {
+          @apply text-white font-semibold pl-2.5;
+        }
+
+        .nav-menu {
+          @apply space-y-1 p-2 text-sm;
+        }
+
+        .nav-item {
+          @apply flex items-center rounded px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white;
+        }
+
+        .user-section {
+          @apply absolute bottom-0 w-64 border-t border-gray-800 p-4;
+        }
+
+        .user-avatar {
+          @apply h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center;
+        }
+
+        .user-avatar-text {
+          @apply text-sm font-medium text-gray-300;
+        }
+
+        .user-name {
+          @apply text-sm font-medium text-white;
+        }
+
+        .user-role {
+          @apply text-xs text-gray-400;
+        }
+
+        .page-header {
+          @apply flex items-center justify-between mb-6;
+        }
+
+        .page-title {
+          @apply text-2xl font-semibold text-white;
+        }
+
+        .btn {
+          @apply px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200;
+        }
+
+        .btn-primary {
+          @apply bg-sky-600 text-white hover:bg-sky-700;
+        }
+
+        .btn-ghost {
+          @apply text-gray-300 hover:bg-gray-800 hover:text-white;
+        }
+
+        .table-container {
+          @apply rounded-lg border border-gray-700 overflow-hidden;
+        }
+
+        .table {
+          @apply min-w-full divide-y divide-gray-700;
+        }
+
+        .table-header {
+          @apply bg-gray-700;
+        }
+
+        .table-header-cell {
+          @apply px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider;
+        }
+
+        .table-body {
+          @apply bg-gray-900 divide-y divide-gray-700;
+        }
+
+        .table-row {
+          @apply hover:bg-gray-800;
+        }
+
+        .table-cell {
+          @apply px-6 py-4 whitespace-nowrap text-sm text-gray-300;
+        }
+
+        .action-menu {
+          @apply relative inline-block text-left;
+        }
+
+        .action-menu-button {
+          @apply flex items-center text-gray-400 hover:text-gray-200 focus:outline-none;
+        }
+
+        .action-menu-items {
+          @apply origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-10;
+        }
+
+        .action-menu-item {
+          @apply block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-700;
+        }
+
+        /* Form Styles */
+        .form-input {
+          @apply rounded-md border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full p-2;
+        }
+
+        .form-label {
+          @apply block text-sm font-medium text-gray-300 mb-1;
+        }
+
+        .form-radio-group {
+          @apply flex space-x-4 mb-4;
+        }
+
+        .form-radio-label {
+          @apply inline-flex items-center text-sm text-gray-300;
+        }
+
+        .form-radio {
+          @apply h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-600 bg-gray-700 mr-2;
+        }
+
+        .form-actions {
+          @apply flex justify-end space-x-3 mt-6;
+        }
+
+        .form-section {
+          @apply mb-6;
+        }
+
+        .btn-secondary {
+          @apply bg-gray-600 text-white hover:bg-gray-700;
+        }
+
+        /* Flyout Styles */
+        .flyout-overlay {
+          @apply fixed inset-0 bg-black bg-opacity-50 z-40;
+        }
+
+        .flyout-panel {
+          @apply fixed inset-y-0 right-0 max-w-full w-screen max-w-md bg-gray-800 text-gray-200 z-50 overflow-y-auto;
+        }
+
+        .flyout-header {
+          @apply flex items-center justify-between p-4 border-b border-gray-700;
+        }
+
+        .flyout-content {
+          @apply p-6;
+        }
+      }
+    </style>

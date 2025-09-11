@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6">
+  <div class="page-header">
+    <h1 class="page-title">Logstash Connections</h1>
+    <div class="relative">
+      <button id="addConnectionDropdown" class="btn btn-primary inline-flex items-center">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Connection
+        <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div id="connectionDropdown" class="hidden absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-gray-700 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+        <div class="py-1">
+          <button id="centralizedPipelineBtn" class="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
+            Centralized Pipeline Management
+          </button>
+          <button id="sshPipelineBtn" class="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
+            Logstash Server (SSH)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection Form Flyout -->
+  <div id="connectionFormFlyout" class="hidden fixed inset-0 overflow-hidden z-50">
+    <div class="flyout-overlay" onclick="closeFlyout()"></div>
+    <div class="absolute inset-y-0 right-0 max-w-full flex">
+      <div class="flyout-panel">
+        <div class="flyout-header">
+          <h2 class="text-lg font-medium">Add New Connection</h2>
+          <button onclick="closeFlyout()" class="text-gray-400 hover:text-gray-200">
+            <span class="sr-only">Close panel</span>
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flyout-content">
+          <form id="connectionForm"
+              hx-post="/PipelineManager/Logstash/"
+              hx-target="body"
+              hx-swap="none"
+              hx-indicator=".loading"
+              hx-on::after-request="
+                  if (event.detail.successful) {
+                      showToast('Connection created successfully!', 'success');
+                      closeFlyout();
+                      setTimeout(() => window.location.reload(), 3000);
+                  } else {
+                      showToast('Error creating connection', 'error');
+                  }">
+              {% csrf_token %}
+
+              <!-- Hidden connection type field -->
+              <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
+
+              <!-- Centralized Connection Fields -->
+              <div id="centralizedFields">
+                <div class="form-radio-group mb-4">
+                  <label class="form-radio-label">
+                    <input type="radio" name="connection_mode" value="cloud" class="form-radio" checked>
+                    <span>Cloud ID</span>
+                  </label>
+                  <label class="form-radio-label">
+                    <input type="radio" name="connection_mode" value="url" class="form-radio">
+                    <span>Elastic Node URL</span>
+                  </label>
+                </div>
+
+                <!-- Cloud ID Field -->
+                <div id="cloudIdField">
+                  <label for="{{ form.cloud_id.id_for_label }}" class="form-label">
+                    Cloud ID
+                  </label>
+                  {{ form.cloud_id }}
+                </div>
+
+                <!-- Node URL and Port Fields -->
+                <div id="nodeUrlField" class="hidden">
+                  <div class="flex space-x-4">
+                    <div class="flex-1">
+                      <label for="{{ form.host.id_for_label }}" class="form-label">
+                        Elastic Node URL
+                      </label>
+                      {{ form.host }}
+                    </div>
+                    <div class="w-32">
+                      <label for="{{ form.port.id_for_label }}" class="form-label">
+                        Port
+                      </label>
+                      {{ form.port }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Authentication Section -->
+                <div class="form-section">
+                  <label class="form-label">Authentication</label>
+                  <div class="form-radio-group">
+                    <label class="form-radio-label">
+                      <input type="radio" name="auth_type" value="basic" class="form-radio" checked>
+                      <span>Username/Password</span>
+                    </label>
+                    <label class="form-radio-label">
+                      <input type="radio" name="auth_type" value="apiKey" class="form-radio">
+                      <span>API Key</span>
+                    </label>
+                  </div>
+
+                  <!-- Username/Password Fields -->
+                  <div id="basicAuthFields">
+                    <div class="mb-4">
+                      <label for="{{ form.username.id_for_label }}" class="form-label">
+                        Username
+                      </label>
+                      {{ form.username }}
+                    </div>
+                    <div class="mb-4">
+                      <label for="{{ form.password.id_for_label }}" class="form-label">
+                        Password
+                      </label>
+                      {{ form.password }}
+                    </div>
+                  </div>
+
+                  <!-- API Key Field -->
+                  <div id="apiKeyField" class="hidden">
+                    <label for="{{ form.api_key.id_for_label }}" class="form-label">
+                      API Key
+                    </label>
+                    {{ form.api_key }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- SSH Connection Fields -->
+              <div id="sshFields" class="hidden">
+                <div class="mb-4">
+                  <label for="ssh_host" class="form-label">Host</label>
+                  <input type="text" id="ssh_host" name="ssh_host" class="form-input">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_port" class="form-label">Port</label>
+                  <input type="number" id="ssh_port" name="ssh_port" class="form-input w-32" value="22" min="1" max="65535">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_username" class="form-label">Username</label>
+                  <input type="text" id="ssh_username" name="ssh_username" class="form-input">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_password" class="form-label">Password</label>
+                  <input type="password" id="ssh_password" name="ssh_password" class="form-input">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_path" class="form-label">Config Path</label>
+                  <input type="text" id="ssh_path" name="ssh_path" class="form-input" value="/etc/logstash/config">
+                </div>
+              </div>
+
+              <div class="form-actions">
+                  <button type="button" onclick="closeFlyout()" class="btn btn-secondary">
+                      Cancel
+                  </button>
+                  <button type="submit" class="btn btn-primary">
+                      Save Connection
+                  </button>
+              </div>
+              <div class="htmx-indicator loading">Saving...</div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-container mt-6 overflow-visible">
+    <table class="table w-full">
+      <thead class="table-header">
+        <tr>
+          <th scope="col" class="table-header-cell">Host</th>
+          <th scope="col" class="table-header-cell">Port</th>
+          <th scope="col" class="table-header-cell">Status</th>
+          <th scope="col" class="table-header-cell text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="table-body">
+        {% for connection in connections %}
+            <tr class="table-row">
+              <td class="table-cell">{{ connection.host }}</td>
+              <td class="table-cell">9600</td>
+              <td class="table-cell">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Connected
+                </span>
+              </td>
+              <td class="table-cell text-right">
+                <div class="action-menu">
+                  <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </button>
+                  <div class="action-menu-items hidden absolute z-50 mt-1 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                    <a href="#" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-700" role="menuitem">
+                      Update
+                    </a>
+                    <a href="#" class="block px-4 py-2 text-sm text-red-400 hover:bg-gray-700" role="menuitem">
+                      Delete
+                    </a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+        {% endfor %}
+
+        <!-- Another example row -->
+        <tr class="table-row">
+          <td class="table-cell">logstash-staging.example.com</td>
+          <td class="table-cell">9600</td>
+          <td class="table-cell">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              Warning
+            </span>
+          </td>
+          <td class="table-cell text-right">
+            <div class="action-menu">
+              <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                </svg>
+              </button>
+              <div class="action-menu-items hidden absolute z-50 mt-1 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                <a href="#" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-700" role="menuitem">
+                  Update
+                </a>
+                <a href="#" class="block px-4 py-2 text-sm text-red-400 hover:bg-gray-700" role="menuitem">
+                  Delete
+                </a>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // Close flyout function
+  function closeFlyout() {
+    document.getElementById('connectionFormFlyout').classList.add('hidden');
+  }
+
+  // Toggle dropdown
+  document.getElementById('addConnectionDropdown').addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.getElementById('connectionDropdown').classList.toggle('hidden');
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function() {
+    document.getElementById('connectionDropdown').classList.add('hidden');
+  });
+
+  // Open appropriate form when dropdown item is clicked
+  document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionFormFlyout').classList.remove('hidden');
+  });
+
+  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionFormFlyout').classList.remove('hidden');
+  });
+
+  // Set connection type based on which button was clicked
+  document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionTypeField').value = 'CENTRALIZED';
+    document.getElementById('centralizedFields').classList.remove('hidden');
+    document.getElementById('sshFields').classList.add('hidden');
+  });
+
+  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionTypeField').value = 'SSH';
+    document.getElementById('centralizedFields').classList.add('hidden');
+    document.getElementById('sshFields').classList.remove('hidden');
+  });
+
+  // Handle form submission
+  document.getElementById('connectionForm').addEventListener('submit', function(e) {
+    // Only validate visible fields
+    if (document.getElementById('connectionTypeField').value === 'SSH') {
+      // For SSH form, only validate SSH fields
+      const sshFields = ['ssh_host', 'ssh_port', 'ssh_username', 'ssh_password'];
+      let isValid = true;
+
+      sshFields.forEach(field => {
+        const input = document.querySelector(`[name="${field}"]`);
+        if (!input.value.trim()) {
+          isValid = false;
+          input.reportValidity();
+        }
+      });
+
+      if (!isValid) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else {
+      // For centralized form, validate based on selected auth type
+      const authType = document.querySelector('input[name="auth_type"]:checked').value;
+      let isValid = true;
+
+      // Always validate username/password if basic auth is selected
+      if (authType === 'basic') {
+        const username = document.querySelector('[name="username"]');
+        const password = document.querySelector('[name="password"]');
+
+        if (!username.value.trim() || !password.value.trim()) {
+          isValid = false;
+          if (!username.value.trim()) username.reportValidity();
+          if (!password.value.trim()) password.reportValidity();
+        }
+      } else {
+        // Validate API key if API key auth is selected
+        const apiKey = document.querySelector('[name="api_key"]');
+        if (!apiKey.value.trim()) {
+          isValid = false;
+          apiKey.reportValidity();
+        }
+      }
+
+      if (!isValid) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  });
+
+  // Toggle between Cloud ID and Node URL fields (for centralized connections)
+  document.querySelectorAll('input[name="connection_mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      if (this.value === 'cloud') {
+        document.getElementById('cloudIdField').classList.remove('hidden');
+        document.getElementById('nodeUrlField').classList.add('hidden');
+      } else {
+        document.getElementById('cloudIdField').classList.add('hidden');
+        document.getElementById('nodeUrlField').classList.remove('hidden');
+      }
+    });
+  });
+
+  // Toggle between Basic Auth and API Key fields (for centralized connections)
+  document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      document.getElementById('basicAuthFields').classList.toggle('hidden', this.value !== 'basic');
+      document.getElementById('apiKeyField').classList.toggle('hidden', this.value !== 'apiKey');
+    });
+  });
+
+  // Toggle action menu with fixed positioning
+  document.querySelectorAll('.action-menu-button').forEach(button => {
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menu = button.nextElementSibling;
+      const isShown = !menu.classList.contains('hidden');
+
+      // Close all other open menus
+      document.querySelectorAll('.action-menu-items').forEach(m => {
+        if (m !== menu) m.classList.add('hidden');
+      });
+
+      if (!isShown) {
+        // Position the menu
+        const rect = button.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = `${rect.bottom + window.scrollY}px`;
+        menu.style.right = `${window.innerWidth - rect.right}px`;
+        menu.classList.remove('hidden');
+      } else {
+        menu.classList.add('hidden');
+      }
+    });
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.action-menu')) {
+      document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+      });
+    }
+  });
+
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('.action-menu-items:not(.hidden)').forEach(menu => {
+      const button = menu.previousElementSibling;
+      const rect = button.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + window.scrollY}px`;
+      menu.style.right = `${window.innerWidth - rect.right}px`;
+    });
+  });
+
+  function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500',
+        warning: 'bg-yellow-500'
+    };
+
+    toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
+    toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  }
+</script>
+
+<style>
+  .form-input {
+    @apply rounded-md border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  }
+  .form-radio {
+    @apply text-blue-500 focus:ring-blue-500 border-gray-600 bg-gray-700;
+  }
+
+  /* Action menu styles */
+  .action-menu {
+    display: inline-block;
+    position: relative;
+  }
+
+  .action-menu-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+    color: #9CA3AF;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .action-menu-button:hover {
+    background-color: rgba(55, 65, 81, 0.5);
+    color: #E5E7EB;
+  }
+
+  .action-menu-items {
+    position: fixed;
+    z-index: 50;
+    margin-top: 0.25rem;
+    background-color: #1F2937;
+    border-radius: 0.375rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    min-width: 8rem;
+    transition: opacity 0.1s ease-in-out, transform 0.1s ease-in-out;
+    opacity: 0;
+    transform: translateY(-5px);
+    pointer-events: none;
+  }
+
+  .action-menu-items:not(.hidden) {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .action-menu-items a {
+    display: block;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    color: #E5E7EB;
+    text-decoration: none;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .action-menu-items a:hover {
+    background-color: #374151;
+  }
+
+  /* Ensure table cells don't affect layout */
+  .table-container {
+    position: relative;
+  }
+
+  .table {
+    position: static;
+  }
+
+  .table-cell {
+    position: relative;
+  }
+
+  #toast-container > div {
+    transition: opacity 0.3s ease-in-out;
+    transform: translateY(0);
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+  }
+</style>
+{% endblock %}
