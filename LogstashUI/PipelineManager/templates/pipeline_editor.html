@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-white">Logstash Pipeline Builder</h1>
+    <div class="flex space-x-4">
+      <button id="savePipeline" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+        Save Pipeline
+      </button>
+      <button id="viewCode" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+        View Code
+      </button>
+    </div>
+  </div>
+
+  <div class="flex h-[calc(100vh-180px)] gap-4">
+    <!-- Component Palette -->
+    <div class="w-64 bg-gray-800 p-4 rounded-lg overflow-y-auto">
+      <h2 class="text-lg font-semibold text-white mb-4">Components</h2>
+
+      <div class="space-y-4">
+        <!-- Input Plugins -->
+        <div>
+          <h3 class="text-sm font-medium text-gray-300 mb-2">Inputs</h3>
+          <div class="space-y-2">
+            <div draggable="true" data-type="input" data-plugin="beats" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              Beats
+            </div>
+            <div draggable="true" data-type="input" data-plugin="tcp" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              TCP
+            </div>
+            <div draggable="true" data-type="input" data-plugin="http" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              HTTP
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Plugins -->
+        <div>
+          <h3 class="text-sm font-medium text-gray-300 mb-2">Filters</h3>
+          <div class="space-y-2">
+            <div draggable="true" data-type="filter" data-plugin="grok" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              Grok
+            </div>
+            <div draggable="true" data-type="filter" data-plugin="mutate" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              Mutate
+            </div>
+            <div draggable="true" data-type="filter" data-plugin="date" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              Date
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Plugins -->
+        <div>
+          <h3 class="text-sm font-medium text-gray-300 mb-2">Outputs</h3>
+          <div class="space-y-2">
+            <div draggable="true" data-type="output" data-plugin="elasticsearch" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              Elasticsearch
+            </div>
+            <div draggable="true" data-type="output" data-plugin="stdout" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              Stdout
+            </div>
+            <div draggable="true" data-type="output" data-plugin="file" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
+              File
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pipeline Canvas -->
+    <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+      <div id="pipelineCanvas" class="min-h-full space-y-8">
+        <!-- Input Section -->
+        <div id="inputSection" class="p-4 bg-gray-700 rounded-lg">
+          <h2 class="text-lg font-semibold text-white mb-4">Input</h2>
+          <div id="inputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+            <!-- Input components will be added here -->
+            <p class="text-gray-400 text-center py-8">Drag input components here</p>
+          </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div id="filterSection" class="p-4 bg-gray-700 rounded-lg">
+          <h2 class="text-lg font-semibold text-white mb-4">Filter</h2>
+          <div id="filterComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+            <!-- Filter components will be added here -->
+            <p class="text-gray-400 text-center py-8">Drag filter components here</p>
+          </div>
+        </div>
+
+        <!-- Output Section -->
+        <div id="outputSection" class="p-4 bg-gray-700 rounded-lg">
+          <h2 class="text-lg font-semibold text-white mb-4">Output</h2>
+          <div id="outputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+            <!-- Output components will be added here -->
+            <p class="text-gray-400 text-center py-8">Drag output components here</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configuration Panel -->
+    <div id="configPanel" class="w-96 bg-gray-800 p-4 rounded-lg overflow-y-auto">
+      <h2 class="text-lg font-semibold text-white mb-4">Configuration</h2>
+      <div id="configForm" class="space-y-4">
+        <div class="text-gray-400 text-center py-8">
+          Select a component to configure
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Code View Modal -->
+<div id="codeModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+  <div class="bg-gray-800 rounded-lg w-3/4 h-3/4 flex flex-col">
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-white">Generated Pipeline Configuration</h3>
+      <button id="closeCodeModal" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <div class="p-4 flex-1 overflow-auto">
+      <pre id="generatedCode" class="bg-gray-900 p-4 rounded text-green-400 overflow-auto h-full"># Your pipeline configuration will appear here</pre>
+    </div>
+    <div class="p-4 border-t border-gray-700 flex justify-end">
+      <button id="copyCode" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+        Copy to Clipboard
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Store components data
+let components = {
+  input: [],
+  filter: [],
+  output: []
+};
+
+// Initialize drag and drop
+document.addEventListener('DOMContentLoaded', () => {
+  // Make components draggable
+  const draggables = document.querySelectorAll('[draggable="true"]');
+  const dropZones = document.querySelectorAll('#inputComponents, #filterComponents, #outputComponents');
+  const configForm = document.getElementById('configForm');
+
+  // Add event listeners to draggable components
+  draggables.forEach(item => {
+    item.addEventListener('dragstart', handleDragStart);
+  });
+
+  // Add event listeners to drop zones
+  dropZones.forEach(zone => {
+    zone.addEventListener('dragover', handleDragOver);
+    zone.addEventListener('drop', handleDrop);
+    zone.addEventListener('dragenter', handleDragEnter);
+    zone.addEventListener('dragleave', handleDragLeave);
+  });
+
+  // Modal controls
+  document.getElementById('viewCode').addEventListener('click', showCodeModal);
+  document.getElementById('closeCodeModal').addEventListener('click', hideCodeModal);
+  document.getElementById('copyCode').addEventListener('click', copyCodeToClipboard);
+});
+
+function handleDragStart(e) {
+  e.dataTransfer.setData('text/plain', JSON.stringify({
+    type: this.dataset.type,
+    plugin: this.dataset.plugin
+  }));
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+}
+
+function handleDragEnter(e) {
+  e.preventDefault();
+  this.classList.add('border-blue-500');
+}
+
+function handleDragLeave() {
+  this.classList.remove('border-blue-500');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  this.classList.remove('border-blue-500');
+
+  const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+  const componentId = 'comp-' + Date.now();
+
+  // Create new component
+  const component = {
+    id: componentId,
+    type: data.type,
+    plugin: data.plugin,
+    config: {}
+  };
+
+  // Add to components object
+  components[data.type].push(component);
+
+  // Create and append component element
+  const componentEl = createComponentElement(component);
+  this.querySelector('p')?.remove();
+  this.appendChild(componentEl);
+
+  // Show configuration panel
+  showConfiguration(component);
+}
+
+function createComponentElement(component) {
+  const el = document.createElement('div');
+  el.className = 'bg-gray-700 p-3 rounded mb-2 cursor-move relative group';
+  el.draggable = true;
+  el.dataset.id = component.id;
+
+  el.innerHTML = `
+    <div class="flex justify-between items-center">
+      <span class="font-medium text-white">${component.plugin}</span>
+      <button class="text-gray-400 hover:text-white opacity-0 group-hover:opacity-100" onclick="removeComponent('${component.id}')">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  `;
+
+  el.addEventListener('click', () => showConfiguration(component));
+
+  return el;
+}
+
+function showConfiguration(component) {
+  const configForm = document.getElementById('configForm');
+
+  // Clear previous configuration
+  configForm.innerHTML = `
+    <h3 class="text-lg font-medium text-white mb-4">${component.plugin} Configuration</h3>
+    <div id="configFields"></div>
+    <div class="flex justify-end space-x-2 mt-4">
+      <button onclick="updateComponent('${component.id}')" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+        Save
+      </button>
+    </div>
+  `;
+
+  // Add configuration fields based on component type and plugin
+  const configFields = document.getElementById('configFields');
+
+  // This is a simplified example - you would expand this for each plugin type
+  if (component.plugin === 'beats') {
+    configFields.innerHTML = `
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-300 mb-1">Port</label>
+        <input type="number" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+               value="${component.config.port || 5044}"
+               onchange="updateComponentConfig('${component.id}', 'port', this.value)">
+      </div>
+    `;
+  } else if (component.plugin === 'grok') {
+    configFields.innerHTML = `
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-300 mb-1">Match</label>
+        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+               placeholder="%{PATTERN:field}"
+               value="${component.config.match || ''}"
+               onchange="updateComponentConfig('${component.id}', 'match', this.value)">
+      </div>
+    `;
+  } else if (component.plugin === 'elasticsearch') {
+    configFields.innerHTML = `
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-300 mb-1">Hosts</label>
+        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+               placeholder="["http://localhost:9200"]"
+               value="${component.config.hosts || ''}"
+               onchange="updateComponentConfig('${component.id}', 'hosts', this.value)">
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-300 mb-1">Index</label>
+        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+               placeholder="logstash-%{+YYYY.MM.dd}"
+               value="${component.config.index || ''}"
+               onchange="updateComponentConfig('${component.id}', 'index', this.value)">
+      </div>
+    `;
+  }
+
+  // Highlight the selected component
+  document.querySelectorAll('.component').forEach(el => {
+    el.classList.remove('ring-2', 'ring-blue-500');
+  });
+  document.querySelector(`[data-id="${component.id}"]`).classList.add('ring-2', 'ring-blue-500');
+}
+
+function updateComponentConfig(componentId, key, value) {
+  // Find the component in the components object
+  for (const type in components) {
+    const component = components[type].find(c => c.id === componentId);
+    if (component) {
+      component.config[key] = value;
+      break;
+    }
+  }
+  updateGeneratedCode();
+}
+
+function updateComponent(componentId) {
+  // This function would handle saving the component's configuration
+  // For now, we'll just update the generated code
+  updateGeneratedCode();
+
+  // Show success message
+  const configForm = document.getElementById('configForm');
+  const message = document.createElement('div');
+  message.className = 'mt-2 text-green-400 text-sm';
+  message.textContent = 'Configuration saved';
+  configForm.appendChild(message);
+
+  setTimeout(() => {
+    message.remove();
+  }, 2000);
+}
+
+function removeComponent(componentId) {
+  // Remove from components object
+  for (const type in components) {
+    const index = components[type].findIndex(c => c.id === componentId);
+    if (index > -1) {
+      components[type].splice(index, 1);
+      break;
+    }
+  }
+
+  // Remove from DOM
+  const element = document.querySelector(`[data-id="${componentId}"]`);
+  if (element) {
+    const parent = element.parentElement;
+    element.remove();
+
+    // Show placeholder if no components left
+    if (parent.children.length === 0) {
+      const placeholder = document.createElement('p');
+      placeholder.className = 'text-gray-400 text-center py-8';
+      placeholder.textContent = parent.id === 'inputComponents' ? 'Drag input components here' :
+                             parent.id === 'filterComponents' ? 'Drag filter components here' :
+                             'Drag output components here';
+      parent.appendChild(placeholder);
+    }
+  }
+
+  // Update generated code
+  updateGeneratedCode();
+}
+
+function updateGeneratedCode() {
+  const codeElement = document.getElementById('generatedCode');
+
+  // Generate Logstash configuration
+  let config = '';
+
+  // Input section
+  if (components.input.length > 0) {
+    config += 'input {\n';
+    components.input.forEach(comp => {
+      config += `  ${comp.plugin} {\n`;
+      for (const [key, value] of Object.entries(comp.config)) {
+        if (value) {
+          config += `    ${key} => ${typeof value === 'string' && !value.startsWith('[') ? `"${value}"` : value}\n`;
+        }
+      }
+      config += '  }\n';
+    });
+    config += '}\n\n';
+  }
+
+  // Filter section
+  if (components.filter.length > 0) {
+    config += 'filter {\n';
+    components.filter.forEach(comp => {
+      config += `  if [type] == "${comp.plugin}" {\n`;
+      config += `    ${comp.plugin} {\n`;
+      for (const [key, value] of Object.entries(comp.config)) {
+        if (value) {
+          config += `      ${key} => ${typeof value === 'string' && !value.startsWith('[') ? `"${value}"` : value}\n`;
+        }
+      }
+      config += '    }\n';
+      config += '  }\n';
+    });
+    config += '}\n\n';
+  }
+
+  // Output section
+  if (components.output.length > 0) {
+    config += 'output {\n';
+    components.output.forEach(comp => {
+      config += `  ${comp.plugin} {\n`;
+      for (const [key, value] of Object.entries(comp.config)) {
+        if (value) {
+          config += `    ${key} => ${typeof value === 'string' && !value.startsWith('[') ? `"${value}"` : value}\n`;
+        }
+      }
+      config += '  }\n';
+    });
+    config += '}\n';
+  }
+
+  codeElement.textContent = config || '# Build your pipeline by dragging components';
+}
+
+function showCodeModal() {
+  updateGeneratedCode();
+  document.getElementById('codeModal').classList.remove('hidden');
+}
+
+function hideCodeModal() {
+  document.getElementById('codeModal').classList.add('hidden');
+}
+
+async function copyCodeToClipboard() {
+  const code = document.getElementById('generatedCode').textContent;
+  try {
+    await navigator.clipboard.writeText(code);
+    const button = document.getElementById('copyCode');
+    const originalText = button.textContent;
+    button.textContent = 'Copied!';
+    button.classList.add('bg-green-600');
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.classList.remove('bg-green-600');
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy text: ', err);
+  }
+}
+
+// Make functions available globally
+window.removeComponent = removeComponent;
+window.showConfiguration = showConfiguration;
+window.updateComponentConfig = updateComponentConfig;
+window.updateComponent = updateComponent;
+</script>
+
+<style>
+  .component {
+    transition: all 0.2s ease;
+  }
+
+  .component:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #2d3748;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4a5568;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #718096;
+  }
+</style>
+{% endblock %}

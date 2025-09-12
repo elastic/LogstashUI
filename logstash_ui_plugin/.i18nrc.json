@@ -1,7 +1,0 @@
-{
-  "prefix": "logstashUi",
-  "paths": {
-    "logstashUi": "."
-  },
-  "translations": ["translations/ja-JP.json"]
-}

@@ -88,7 +88,6 @@ class Connection(models.Model):
         Validate that the required fields are provided based on the connection type.
         """
         from django.core.exceptions import ValidationError
-        
         if self.connection_type == self.ConnectionType.SSH:
             if not self.host:
                 raise ValidationError("Host is required for SSH connections")

@@ -3,14 +3,78 @@ from . import models
 from .forms import ConnectionForm
 # Create your views here.
 from elasticsearch import Elasticsearch
+from django.http import HttpResponse
+import json
+
+
+def PipelineEditor(request):
+    context = {}
+    if request.method == "GET":
+        es_id = request.GET.get("es_id")
+        pipeline_name = request.GET.get("pipeline")
+
+
+        es = Elasticsearch(**_get_elastic_creds(es_id))
+        pipeline_doc = es.get(index=".logstash", id=pipeline_name)
+
+
+        context['pipeline_text'] = pipeline_doc['_source']['pipeline']
+        print(pipeline_doc)
+
+
+
+
+    return render(request, "pipeline_editor.html", context=context)
 
 def PipelineManager(request):
-    return render(request, "pipelines.html")
+
+    logstash_pipelines = []
+
+    for connection in models.Connection.objects.all():
+
+        if connection.connection_type == "CENTRALIZED":
+            es = Elasticsearch(**_get_elastic_creds(connection.id))
+            pipelines = es.search(index=".logstash", size=2000)
+            for pipeline in pipelines['hits']['hits']:
+                logstash_pipelines.append(
+                    {
+                        "es_id": connection.id,
+                        "es_name": connection.name,
+                        "name": pipeline['_id']
+                    }
+                )
+            # TODO: Allow editing of Logstash metadata too
 
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.template.loader import render_to_string
+
+
+    return render(request, "pipelines.html", context = {"pipelines": logstash_pipelines})
+
+
+def _get_elastic_creds(connection_id):
+
+    connection = models.Connection.objects.get(id=connection_id)
+    connection_data = {}
+
+    if connection.cloud_id:
+        connection_data['cloud_id'] = connection.cloud_id
+    else:
+        connection_data['host'] = connection.url
+
+    if connection.api_key:
+        connection_data['api_key'] = connection.api_key
+    else:
+        connection_data['username'] = connection.username
+        connection_data['password'] = connection.password
+
+    return connection_data
+
+
+def test_elastic_connectivity(connection_id):
+    elastic_creds = _get_elastic_creds(connection_id)
+    es = Elasticsearch(**elastic_creds)
+    es_info = json.dumps(dict(es.info()), indent=4)
+    return es_info
 
 
 def Logstash(request):
@@ -47,8 +111,6 @@ def Logstash(request):
                         </script>
                     </div>
                 """)
-            return redirect('logstash')
-
         except Exception as e:
             error_message = f"Error: {str(e)}"
             if request.headers.get('HX-Request') == 'true':
@@ -60,8 +122,28 @@ def Logstash(request):
 
             return redirect('logstash')
 
+
+    if request.method == "GET":
+
+        delete_id = request.GET.get('delete_id')
+        if request.GET.get('delete_id'):
+            models.Connection.objects.filter(id=delete_id).delete()
+            return
+
+        test_id = request.GET.get('test')
+        if request.GET.get("test"):
+            return HttpResponse("""
+                <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
+                    onload="setTimeout(() => this.remove(), 3000);">
+                    <p>{0}</p>
+                </div>
+            """.format(test_elastic_connectivity(test_id)))
+            return test_elastic_connectivity(test_id)
+
+
     connections = models.Connection.objects.all()
-    print(connections, "ME")
+
+    #print(connections, "ME")
     for connection in connections:
         print(connection, dir(connection))
     return render(request, "connections.html", context={"connections": connections, "form": ConnectionForm()})
