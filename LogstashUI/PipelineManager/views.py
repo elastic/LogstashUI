@@ -7,8 +7,48 @@ from django.http import HttpResponse
 import json
 
 
+
+import os
+from django.conf import settings
+
+def load_plugin_data():
+    # Get the base directory of the project
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the path to the JSON file
+    json_path = os.path.join(app_dir, 'data', 'plugins.json')
+
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        
+    # Transform the data to match the expected format in the template
+    transformed = {
+        'input': {},
+        'filter': {},
+        'output': {}
+    }
+    
+    # Process each plugin type
+    for plugin_type in ['input', 'filter', 'output']:
+        if plugin_type in data:
+            for plugin_name, plugin_data in data[plugin_type].items():
+                transformed[plugin_type][plugin_name] = {
+                    'name': plugin_data.get('name', plugin_name),
+                    'version': plugin_data.get('version', ''),
+                    'description': f"{plugin_name} plugin (v{plugin_data.get('version', '?')})",
+                    'params': plugin_data.get('params', {}),
+                    'link': f"/guide/en/logstash/current/plugins-{plugin_type}s-{plugin_name}.html",
+                    'repo_link': f"https://github.com/logstash-plugins/logstash-{plugin_type}-{plugin_name}"
+                }
+    
+    return transformed
+
+# Load plugin data once when the module is imported
+plugin_data = load_plugin_data()
+
 def PipelineEditor(request):
-    context = {}
+    context = {
+        "plugin_data": plugin_data
+    }
     if request.method == "GET":
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
@@ -76,7 +116,8 @@ def test_elastic_connectivity(connection_id):
     es_info = json.dumps(dict(es.info()), indent=4)
     return es_info
 
-
+#TODO: Implement ssh connection
+#TODO: Change naming of connections
 def Logstash(request):
     if request.method == "POST":
         try:

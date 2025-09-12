@@ -15,101 +15,98 @@
   </div>
 
   <div class="flex h-[calc(100vh-180px)] gap-4">
-    <!-- Component Palette -->
-    <div class="w-64 bg-gray-800 p-4 rounded-lg overflow-y-auto">
-      <h2 class="text-lg font-semibold text-white mb-4">Components</h2>
-
-      <div class="space-y-4">
-        <!-- Input Plugins -->
-        <div>
-          <h3 class="text-sm font-medium text-gray-300 mb-2">Inputs</h3>
-          <div class="space-y-2">
-            <div draggable="true" data-type="input" data-plugin="beats" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              Beats
+    <!-- Main Content Area -->
+    <div class="flex-1">
+      <!-- Pipeline Canvas -->
+      <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+        <div id="pipelineCanvas" class="min-h-full space-y-8">
+          <!-- Input Section -->
+          <div id="inputSection" class="p-4 bg-gray-700 rounded-lg">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-lg font-semibold text-white">Input</h2>
+              <button id="addInputBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                Add Input
+              </button>
             </div>
-            <div draggable="true" data-type="input" data-plugin="tcp" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              TCP
-            </div>
-            <div draggable="true" data-type="input" data-plugin="http" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              HTTP
+            <div id="inputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+              <p class="text-gray-400 text-center py-8">No input components added</p>
             </div>
           </div>
-        </div>
 
-        <!-- Filter Plugins -->
-        <div>
-          <h3 class="text-sm font-medium text-gray-300 mb-2">Filters</h3>
-          <div class="space-y-2">
-            <div draggable="true" data-type="filter" data-plugin="grok" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              Grok
+          <!-- Filter Section -->
+          <div id="filterSection" class="p-4 bg-gray-700 rounded-lg">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-lg font-semibold text-white">Filter</h2>
+              <button id="addFilterBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                Add Filter
+              </button>
             </div>
-            <div draggable="true" data-type="filter" data-plugin="mutate" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              Mutate
-            </div>
-            <div draggable="true" data-type="filter" data-plugin="date" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              Date
+            <div id="filterComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+              <p class="text-gray-400 text-center py-8">No filter components added</p>
             </div>
           </div>
-        </div>
 
-        <!-- Output Plugins -->
-        <div>
-          <h3 class="text-sm font-medium text-gray-300 mb-2">Outputs</h3>
-          <div class="space-y-2">
-            <div draggable="true" data-type="output" data-plugin="elasticsearch" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              Elasticsearch
+          <!-- Output Section -->
+          <div id="outputSection" class="p-4 bg-gray-700 rounded-lg">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-lg font-semibold text-white">Output</h2>
+              <button id="addOutputBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                Add Output
+              </button>
             </div>
-            <div draggable="true" data-type="output" data-plugin="stdout" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              Stdout
-            </div>
-            <div draggable="true" data-type="output" data-plugin="file" class="p-2 bg-gray-700 rounded cursor-move hover:bg-gray-600 text-white">
-              File
+            <div id="outputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+              <p class="text-gray-400 text-center py-8">No output components added</p>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
+</div>
 
-    <!-- Pipeline Canvas -->
-    <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
-      <div id="pipelineCanvas" class="min-h-full space-y-8">
-        <!-- Input Section -->
-        <div id="inputSection" class="p-4 bg-gray-700 rounded-lg">
-          <h2 class="text-lg font-semibold text-white mb-4">Input</h2>
-          <div id="inputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
-            <!-- Input components will be added here -->
-            <p class="text-gray-400 text-center py-8">Drag input components here</p>
-          </div>
-        </div>
-
-        <!-- Filter Section -->
-        <div id="filterSection" class="p-4 bg-gray-700 rounded-lg">
-          <h2 class="text-lg font-semibold text-white mb-4">Filter</h2>
-          <div id="filterComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
-            <!-- Filter components will be added here -->
-            <p class="text-gray-400 text-center py-8">Drag filter components here</p>
-          </div>
-        </div>
-
-        <!-- Output Section -->
-        <div id="outputSection" class="p-4 bg-gray-700 rounded-lg">
-          <h2 class="text-lg font-semibold text-white mb-4">Output</h2>
-          <div id="outputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
-            <!-- Output components will be added here -->
-            <p class="text-gray-400 text-center py-8">Drag output components here</p>
-          </div>
-        </div>
+<!-- Add Component Modal -->
+<div id="addComponentModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 id="addComponentTitle" class="text-lg font-semibold text-white">Select Plugin</h3>
+      <button onclick="hideAddComponentModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <div class="p-4 border-b border-gray-700">
+      <input type="text" id="pluginSearch" placeholder="Search plugins..." 
+             class="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white">
+    </div>
+    <div id="pluginOptions" class="flex-1 overflow-y-auto p-4">
+      <div id="pluginGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Plugin cards will be inserted here -->
       </div>
     </div>
+  </div>
+</div>
 
-    <!-- Configuration Panel -->
-    <div id="configPanel" class="w-96 bg-gray-800 p-4 rounded-lg overflow-y-auto">
-      <h2 class="text-lg font-semibold text-white mb-4">Configuration</h2>
+<!-- Component Configuration Modal -->
+<div id="configModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+  <div class="bg-gray-800 rounded-lg w-1/2 h-3/4 flex flex-col">
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-white">Configure Component</h3>
+      <button onclick="hideConfigModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <div class="p-4 flex-1 overflow-auto">
       <div id="configForm" class="space-y-4">
-        <div class="text-gray-400 text-center py-8">
-          Select a component to configure
-        </div>
+        <!-- Configuration form will be inserted here -->
       </div>
+    </div>
+    <div class="p-4 border-t border-gray-700 flex justify-end">
+      <button onclick="saveComponentConfig()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+        Save
+      </button>
     </div>
   </div>
 </div>
@@ -137,106 +134,631 @@
 </div>
 
 <script>
-// Store components data
-let components = {
+
+// Global variables
+let currentPluginType = '';
+const components = {
   input: [],
   filter: [],
   output: []
 };
 
-// Initialize drag and drop
+// Load plugin data from Django template
+const pluginData = {{ plugin_data|safe }};
+
+// Function declarations
+function showAddComponentModal(type) {
+  currentPluginType = type;
+  const modal = document.getElementById('addComponentModal');
+  const title = document.getElementById('addComponentTitle');
+  const pluginGrid = document.getElementById('pluginGrid');
+  const searchInput = document.getElementById('pluginSearch');
+  
+  title.textContent = `Add ${type.charAt(0).toUpperCase() + type.slice(1)} Plugin`;
+  
+  // Clear previous plugins
+  pluginGrid.innerHTML = '';
+  
+  // Get plugins for the selected type
+  const plugins = pluginData[type] || {};
+  
+  // Add each plugin to the grid
+  Object.entries(plugins).forEach(([name, plugin]) => {
+    const pluginCard = document.createElement('div');
+    pluginCard.className = 'bg-gray-700 rounded-lg overflow-hidden hover:shadow-lg transition-shadow';
+    pluginCard.innerHTML = `
+      <div class="p-4 h-full flex flex-col">
+        <div class="flex justify-between items-start mb-2">
+          <h4 class="font-medium text-white">${name}</h4>
+          ${plugin.deprecated ? '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Deprecated</span>' : ''}
+        </div>
+        ${plugin.description ? `<p class="text-sm text-gray-300 mb-3 flex-1">${plugin.description}</p>` : ''}
+        <div class="mt-auto pt-3 border-t border-gray-600">
+          <div class="flex justify-between items-center">
+            <button data-plugin="${name}" data-type="${type}" 
+                    class="select-plugin-btn px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+              Add
+            </button>
+            <div class="flex space-x-2">
+              ${plugin.link ? `
+                <a href="https://www.elastic.co${plugin.link}" target="_blank" 
+                   class="text-gray-400 hover:text-white" title="Documentation">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </a>` : ''}
+              ${plugin.repo_link ? `
+                <a href="${plugin.repo_link}" target="_blank" 
+                   class="text-gray-400 hover:text-white" title="Source Code">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                </a>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    pluginGrid.appendChild(pluginCard);
+  });
+  
+  // Add event listeners to the new buttons
+  document.querySelectorAll('.select-plugin-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const pluginName = e.target.closest('button').dataset.plugin;
+      const pluginType = e.target.closest('button').dataset.type;
+      selectPlugin(pluginName, pluginType);
+    });
+  });
+  
+  // Setup search functionality
+  searchInput.value = '';
+  searchInput.oninput = (e) => {
+    const searchTerm = e.target.value.toLowerCase();
+    const cards = pluginGrid.querySelectorAll('.bg-gray-700');
+    
+    cards.forEach(card => {
+      const name = card.querySelector('h4').textContent.toLowerCase();
+      const description = card.querySelector('p')?.textContent.toLowerCase() || '';
+      
+      if (name.includes(searchTerm) || description.includes(searchTerm)) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  };
+  
+  modal.classList.remove('hidden');
+  searchInput.focus();
+}
+
+function hideAddComponentModal() {
+  document.getElementById('addComponentModal').classList.add('hidden');
+}
+
+function selectPlugin(pluginName, pluginType) {
+  hideAddComponentModal();
+  
+  const componentId = 'comp-' + Date.now();
+  const component = {
+    id: componentId,
+    type: pluginType,
+    plugin: pluginName,
+    config: {}
+  };
+  
+  // Add to components array
+  components[pluginType].push(component);
+  
+  // Create and append component element
+  const container = document.getElementById(`${pluginType}Components`);
+  const emptyMessage = container.querySelector('p');
+  if (emptyMessage) {
+    container.removeChild(emptyMessage);
+  }
+  
+  const componentEl = createComponentElement(component);
+  container.appendChild(componentEl);
+  
+  // Show configuration modal
+  showConfigModal(component);
+}
+
+// Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-  // Make components draggable
-  const draggables = document.querySelectorAll('[draggable="true"]');
-  const dropZones = document.querySelectorAll('#inputComponents, #filterComponents, #outputComponents');
-  const configForm = document.getElementById('configForm');
-
-  // Add event listeners to draggable components
-  draggables.forEach(item => {
-    item.addEventListener('dragstart', handleDragStart);
-  });
-
-  // Add event listeners to drop zones
-  dropZones.forEach(zone => {
-    zone.addEventListener('dragover', handleDragOver);
-    zone.addEventListener('drop', handleDrop);
-    zone.addEventListener('dragenter', handleDragEnter);
-    zone.addEventListener('dragleave', handleDragLeave);
-  });
-
   // Modal controls
   document.getElementById('viewCode').addEventListener('click', showCodeModal);
   document.getElementById('closeCodeModal').addEventListener('click', hideCodeModal);
   document.getElementById('copyCode').addEventListener('click', copyCodeToClipboard);
+  
+  // Add component buttons
+  document.getElementById('addInputBtn').addEventListener('click', () => showAddComponentModal('input'));
+  document.getElementById('addFilterBtn').addEventListener('click', () => showAddComponentModal('filter'));
+  document.getElementById('addOutputBtn').addEventListener('click', () => showAddComponentModal('output'));
+  
+  // Initialize drag and drop for filter components
+  setupDragAndDrop();
+  
+  // Initialize any existing components
+  updateGeneratedCode();
 });
 
-function handleDragStart(e) {
-  e.dataTransfer.setData('text/plain', JSON.stringify({
-    type: this.dataset.type,
-    plugin: this.dataset.plugin
-  }));
-}
+// Set up drag and drop functionality for filter components
+function setupDragAndDrop() {
+  const filterContainer = document.getElementById('filterComponents');
 
-function handleDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'copy';
-}
+  // Make filter items draggable
+  const makeItemsDraggable = () => {
+    const items = filterContainer.querySelectorAll('.draggable-item');
+    items.forEach(item => {
+      item.setAttribute('draggable', 'true');
 
-function handleDragEnter(e) {
-  e.preventDefault();
-  this.classList.add('border-blue-500');
-}
+      item.addEventListener('dragstart', (e) => {
+        e.target.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', e.target.dataset.id);
+      });
 
-function handleDragLeave() {
-  this.classList.remove('border-blue-500');
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  this.classList.remove('border-blue-500');
-
-  const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-  const componentId = 'comp-' + Date.now();
-
-  // Create new component
-  const component = {
-    id: componentId,
-    type: data.type,
-    plugin: data.plugin,
-    config: {}
+      item.addEventListener('dragend', (e) => {
+        e.target.classList.remove('dragging');
+      });
+    });
   };
 
-  // Add to components object
-  components[data.type].push(component);
+  // Handle drag over for the container
+  filterContainer.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
 
+    const afterElement = getDragAfterElement(filterContainer, e.clientY);
+    const draggable = document.querySelector('.dragging');
+
+    if (afterElement == null) {
+      filterContainer.appendChild(draggable);
+    } else {
+      filterContainer.insertBefore(draggable, afterElement);
+    }
+  });
+
+  // Handle drop to update the components array order
+  filterContainer.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const componentId = e.dataTransfer.getData('text/plain');
+    const component = findComponentById(componentId);
+
+    if (!component) return;
+
+    // Update the components array order
+    const items = Array.from(filterContainer.querySelectorAll('.draggable-item'));
+    const newOrder = items.map(item => item.dataset.id);
+
+    // Reorder the components array
+    components.filter = newOrder
+      .map(id => components.filter.find(c => c.id === id))
+      .filter(Boolean);
+
+    updateGeneratedCode();
+  });
+
+  // Helper function to find the element after which to place the dragged element
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
+
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  // Initialize draggable items
+  makeItemsDraggable();
+
+  // Observe changes to the filter container to update draggable items
+  const observer = new MutationObserver(makeItemsDraggable);
+  observer.observe(filterContainer, { childList: true });
+}
+
+// Helper function to find a component by ID
+function findComponentById(id) {
+  for (const type in components) {
+    const component = components[type].find(c => c.id === id);
+    if (component) return component;
+  }
+  return null;
+}
+
+// Show the add component modal
+function showAddComponentModal(type) {
+  currentPluginType = type;
+  const modal = document.getElementById('addComponentModal');
+  const title = document.getElementById('addComponentTitle');
+  const pluginGrid = document.getElementById('pluginGrid');
+  const searchInput = document.getElementById('pluginSearch');
+  
+  // Set title based on plugin type
+  title.textContent = `Add ${type.charAt(0).toUpperCase() + type.slice(1)} Plugin`;
+  
+  // Clear previous plugins
+  pluginGrid.innerHTML = '';
+  
+  // Get plugins for the selected type
+  const plugins = pluginData[type] || {};
+  
+  // Add each plugin to the grid
+  Object.entries(plugins).forEach(([name, plugin]) => {
+    const pluginCard = document.createElement('div');
+    pluginCard.className = 'bg-gray-700 rounded-lg overflow-hidden hover:shadow-lg transition-shadow';
+    pluginCard.innerHTML = `
+      <div class="p-4 h-full flex flex-col">
+        <div class="flex justify-between items-start mb-2">
+          <h4 class="font-medium text-white">${name}</h4>
+          ${plugin.deprecated ? '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Deprecated</span>' : ''}
+        </div>
+        ${plugin.description ? `<p class="text-sm text-gray-300 mb-3 flex-1">${plugin.description}</p>` : ''}
+        <div class="mt-auto pt-3 border-t border-gray-600">
+          <div class="flex justify-between items-center">
+            <button onclick="selectPlugin('${name}', '${type}')" 
+                    class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+              Add
+            </button>
+            <div class="flex space-x-2">
+              ${plugin.link ? `
+                <a href="https://www.elastic.co${plugin.link}" target="_blank" 
+                   class="text-gray-400 hover:text-white" title="Documentation">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </a>` : ''}
+              ${plugin.repo_link ? `
+                <a href="${plugin.repo_link}" target="_blank" 
+                   class="text-gray-400 hover:text-white" title="Source Code">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                </a>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    pluginGrid.appendChild(pluginCard);
+  });
+  
+  // Setup search functionality
+  searchInput.value = '';
+  searchInput.oninput = (e) => {
+    const searchTerm = e.target.value.toLowerCase();
+    const cards = pluginGrid.querySelectorAll('.bg-gray-700');
+    
+    cards.forEach(card => {
+      const name = card.querySelector('h4').textContent.toLowerCase();
+      const description = card.querySelector('p')?.textContent.toLowerCase() || '';
+      
+      if (name.includes(searchTerm) || description.includes(searchTerm)) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  };
+  
+  modal.classList.remove('hidden');
+  searchInput.focus();
+}
+
+// Hide the add component modal
+function hideAddComponentModal() {
+  document.getElementById('addComponentModal').classList.add('hidden');
+}
+
+// Handle plugin selection
+function selectPlugin(pluginName, pluginType) {
+  hideAddComponentModal();
+  
+  const componentId = 'comp-' + Date.now();
+  const component = {
+    id: componentId,
+    type: pluginType,
+    plugin: pluginName,
+    config: {}
+  };
+  
+  // Add to components array
+  components[pluginType].push(component);
+  
   // Create and append component element
+  const container = document.getElementById(`${pluginType}Components`);
+  const emptyMessage = container.querySelector('p');
+  if (emptyMessage) {
+    container.removeChild(emptyMessage);
+  }
+  
   const componentEl = createComponentElement(component);
-  this.querySelector('p')?.remove();
-  this.appendChild(componentEl);
+  container.appendChild(componentEl);
+  
+  // Show configuration modal
+  showConfigModal(component);
+}
 
-  // Show configuration panel
-  showConfiguration(component);
+// Show the configuration modal with dynamic fields
+function showConfigModal(component) {
+  const modal = document.getElementById('configModal');
+  const configForm = document.getElementById('configForm');
+  const pluginInfo = pluginData[component.type]?.[component.plugin] || {};
+  
+  // Set modal title with plugin type badge
+  modal.querySelector('h3').innerHTML = `
+    <div class="flex items-center">
+      <span>${component.plugin}</span>
+      <span class="ml-2 px-2 py-0.5 text-xs rounded-full ${getPluginTypeColor(component.type)}">
+        ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
+      </span>
+    </div>
+  `;
+  
+  // Clear previous configuration
+  configForm.innerHTML = '';
+  
+  // Add plugin description if available
+  if (pluginInfo.description) {
+    const desc = document.createElement('p');
+    desc.className = 'text-sm text-gray-300 mb-4 pb-4 border-b border-gray-700';
+    desc.textContent = pluginInfo.description;
+    configForm.appendChild(desc);
+  }
+  
+  // Add configuration fields based on plugin parameters
+  if (pluginInfo.params && Object.keys(pluginInfo.params).length > 0) {
+    Object.entries(pluginInfo.params).forEach(([key, option]) => {
+      const fieldId = `config-${key}`;
+      const value = component.config[key] !== undefined ? component.config[key] : (option.default_value || '');
+      const isRequired = option.required === 'Yes';
+      const isDeprecated = option.deprecated === 'Yes';
+      
+      const fieldGroup = document.createElement('div');
+      fieldGroup.className = `mb-4 p-3 rounded ${isDeprecated ? 'bg-red-900/20 border-l-4 border-red-600' : ''}`;
+      
+      let inputField = '';
+      const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white';
+      
+      // Determine input type based on option type
+      if (option.input_type?.toLowerCase().includes('boolean') || option.input_type?.toLowerCase() === 'bool') {
+        inputField = `
+          <select id="${fieldId}" name="${key}" class="${inputClasses}">
+            <option value="true" ${value === true || value === 'true' ? 'selected' : ''}>true</option>
+            <option value="false" ${value === false || value === 'false' ? 'selected' : ''}>false</option>
+          </select>
+        `;
+      } else if (option.input_type?.toLowerCase() === 'hash') {
+        inputField = `
+          <textarea id="${fieldId}" name="${key}" 
+                    class="${inputClasses} font-mono text-sm h-24" 
+                    placeholder="{\n  key1: \"value1\",\n  key2: \"value2\"\n}">${JSON.stringify(component.config[key] || {}, null, 2)}</textarea>
+        `;
+      } else if (option.input_type?.toLowerCase() === 'array') {
+        inputField = `
+          <textarea id="${fieldId}" name="${key}" 
+                    class="${inputClasses} font-mono text-sm h-20" 
+                    placeholder="[\"value1\", \"value2\"]">${JSON.stringify(component.config[key] || [])}</textarea>
+        `;
+      } else {
+        // Default to text input
+        inputField = `
+          <input type="text" id="${fieldId}" name="${key}" 
+                 value="${escapeHtml(value)}" 
+                 class="${inputClasses}" ${isRequired ? 'required' : ''}>
+        `;
+      }
+      
+      fieldGroup.innerHTML = `
+        <div class="flex justify-between items-start">
+          <label for="${fieldId}" class="block text-sm font-medium ${isDeprecated ? 'text-red-400' : 'text-gray-300'} mb-1">
+            ${key} ${isRequired ? '<span class="text-red-500">*</span>' : ''}
+            ${isDeprecated ? '<span class="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">Deprecated</span>' : ''}
+          </label>
+          ${option.input_type ? `<span class="text-xs text-gray-400">${option.input_type}</span>` : ''}
+        </div>
+        ${option.description ? 
+          `<p class="text-xs text-gray-400 mb-2">${option.description}</p>` : ''}
+        ${inputField}
+        ${option.default_value !== undefined ? 
+          `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+      `;
+      
+      configForm.appendChild(fieldGroup);
+    });
+  } else {
+    const noOptions = document.createElement('p');
+    noOptions.className = 'text-gray-400 italic';
+    noOptions.textContent = 'No configuration options available for this plugin.';
+    configForm.appendChild(noOptions);
+  }
+  
+  // Add documentation link if available
+  if (pluginInfo.link) {
+    const docLink = document.createElement('a');
+    docLink.href = `https://www.elastic.co${pluginInfo.link}`;
+    docLink.target = '_blank';
+    docLink.className = 'inline-flex items-center text-sm text-blue-400 hover:underline mt-4';
+    docLink.innerHTML = `
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+      </svg>
+      View Documentation
+    `;
+    configForm.appendChild(docLink);
+  }
+  
+  // Add save and cancel buttons
+  const actions = document.createElement('div');
+  actions.className = 'flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-700';
+  actions.innerHTML = `
+    <button type="button" onclick="hideConfigModal()" 
+            class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
+      Cancel
+    </button>
+    <button type="button" onclick="saveComponentConfig()" 
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
+      Save Configuration
+    </button>
+  `;
+  configForm.appendChild(actions);
+  
+  currentComponent = component;
+  modal.classList.remove('hidden');
+  
+  // Focus the first input field
+  const firstInput = configForm.querySelector('input, select, textarea');
+  if (firstInput) firstInput.focus();
+}
+
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+  if (unsafe === undefined || unsafe === null) return '';
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Helper function to get color based on plugin type
+function getPluginTypeColor(type) {
+  const colors = {
+    input: 'bg-blue-900/50 text-blue-300',
+    filter: 'bg-purple-900/50 text-purple-300',
+    output: 'bg-green-900/50 text-green-300',
+    codec: 'bg-yellow-900/50 text-yellow-300'
+  };
+  return colors[type] || 'bg-gray-700 text-gray-300';
+}
+
+// Save component configuration
+function saveComponentConfig() {
+  if (!currentComponent) return;
+  
+  // Get all input values
+  const inputs = document.querySelectorAll('#configForm input, #configForm select, #configForm textarea');
+  const newConfig = {};
+  
+  // Update component config
+  inputs.forEach(input => {
+    const key = input.id.replace('config-', '');
+    if (input.value && input.value.trim() !== '') {
+      // Try to parse JSON for complex fields
+      try {
+        // Check if the input looks like JSON (starts with {, }, [ or ])
+        const trimmedValue = input.value.trim();
+        if ((trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) || 
+            (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))) {
+          newConfig[key] = JSON.parse(input.value);
+        } else if (input.type === 'number') {
+          newConfig[key] = Number(input.value);
+        } else if (input.value.toLowerCase() === 'true') {
+          newConfig[key] = true;
+        } else if (input.value.toLowerCase() === 'false') {
+          newConfig[key] = false;
+        } else if (input.value === 'null') {
+          newConfig[key] = null;
+        } else {
+          newConfig[key] = input.value;
+        }
+      } catch (e) {
+        // If JSON parsing fails, store as string
+        newConfig[key] = input.value;
+      }
+    }
+  });
+  
+  // Update the component's config
+  currentComponent.config = newConfig;
+  
+  // Find and update the component in the DOM
+  const componentEl = document.querySelector(`[data-id="${currentComponent.id}"]`);
+  if (componentEl) {
+    const newEl = createComponentElement(currentComponent);
+    componentEl.parentNode.replaceChild(newEl, componentEl);
+  }
+  
+  // Update the generated code
+  updateGeneratedCode();
+  
+  // Close the modal
+  hideConfigModal();
 }
 
 function createComponentElement(component) {
   const el = document.createElement('div');
-  el.className = 'bg-gray-700 p-3 rounded mb-2 cursor-move relative group';
-  el.draggable = true;
+  el.className = 'bg-gray-700 p-3 rounded mb-2 relative group draggable-item';
   el.dataset.id = component.id;
-
+  
+  // Get plugin info for description and type
+  const pluginInfo = pluginData[component.type]?.[component.plugin] || {};
+  const typeColor = getPluginTypeColor(component.type);
+  
+  // Create a summary of the configuration
+  let configSummary = '';
+  if (Object.keys(component.config).length > 0) {
+    const configItems = [];
+    for (const [key, value] of Object.entries(component.config)) {
+      if (value !== undefined && value !== null && value !== '') {
+        let displayValue = value;
+        if (typeof value === 'object') {
+          displayValue = JSON.stringify(value).substring(0, 30) + (JSON.stringify(value).length > 30 ? '...' : '');
+        } else if (String(value).length > 20) {
+          displayValue = String(value).substring(0, 20) + '...';
+        }
+        configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${displayValue}</span>`);
+      }
+    }
+    if (configItems.length > 0) {
+      configSummary = `<div class="mt-2 flex flex-wrap gap-1">${configItems.join('')}</div>`;
+    }
+  }
+  
   el.innerHTML = `
-    <div class="flex justify-between items-center">
-      <span class="font-medium text-white">${component.plugin}</span>
-      <button class="text-gray-400 hover:text-white opacity-0 group-hover:opacity-100" onclick="removeComponent('${component.id}')">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+    <div class="flex justify-between items-start">
+      <div class="flex-1">
+        <div class="flex items-center">
+          <span class="font-medium text-white">${component.plugin}</span>
+          <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
+            ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
+          </span>
+          ${pluginInfo.deprecated ? 
+            '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+        </div>
+        ${pluginInfo.description ? 
+          `<p class="text-xs text-gray-400 mt-1 line-clamp-2">${pluginInfo.description}</p>` : ''}
+        ${configSummary}
+      </div>
+      <div class="flex space-x-1 ml-2">
+        <button class="text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" 
+                onclick="event.stopPropagation(); showConfigModal(${JSON.stringify(component).replace(/"/g, '&quot;')})"
+                title="Configure">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+        <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" 
+                onclick="event.stopPropagation(); removeComponent('${component.id}')"
+                title="Remove">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
     </div>
   `;
-
-  el.addEventListener('click', () => showConfiguration(component));
-
+  
   return el;
 }
 
@@ -333,6 +855,10 @@ function updateComponent(componentId) {
 }
 
 function removeComponent(componentId) {
+  if (!confirm('Are you sure you want to remove this component?')) {
+    return;
+  }
+
   // Remove from components object
   for (const type in components) {
     const index = components[type].findIndex(c => c.id === componentId);
@@ -352,9 +878,9 @@ function removeComponent(componentId) {
     if (parent.children.length === 0) {
       const placeholder = document.createElement('p');
       placeholder.className = 'text-gray-400 text-center py-8';
-      placeholder.textContent = parent.id === 'inputComponents' ? 'Drag input components here' :
-                             parent.id === 'filterComponents' ? 'Drag filter components here' :
-                             'Drag output components here';
+      placeholder.textContent = parent.id === 'inputComponents' ? 'No input components added' :
+                             parent.id === 'filterComponents' ? 'No filter components added' :
+                             'No output components added';
       parent.appendChild(placeholder);
     }
   }
@@ -450,6 +976,9 @@ window.removeComponent = removeComponent;
 window.showConfiguration = showConfiguration;
 window.updateComponentConfig = updateComponentConfig;
 window.updateComponent = updateComponent;
+window.showAddComponentModal = showAddComponentModal;
+window.hideAddComponentModal = hideAddComponentModal;
+window.selectPlugin = selectPlugin;
 </script>
 
 <style>
@@ -460,6 +989,22 @@ window.updateComponent = updateComponent;
   .component:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Drag and drop styles */
+  .draggable-item {
+    cursor: move;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+
+  .draggable-item.dragging {
+    opacity: 0.5;
+    background: #4a5568;
+  }
+
+  .draggable-item.over {
+    transform: scale(1.02);
+    box-shadow: 0 0 10px rgba(66, 153, 225, 0.5);
   }
 
   /* Custom scrollbar */
