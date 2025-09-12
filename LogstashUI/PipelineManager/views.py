@@ -17,14 +17,20 @@ def Logstash(request):
     if request.method == "POST":
         try:
             print("Form data:", request.POST)  # Debug print
-            # Process form data and save
-            # connection = Connection.objects.create(...)
 
-            # Check if it's an HTMX request
             is_htmx = request.headers.get('HX-Request') == 'true'
             print(f"Is HTMX request: {is_htmx}")
 
             if is_htmx:
+
+                form = ConnectionForm(request.POST)
+
+                print("----")
+                if form.is_valid():
+                    form.save()
+                else:
+                    raise Exception(form.errors)
+
                 return HttpResponse("""
                     <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
                         Connection created successfully!
@@ -51,8 +57,11 @@ def Logstash(request):
                         {error_message}
                     </div>
                 """, status=400)
-            messages.error(request, error_message)
+
             return redirect('logstash')
 
     connections = models.Connection.objects.all()
+    print(connections, "ME")
+    for connection in connections:
+        print(connection, dir(connection))
     return render(request, "connections.html", context={"connections": connections, "form": ConnectionForm()})

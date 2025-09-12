@@ -57,6 +57,18 @@
                   }">
               {% csrf_token %}
 
+              <!-- Connection Name Field -->
+              <div class="mb-4">
+                <label for="{{ form.name.id_for_label }}" class="form-label">
+                  Connection Name <span class="text-red-500">*</span>
+                </label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                  <p class="text-red-500 text-sm mt-1">{{ form.name.errors.0 }}</p>
+                {% endif %}
+                <p class="text-gray-400 text-xs mt-1">A descriptive name for this connection</p>
+              </div>
+
               <!-- Hidden connection type field -->
               <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
 
