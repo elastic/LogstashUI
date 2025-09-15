@@ -1,15 +1,14 @@
 from django.shortcuts import render, redirect
 from . import models
 from .forms import ConnectionForm
-# Create your views here.
 from elasticsearch import Elasticsearch
 from django.http import HttpResponse
 import json
-
-
-
 import os
-from django.conf import settings
+
+from . import logstash_config_parse
+
+
 
 def load_plugin_data():
     # Get the base directory of the project
@@ -20,27 +19,7 @@ def load_plugin_data():
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
         
-    # Transform the data to match the expected format in the template
-    transformed = {
-        'input': {},
-        'filter': {},
-        'output': {}
-    }
-    
-    # Process each plugin type
-    for plugin_type in ['input', 'filter', 'output']:
-        if plugin_type in data:
-            for plugin_name, plugin_data in data[plugin_type].items():
-                transformed[plugin_type][plugin_name] = {
-                    'name': plugin_data.get('name', plugin_name),
-                    'version': plugin_data.get('version', ''),
-                    'description': f"{plugin_name} plugin (v{plugin_data.get('version', '?')})",
-                    'params': plugin_data.get('params', {}),
-                    'link': f"/guide/en/logstash/current/plugins-{plugin_type}s-{plugin_name}.html",
-                    'repo_link': f"https://github.com/logstash-plugins/logstash-{plugin_type}-{plugin_name}"
-                }
-    
-    return transformed
+    return data
 
 # Load plugin data once when the module is imported
 plugin_data = load_plugin_data()
@@ -53,13 +32,34 @@ def PipelineEditor(request):
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
 
-
         es = Elasticsearch(**_get_elastic_creds(es_id))
         pipeline_doc = es.get(index=".logstash", id=pipeline_name)
 
 
         context['pipeline_text'] = pipeline_doc['_source']['pipeline']
-        print(pipeline_doc)
+
+        try:
+            parsed_config = logstash_config_parse.logstash_config_to_components(pipeline_doc['_source']['pipeline'])
+        except:
+            parsed_config = {
+                "input": [],
+                "filter": [],
+                "output": []
+            }
+
+
+        context['component_data'] = parsed_config
+
+    if request.method == "POST":
+        print("POSTED")
+        # Handle HTMX request
+
+
+        data = json.loads(request.body.decode("utf-8"))
+        print("MAKING IT")
+
+        config = logstash_config_parse.components_to_logstash_config(data)
+        return HttpResponse(config, content_type="text/plain")
 
 
 
