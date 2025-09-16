@@ -51,15 +51,24 @@ def PipelineEditor(request):
         context['component_data'] = parsed_config
 
     if request.method == "POST":
-        print("POSTED")
-        # Handle HTMX request
 
+        if request.headers.get('HX-Request'):
+            data = json.loads(request.POST.get("components"))
+            if "save_pipeline" in request.POST:
+                pipeline_name = request.POST.get("pipeline")
+                config = logstash_config_parse.components_to_logstash_config({"components": data})
+                es = Elasticsearch(**_get_elastic_creds(request.POST.get("es_id")))
+                current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
+                print(current_pipeline_config)
 
-        data = json.loads(request.body.decode("utf-8"))
-        print("MAKING IT")
+                es.logstash.put_pipeline(id=pipeline_name, body={"pipeline": config, "last_modified": current_pipeline_config[pipeline_name]['last_modified'], "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'], "username": "LogstashUI", "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings']})
 
-        config = logstash_config_parse.components_to_logstash_config(data)
-        return HttpResponse(config, content_type="text/plain")
+        else:
+            data = json.loads(request.body.decode("utf-8"))
+            print("MAKING IT")
+
+            config = logstash_config_parse.components_to_logstash_config(data)
+            return HttpResponse(config, content_type="text/plain")
 
 
 
@@ -90,7 +99,7 @@ def PipelineManager(request):
 
     return render(request, "pipelines.html", context = {"pipelines": logstash_pipelines})
 
-
+# TODO: Make storing of credentials.. well.. actually secure.
 def _get_elastic_creds(connection_id):
 
     connection = models.Connection.objects.get(id=connection_id)

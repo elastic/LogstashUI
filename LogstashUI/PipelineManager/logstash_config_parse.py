@@ -17,7 +17,7 @@ LOGSTASH_GRAMMAR = r"""
 
     plugin: CNAME "{" [pair (","? pair)*] "}"
 
-    pair: CNAME "=>" value
+    pair: (CNAME | ESCAPED_STRING) "=>" value
 
     ?value: string
           | number
@@ -144,18 +144,23 @@ def components_to_logstash_config(component_dict):
     for section in component_dict['components']:
         config += section + " {\n"
         for plugin in component_dict['components'][section]:
-            config += "\t" + plugin['plugin'] + " {\n"
+            config += f'\t{plugin["plugin"]} {{\n'
             for plugin_config_name in plugin['config']:
                 plugin_config_value = plugin['config'][plugin_config_name]
 
-                print(plugin_config_name, plugin_config_value, type(plugin_config_value))
+                #print(plugin_config_name, plugin_config_value, type(plugin_config_value))
                 if type(plugin_config_value) in [str, int, float]:
-                    config += "\t\t" + plugin_config_name + " => " + plugin_config_value + "\n"
+                    config += f'\t\t{plugin_config_name} => "{plugin_config_value}"\n'
+
                 elif type(plugin_config_value) is dict:
-                    config += "\t\t" + plugin_config_name + " => {\n"
+
+                    config += f"\t\t{plugin_config_name} => {{\n"
 
                     for dict_key in plugin_config_value:
-                        config += "\t\t\t" + dict_key + " => " + plugin_config_value[dict_key] + "\n"
+                        print(dict_key)
+                        config += f'\t\t\t{dict_key} => "{plugin_config_value[dict_key]}"\n'
+
+
 
                     config += "\t\t}\n"
                 elif type(plugin_config_value) is list:
@@ -166,6 +171,7 @@ def components_to_logstash_config(component_dict):
             config += "\t}\n"
 
         config += "}\n"
+    print(config)
     return config
 
 
