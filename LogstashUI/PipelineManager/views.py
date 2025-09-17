@@ -1,38 +1,39 @@
+
+# Django
 from django.shortcuts import render, redirect
-from . import models
-from .forms import ConnectionForm
-from elasticsearch import Elasticsearch
 from django.http import HttpResponse
+
+## Forms
+from .forms import ConnectionForm # Lives here because UI will only be here
+
+## Tables
+from Core.models import Connection as ConnectionTable
+from Core.views import get_elastic_connection
+
+from API import logstash_config_parse
 import json
 import os
 
-from . import logstash_config_parse
 
 
-
-def load_plugin_data():
-    # Get the base directory of the project
+def _load_plugin_data():
     app_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct the path to the JSON file
     json_path = os.path.join(app_dir, 'data', 'plugins.json')
-
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-        
     return data
-
-# Load plugin data once when the module is imported
-plugin_data = load_plugin_data()
 
 def PipelineEditor(request):
     context = {
-        "plugin_data": plugin_data
+        "plugin_data": _load_plugin_data()
     }
+
+    # TODO: Allow editing of Logstash config too
     if request.method == "GET":
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
 
-        es = Elasticsearch(**_get_elastic_creds(es_id))
+        es = get_elastic_connection(es_id)
         pipeline_doc = es.get(index=".logstash", id=pipeline_name)
 
 
@@ -46,43 +47,19 @@ def PipelineEditor(request):
                 "filter": [],
                 "output": []
             }
-
-
         context['component_data'] = parsed_config
-
-    if request.method == "POST":
-
-        if request.headers.get('HX-Request'):
-            data = json.loads(request.POST.get("components"))
-            if "save_pipeline" in request.POST:
-                pipeline_name = request.POST.get("pipeline")
-                config = logstash_config_parse.components_to_logstash_config({"components": data})
-                es = Elasticsearch(**_get_elastic_creds(request.POST.get("es_id")))
-                current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
-                print(current_pipeline_config)
-
-                es.logstash.put_pipeline(id=pipeline_name, body={"pipeline": config, "last_modified": current_pipeline_config[pipeline_name]['last_modified'], "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'], "username": "LogstashUI", "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings']})
-
-        else:
-            data = json.loads(request.body.decode("utf-8"))
-            print("MAKING IT")
-
-            config = logstash_config_parse.components_to_logstash_config(data)
-            return HttpResponse(config, content_type="text/plain")
-
-
-
-
     return render(request, "pipeline_editor.html", context=context)
 
+# Builds the table of pipelines
 def PipelineManager(request):
 
+    context = {}
     logstash_pipelines = []
 
-    for connection in models.Connection.objects.all():
+    for connection in ConnectionTable.objects.all():
 
         if connection.connection_type == "CENTRALIZED":
-            es = Elasticsearch(**_get_elastic_creds(connection.id))
+            es = get_elastic_connection(connection.id)
             pipelines = es.search(index=".logstash", size=2000)
             for pipeline in pipelines['hits']['hits']:
                 logstash_pipelines.append(
@@ -92,46 +69,20 @@ def PipelineManager(request):
                         "name": pipeline['_id']
                     }
                 )
-            # TODO: Allow editing of Logstash metadata too
 
+    context['pipelines'] = logstash_pipelines
 
+    return render(request, "pipelines.html", context = context)
 
-
-    return render(request, "pipelines.html", context = {"pipelines": logstash_pipelines})
-
-# TODO: Make storing of credentials.. well.. actually secure.
-def _get_elastic_creds(connection_id):
-
-    connection = models.Connection.objects.get(id=connection_id)
-    connection_data = {}
-
-    if connection.cloud_id:
-        connection_data['cloud_id'] = connection.cloud_id
-    else:
-        connection_data['host'] = connection.url
-
-    if connection.api_key:
-        connection_data['api_key'] = connection.api_key
-    else:
-        connection_data['username'] = connection.username
-        connection_data['password'] = connection.password
-
-    return connection_data
-
-
-def test_elastic_connectivity(connection_id):
-    elastic_creds = _get_elastic_creds(connection_id)
-    es = Elasticsearch(**elastic_creds)
-    es_info = json.dumps(dict(es.info()), indent=4)
-    return es_info
 
 #TODO: Implement ssh connection
-#TODO: Change naming of connections
+
+# Allows users to manage connections to Elastic
 def Logstash(request):
+
+    context = {}
     if request.method == "POST":
         try:
-            print("Form data:", request.POST)  # Debug print
-
             is_htmx = request.headers.get('HX-Request') == 'true'
             print(f"Is HTMX request: {is_htmx}")
 
@@ -173,27 +124,11 @@ def Logstash(request):
             return redirect('logstash')
 
 
-    if request.method == "GET":
 
-        delete_id = request.GET.get('delete_id')
-        if request.GET.get('delete_id'):
-            models.Connection.objects.filter(id=delete_id).delete()
             return
 
-        test_id = request.GET.get('test')
-        if request.GET.get("test"):
-            return HttpResponse("""
-                <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
-                    onload="setTimeout(() => this.remove(), 3000);">
-                    <p>{0}</p>
-                </div>
-            """.format(test_elastic_connectivity(test_id)))
-            return test_elastic_connectivity(test_id)
 
+    context['connections'] = ConnectionTable.objects.all()
+    context['form'] = ConnectionForm()
 
-    connections = models.Connection.objects.all()
-
-    #print(connections, "ME")
-    for connection in connections:
-        print(connection, dir(connection))
-    return render(request, "connections.html", context={"connections": connections, "form": ConnectionForm()})
+    return render(request, "connections.html", context=context)

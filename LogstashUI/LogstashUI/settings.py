@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'PipelineManager',
+    'API',
+    'Core',
     'django_htmx'
 ]
 
@@ -58,7 +60,6 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            BASE_DIR / "LogstashUI" / "templates"
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -126,8 +127,4 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-STATICFILES_DIRS = [
-    BASE_DIR / "LogstashUI" / "static",
-]
 STATIC_ROOT = BASE_DIR / "staticfiles"

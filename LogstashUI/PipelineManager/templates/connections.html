@@ -20,8 +20,8 @@
           <button id="centralizedPipelineBtn" class="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
             Centralized Pipeline Management
           </button>
-          <button id="sshPipelineBtn" class="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
-            Logstash Server (SSH)
+          <button id="sshPipelineBtn" class="w-full text-left px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
+            Logstash Server (SSH) - Coming soon!
           </button>
         </div>
       </div>
@@ -207,13 +207,29 @@
               <td class="table-cell">{{ connection.name }}</td>
               <td class="table-cell" title="{{ connection.cloud_id }}">{{ connection.cloud_id|truncatechars:12 }}</td>
               <td class="table-cell">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                      hx-get="/PipelineManager/Logstash?test={{ connection.pk }}"
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
+                      hx-get="/API/TestConnectivity?test={{ connection.pk }}"
                       hx-trigger="click"
                       hx-target="#toast-container"
                       hx-indicator=".loading"
-                      hx-on::after-request="setTimeout(() => {document.getElementById('toast-container').innerHTML = ''; window.location.reload();}, 3000);">
-                  Connected
+                      hx-on::click="this.textContent = 'Testing...'; this.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200'); this.classList.add('bg-yellow-100', 'text-yellow-800', 'animate-pulse');"
+                      hx-on::after-request="
+                        const result = event.detail.successful ? 
+                          {text: 'Connected', bg: 'bg-green-100', textColor: 'text-green-800', hover: 'hover:bg-green-200'} : 
+                          {text: 'Connection Failed', bg: 'bg-red-100', textColor: 'text-red-800', hover: 'hover:bg-red-200'};
+                        this.textContent = result.text;
+                        this.classList.remove('bg-yellow-100', 'text-yellow-800', 'animate-pulse');
+                        this.classList.add(result.bg, result.textColor, result.hover);
+                        
+                        // Hide the toast after 3 seconds with a fade effect
+                        const toast = document.querySelector('#toast-container > div');
+                        if (toast) {
+                          setTimeout(() => {
+                            toast.style.opacity = '0';
+                            setTimeout(() => toast.remove(), 300);
+                          }, 3000);
+                        }">
+                  Test
                 </span>
               </td>
               <td class="table-cell text-right">
@@ -224,9 +240,12 @@
                     </svg>
                   </button>
                   <div class="action-menu-items hidden absolute z-50 mt-1 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
-                    <a hx-get="/PipelineManager/Logstash/?delete_id={{ connection.pk }}" hx-trigger="click" hx-confirm="Are you sure you want to delete this connection?" hx-swap="afterend" hx-get-response="#connections" class="block px-4 py-2 text-sm text-red-400 hover:bg-gray-700" role="menuitem" onclick="setTimeout(() => window.location.reload(), 10)">
-                      Delete
-                    </a>
+                      <form>
+                      {% csrf_token %}
+                        <a hx-post="/API/DeleteConnection/{{ connection.pk }}/" hx-trigger="click" hx-confirm="Are you sure you want to delete this connection?" hx-swap="afterend" hx-get-response="#connections" class="block px-4 py-2 text-sm text-red-400 hover:bg-gray-700" role="menuitem" onclick="setTimeout(() => window.location.reload(), 10)">
+                          Delete
+                        </a>
+                      </form>
                   </div>
                 </div>
               </td>
@@ -257,6 +276,11 @@
   // Open appropriate form when dropdown item is clicked
   document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
     document.getElementById('connectionFormFlyout').classList.remove('hidden');
+    // Set default Elasticsearch port to 9200 when showing the form
+    const portInput = document.querySelector('input[name="port"]');
+    if (portInput) {
+      portInput.value = '9200';
+    }
   });
 
   document.getElementById('sshPipelineBtn').addEventListener('click', function() {
