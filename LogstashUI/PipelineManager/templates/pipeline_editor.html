@@ -10,6 +10,23 @@
     <div class="flex space-x-4">
         <form id="pipelineForm">
             {% csrf_token %}
+          <button id="viewCode"
+              class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+              hx-post="/API/GetLogstashCode"
+              hx-trigger="click"
+              hx-target="#codeContent"
+              hx-swap="innerHTML"
+              hx-vals='js:{"components": components}'
+              onclick="document.getElementById('codeModal').classList.remove('hidden');">
+
+            View Code
+          </button>
+          <button
+            type="button"
+            onclick="document.getElementById('simulationModal').classList.remove('hidden')"
+            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
+            Simulate Pipeline
+          </button>
             <button type="button" 
                     id="savePipeline" 
                     class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -24,16 +41,8 @@
                 <!---TODO: Find a way to include logs for the respective logstash instances--->
             </button>
             <span id="saveStatus" class="ml-2"></span>
-      <button id="viewCode"
-              class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-              hx-post="/API/GetLogstashCode"
-              hx-trigger="click"
-              hx-target="#codeContent"
-              hx-swap="innerHTML"
-              hx-vals='js:{"components": components}'
-              onclick="showCodeModal(event)">
-        View Code
-      </button>
+
+
         </form>
     </div>
   </div>
@@ -839,47 +848,7 @@ function removeComponent(componentId) {
   }
 }
 
-async function showCodeModal(event) {
-  event.preventDefault();
-  
-  const modal = document.getElementById('codeModal');
-  const codeContent = document.getElementById('codeContent');
-  
-  try {
-    // Show the modal immediately
-    modal.classList.remove('hidden');
-    
-    // Show loading state
-    codeContent.innerHTML = '<div class="text-yellow-400">Generating configuration...</div>';
-    
-    // Make the HTMX request
-    htmx.ajax('POST', '/API/GetLogstashCode', {
-      values: {components: components},
-      target: '#codeContent',
-      swap: 'innerHTML'
-    });
-    
-  } catch (error) {
-    console.error('Error:', error);
-    codeContent.innerHTML = `<div class="text-red-400">Error: ${error.message}</div>`;
-  }
-}
 
-// Helper function to get CSRF token from cookies
-function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
-}
 
 function hideCodeModal() {
   document.getElementById('codeModal').classList.add('hidden');
@@ -960,11 +929,32 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Load existing components from the components variable
 function loadExistingComponents() {
-  // Loop through each component type (input, filter, output)
+  // First, clear all existing components
+  const componentTypes = ['input', 'filter', 'output'];
+
+  // Clear all component containers
+  componentTypes.forEach(type => {
+    const container = document.getElementById(`${type}Components`);
+    if (container) {
+      // Save any 'No components' message
+      const emptyMessage = container.querySelector('p');
+      container.innerHTML = '';
+
+      // Restore the 'No components' message if it exists and there are no components of this type
+      if (emptyMessage && emptyMessage.textContent.includes('No ')) {
+        if (!components[type] || components[type].length === 0) {
+          container.appendChild(emptyMessage);
+        }
+      }
+    }
+  });
+
+  // Then add all components
   Object.entries(components).forEach(([type, componentList]) => {
     const container = document.getElementById(`${type}Components`);
+    if (!container) return;
 
-    // Clear any existing "No components" message
+    // Remove 'No components' message if we're adding components
     const emptyMessage = container.querySelector('p');
     if (emptyMessage && emptyMessage.textContent.includes('No ')) {
       container.removeChild(emptyMessage);
@@ -1247,29 +1237,81 @@ function saveComponentConfig() {
     return;
   }
   
-  // Load any existing components
-  loadExistingComponents();
-}
+  // Get all form inputs and hidden fields
+  const allFields = form.querySelectorAll('input, select, textarea');
+  const config = {};
 
-// Load existing components from the components variable
-function loadExistingComponents() {
-  // Loop through each component type (input, filter, output)
-  Object.entries(components).forEach(([type, componentList]) => {
-    const container = document.getElementById(`${type}Components`);
-
-    // Clear any existing "No components" message
-    const emptyMessage = container.querySelector('p');
-    if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-      container.removeChild(emptyMessage);
+  // First pass: collect all regular fields
+  allFields.forEach(field => {
+    // Skip buttons, file inputs, and hidden fields (we'll handle those specially)
+    if (field.type === 'button' || field.type === 'submit' || field.type === 'file' ||
+        (field.type === 'hidden' && !field.dataset.fieldType)) {
+      return;
     }
 
-    // Add each component to the UI
-    componentList.forEach(component => {
-      const componentEl = createComponentElement(component);
-      container.appendChild(componentEl);
-    });
+    const name = field.name || field.id.replace('config-', '');
+    if (!name) return;
+
+    // Skip if we already processed this field (in case of duplicate names)
+    if (config.hasOwnProperty(name) && field.type !== 'checkbox') return;
+
+    // Handle different input types
+    if (field.type === 'checkbox') {
+      // For checkboxes, we need to handle multiple checkboxes with the same name
+      if (!config[name]) config[name] = [];
+      if (field.checked) {
+        config[name].push(field.value || true);
+      }
+    } else if (field.type === 'number') {
+      config[name] = field.value === '' ? null : Number(field.value);
+    } else if (field.dataset.fieldType === 'hash' || field.dataset.fieldType === 'array') {
+      // Skip here, we'll handle these in the next pass
+      return;
+    } else if (field.value.trim() !== '') {
+      config[name] = field.type === 'select-one' ? field.value : field.value.trim();
+    }
   });
+
+  // Second pass: handle special field types (hash and array)
+  const specialFields = form.querySelectorAll('[data-field-type]');
+  specialFields.forEach(field => {
+    const name = field.name || field.id.replace('config-', '');
+    if (!name) return;
+
+    try {
+      if (field.dataset.fieldType === 'hash' || field.dataset.fieldType === 'array') {
+        const value = field.value ? JSON.parse(field.value) :
+                     (field.dataset.fieldType === 'hash' ? {} : []);
+        if (Object.keys(value).length > 0 || Array.isArray(value) && value.length > 0) {
+          config[name] = value;
+        }
+      }
+    } catch (e) {
+      console.error(`Error parsing ${field.dataset.fieldType} field ${name}:`, e);
+    }
+  });
+
+  // Update the component's config in the components array
+  for (const type in components) {
+    const index = components[type].findIndex(c => c.id === currentComponent.id);
+    if (index !== -1) {
+      // Merge the new config with the existing one to preserve any non-form fields
+      components[type][index].config = { ...components[type][index].config, ...config };
+      break;
+    }
+  }
+  
+  // Reload the components to reflect changes
+  loadExistingComponents();
+  
+  // Close the modal after saving
+  const modal = document.getElementById('configModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
 }
+
+
 
 // Set up drag and drop functionality for filter components
 function setupDragAndDrop() {
@@ -1427,4 +1469,10 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
     background: #718096;
   }
 </style>
+
+
+  <!-- Include Simulation Modal Component -->
+  {% include 'components/simulation_modal.html' %}
+
+
 {% endblock %}

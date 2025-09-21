@@ -139,11 +139,36 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
 
 ################################ Component JSON to Logstash config ################################
 
-def components_to_logstash_config(component_dict):
+def components_to_logstash_config(component_dict, test=False):
     config = ""
+
+    if test:
+        component_dict['components']['input'] = [{
+            'id': 'stdin',
+            'type': 'input',
+            'plugin': 'stdin',
+            'config': {
+                "codec": "json"
+            }
+        }]
+        component_dict['components']['output'] = [{
+            'id': 'stdout',
+            'type': 'output',
+            'plugin': 'stdout',
+            'config': {
+                "codec": "json_lines"
+            }
+        }]
     for section in component_dict['components']:
         config += section + " {\n"
+
+        # plugin_num used for running simulations
+        plugin_num = 0
         for plugin in component_dict['components'][section]:
+
+            # Setup testing
+            if section == "filter" and test == True:
+                config += f"\tif [plugin_num] >= {plugin_num} {{\n"
             config += f'\t{plugin["plugin"]} {{\n'
             for plugin_config_name in plugin['config']:
                 plugin_config_value = plugin['config'][plugin_config_name]
@@ -169,9 +194,12 @@ def components_to_logstash_config(component_dict):
 
 
             config += "\t}\n"
+            if section == "filter" and test == True:
+                config += "\t}\n"
+            plugin_num += 1
 
         config += "}\n"
-    print(config)
+    #print(config)
     return config
 
 
