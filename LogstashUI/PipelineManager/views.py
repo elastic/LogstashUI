@@ -28,7 +28,6 @@ def PipelineEditor(request):
         "plugin_data": _load_plugin_data()
     }
 
-    # TODO: Allow editing of Logstash config too
     if request.method == "GET":
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")

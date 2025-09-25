@@ -74,8 +74,6 @@ def SavePipeline(request):
 
         return HttpResponse("Pipeline saved successfully!")
 
-
-# TODO: Plan how to get logstash loaded into the folder for simulations
 def SimulatePipeline(request):
     components = request.POST.get("components")
     data = json.loads(components)

@@ -3,7 +3,6 @@
 {% block content %}
 
 <!---TODO: Fix issue where when hash and lists are populated, the UI doesn't update them properly --->
-<!---TODO: Add test functionality to see changes before publishing --->
 <div class="p-6">
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-white">Logstash Pipeline Builder</h1>
@@ -36,7 +35,6 @@
                     hx-target="#saveStatus"
                     hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'>
               Save Pipeline
-                <!---TODO: Move Save validation (doesnt work) out of javascript and into htmx-->
                 <!---TODO: Find a way to validate that the pipeline won't fail before allowing a submit / overwrite -->
                 <!---TODO: Find a way to include logs for the respective logstash instances--->
             </button>
