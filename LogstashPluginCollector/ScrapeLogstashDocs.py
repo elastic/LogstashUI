@@ -38,7 +38,6 @@ class ScrapeLogstashDocs:
             if plugin_type in ['input', 'filter', 'output', 'codec']:
                 self.get_plugin_params(plugin_name, plugin_type)
 
-
         return soup
 
     def get_integration_plugin_params(self):
