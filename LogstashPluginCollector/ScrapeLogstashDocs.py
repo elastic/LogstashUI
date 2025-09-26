@@ -35,12 +35,17 @@ class ScrapeLogstashDocs:
                 "repo_link": plugin_row[2].find("a").get('href'),
                 "options": {}
             }
-            # TODO: Implement integration type
             if plugin_type in ['input', 'filter', 'output', 'codec']:
                 self.get_plugin_params(plugin_name, plugin_type)
 
 
         return soup
+
+    def get_integration_plugin_params(self):
+        print(" === Getting integration plugins params ===")
+        response = requests.get(self.document_sources['integrations'])
+        soup = BeautifulSoup(response.text, 'html.parser')
+        all_tables = soup.find_all("table")
 
     def get_plugin_params(self, plugin_name, plugin_type):
         print(" === Getting " + plugin_name + " params ===")
