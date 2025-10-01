@@ -31,8 +31,7 @@ def _get_creds(connection_id):
     if connection.api_key:
         connection_data['api_key'] = connection.api_key
     else:
-        connection_data['username'] = connection.username
-        connection_data['password'] = connection.password
+        connection_data['http_auth'] = (connection.username, connection.password)
 
     return connection_data
 

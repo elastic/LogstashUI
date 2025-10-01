@@ -12,38 +12,43 @@ class ConnectionForm(ModelForm):
     # Connection type radio buttons
     connection_type = forms.ChoiceField(
         choices=Connection.ConnectionType.choices,
-        widget=forms.RadioSelect(attrs={'class': 'form-radio-group'}),
+        widget=forms.RadioSelect(attrs={
+            'class': 'flex flex-col space-y-2',
+        }),
         initial=Connection.ConnectionType.CENTRALIZED,
     )
 
     # SSH Fields
     ssh_key = forms.CharField(
         widget=forms.Textarea(attrs={
-            'class': 'form-input',
+            'class': 'textarea textarea-bordered w-full',
             'rows': 5,
             'placeholder': 'Paste your SSH private key (PEM format) here',
         }),
         required=False,
         help_text='SSH private key for key-based authentication',
+        label_suffix='',
     )
 
     # Centralized Management Fields
     cloud_id = forms.CharField(
         widget=forms.TextInput(attrs={
-            'class': 'form-input',
+            'class': 'input input-bordered w-full',
             'placeholder': 'deployment-name:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
         }),
         required=False,
         help_text='Elastic Cloud ID (e.g., deployment-name:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX)',
+        label_suffix='',
     )
 
     api_key = forms.CharField(
         widget=forms.PasswordInput(attrs={
-            'class': 'form-input',
+            'class': 'input input-bordered w-full',
             'autocomplete': 'new-password',
         }),
         required=False,
         help_text='API key for authentication (leave empty to keep current)',
+        label_suffix='',
     )
 
     class Meta:
@@ -56,24 +61,42 @@ class ConnectionForm(ModelForm):
             'cloud_id', 'cloud_url', 'api_key',
         ]
         widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-input'}),
-            'host': forms.TextInput(attrs={'class': 'form-input', 'required': False}),
-            'port': forms.NumberInput(attrs={'class': 'form-input', 'required': False}),
-            'username': forms.TextInput(attrs={'class': 'form-input', 'required': False}),
+            'name': forms.TextInput(attrs={
+                'class': 'input input-bordered w-full',
+                'placeholder': 'e.g., Production Cluster',
+            }),
+            'host': forms.TextInput(attrs={
+                'class': 'input input-bordered w-full',
+                'placeholder': 'elasticsearch.example.com',
+                'required': False,
+            }),
+            'port': forms.NumberInput(attrs={
+                'class': 'input input-bordered w-24',
+                'required': False,
+            }),
+            'username': forms.TextInput(attrs={
+                'class': 'input input-bordered w-full',
+                'placeholder': 'elastic',
+                'required': False,
+            }),
             'password': forms.PasswordInput(attrs={
-                'class': 'form-input',
+                'class': 'input input-bordered w-full',
                 'autocomplete': 'new-password',
+                'placeholder': '••••••••',
                 'required': False,
             }),
             'cloud_url': forms.URLInput(attrs={
-                'class': 'form-input',
-                'placeholder': 'https://example.com',
+                'class': 'input input-bordered w-full',
+                'placeholder': 'https://my-deployment.es.us-central1.gcp.cloud.es.io:9243',
                 'required': False,
             }),
         }
         help_texts = {
             'password': 'Leave empty to keep current password',
-            'cloud_url': 'Full URL to your Elasticsearch cluster (e.g., https://my-deployment.es.us-central1.gcp.cloud.es.io:9243)',
+            'cloud_url': 'Full URL to your Elasticsearch cluster',
+            'ssh_key': 'Paste your SSH private key in PEM format',
+            'username': 'Elasticsearch username (usually "elastic")',
+            'port': 'Elasticsearch API port (usually 9200)',
         }
 
     def __init__(self, *args, **kwargs):
@@ -84,12 +107,27 @@ class ConnectionForm(ModelForm):
             self.fields['password'].required = False
             self.fields['api_key'].required = False
 
-        # Add form-control class to all fields
+        # Add DaisyUI classes to all fields
         for field_name, field in self.fields.items():
-            if 'class' in field.widget.attrs:
-                field.widget.attrs['class'] += ' form-control'
-            else:
-                field.widget.attrs['class'] = 'form-control'
+            if field_name != 'connection_type':  # Skip connection_type as it's handled separately
+                if 'class' in field.widget.attrs:
+                    if 'input' not in field.widget.attrs['class'] and 'textarea' not in field.widget.attrs['class']:
+                        if isinstance(field.widget, (forms.TextInput, forms.NumberInput, forms.PasswordInput, forms.URLInput)):
+                            field.widget.attrs['class'] += ' input input-bordered w-full'
+                        elif isinstance(field.widget, forms.Textarea):
+                            field.widget.attrs['class'] += ' textarea textarea-bordered w-full'
+                else:
+                    if isinstance(field.widget, (forms.TextInput, forms.NumberInput, forms.PasswordInput, forms.URLInput)):
+                        field.widget.attrs['class'] = 'input input-bordered w-full'
+                    elif isinstance(field.widget, forms.Textarea):
+                        field.widget.attrs['class'] = 'textarea textarea-bordered w-full'
+                
+                # Add placeholder if not already set
+                if 'placeholder' not in field.widget.attrs:
+                    field.widget.attrs['placeholder'] = field.label or ''
+                
+                # Remove default colons from labels
+                field.label_suffix = ''
 
     def clean(self):
         cleaned_data = super().clean()

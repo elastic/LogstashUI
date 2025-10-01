@@ -3,7 +3,7 @@ from . import views
 
 
 urlpatterns = [
-    path('Pipelines/', views.PipelineManager, name='pipelines'),
-    path('Logstash/', views.Logstash, name='logstash'),
+
+    path("", views.PipelineManager, name="PipelineManager"),
     path("Pipelines/Editor/", views.PipelineEditor, name="PipelineEditor")
 ]

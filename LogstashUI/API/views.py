@@ -16,8 +16,10 @@ import os
 import subprocess
 import tempfile
 from deepdiff import DeepDiff
+from PipelineManager.forms import ConnectionForm
 
 from django.conf import settings
+from django.template import Template, Context
 
 def TestConnectivity(request):
     test_id = request.GET.get('test')
@@ -34,8 +36,35 @@ def TestConnectivity(request):
             test_elastic_connectivity(elastic_connection))
         )
 
+def AddConnection(request):
+
+    if request.method == "POST":
+        form = ConnectionForm(request.POST)
+        if form.is_valid():
+            form.save()
+        else:
+            raise Exception(form.errors)
+
+    return HttpResponse("""
+        <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
+            Connection created successfully!
+            <script>
+                // Close the flyout after a short delay
+                setTimeout(() => {
+                    const flyout = document.getElementById('connectionFormFlyout');
+                    if (flyout) {
+                        flyout.classList.add('hidden');
+                    }
+                    // Reload the page to show the new connection
+                    window.location.reload();
+                }, 100000);
+            </script>
+        </div>
+    """)
+
 def DeleteConnection(request, connection_id=None):
-    print("MADE IT")
+
+    print(connection_id, "MUAH")
     if connection_id:
         ConnectionTable.objects.filter(id=connection_id).delete()
 
@@ -160,3 +189,48 @@ def SimulatePipeline(request):
 
 
     return HttpResponse(html_text)
+
+
+
+def GetPipelines(request, connection_id):
+
+    connection = ConnectionTable.objects.get(pk=connection_id)
+
+
+    logstash_pipelines = []
+    if connection.connection_type == "CENTRALIZED":
+        es = get_elastic_connection(connection.id)
+
+
+
+        pipelines = es.logstash.get_pipeline()
+        for pipeline in pipelines:
+            logstash_pipelines.append(
+                {
+                    "es_id": connection.id,
+                    "es_name": connection.name,
+                    "name": pipeline
+                }
+            )
+
+
+    logstash_template = Template("""
+            <table>
+                <thead>
+                    <th>Pipeline Name</th>
+                </thead>
+                <tbody>
+                    {% for pipeline in pipelines %}
+                        <td>
+                            <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">{{ pipeline.name }}</a>
+                        </td>
+                    {% endfor %}
+                </tbody>
+            </table>
+        """)
+    context = Context({"pipelines": logstash_pipelines})
+    print(logstash_template.render(context))
+
+    return HttpResponse(
+        logstash_template.render(context)
+    )

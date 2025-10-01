@@ -1,0 +1,276 @@
+  <!-- Connection Form Flyout -->
+  <div id="connectionFormFlyout" class="hidden fixed inset-0 overflow-hidden z-50">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeFlyout()"></div>
+    <div class="absolute inset-y-0 right-0 max-w-full flex">
+      <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+        <div class="flex justify-between items-center p-6 border-b border-base-300">
+          <h2 class="text-xl font-bold">Add New Connection</h2>
+          <button onclick="closeFlyout()" class="btn btn-ghost btn-sm btn-circle">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6">
+          <form id="connectionForm"
+              hx-post="/API/AddConnection"
+              hx-target="body"
+              hx-swap="none"
+              hx-indicator=".loading"
+              hx-on::after-request="
+                  if (event.detail.successful) {
+                      showToast('Connection created successfully!', 'success');
+                      closeFlyout();
+                      setTimeout(() => window.location.reload(), 3000);
+                  } else {
+                      showToast('Error creating connection', 'error');
+                  }">
+              {% csrf_token %}
+
+              <!-- Connection Name Field -->
+              <div class="mb-4">
+                <label for="{{ form.name.id_for_label }}" class="form-label">
+                  Connection Name <span class="text-red-500">*</span>
+                </label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                  <p class="text-red-500 text-sm mt-1">{{ form.name.errors.0 }}</p>
+                {% endif %}
+                <p class="text-gray-400 text-xs mt-1">A descriptive name for this connection</p>
+              </div>
+
+              <!-- Hidden connection type field -->
+              <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
+
+              <!-- Centralized Connection Fields -->
+              <div id="centralizedFields">
+                <div class="form-radio-group mb-4">
+                  <label class="form-radio-label">
+                    <input type="radio" name="connection_mode" value="cloud" class="form-radio" checked>
+                    <span>Cloud ID</span>
+                  </label>
+                  <label class="form-radio-label">
+                    <input type="radio" name="connection_mode" value="url" class="form-radio">
+                    <span>Elastic Node URL</span>
+                  </label>
+                </div>
+
+                <!-- Cloud ID Field -->
+                <div id="cloudIdField">
+                  <label for="{{ form.cloud_id.id_for_label }}" class="form-label">
+                    Cloud ID
+                  </label>
+                  {{ form.cloud_id }}
+                </div>
+
+                <!-- Node URL and Port Fields -->
+                <div id="nodeUrlField" class="hidden">
+                  <div class="flex space-x-4">
+                    <div class="flex-1">
+                      <label for="{{ form.host.id_for_label }}" class="form-label">
+                        Elastic Node URL
+                      </label>
+                      {{ form.host }}
+                    </div>
+                    <div class="w-32">
+                      <label for="{{ form.port.id_for_label }}" class="form-label">
+                        Port
+                      </label>
+                      {{ form.port }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Authentication Section -->
+                <div class="form-section">
+                  <label class="form-label">Authentication</label>
+                  <div class="form-radio-group">
+                    <label class="form-radio-label">
+                      <input type="radio" name="auth_type" value="basic" class="form-radio" checked>
+                      <span>Username/Password</span>
+                    </label>
+                    <label class="form-radio-label">
+                      <input type="radio" name="auth_type" value="apiKey" class="form-radio">
+                      <span>API Key</span>
+                    </label>
+                  </div>
+
+                  <!-- Username/Password Fields -->
+                  <div id="basicAuthFields">
+                    <div class="mb-4">
+                      <label for="{{ form.username.id_for_label }}" class="form-label">
+                        Username
+                      </label>
+                      {{ form.username }}
+                    </div>
+                    <div class="mb-4">
+                      <label for="{{ form.password.id_for_label }}" class="form-label">
+                        Password
+                      </label>
+                      {{ form.password }}
+                    </div>
+                  </div>
+
+                  <!-- API Key Field -->
+                  <div id="apiKeyField" class="hidden">
+                    <label for="{{ form.api_key.id_for_label }}" class="form-label">
+                      API Key
+                    </label>
+                    {{ form.api_key }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- SSH Connection Fields -->
+              <div id="sshFields" class="hidden">
+                <div class="mb-4">
+                  <label for="ssh_host" class="form-label">Host</label>
+                  <input type="text" id="ssh_host" name="ssh_host" class="form-input">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_port" class="form-label">Port</label>
+                  <input type="number" id="ssh_port" name="ssh_port" class="form-input w-32" value="22" min="1" max="65535">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_username" class="form-label">Username</label>
+                  <input type="text" id="ssh_username" name="ssh_username" class="form-input">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_password" class="form-label">Password</label>
+                  <input type="password" id="ssh_password" name="ssh_password" class="form-input">
+                </div>
+                <div class="mb-4">
+                  <label for="ssh_path" class="form-label">Config Path</label>
+                  <input type="text" id="ssh_path" name="ssh_path" class="form-input" value="/etc/logstash/config">
+                </div>
+              </div>
+
+              <div class="form-actions">
+                  <button type="button" onclick="closeFlyout()" class="btn btn-secondary">
+                      Cancel
+                  </button>
+                  <button type="submit" class="btn btn-primary">
+                      Save Connection
+                  </button>
+              </div>
+              <div class="htmx-indicator loading">Saving...</div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function closeFlyout() {
+        document.getElementById('connectionFormFlyout').classList.add('hidden');
+    }
+
+
+
+
+  // Handle form submission and front end validation
+  document.getElementById('connectionForm').addEventListener('submit', function(e) {
+    // Only validate visible fields
+    if (document.getElementById('connectionTypeField').value === 'SSH') {
+      // For SSH form, only validate SSH fields
+      const sshFields = ['ssh_host', 'ssh_port', 'ssh_username', 'ssh_password'];
+      let isValid = true;
+
+      sshFields.forEach(field => {
+        const input = document.querySelector(`[name="${field}"]`);
+        if (!input.value.trim()) {
+          isValid = false;
+          input.reportValidity();
+        }
+      });
+
+      if (!isValid) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else {
+      // For centralized form, validate based on selected auth type
+      const authType = document.querySelector('input[name="auth_type"]:checked').value;
+      let isValid = true;
+
+      // Always validate username/password if basic auth is selected
+      if (authType === 'basic') {
+        const username = document.querySelector('[name="username"]');
+        const password = document.querySelector('[name="password"]');
+
+        if (!username.value.trim() || !password.value.trim()) {
+          isValid = false;
+          if (!username.value.trim()) username.reportValidity();
+          if (!password.value.trim()) password.reportValidity();
+        }
+      } else {
+        // Validate API key if API key auth is selected
+        const apiKey = document.querySelector('[name="api_key"]');
+        if (!apiKey.value.trim()) {
+          isValid = false;
+          apiKey.reportValidity();
+        }
+      }
+
+      if (!isValid) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  });
+
+
+
+  // Toggle between Cloud ID and Node URL fields (for centralized connections)
+  document.querySelectorAll('input[name="connection_mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      if (this.value === 'cloud') {
+        document.getElementById('cloudIdField').classList.remove('hidden');
+        document.getElementById('nodeUrlField').classList.add('hidden');
+      } else {
+        document.getElementById('cloudIdField').classList.add('hidden');
+        document.getElementById('nodeUrlField').classList.remove('hidden');
+      }
+    });
+  });
+
+
+
+// Toggle between Basic Auth and API Key fields (for centralized connections)
+  document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      document.getElementById('basicAuthFields').classList.toggle('hidden', this.value !== 'basic');
+      document.getElementById('apiKeyField').classList.toggle('hidden', this.value !== 'apiKey');
+    });
+  });
+
+    function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500',
+        warning: 'bg-yellow-500'
+    };
+
+    toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
+    toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  }
+
+  </script>

@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<!--TODO: Implement SSH Connection-->
+<div class="p-6">
+
+  <div class="page-header flex justify-end">
+
+    <div class="relative">
+      <button id="addConnectionDropdown" class="btn btn-primary btn-primary-primary flex items-center gap-x-2 justify-end">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Connection
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div id="connectionDropdown" class="hidden absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none">
+        <div class="py-1">
+          <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
+            Centralized Pipeline Management
+          </a>
+          <a id="sshPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
+            Logstash Server (SSH) - Coming soon!
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection Form Flyout -->
+  {% include 'components/pipeline_manager/connection_modal.html' %}
+
+  <div class="table-container mt-6 overflow-visible">
+    <table class="table w-full">
+      <thead class="table-header">
+        <tr>
+          <th scope="col" class="table-header-cell"></th>
+          <th scope="col" class="table-header-cell">Type</th>
+          <th scope="col" class="table-header-cell">Name</th>
+          <th scope="col" class="table-header-cell">Host</th>
+          <th scope="col" class="table-header-cell">Status</th>
+          <th scope="col" class="table-header-cell text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="table-body">
+        {% for connection in connections %}
+            <tr class="table-row">
+              <td class="table-cell">
+                <button class="expand-button p-1 hover:bg-gray-700 rounded transition-transform"
+                    onclick="
+                      const target = document.getElementById('pipelines-{{ connection.pk }}');
+                      if (target.classList.contains('hidden')) {
+                        target.classList.remove('hidden');
+                        htmx.ajax('GET', '/API/GetPipelines/{{ connection.pk }}/', {target: '#pipelines-{{ connection.pk }}', swap: 'innerHTML'});
+                      } else {
+                        target.classList.add('hidden');
+                        target.innerHTML = '';
+                      }
+                      this.querySelector('svg').classList.toggle('rotate-180');
+                    ">
+                  <svg class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </td>
+              <td class="table-cell">
+
+                {% if connection.connection_type == "CENTRALIZED" %}
+                  <img src="{% static 'images/ElasticIcon.png' %}" alt="Centralized" width="52" height="52" class="inline-block">
+                {% else %}
+                  <img src="{% static 'images/LoggyIcon.png' %}" alt="SSH" class="inline-block">
+                {% endif %}
+              </td>
+
+              <td class="table-cell">{{ connection.name }}</td>
+              <td class="table-cell" title="{{ connection.cloud_id }}">{{ connection.cloud_id|truncatechars:12 }}</td>
+              <td class="table-cell">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
+                      hx-get="/API/TestConnectivity?test={{ connection.pk }}"
+                      hx-trigger="click"
+                      hx-target="#toast-container"
+                      hx-indicator=".loading"
+                      hx-on::click="this.textContent = 'Testing...'; this.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200'); this.classList.add('bg-yellow-100', 'text-yellow-800', 'animate-pulse');"
+                      hx-on::after-request="
+                        const result = event.detail.successful ? 
+                          {text: 'Connected', bg: 'bg-green-100', textColor: 'text-green-800', hover: 'hover:bg-green-200'} : 
+                          {text: 'Connection Failed', bg: 'bg-red-100', textColor: 'text-red-800', hover: 'hover:bg-red-200'};
+                        this.textContent = result.text;
+                        this.classList.remove('bg-yellow-100', 'text-yellow-800', 'animate-pulse');
+                        this.classList.add(result.bg, result.textColor, result.hover);
+                        
+                        // Hide the toast after 3 seconds with a fade effect
+                        const toast = document.querySelector('#toast-container > div');
+                        if (toast) {
+                          setTimeout(() => {
+                            toast.style.opacity = '0';
+                            setTimeout(() => toast.remove(), 300);
+                          }, 3000);
+                        }">
+                  Test
+                </span>
+              </td>
+              <td class="table-cell text-right">
+                <div class="action-menu relative">
+                  <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </button>
+
+                  <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                      <div class="px-1 py-1">
+                        <form method="POST">
+                          {% csrf_token %}
+                          <a hx-post="/API/DeleteConnection/{{ connection.pk }}/"
+                           hx-trigger="click" 
+                           hx-confirm="Are you sure you want to delete this connection?" 
+                           hx-swap="afterend" 
+                           hx-get-response="#connections" 
+                           class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" 
+                           role="menuitem" 
+                           onclick="setTimeout(() => window.location.reload(), 10)">
+                          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </a>
+                        </form>
+                      </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr id="pipelines-{{ connection.pk }}" class="hidden">
+              <td colspan="6" class="p-0">
+                <div class="p-4 bg-gray-800">
+                  <div class="htmx-indicator">
+                    <div class="flex justify-center items-center py-4">
+                      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    </div>
+                  </div>
+                  <div class="htmx-fade-in"></div>
+                </div>
+              </td>
+            </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+
+
+
+</div>
+
+<script>
+
+
+  // Toggle dropdown
+  document.getElementById('addConnectionDropdown').addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.getElementById('connectionDropdown').classList.toggle('hidden');
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function() {
+    document.getElementById('connectionDropdown').classList.add('hidden');
+  });
+
+  // Open appropriate form when dropdown item is clicked
+  document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionFormFlyout').classList.remove('hidden');
+    // Set default Elasticsearch port to 9200 when showing the form
+    const portInput = document.querySelector('input[name="port"]');
+    if (portInput) {
+      portInput.value = '9200';
+    }
+  });
+
+  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionFormFlyout').classList.remove('hidden');
+  });
+
+  // Set connection type based on which button was clicked
+  document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionTypeField').value = 'CENTRALIZED';
+    document.getElementById('centralizedFields').classList.remove('hidden');
+    document.getElementById('sshFields').classList.add('hidden');
+  });
+
+  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
+    document.getElementById('connectionTypeField').value = 'SSH';
+    document.getElementById('centralizedFields').classList.add('hidden');
+    document.getElementById('sshFields').classList.remove('hidden');
+  });
+
+  // Handle action menu (3-dot icon) functionality
+  document.addEventListener('click', function(e) {
+    // Close all open action menus when clicking anywhere
+    if (!e.target.closest('.action-menu')) {
+      document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+      });
+    }
+  });
+
+  // Toggle action menu when clicking the 3-dot icon
+  document.querySelectorAll('.action-menu-button').forEach(button => {
+    button.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const menu = this.nextElementSibling;
+      const isHidden = menu.classList.contains('hidden');
+      
+      // Close all other open menus
+      document.querySelectorAll('.action-menu-items').forEach(m => {
+        if (m !== menu) m.classList.add('hidden');
+      });
+      
+      // Position the menu at the cursor
+      if (isHidden) {
+        const rect = this.getBoundingClientRect();
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+      }
+      
+      // Toggle current menu
+      menu.classList.toggle('hidden', !isHidden);
+    });
+  });
+  
+  // Close menu when scrolling
+  window.addEventListener('scroll', function() {
+    document.querySelectorAll('.action-menu-items').forEach(menu => {
+      menu.classList.add('hidden');
+    });
+  }, true);
+</script>
+
+
+
+
+{% endblock %}
