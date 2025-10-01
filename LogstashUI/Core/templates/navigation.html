@@ -1,49 +1,63 @@
-<!-- Left Navigation -->
-<aside class="nav-container">
-  <div class="nav-header">
-    <span class="brand-icon">
-      <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-        <circle cx="8" cy="12" r="3" class="text-sky-400"></circle>
-        <circle cx="15" cy="8" r="2" class="text-cyan-300"></circle>
-        <circle cx="15" cy="15.5" r="2.5" class="text-fuchsia-400"></circle>
-      </svg>
-    </span>
-    <span class="nav-title">Logstash UI</span>
+<!-- Sidebar Content -->
+<aside class="w-64 min-h-screen base-100 text-base-content flex flex-col">
+  <!-- Sidebar Header -->
+  <div class="p-4 border-b border-base-300">
+    <a href="/" class="flex items-center gap-2">
+      <div class="w-10 h-10 rounded-lg bg-primary text-primary-content flex items-center justify-center">
+        <svg viewBox="0 0 24 24" class="w-6 h-6" fill="currentColor">
+          <circle cx="8" cy="12" r="3" class="text-primary-content"></circle>
+          <circle cx="15" cy="8" r="2" class="text-primary-content"></circle>
+          <circle cx="15" cy="15.5" r="2.5" class="text-primary-content"></circle>
+        </svg>
+      </div>
+      <h1 class="text-xl font-bold nav-text">Logstash UI</h1>
+    </a>
   </div>
 
-  <nav class="nav-menu">
-    <!-- Pipelines -->
-    <div>
-      <a href="/PipelineManager/Pipelines" class="nav-item">
-        <span>Pipelines</span>
-      </a>
-    </div>
+  <!-- Collapsible Content -->
+  <div id="sidebar-content" class="flex-1 overflow-y-auto transition-all duration-300">
+    <!-- Navigation Menu -->
+    <ul class="menu p-2 w-full">
+      <!-- Pipelines -->
+      <li>
+        <a href="/PipelineManager/Pipelines" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="nav-text">Pipelines</span>
+        </a>
+      </li>
 
-    <!-- Connections -->
-    <div>
-      <a href="/PipelineManager/Logstash" class="nav-item">
-        <span>Connections</span>
-      </a>
-    </div>
+      <!-- Connections -->
+      <li>
+        <a href="/PipelineManager/Logstash" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          <span class="nav-text">Connections</span>
+        </a>
+      </li>
 
-    <!-- Settings -->
-    <div>
-      <a href="#" class="nav-item">
-        <span>Settings</span>
-      </a>
-    </div>
-  </nav>
-
-  <!-- Bottom section -->
-  <div class="user-section">
-    <div class="flex items-center space-x-3">
-      <div class="user-avatar">
-        <span class="user-avatar-text">U</span>
-      </div>
-      <div>
-        <p class="user-name">User</p>
-        <p class="user-role">Administrator</p>
-      </div>
-    </div>
-  </div>
+      <!-- Settings -->
+      <li>
+        <a href="#" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="nav-text">Settings</span>
+        </a>
+      </li>
+    </ul>
 </aside>
+
+
+<style>
+/* Navigation styles */
+.nav-text {
+  white-space: nowrap;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+</style>
