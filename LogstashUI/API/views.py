@@ -78,9 +78,6 @@ def GetLogstashCode(request):
             "components": data
         }
     )
-    print(data)
-    print("What")
-    print(config)
     
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(

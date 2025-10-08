@@ -1,0 +1,373 @@
+<!-- Plugin Configuration Modal -->
+<div id="configModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+  <div class="bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <!-- Modal Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-white"></h3>
+      <button onclick="PluginConfigModal.hide()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Configuration Form -->
+    <div class="p-4 overflow-y-auto flex-1">
+      <form id="configForm" class="space-y-4">
+        <!-- Dynamic content will be inserted here -->
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Plugin Configuration Modal Controller
+window.PluginConfigModal = (function() {
+  let currentComponent = null;
+  let pluginData = {};
+
+  // Initialize the modal with plugin data
+  function init(data) {
+    pluginData = data;
+  }
+
+  // Show the configuration modal for a component
+  function show(component) {
+    currentComponent = component;
+    const modal = document.getElementById('configModal');
+    const configForm = document.getElementById('configForm');
+    const pluginInfo = pluginData[component.type]?.[component.plugin] || {};
+
+    // Set modal title with plugin type badge
+    modal.querySelector('h3').innerHTML = `
+      <div class="flex items-center">
+        <span>${component.plugin}</span>
+        <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${getPluginTypeColor(component.type)}">
+          ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
+        </span>
+        ${pluginInfo.deprecated ?
+          '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+      </div>
+    `;
+
+    // Clear previous configuration
+    configForm.innerHTML = '';
+
+    // Add plugin description if available
+    if (pluginInfo.description) {
+      const desc = document.createElement('p');
+      desc.className = 'text-sm text-gray-300 mb-4 pb-4 border-b border-gray-700';
+      desc.textContent = pluginInfo.description;
+      configForm.appendChild(desc);
+    }
+
+    // Add configuration fields based on plugin options
+    if (pluginInfo.options && Object.keys(pluginInfo.options).length > 0) {
+      // Convert options to array and sort them
+      const sortedOptions = Object.entries(pluginInfo.options)
+        .filter(([key]) => !key.startsWith('_'))  // Skip internal fields
+        .sort((a, b) => {
+          const [keyA, optA] = a;
+          const [keyB, optB] = b;
+
+          // Sort order: Required (Yes) > Optional (No) > Deprecated
+          const getSortValue = (opt) => {
+            if (opt.deprecated) return 2;
+            return opt.required === 'Yes' ? 0 : 1;
+          };
+
+          return getSortValue(optA) - getSortValue(optB) || keyA.localeCompare(keyB);
+        });
+
+      // Create fields in sorted order
+      sortedOptions.forEach(([key, option]) => {
+        const fieldId = `config-${key}`;
+        const value = component.config[key] !== undefined ? component.config[key] : '';
+        const inputType = (option.input_type || 'text').toLowerCase();
+
+        const fieldGroup = document.createElement('div');
+        fieldGroup.className = 'mb-4';
+
+        let inputField = '';
+        const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white';
+
+        // Create appropriate input based on type
+        if (inputType.includes('boolean') || inputType === 'bool') {
+          inputField = `
+            <select id="${fieldId}" name="${key}" class="${inputClasses}">
+              <option value="true" ${value === true || value === 'true' ? 'selected' : ''}>true</option>
+              <option value="false" ${value === false || value === 'false' ? 'selected' : ''}>false</option>
+            </select>
+          `;
+        }
+        else if (inputType.includes('hash') || inputType === 'object') {
+          // Handle hash/object input type
+          let hashValue = {};
+          try {
+            if (typeof value === 'string' && value.trim() !== '') {
+              hashValue = JSON.parse(value);
+            } else if (typeof value === 'object' && value !== null) {
+              hashValue = { ...value };
+            }
+          } catch (e) {
+            console.error('Error parsing hash value:', e);
+          }
+
+          const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="flex items-center space-x-2">
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       placeholder="Key"
+                       onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
+                <span class="text-gray-400">=></span>
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       placeholder="Value"
+                       onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
+                <button type="button"
+                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        onclick="removeHashPair('${containerId}', this)">
+                  Remove
+                </button>
+              </div>
+              <button type="button"
+                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      onclick="addHashPair('${containerId}', '${fieldId}')">
+                + Add More
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="hash" value='${escapeHtml(JSON.stringify(hashValue))}'>
+            </div>
+          `;
+        }
+        else if (inputType.includes('array') || inputType === 'list') {
+          // Handle array input type
+          let arrayValue = [];
+          try {
+            if (typeof value === 'string' && value.trim() !== '') {
+              arrayValue = JSON.parse(value);
+              if (!Array.isArray(arrayValue)) {
+                arrayValue = [arrayValue];
+              }
+            } else if (Array.isArray(value)) {
+              arrayValue = [...value];
+            }
+          } catch (e) {
+            console.error('Error parsing array value:', e);
+            if (value !== undefined && value !== '') {
+              arrayValue = [value];
+            }
+          }
+
+          const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="flex items-center space-x-2">
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       placeholder="Value"
+                       onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
+                <button type="button"
+                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        onclick="removeArrayItem('${containerId}', this)">
+                  Remove
+                </button>
+              </div>
+              <button type="button"
+                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      onclick="addArrayItem('${containerId}', '${fieldId}')">
+                + Add More
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array" value='${escapeHtml(JSON.stringify(arrayValue))}'>
+            </div>
+          `;
+        }
+        else if (inputType.includes('number') || inputType === 'int' || inputType === 'float') {
+          inputField = `
+            <input type="number" id="${fieldId}" name="${key}"
+                   value="${escapeHtml(value)}"
+                   step="${inputType === 'float' ? '0.1' : '1'}"
+                   class="${inputClasses}">
+          `;
+        } else {
+          // Default to text input
+          inputField = `
+            <input type="text" id="${fieldId}" name="${key}"
+                   value="${escapeHtml(value)}"
+                   class="${inputClasses}">
+          `;
+        }
+
+        fieldGroup.innerHTML = `
+          <div class="flex items-start justify-between">
+            <label for="${fieldId}" class="block text-sm font-medium text-gray-300 mb-1">
+              ${key}
+              <span class="text-xs font-normal">
+                (Required:
+                  <span class="${option.required === 'Yes' ? 'text-green-400' : 'text-red-400'}">
+                    ${option.required || 'No'}
+                  </span>
+                  , Type: ${option.input_type || 'string'}
+                )
+              </span>
+            </label>
+            ${pluginInfo.link && option.setting_link ? `
+              <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
+                 class="text-gray-400 hover:text-blue-400 ml-2"
+                 title="Documentation for ${key}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </a>
+            ` : ''}
+          </div>
+          ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
+          ${inputField}
+          ${option.default_value !== undefined ?
+            `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+        `;
+
+        configForm.appendChild(fieldGroup);
+      });
+    } else {
+      const noOptions = document.createElement('p');
+      noOptions.className = 'text-gray-400 italic';
+      noOptions.textContent = 'No configuration options available for this plugin.';
+      configForm.appendChild(noOptions);
+    }
+
+    // Add save and cancel buttons
+    const actions = document.createElement('div');
+    actions.className = 'flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-700';
+    actions.innerHTML = `
+      <button type="button" onclick="PluginConfigModal.hide()"
+              class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
+        Cancel
+      </button>
+      <button type="button" onclick="PluginConfigModal.saveConfig()"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
+        Save Configuration
+      </button>
+    `;
+    configForm.appendChild(actions);
+
+    // Show the modal
+    modal.classList.remove('hidden');
+
+    // Focus the first input field
+    const firstInput = configForm.querySelector('input, select, textarea');
+    if (firstInput) firstInput.focus();
+  }
+
+  // Hide the configuration modal
+  function hide() {
+    document.getElementById('configModal').classList.add('hidden');
+  }
+
+  // Save the configuration
+  function saveConfig() {
+    if (!currentComponent) return;
+
+    const form = document.getElementById('configForm');
+    const formData = new FormData(form);
+    const config = {};
+
+    // Process form data
+    for (const [key, value] of formData.entries()) {
+      const input = form.querySelector(`[name="${key}"]`);
+      const fieldType = input ? input.dataset.fieldType : null;
+      
+      try {
+        // Handle different field types
+        if (fieldType === 'hash' || fieldType === 'array') {
+          config[key] = JSON.parse(value);
+        } else if (value === 'true') {
+          config[key] = true;
+        } else if (value === 'false') {
+          config[key] = false;
+        } else if (!isNaN(value) && value !== '') {
+          config[key] = Number(value);
+        } else if (value === '') {
+          // Skip empty values to use defaults
+          continue;
+        } else {
+          config[key] = value;
+        }
+      } catch (e) {
+        console.error(`Error processing field ${key}:`, e);
+        config[key] = value; // Fallback to raw value
+      }
+    }
+
+    // Update the component's configuration
+    currentComponent.config = config;
+    
+    // If there's a global update function, call it
+    if (window.updateComponent) {
+      window.updateComponent(currentComponent);
+    }
+
+    // Hide the modal
+    hide();
+  }
+
+  // Helper function to escape HTML
+  function escapeHtml(unsafe) {
+    if (unsafe === undefined || unsafe === null) return '';
+    return unsafe
+      .toString()
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // Helper function to get color based on plugin type
+  function getPluginTypeColor(type) {
+    switch (type) {
+      case 'input':
+        return 'bg-green-600/20 text-green-400';
+      case 'filter':
+        return 'bg-blue-600/20 text-blue-400';
+      case 'output':
+        return 'bg-purple-600/20 text-purple-400';
+      default:
+        return 'bg-gray-600/20 text-gray-400';
+    }
+  }
+
+  // Public API
+  return {
+    init,
+    show,
+    hide,
+    saveConfig
+  };
+})();
+
+// Make it globally available
+window.PluginConfigModal = PluginConfigModal;
+
+// Initialize when the document is ready
+function initializePluginConfigModal() {
+  // No need to initialize here as we'll do it from pipeline_editor.html
+}
+
+// Make sure the modal is available globally
+window.showConfigModal = function(component) {
+  if (typeof PluginConfigModal !== 'undefined') {
+    PluginConfigModal.show(component);
+  }
+};
+
+// Initialize when the DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePluginConfigModal);
+} else {
+  initializePluginConfigModal();
+}
+</script>
+</body>
+</html>

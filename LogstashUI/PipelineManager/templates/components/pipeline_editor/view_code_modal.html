@@ -1,0 +1,75 @@
+<!-- Code Viewer Modal -->
+<div id="codeModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+  <!-- Debug info -->
+  <div id="debugInfo" class="fixed top-4 left-4 bg-red-500 text-white p-2 rounded hidden"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-white">Generated Pipeline Code</h3>
+      <div class="flex space-x-2">
+        <button id="copyButton" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+          Copy to Clipboard
+        </button>
+        <button onclick="hideCodeModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 flex-1 overflow-auto">
+      <pre id="codeContent" class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code id="pipelineCode" class="language-ruby">Click "View Code" to generate the Logstash configuration</code></pre>
+    </div>
+  </div>
+</div>
+
+
+<script>
+function hideCodeModal() {
+  document.getElementById('codeModal').classList.add('hidden');
+}
+function copyCodeToClipboard() {
+  const codeElement = document.querySelector('#codeContent code');
+  const copyButton = document.getElementById('copyButton');
+
+  if (!codeElement) {
+    console.error('Could not find code element');
+    return;
+  }
+
+  if (!copyButton) {
+    console.error('Could not find copy button');
+    return;
+  }
+
+  const code = codeElement.textContent;
+  console.log('Code to copy:', code.substring(0, 50) + '...');
+
+  navigator.clipboard.writeText(code).then(() => {
+    console.log('Successfully copied to clipboard');
+    // Update button text and style
+    const originalText = copyButton.textContent;
+    copyButton.textContent = 'Copied!';
+    copyButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    copyButton.classList.add('bg-green-600', 'hover:bg-green-700');
+
+    // Reset button after 2 seconds
+    setTimeout(() => {
+      copyButton.textContent = 'Copy to Clipboard';
+      copyButton.classList.remove('bg-green-600', 'hover:bg-green-700');
+      copyButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy text: ', err);
+    copyButton.textContent = 'Failed to copy!';
+    copyButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    copyButton.classList.add('bg-red-600', 'hover:bg-red-700');
+
+    setTimeout(() => {
+      copyButton.textContent = 'Copy to Clipboard';
+      copyButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+      copyButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    }, 2000);
+  });
+}
+
+</script>

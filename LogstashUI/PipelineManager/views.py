@@ -33,13 +33,14 @@ def PipelineEditor(request):
         pipeline_name = request.GET.get("pipeline")
 
         es = get_elastic_connection(es_id)
-        pipeline_doc = es.get(index=".logstash", id=pipeline_name)
+        pipeline_doc = es.logstash.get_pipeline(id=pipeline_name)[pipeline_name]
 
 
-        context['pipeline_text'] = pipeline_doc['_source']['pipeline']
+        context['pipeline_text'] = pipeline_doc['pipeline']
+        context['pipeline_name'] = pipeline_name
 
         try:
-            parsed_config = logstash_config_parse.logstash_config_to_components(pipeline_doc['_source']['pipeline'])
+            parsed_config = logstash_config_parse.logstash_config_to_components(pipeline_doc['pipeline'])
         except:
             parsed_config = {
                 "input": [],
@@ -61,12 +62,12 @@ def PipelineManager(request):
 
                 form = ConnectionForm(request.POST)
 
-                print("----")
                 if form.is_valid():
                     form.save()
                 else:
                     raise Exception(form.errors)
 
+                # TODO: Move this into an HTML file
                 return HttpResponse("""
                     <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
                         Connection created successfully!

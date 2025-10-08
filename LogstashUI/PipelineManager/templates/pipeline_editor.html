@@ -2,10 +2,10 @@
 
 {% block content %}
 
-<!---TODO: Fix issue where when hash and lists are populated, the UI doesn't update them properly --->
+<!--- Pipeline Component Layout-->
 <div class="p-6">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold text-white">Logstash Pipeline Builder</h1>
+    <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
     <div class="flex space-x-4">
         <form id="pipelineForm">
             {% csrf_token %}
@@ -26,8 +26,8 @@
             class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
             Simulate Pipeline
           </button>
-            <button type="button" 
-                    id="savePipeline" 
+            <button type="button"
+                    id="savePipeline"
                     class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                     hx-post="/API/SavePipeline/"
                     hx-include="#pipelineForm"
@@ -55,7 +55,7 @@
           <div id="inputSection" class="p-4 bg-gray-700 rounded-lg">
             <div class="flex justify-between items-center mb-4">
               <h2 class="text-lg font-semibold text-white">Input</h2>
-              <button id="addInputBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+              <button id="addInputBtn" class="add-plugin-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" data-type="input">
                 Add Input
               </button>
             </div>
@@ -68,7 +68,7 @@
           <div id="filterSection" class="p-4 bg-gray-700 rounded-lg">
             <div class="flex justify-between items-center mb-4">
               <h2 class="text-lg font-semibold text-white">Filter</h2>
-              <button id="addFilterBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+              <button id="addFilterBtn" class="add-plugin-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" data-type="filter">
                 Add Filter
               </button>
             </div>
@@ -81,7 +81,7 @@
           <div id="outputSection" class="p-4 bg-gray-700 rounded-lg">
             <div class="flex justify-between items-center mb-4">
               <h2 class="text-lg font-semibold text-white">Output</h2>
-              <button id="addOutputBtn" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+              <button id="addOutputBtn" class="add-plugin-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" data-type="output">
                 Add Output
               </button>
             </div>
@@ -95,580 +95,63 @@
   </div>
 </div>
 
-<!-- Code Viewer Modal -->
-<div id="codeModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-  <!-- Debug info -->
-  <div id="debugInfo" class="fixed top-4 left-4 bg-red-500 text-white p-2 rounded hidden"></div>
-  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-      <h3 class="text-lg font-semibold text-white">Generated Pipeline Code</h3>
-      <div class="flex space-x-2">
-        <button id="copyButton" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
-          Copy to Clipboard
-        </button>
-        <button onclick="hideCodeModal()" class="text-gray-400 hover:text-white">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-    <div class="p-4 flex-1 overflow-auto">
-      <pre id="codeContent" class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code id="pipelineCode" class="language-ruby">Click "View Code" to generate the Logstash configuration</code></pre>
-    </div>
-  </div>
-</div>
+<!--- Simulation modal -->
+{% include 'components/pipeline_editor/simulation_modal.html' %}
 
-<!-- Add Component Modal -->
-<div id="addComponentModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-      <h3 id="addComponentTitle" class="text-lg font-semibold text-white">Select Plugin</h3>
-      <button onclick="hideAddComponentModal()" class="text-gray-400 hover:text-white">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-    <div class="p-4 border-b border-gray-700">
-      <input type="text" id="pluginSearch" placeholder="Search plugins..."
-             class="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white">
-    </div>
-    <div id="pluginOptions" class="flex-1 overflow-y-auto p-4">
-      <div id="pluginGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <!-- Plugin cards will be inserted here -->
-      </div>
-    </div>
-  </div>
-</div>
+<!--- View code modal -->
+{% include 'components/pipeline_editor/view_code_Modal.html' %}
 
-<!-- Component Configuration Modal -->
-<div id="configModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-  <div class="bg-gray-800 rounded-lg w-1/2 h-3/4 flex flex-col">
-    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-      <h3 class="text-lg font-semibold text-white">Configure Component</h3>
-      <button onclick="hideConfigModal()" class="text-gray-400 hover:text-white">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-    <div class="p-4 flex-1 overflow-auto">
-      <div id="configForm" class="space-y-4">
-        <!-- Configuration form will be inserted here -->
-      </div>
-    </div>
-    <div class="p-4 border-t border-gray-700 flex justify-end">
-      <button onclick="saveComponentConfig()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-        Save
-      </button>
-    </div>
-  </div>
-</div>
+<!-- Add Plugin Modal -->
+{% include 'components/pipeline_editor/plugin_modal.html' %}
 
-      </button>
-    </div>
-  </div>
-</div>
+<!-- Add Plugin Config Modal -->
+{% include 'components/pipeline_editor/plugin_config_modal.html' %}
+
 
 <script>
-// Global variables
-let currentPluginType = '';
-const components = {{ component_data |safe }};
-let currentComponent = null;
+    const components = {{ component_data |safe }};
+    const pluginData = {{ plugin_data|safe }};
 
-// Modal control functions
-function hideAddComponentModal() {
-  document.getElementById('addComponentModal').classList.add('hidden');
-}
+    function loadExistingComponents() {
+      // Clears all existing components first
+      const componentTypes = ['input', 'filter', 'output'];
 
-function hideConfigModal() {
-  document.getElementById('configModal').classList.add('hidden');
-  currentComponent = null;
-}
+      // Clear containers
+      componentTypes.forEach(type => {
+        const container = document.getElementById(`${type}Components`);
+        if (container) {
+          const emptyMessage = container.querySelector('p');
+          container.innerHTML = '';
 
-function hideCodeModal() {
-  document.getElementById('codeModal').classList.add('hidden');
-}
-
-// Load plugin data from Django template
-const pluginData = {{ plugin_data|safe }};
-
-// Function declarations
-function showAddComponentModal(type) {
-  currentPluginType = type;
-  const modal = document.getElementById('addComponentModal');
-  const title = document.getElementById('addComponentTitle');
-  const pluginGrid = document.getElementById('pluginGrid');
-  const searchInput = document.getElementById('pluginSearch');
-
-  title.textContent = `Add ${type.charAt(0).toUpperCase() + type.slice(1)} Plugin`;
-
-  // Clear previous plugins
-  pluginGrid.innerHTML = '';
-
-  // Get plugins for the selected type
-  const plugins = pluginData[type] || {};
-
-  // Add each plugin to the grid
-  Object.entries(plugins).forEach(([name, plugin]) => {
-    const pluginCard = document.createElement('div');
-    pluginCard.className = 'bg-gray-700 rounded-lg overflow-hidden hover:shadow-lg transition-shadow';
-    pluginCard.innerHTML = `
-      <div class="p-4 h-full flex flex-col">
-        <div class="flex justify-between items-start mb-2">
-          <h4 class="font-medium text-white">${name}</h4>
-          ${plugin.deprecated ? '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Deprecated</span>' : ''}
-        </div>
-        ${plugin.description ? `<p class="text-sm text-gray-300 mb-3 flex-1">${plugin.description}</p>` : ''}
-        <div class="mt-auto pt-3 border-t border-gray-600">
-          <div class="flex justify-between items-center">
-            <button data-plugin="${name}" data-type="${type}"
-                    class="select-plugin-btn px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
-              Add
-            </button>
-            <div class="flex space-x-2">
-              ${plugin.link ? `
-                <a href="${plugin.link}" target="_blank"
-                   class="text-gray-400 hover:text-white" title="Documentation">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </a>` : ''}
-              ${plugin.repo_link ? `
-                <a href="${plugin.repo_link}" target="_blank"
-                   class="text-gray-400 hover:text-white" title="Source Code">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                  </svg>
-                </a>` : ''}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-    pluginGrid.appendChild(pluginCard);
-  });
-
-  // Add event listeners to the new buttons
-  document.querySelectorAll('.select-plugin-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const pluginName = e.target.closest('button').dataset.plugin;
-      const pluginType = e.target.closest('button').dataset.type;
-      selectPlugin(pluginName, pluginType);
-    });
-  });
-
-  // Setup search functionality
-  searchInput.value = '';
-  searchInput.oninput = (e) => {
-    const searchTerm = e.target.value.toLowerCase();
-    const cards = pluginGrid.querySelectorAll('.bg-gray-700');
-
-    cards.forEach(card => {
-      const name = card.querySelector('h4').textContent.toLowerCase();
-      const description = card.querySelector('p')?.textContent.toLowerCase() || '';
-
-      if (name.includes(searchTerm) || description.includes(searchTerm)) {
-        card.style.display = '';
-      } else {
-        card.style.display = 'none';
-      }
-    });
-  };
-
-  modal.classList.remove('hidden');
-  searchInput.focus();
-}
-
-function hideAddComponentModal() {
-  document.getElementById('addComponentModal').classList.add('hidden');
-}
-
-function selectPlugin(pluginName, pluginType) {
-  hideAddComponentModal();
-
-  const componentId = 'comp-' + Date.now();
-  const component = {
-    id: componentId,
-    type: pluginType,
-    plugin: pluginName,
-    config: {}
-  };
-
-  // Add to components array
-  components[pluginType].push(component);
-
-  // Create and append component element
-  const container = document.getElementById(`${pluginType}Components`);
-  const emptyMessage = container.querySelector('p');
-  if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-    container.removeChild(emptyMessage);
-  }
-
-  const componentEl = createComponentElement(component);
-  container.appendChild(componentEl);
-
-  // Show configuration modal
-  showConfigModal(component);
-}
-
-// Helper function to safely escape HTML
-function escapeHtml(unsafe) {
-  if (unsafe === undefined || unsafe === null) return '';
-  return String(unsafe)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-// Helper function to get color based on plugin type
-function getPluginTypeColor(type) {
-  const colors = {
-    input: 'bg-blue-900/50 text-blue-300',
-    filter: 'bg-purple-900/50 text-purple-300',
-    output: 'bg-green-900/50 text-green-300',
-    codec: 'bg-yellow-900/50 text-yellow-300'
-  };
-  return colors[type] || 'bg-gray-700 text-gray-300';
-}
-
-// Show the configuration modal with dynamic fields
-function showConfigModal(component) {
-  const modal = document.getElementById('configModal');
-  const configForm = document.getElementById('configForm');
-  const pluginInfo = pluginData[component.type]?.[component.plugin] || {};
-
-  // Set modal title with plugin type badge
-  modal.querySelector('h3').innerHTML = `
-    <div class="flex items-center">
-      <span>${component.plugin}</span>
-      <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${getPluginTypeColor(component.type)}">
-        ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
-      </span>
-      ${pluginInfo.deprecated ?
-        '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
-    </div>
-  `;
-
-  // Clear previous configuration
-  configForm.innerHTML = '';
-
-  // Add plugin description if available
-  if (pluginInfo.description) {
-    const desc = document.createElement('p');
-    desc.className = 'text-sm text-gray-300 mb-4 pb-4 border-b border-gray-700';
-    desc.textContent = pluginInfo.description;
-    configForm.appendChild(desc);
-  }
-
-  // Add configuration fields based on plugin options
-  if (pluginInfo.options && Object.keys(pluginInfo.options).length > 0) {
-    // Convert options to array and sort them
-    const sortedOptions = Object.entries(pluginInfo.options)
-      .filter(([key]) => !key.startsWith('_'))  // Skip internal fields
-      .sort((a, b) => {
-        const [keyA, optA] = a;
-        const [keyB, optB] = b;
-
-        // Sort order: Required (Yes) > Optional (No) > Deprecated
-        const getSortValue = (opt) => {
-          if (opt.deprecated) return 2;
-          return opt.required === 'Yes' ? 0 : 1;
-        };
-
-        return getSortValue(optA) - getSortValue(optB) || keyA.localeCompare(keyB);
+          // Restore 'No components' message if needed
+          if (emptyMessage && emptyMessage.textContent.includes('No ')) {
+            if (!components[type] || components[type].length === 0) {
+              container.appendChild(emptyMessage);
+            }
+          }
+        }
       });
 
-    // Create fields in sorted order
-    sortedOptions.forEach(([key, option]) => {
-      const fieldId = `config-${key}`;
-      const value = component.config[key] !== undefined ? component.config[key] : '';
-      const inputType = (option.input_type || 'text').toLowerCase();
+      // Add all components
+      Object.entries(components).forEach(([type, componentList]) => {
+        const container = document.getElementById(`${type}Components`);
+        if (!container) return;
 
-      const fieldGroup = document.createElement('div');
-      fieldGroup.className = 'mb-4';
-
-      let inputField = '';
-      const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white';
-
-      // Create appropriate input based on type
-      if (inputType.includes('boolean') || inputType === 'bool') {
-        inputField = `
-          <select id="${fieldId}" name="${key}" class="${inputClasses}">
-            <option value="true" ${value === true || value === 'true' ? 'selected' : ''}>true</option>
-            <option value="false" ${value === false || value === 'false' ? 'selected' : ''}>false</option>
-          </select>
-        `;
-      }
-      else if (inputType.includes('hash') || inputType === 'object') {
-        // Parse the initial value or create an empty object
-        let hashValue = {};
-        try {
-          if (typeof value === 'string' && value.trim() !== '') {
-            hashValue = JSON.parse(value);
-          } else if (typeof value === 'object' && value !== null) {
-            hashValue = { ...value };
-          }
-        } catch (e) {
-          console.error('Error parsing hash value:', e);
+        // Remove 'No components' message
+        const emptyMessage = container.querySelector('p');
+        if (emptyMessage && emptyMessage.textContent.includes('No ')) {
+          container.removeChild(emptyMessage);
         }
 
-        // Generate a unique ID for this field's container
-        const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Add each component to the UI
+        componentList.forEach(component => {
+          const componentEl = createComponentElement(component);
+          container.appendChild(componentEl);
+        });
+      });
+    }
 
-        // Create the container for key-value pairs
-        inputField = `
-          <div id="${containerId}" class="space-y-2">
-            <div class="flex items-center space-x-2">
-              <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                     placeholder="Key"
-                     onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
-              <span class="text-gray-400">=></span>
-              <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                     placeholder="Value"
-                     onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
-              <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                      onclick="removeHashPair('${containerId}', this)">
-                Remove
-              </button>
-            </div>
-            <button type="button"
-                    class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                    onclick="addHashPair('${containerId}', '${fieldId}')">
-              + Add More
-            </button>
-            <input type="hidden" id="${fieldId}" name="${key}" data-field-type="hash" value='${escapeHtml(JSON.stringify(hashValue))}'>
-          </div>
-        `;
-
-        // Add initial key-value pairs if they exist
-        const pairs = Object.entries(hashValue);
-        if (pairs.length > 0) {
-          const container = document.createElement('div');
-          container.id = containerId;
-          container.className = 'space-y-2';
-
-          pairs.forEach(([k, v], index) => {
-            const pairDiv = document.createElement('div');
-            pairDiv.className = 'flex items-center space-x-2';
-            pairDiv.innerHTML = `
-              <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                     placeholder="Key"
-                     value="${escapeHtml(k)}"
-                     onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
-              <span class="text-gray-400">=></span>
-              <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                     placeholder="Value"
-                     value="${escapeHtml(v)}"
-                     onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
-              <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                      onclick="removeHashPair('${containerId}', this)">
-                Remove
-              </button>
-            `;
-            container.appendChild(pairDiv);
-          });
-
-          // Add the "Add More" button and hidden input
-          container.innerHTML += `
-            <button type="button"
-                    class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                    onclick="addHashPair('${containerId}', '${fieldId}')">
-              + Add More
-            </button>
-            <input type="hidden" id="${fieldId}" name="${key}" data-field-type="hash" value='${escapeHtml(JSON.stringify(hashValue))}'>
-          `;
-
-          // Replace the textarea with our dynamic container
-          fieldGroup.appendChild(container);
-          return; // Skip the default fieldGroup.innerHTML assignment
-        }
-      } else if (inputType.includes('array') || inputType === 'list') {
-        // Parse the initial value or create an empty array
-        let arrayValue = [];
-        try {
-          if (typeof value === 'string' && value.trim() !== '') {
-            arrayValue = JSON.parse(value);
-            if (!Array.isArray(arrayValue)) {
-              arrayValue = [arrayValue]; // Convert single value to array
-            }
-          } else if (Array.isArray(value)) {
-            arrayValue = [...value];
-          }
-        } catch (e) {
-          console.error('Error parsing array value:', e);
-          // If parsing fails, treat it as a single-value array
-          if (value !== undefined && value !== '') {
-            arrayValue = [value];
-          }
-        }
-
-        // Generate a unique ID for this field's container
-        const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        // Create the container for array items
-        inputField = `
-          <div id="${containerId}" class="space-y-2">
-            <div class="flex items-center space-x-2">
-              <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                     placeholder="Value"
-                     onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${arrayValue.length})">
-              <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                      onclick="removeArrayItem('${containerId}', this)">
-                Remove
-              </button>
-            </div>
-            <button type="button"
-                    class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                    onclick="addArrayItem('${containerId}', '${fieldId}')">
-              + Add More
-            </button>
-            <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array" value='${escapeHtml(JSON.stringify(arrayValue))}'>
-          </div>
-        `;
-
-        // Add initial array items if they exist
-        if (arrayValue.length > 0) {
-          const container = document.createElement('div');
-          container.id = containerId;
-          container.className = 'space-y-2';
-
-          arrayValue.forEach((item, index) => {
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'flex items-center space-x-2';
-            itemDiv.innerHTML = `
-              <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-                     placeholder="Value"
-                     value="${escapeHtml(item)}"
-                     onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${index})">
-              <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                      onclick="removeArrayItem('${containerId}', this)">
-                Remove
-              </button>
-            `;
-            container.appendChild(itemDiv);
-          });
-
-          // Add the "Add More" button and hidden input
-          container.innerHTML += `
-            <button type="button"
-                    class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                    onclick="addArrayItem('${containerId}', '${fieldId}')">
-              + Add More
-            </button>
-            <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array" value='${escapeHtml(JSON.stringify(arrayValue))}'>
-          `;
-
-          // Replace the textarea with our dynamic container
-          fieldGroup.appendChild(container);
-          return; // Skip the default fieldGroup.innerHTML assignment
-        }
-      } else if (inputType.includes('number') || inputType === 'int' || inputType === 'float') {
-        inputField = `
-          <input type="number" id="${fieldId}" name="${key}"
-                 value="${escapeHtml(value)}"
-                 step="${inputType === 'float' ? '0.1' : '1'}"
-                 class="${inputClasses}">
-        `;
-      } else if (inputType === 'path' || inputType === 'file') {
-        inputField = `
-          <div class="flex">
-            <input type="text" id="${fieldId}" name="${key}"
-                   value="${escapeHtml(value)}"
-                   class="${inputClasses} rounded-r-none">
-            <button type="button" class="px-3 bg-gray-600 text-white rounded-r hover:bg-gray-700"
-                    onclick="document.getElementById('${fieldId}').click()">
-              Browse
-            </button>
-          </div>
-        `;
-      } else {
-        // Default to text input
-        inputField = `
-          <input type="text" id="${fieldId}" name="${key}"
-                 value="${escapeHtml(value)}"
-                 class="${inputClasses}">
-        `;
-      }
-
-      fieldGroup.innerHTML = `
-        <div class="flex items-start justify-between">
-          <label for="${fieldId}" class="block text-sm font-medium text-gray-300 mb-1">
-            ${key}
-            <span class="text-xs font-normal">
-              (Required:
-                <span class="${option.required === 'Yes' ? 'text-green-400' : 'text-red-400'}">
-                  ${option.required || 'No'}
-                </span>
-                , Type: ${option.input_type || 'string'}
-              )
-            </span>
-          </label>
-          ${pluginInfo.link && option.setting_link ? `
-            <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
-               class="text-gray-400 hover:text-blue-400 ml-2"
-               title="Documentation for ${key}">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </a>
-          ` : ''}
-        </div>
-        ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
-        ${inputField}
-        ${option.default_value !== undefined ?
-          `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
-      `;
-
-      configForm.appendChild(fieldGroup);
-    });
-  } else {
-    const noOptions = document.createElement('p');
-    noOptions.className = 'text-gray-400 italic';
-    noOptions.textContent = 'No configuration options available for this plugin.';
-    configForm.appendChild(noOptions);
-  }
-
-  // Add save and cancel buttons
-  const actions = document.createElement('div');
-  actions.className = 'flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-700';
-  actions.innerHTML = `
-    <button type="button" onclick="hideConfigModal()"
-            class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
-      Cancel
-    </button>
-    <button type="button" onclick="saveComponentConfig()"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
-      Save Configuration
-    </button>
-  `;
-  configForm.appendChild(actions);
-
-  // Store reference to current component
-  currentComponent = component;
-
-  // Show the modal
-  modal.classList.remove('hidden');
-
-  // Focus the first input field
-  const firstInput = configForm.querySelector('input, select, textarea');
-  if (firstInput) firstInput.focus();
-}
-
-function createComponentElement(component) {
+    function createComponentElement(component) {
   const el = document.createElement('div');
   el.className = 'bg-gray-700 p-3 rounded mb-2 relative group draggable-item';
   el.dataset.id = component.id;
@@ -735,86 +218,53 @@ function createComponentElement(component) {
   return el;
 }
 
-function showConfiguration(component) {
-  const configForm = document.getElementById('configForm');
-
-  // Clear previous configuration
-  configForm.innerHTML = `
-    <h3 class="text-lg font-medium text-white mb-4">${component.plugin} Configuration</h3>
-    <div id="configFields"></div>
-    <div class="flex justify-end space-x-2 mt-4">
-      <button onclick="updateComponent('${component.id}')" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-        Save
-      </button>
-    </div>
-  `;
-
-  // Add configuration fields based on component type and plugin
-  const configFields = document.getElementById('configFields');
-
-  // This is a simplified example - you would expand this for each plugin type
-  if (component.plugin === 'beats') {
-    configFields.innerHTML = `
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-300 mb-1">Port</label>
-        <input type="number" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-               value="${component.config.port || 5044}"
-               onchange="updateComponentConfig('${component.id}', 'port', this.value)">
-      </div>
-    `;
-  } else if (component.plugin === 'grok') {
-    configFields.innerHTML = `
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-300 mb-1">Match</label>
-        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-               placeholder="%{PATTERN:field}"
-               value="${component.config.match || ''}"
-               onchange="updateComponentConfig('${component.id}', 'match', this.value)">
-      </div>
-    `;
-  } else if (component.plugin === 'elasticsearch') {
-    configFields.innerHTML = `
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-300 mb-1">Hosts</label>
-        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-               placeholder="["http://localhost:9200"]"
-               value="${component.config.hosts || ''}"
-               onchange="updateComponentConfig('${component.id}', 'hosts', this.value)">
-      </div>
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-300 mb-1">Index</label>
-        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-               placeholder="logstash-%{+YYYY.MM.dd}"
-               value="${component.config.index || ''}"
-               onchange="updateComponentConfig('${component.id}', 'index', this.value)">
-      </div>
-    `;
-  }
-
-  // Highlight the selected component
-  document.querySelectorAll('.component').forEach(el => {
-    el.classList.remove('ring-2', 'ring-blue-500');
-  });
-  document.querySelector(`[data-id="${component.id}"]`).classList.add('ring-2', 'ring-blue-500');
-}
-
-function updateComponentConfig(componentId, key, value) {
-  // Find the component in the components object
-  for (const type in components) {
-    const component = components[type].find(c => c.id === componentId);
-    if (component) {
-      component.config[key] = value;
-      break;
+    // Helper function to get color based on plugin type
+    function getPluginTypeColor(type) {
+      const colors = {
+        input: 'bg-blue-900/50 text-blue-300',
+        filter: 'bg-purple-900/50 text-purple-300',
+        output: 'bg-green-900/50 text-green-300',
+        codec: 'bg-yellow-900/50 text-yellow-300'
+      };
+      return colors[type] || 'bg-gray-700 text-gray-300';
     }
-  }
-}
 
-function updateComponent(componentId) {
-  // This function would handle saving the component's configuration
-  // For now, we'll just update the generated code
-}
+    // Initialize the pipeline editor
+    document.addEventListener('DOMContentLoaded', function() {
+      if (typeof components !== 'undefined') {
+        loadExistingComponents();
+      }
 
-function removeComponent(componentId) {
+      // Initialize PluginConfigModal with plugin data
+      if (typeof window.PluginConfigModal !== 'undefined' && typeof pluginData !== 'undefined') {
+        window.PluginConfigModal.init(pluginData);
+
+        // Add click handler for config buttons
+        document.addEventListener('click', function(event) {
+          const configBtn = event.target.closest('.config-btn');
+          if (configBtn) {
+            const componentId = configBtn.closest('[data-component-id]').getAttribute('data-component-id');
+            const component = findComponentById(componentId);
+            if (component) {
+              event.preventDefault();
+              window.PluginConfigModal.show(component);
+            }
+          }
+        });
+      }
+    });
+
+    // Helper function to find component by ID
+    function findComponentById(id) {
+      if (!id || !components) return null;
+      for (const type in components) {
+        const found = components[type].find(c => c.id === id);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function removeComponent(componentId) {
   if (!confirm('Are you sure you want to remove this component?')) {
     return;
   }
@@ -847,630 +297,6 @@ function removeComponent(componentId) {
 }
 
 
-
-function hideCodeModal() {
-  document.getElementById('codeModal').classList.add('hidden');
-}
-
-function copyCodeToClipboard() {
-  console.log('Copy button clicked');
-  const codeElement = document.querySelector('#codeContent code');
-  const copyButton = document.getElementById('copyButton');
-  
-  if (!codeElement) {
-    console.error('Could not find code element');
-    return;
-  }
-  
-  if (!copyButton) {
-    console.error('Could not find copy button');
-    return;
-  }
-  
-  const code = codeElement.textContent;
-  console.log('Code to copy:', code.substring(0, 50) + '...');
-  
-  navigator.clipboard.writeText(code).then(() => {
-    console.log('Successfully copied to clipboard');
-    // Update button text and style
-    const originalText = copyButton.textContent;
-    copyButton.textContent = 'Copied!';
-    copyButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-    copyButton.classList.add('bg-green-600', 'hover:bg-green-700');
-    
-    // Reset button after 2 seconds
-    setTimeout(() => {
-      copyButton.textContent = 'Copy to Clipboard';
-      copyButton.classList.remove('bg-green-600', 'hover:bg-green-700');
-      copyButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
-    }, 2000);
-  }).catch(err => {
-    console.error('Failed to copy text: ', err);
-    copyButton.textContent = 'Failed to copy!';
-    copyButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-    copyButton.classList.add('bg-red-600', 'hover:bg-red-700');
-    
-    setTimeout(() => {
-      copyButton.textContent = 'Copy to Clipboard';
-      copyButton.classList.remove('bg-red-600', 'hover:bg-red-700');
-      copyButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
-    }, 2000);
-  });
-}
-
-// Initialize everything when the DOM is fully loaded
-document.addEventListener('DOMContentLoaded', function() {
-  // Initialize HTMX
-  htmx.process(document.body);
-  
-  // Set up copy button
-  const copyButton = document.getElementById('copyButton');
-  if (copyButton) {
-    copyButton.addEventListener('click', copyCodeToClipboard);
-  }
-  
-  // Set up component buttons
-  const addInputBtn = document.getElementById('addInputBtn');
-  const addFilterBtn = document.getElementById('addFilterBtn');
-  const addOutputBtn = document.getElementById('addOutputBtn');
-  
-  if (addInputBtn) addInputBtn.addEventListener('click', () => showAddComponentModal('input'));
-  if (addFilterBtn) addFilterBtn.addEventListener('click', () => showAddComponentModal('filter'));
-  if (addOutputBtn) addOutputBtn.addEventListener('click', () => showAddComponentModal('output'));
-  
-  // Initialize components if they exist
-  if (typeof components !== 'undefined') {
-    loadExistingComponents();
-    setupDragAndDrop();
-  }
-});
-
-// Load existing components from the components variable
-function loadExistingComponents() {
-  // First, clear all existing components
-  const componentTypes = ['input', 'filter', 'output'];
-
-  // Clear all component containers
-  componentTypes.forEach(type => {
-    const container = document.getElementById(`${type}Components`);
-    if (container) {
-      // Save any 'No components' message
-      const emptyMessage = container.querySelector('p');
-      container.innerHTML = '';
-
-      // Restore the 'No components' message if it exists and there are no components of this type
-      if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-        if (!components[type] || components[type].length === 0) {
-          container.appendChild(emptyMessage);
-        }
-      }
-    }
-  });
-
-  // Then add all components
-  Object.entries(components).forEach(([type, componentList]) => {
-    const container = document.getElementById(`${type}Components`);
-    if (!container) return;
-
-    // Remove 'No components' message if we're adding components
-    const emptyMessage = container.querySelector('p');
-    if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-      container.removeChild(emptyMessage);
-    }
-
-    // Add each component to the UI
-    componentList.forEach(component => {
-      const componentEl = createComponentElement(component);
-      container.appendChild(componentEl);
-    });
-  });
-}
-
-// Set up drag and drop functionality for filter components
-function setupDragAndDrop() {
-  const filterContainer = document.getElementById('filterComponents');
-
-  // Make filter items draggable
-  const makeItemsDraggable = () => {
-    const items = filterContainer.querySelectorAll('.draggable-item');
-    items.forEach(item => {
-      item.setAttribute('draggable', 'true');
-
-      item.addEventListener('dragstart', (e) => {
-        e.target.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', e.target.dataset.id);
-      });
-
-      item.addEventListener('dragend', (e) => {
-        e.target.classList.remove('dragging');
-      });
-    });
-  };
-
-  // Handle drag over for the container
-  filterContainer.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-
-    const afterElement = getDragAfterElement(filterContainer, e.clientY);
-    const draggable = document.querySelector('.dragging');
-
-    if (afterElement == null) {
-      filterContainer.appendChild(draggable);
-    } else {
-      filterContainer.insertBefore(draggable, afterElement);
-    }
-  });
-
-  // Handle drop to update the components array order
-  filterContainer.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const componentId = e.dataTransfer.getData('text/plain');
-    const component = findComponentById(componentId);
-
-    if (!component) return;
-
-    // Update the components array order
-    const items = Array.from(filterContainer.querySelectorAll('.draggable-item'));
-    const newOrder = items.map(item => item.dataset.id);
-
-    // Reorder the components array
-    components.filter = newOrder
-      .map(id => components.filter.find(c => c.id === id))
-      .filter(Boolean);
-  });
-
-  // Helper function to find the element after which to place the dragged element
-  function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
-
-    return draggableElements.reduce((closest, child) => {
-      const box = child.getBoundingClientRect();
-      const offset = y - box.top - box.height / 2;
-
-      if (offset < 0 && offset > closest.offset) {
-        return { offset: offset, element: child };
-      } else {
-        return closest;
-      }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-  }
-
-  // Initialize draggable items
-  makeItemsDraggable();
-
-  // Observe changes to the filter container to update draggable items
-  const observer = new MutationObserver(makeItemsDraggable);
-  observer.observe(filterContainer, { childList: true });
-}
-
-// Helper function to find a component by ID
-function findComponentById(id) {
-  for (const type in components) {
-    const component = components[type].find(c => c.id === id);
-    if (component) return component;
-  }
-  return null;
-}
-
-// Make functions available globally
-window.removeComponent = removeComponent;
-window.showConfiguration = showConfiguration;
-window.updateComponentConfig = updateComponentConfig;
-window.updateComponent = updateComponent;
-window.showAddComponentModal = showAddComponentModal;
-window.hideAddComponentModal = hideAddComponentModal;
-window.selectPlugin = selectPlugin;
-
-// Add these helper functions for hash pair management
-function updateHashPair(containerId, fieldId, input, type) {
-  const container = document.getElementById(containerId);
-  const hiddenInput = document.getElementById(fieldId);
-  const pairs = [];
-
-  // Get all key-value pairs from the UI
-  container.querySelectorAll('.flex.space-x-2').forEach(pairDiv => {
-    const keyInput = pairDiv.querySelector('input:first-child');
-    const valueInput = pairDiv.querySelector('input:nth-child(3)');
-    if (keyInput && valueInput) {
-      pairs.push({
-        key: keyInput.value,
-        value: valueInput.value
-      });
-    }
-  });
-
-  // Update the hidden input with the current state
-  const hashObj = {};
-  pairs.forEach(pair => {
-    if (pair.key) { // Only add non-empty keys
-      hashObj[pair.key] = pair.value;
-    }
-  });
-
-  hiddenInput.value = JSON.stringify(hashObj);
-}
-
-function addHashPair(containerId, fieldId) {
-  const container = document.getElementById(containerId);
-  if (!container) return; // Safety check
-
-  const pairDiv = document.createElement('div');
-  pairDiv.className = 'flex items-center space-x-2';
-  pairDiv.innerHTML = `
-    <input type="text"
-           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-           placeholder="Key"
-           onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
-    <span class="text-gray-400">=></span>
-    <input type="text"
-           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-           placeholder="Value"
-           onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
-    <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-            onclick="removeHashPair('${containerId}', this)">
-      Remove
-    </button>
-  `;
-
-  // Find the last key-value pair or the add button
-  const lastPair = container.querySelector('.flex.space-x-2:last-of-type');
-  const addButton = container.querySelector('button.bg-blue-600');
-
-  // Insert the new pair in the correct position
-  if (lastPair && lastPair !== addButton) {
-    lastPair.after(pairDiv);
-  } else if (addButton) {
-    addButton.before(pairDiv);
-  } else {
-    // Fallback: just append to container
-    container.appendChild(pairDiv);
-  }
-
-  // Focus the new key input
-  pairDiv.querySelector('input').focus();
-}
-
-function removeHashPair(containerId, button) {
-  const container = document.getElementById(containerId);
-  const pairDiv = button.closest('.flex.space-x-2');
-  if (pairDiv) {
-    container.removeChild(pairDiv);
-
-    // Update the hidden input
-    const hiddenInput = container.querySelector('input[type="hidden"]');
-    if (hiddenInput) {
-      updateHashPair(containerId, hiddenInput.id, null, null);
-    }
-  }
-}
-
-// Make hash functions available globally
-window.addHashPair = addHashPair;
-window.removeHashPair = removeHashPair;
-window.updateHashPair = updateHashPair;
-
-// Add these helper functions for array item management
-function updateArrayItem(containerId, fieldId, input, index) {
-  const container = document.getElementById(containerId);
-  const hiddenInput = document.getElementById(fieldId);
-  const items = [];
-
-  // Get all array items from the UI
-  container.querySelectorAll('.flex.space-x-2').forEach(itemDiv => {
-    const itemInput = itemDiv.querySelector('input');
-    if (itemInput) {
-      items.push(itemInput.value);
-    }
-  });
-
-  // Update the hidden input with the current state
-  hiddenInput.value = JSON.stringify(items);
-}
-
-function addArrayItem(containerId, fieldId) {
-  const container = document.getElementById(containerId);
-  if (!container) return; // Safety check
-
-  const itemDiv = document.createElement('div');
-  itemDiv.className = 'flex items-center space-x-2';
-  itemDiv.innerHTML = `
-    <input type="text"
-           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
-           placeholder="Value"
-           onchange="updateArrayItem('${containerId}', '${fieldId}', this, -1)">
-    <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-            onclick="removeArrayItem('${containerId}', this)">
-      Remove
-    </button>
-  `;
-
-  // Find the last item or the add button
-  const lastItem = container.querySelector('.flex.space-x-2:last-of-type');
-  const addButton = container.querySelector('button.bg-blue-600');
-
-  // Insert the new item in the correct position
-  if (lastItem && lastItem !== addButton) {
-    lastItem.after(itemDiv);
-  } else if (addButton) {
-    addButton.before(itemDiv);
-  } else {
-    // Fallback: just append to container
-    container.appendChild(itemDiv);
-  }
-
-  // Focus the new input
-  itemDiv.querySelector('input').focus();
-}
-
-function removeArrayItem(containerId, button) {
-  const container = document.getElementById(containerId);
-  const itemDiv = button.closest('.flex.space-x-2');
-  if (itemDiv) {
-    container.removeChild(itemDiv);
-
-    // Update the hidden input
-    const hiddenInput = container.querySelector('input[type="hidden"]');
-    if (hiddenInput) {
-      updateArrayItem(containerId, hiddenInput.id, null, -1);
-    }
-  }
-}
-
-// Make array functions available globally
-window.addArrayItem = addArrayItem;
-window.removeArrayItem = removeArrayItem;
-window.updateArrayItem = updateArrayItem;
-
-// Save component configuration
-function saveComponentConfig() {
-  if (!currentComponent) return;
-
-  const form = document.getElementById('configForm');
-  if (!form) {
-    console.error('Config form not found');
-    return;
-  }
-  
-  // Get all form inputs and hidden fields
-  const allFields = form.querySelectorAll('input, select, textarea');
-  const config = {};
-
-  // First pass: collect all regular fields
-  allFields.forEach(field => {
-    // Skip buttons, file inputs, and hidden fields (we'll handle those specially)
-    if (field.type === 'button' || field.type === 'submit' || field.type === 'file' ||
-        (field.type === 'hidden' && !field.dataset.fieldType)) {
-      return;
-    }
-
-    const name = field.name || field.id.replace('config-', '');
-    if (!name) return;
-
-    // Skip if we already processed this field (in case of duplicate names)
-    if (config.hasOwnProperty(name) && field.type !== 'checkbox') return;
-
-    // Handle different input types
-    if (field.type === 'checkbox') {
-      // For checkboxes, we need to handle multiple checkboxes with the same name
-      if (!config[name]) config[name] = [];
-      if (field.checked) {
-        config[name].push(field.value || true);
-      }
-    } else if (field.type === 'number') {
-      config[name] = field.value === '' ? null : Number(field.value);
-    } else if (field.dataset.fieldType === 'hash' || field.dataset.fieldType === 'array') {
-      // Skip here, we'll handle these in the next pass
-      return;
-    } else if (field.value.trim() !== '') {
-      config[name] = field.type === 'select-one' ? field.value : field.value.trim();
-    }
-  });
-
-  // Second pass: handle special field types (hash and array)
-  const specialFields = form.querySelectorAll('[data-field-type]');
-  specialFields.forEach(field => {
-    const name = field.name || field.id.replace('config-', '');
-    if (!name) return;
-
-    try {
-      if (field.dataset.fieldType === 'hash' || field.dataset.fieldType === 'array') {
-        const value = field.value ? JSON.parse(field.value) :
-                     (field.dataset.fieldType === 'hash' ? {} : []);
-        if (Object.keys(value).length > 0 || Array.isArray(value) && value.length > 0) {
-          config[name] = value;
-        }
-      }
-    } catch (e) {
-      console.error(`Error parsing ${field.dataset.fieldType} field ${name}:`, e);
-    }
-  });
-
-  // Update the component's config in the components array
-  for (const type in components) {
-    const index = components[type].findIndex(c => c.id === currentComponent.id);
-    if (index !== -1) {
-      // Merge the new config with the existing one to preserve any non-form fields
-      components[type][index].config = { ...components[type][index].config, ...config };
-      break;
-    }
-  }
-  
-  // Reload the components to reflect changes
-  loadExistingComponents();
-  
-  // Close the modal after saving
-  const modal = document.getElementById('configModal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
-}
-
-
-
-// Set up drag and drop functionality for filter components
-function setupDragAndDrop() {
-  const filterContainer = document.getElementById('filterComponents');
-
-  // Make filter items draggable
-  const makeItemsDraggable = () => {
-    const items = filterContainer.querySelectorAll('.draggable-item');
-    items.forEach(item => {
-      item.setAttribute('draggable', 'true');
-
-      item.addEventListener('dragstart', (e) => {
-        e.target.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', e.target.dataset.id);
-      });
-
-      item.addEventListener('dragend', (e) => {
-        e.target.classList.remove('dragging');
-      });
-    });
-  };
-
-  // Handle drag over for the container
-  filterContainer.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-
-    const afterElement = getDragAfterElement(filterContainer, e.clientY);
-    const draggable = document.querySelector('.dragging');
-
-    if (afterElement == null) {
-      filterContainer.appendChild(draggable);
-    } else {
-      filterContainer.insertBefore(draggable, afterElement);
-    }
-  });
-
-  // Handle drop to update the components array order
-  filterContainer.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const componentId = e.dataTransfer.getData('text/plain');
-    const component = findComponentById(componentId);
-
-    if (!component) return;
-
-    // Update the components array order
-    const items = Array.from(filterContainer.querySelectorAll('.draggable-item'));
-    const newOrder = items.map(item => item.dataset.id);
-
-    // Reorder the components array
-    components.filter = newOrder
-      .map(id => components.filter.find(c => c.id === id))
-      .filter(Boolean);
-  });
-
-  // Helper function to find the element after which to place the dragged element
-  function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
-
-    return draggableElements.reduce((closest, child) => {
-      const box = child.getBoundingClientRect();
-      const offset = y - box.top - box.height / 2;
-
-      if (offset < 0 && offset > closest.offset) {
-        return { offset: offset, element: child };
-      } else {
-        return closest;
-      }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-  }
-
-  // Initialize draggable items
-  makeItemsDraggable();
-
-  // Observe changes to the filter container to update draggable items
-  const observer = new MutationObserver(makeItemsDraggable);
-  observer.observe(filterContainer, { childList: true });
-}
-
-// Helper function to find a component by ID
-function findComponentById(id) {
-  for (const type in components) {
-    const component = components[type].find(c => c.id === id);
-    if (component) return component;
-  }
-  return null;
-}
-
-// Make functions available globally
-window.findComponentById = findComponentById;
-
-
-// Add success/error handling for HTMX requests
-document.body.addEventListener('htmx:afterRequest', function(evt) {
-  if (evt.detail.elt.id === 'savePipeline') {
-    const saveStatus = document.getElementById('saveStatus');
-    if (evt.detail.successful) {
-      saveStatus.textContent = 'Saved successfully!';
-      saveStatus.className = 'text-green-500 ml-2';
-      // Clear the success message after 3 seconds
-      setTimeout(() => {
-        saveStatus.textContent = '';
-      }, 3000);
-    } else {
-      saveStatus.textContent = 'Error saving pipeline';
-      saveStatus.className = 'text-red-500 ml-2';
-    }
-  }
-});
 </script>
-
-<style>
-  .component {
-    transition: all 0.2s ease;
-  }
-
-  .component:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  }
-
-  /* Drag and drop styles */
-  .draggable-item {
-    cursor: move;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-  }
-
-  .draggable-item.dragging {
-    opacity: 0.5;
-    background: #4a5568;
-  }
-
-  .draggable-item.over {
-    transform: scale(1.02);
-    box-shadow: 0 0 10px rgba(66, 153, 225, 0.5);
-  }
-
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: #2d3748;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #4a5568;
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #718096;
-  }
-</style>
-
-
-  <!-- Include Simulation Modal Component -->
-  {% include 'components/pipeline_editor/simulation_modal.html' %}
-
 
 {% endblock %}

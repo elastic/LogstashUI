@@ -1,0 +1,268 @@
+<!-- Plugin Selection Modal -->
+<div id="pluginModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <!-- Modal Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 id="pluginModalTitle" class="text-lg font-semibold text-white">Select Plugin</h3>
+      <button onclick="PluginModal.hide()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="p-4 border-b border-gray-700">
+      <input type="text"
+             id="pluginSearch"
+             placeholder="Search plugins..."
+             class="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+
+    <!-- Plugin Grid Container -->
+    <div class="flex-1 overflow-y-auto">
+      <div id="pluginGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+        <!-- Plugin cards will be inserted here by JavaScript -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Plugin Modal Controller
+const PluginModal = (function() {
+  let currentPluginType = '';
+  let pluginData = {};
+
+  // Initialize the modal with plugin data
+  function init(data) {
+    pluginData = data;
+    setupEventListeners();
+  }
+
+  // Show the modal for a specific plugin type
+  function show(type) {
+    currentPluginType = type;
+    const modal = document.getElementById('pluginModal');
+    const title = document.getElementById('pluginModalTitle');
+
+    title.textContent = `Add ${type.charAt(0).toUpperCase() + type.slice(1)} Plugin`;
+    renderPlugins(type);
+
+    modal.classList.remove('hidden');
+    document.getElementById('pluginSearch').focus();
+  }
+
+  // Hide the modal
+  function hide() {
+    document.getElementById('pluginModal').classList.add('hidden');
+  }
+
+  // Render plugins in the grid
+  function renderPlugins(type) {
+    const grid = document.getElementById('pluginGrid');
+    const plugins = pluginData[type] || {};
+    grid.innerHTML = '';
+
+    Object.entries(plugins).forEach(([name, plugin]) => {
+      const card = createPluginCard(name, plugin, type);
+      grid.appendChild(card);
+    });
+
+    // Re-attach search handler
+    setupSearch();
+  }
+
+  // Create a plugin card element
+  function createPluginCard(name, plugin, type) {
+    const card = document.createElement('div');
+    card.className = 'bg-gray-700 rounded-lg overflow-hidden hover:shadow-lg transition-shadow';
+
+    card.innerHTML = `
+      <div class="p-4 h-full flex flex-col">
+        <div class="flex justify-between items-start mb-2">
+          <h4 class="font-medium text-white">${name}</h4>
+          ${plugin.deprecated ?
+            '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Deprecated</span>' : ''}
+        </div>
+        ${plugin.description ?
+          `<p class="text-sm text-gray-300 mb-3 flex-1">${plugin.description}</p>` : ''}
+        <div class="mt-auto pt-3 border-t border-gray-600">
+          <div class="flex justify-between items-center">
+            <button data-plugin="${name}" data-type="${type}"
+                    class="select-plugin-btn px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+              Add
+            </button>
+            <div class="flex space-x-2">
+              ${plugin.link ? createIconLink(plugin.link, 'Documentation', 'info') : ''}
+              ${plugin.repo_link ? createIconLink(plugin.repo_link, 'Source Code', 'code') : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add click handler for the Add button
+    const btn = card.querySelector('.select-plugin-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (window.selectPlugin) {
+          window.selectPlugin(name, type);
+          hide();
+        }
+      });
+    }
+
+    return card;
+  }
+
+  // Create an icon link
+  function createIconLink(href, title, iconType) {
+    const icons = {
+      info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      code: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4'
+    };
+
+    return `
+      <a href="${href}" target="_blank"
+         class="text-gray-400 hover:text-white"
+         title="${title}">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="${icons[iconType] || icons.info}" />
+        </svg>
+      </a>
+    `;
+  }
+
+  // Setup search functionality
+  function setupSearch() {
+    const searchInput = document.getElementById('pluginSearch');
+    if (!searchInput) return;
+
+    searchInput.value = '';
+    searchInput.oninput = (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const cards = document.querySelectorAll('#pluginGrid > div');
+
+      cards.forEach(card => {
+        const name = card.querySelector('h4')?.textContent?.toLowerCase() || '';
+        const description = card.querySelector('p')?.textContent?.toLowerCase() || '';
+        card.style.display = (name.includes(searchTerm) || description.includes(searchTerm))
+          ? ''
+          : 'none';
+      });
+    };
+  }
+
+  // Setup event listeners
+  function setupEventListeners() {
+    // Handle add plugin button clicks
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.add-plugin-btn');
+      if (btn) {
+        e.preventDefault();
+        const type = btn.dataset.type;
+        if (type) {
+          show(type);
+        }
+      }
+      
+      // Handle plugin selection
+      const selectBtn = e.target.closest('.select-plugin-btn');
+      if (selectBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const pluginName = selectBtn.dataset.plugin;
+        const pluginType = selectBtn.dataset.type;
+        
+        if (pluginName && pluginType) {
+          // Create a new component
+          const component = {
+            id: `comp_${Date.now()}`,
+            type: pluginType,
+            plugin: pluginName,
+            config: {}
+          };
+          
+          // Initialize components if it doesn't exist
+          if (!window.components) {
+            window.components = { input: [], filter: [], output: [] };
+          }
+
+          // Add the component
+          if (!window.components[pluginType]) {
+            window.components[pluginType] = [];
+          }
+          window.components[pluginType].push(component);
+
+          // Update the UI
+          const container = document.getElementById(`${pluginType}Components`);
+          if (container) {
+            // Remove 'No components' message if present
+            const emptyMessage = container.querySelector('p');
+            if (emptyMessage && emptyMessage.textContent.includes('No ')) {
+              container.removeChild(emptyMessage);
+            }
+
+            // Add the new component
+            const componentEl = createComponentElement(component);
+            container.appendChild(componentEl);
+          }
+          
+          // Show the config modal for the new component
+          if (typeof window.PluginConfigModal !== 'undefined') {
+            // Use a small timeout to ensure the modal is properly initialized
+            setTimeout(() => {
+              window.PluginConfigModal.show(component);
+            }, 50);
+          }
+          
+          // Close the modal
+          hide();
+        }
+      }
+    });
+
+    // Close modal when clicking outside
+    document.getElementById('pluginModal')?.addEventListener('click', (e) => {
+      if (e.target === document.getElementById('pluginModal')) {
+        hide();
+      }
+    });
+
+    // Close with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        hide();
+      }
+    });
+  }
+
+  // Public API
+  return {
+    init,
+    show,
+    hide
+  };
+})();
+
+// Make it globally available
+window.PluginModal = PluginModal;
+
+// Initialize with plugin data when the document is ready
+function initializePluginModal() {
+  if (typeof pluginData !== 'undefined') {
+    PluginModal.init(pluginData);
+  }
+}
+
+// Handle both immediate and delayed initialization
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePluginModal);
+} else {
+  // In case the script loads after DOMContentLoaded
+  initializePluginModal();
+}
+</script>
