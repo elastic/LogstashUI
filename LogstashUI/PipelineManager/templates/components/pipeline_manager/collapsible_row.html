@@ -1,0 +1,32 @@
+<td colspan=4">
+    <table>
+        <thead>
+            <th>Pipeline Name</th>
+        </thead>
+        <tbody>
+            {% for pipeline in pipelines %}
+            <tr>
+                <td>
+                    <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">{{ pipeline.name }}</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</td>
+
+
+<td colspan=2 style="overflow-x: auto;">
+    <table style="display: block; max-width: 100%;">
+        <thead>
+            <th>Instance</th>
+        </thead>
+        <tbody>
+            {% for node in instances %}
+            <tr>
+                <td>{{ node }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</td>

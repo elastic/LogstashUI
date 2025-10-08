@@ -9,6 +9,7 @@ from Core.views import get_elastic_connection, test_elastic_connectivity
 
 # Custom libraries
 from . import logstash_config_parse
+from . import logstash_metrics
 
 # General libraries
 import json
@@ -18,8 +19,8 @@ import tempfile
 from deepdiff import DeepDiff
 from PipelineManager.forms import ConnectionForm
 
-from django.conf import settings
-from django.template import Template, Context
+
+from django.template.loader import get_template
 
 def TestConnectivity(request):
     test_id = request.GET.get('test')
@@ -70,7 +71,6 @@ def DeleteConnection(request, connection_id=None):
 
     return HttpResponse("Connection deleted successfully!")
 
-
 def GetLogstashCode(request):
     data = json.loads(request.POST.get("components"))
     config = logstash_config_parse.components_to_logstash_config(
@@ -78,6 +78,9 @@ def GetLogstashCode(request):
             "components": data
         }
     )
+    print(data)
+    print("What")
+    print(config)
     
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(
@@ -192,17 +195,17 @@ def SimulatePipeline(request):
 
 
 
-def GetPipelines(request, connection_id):
 
+
+def GetPipelines(request, connection_id):
+    context = {}
     connection = ConnectionTable.objects.get(pk=connection_id)
 
 
     logstash_pipelines = []
     if connection.connection_type == "CENTRALIZED":
+        # --- Gets our pipelines from the connection
         es = get_elastic_connection(connection.id)
-
-
-
         pipelines = es.logstash.get_pipeline()
         for pipeline in pipelines:
             logstash_pipelines.append(
@@ -213,24 +216,15 @@ def GetPipelines(request, connection_id):
                 }
             )
 
+        context['instances'] = logstash_metrics.get_instances_centralized(es)
 
-    logstash_template = Template("""
-            <table>
-                <thead>
-                    <th>Pipeline Name</th>
-                </thead>
-                <tbody>
-                    {% for pipeline in pipelines %}
-                        <td>
-                            <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">{{ pipeline.name }}</a>
-                        </td>
-                    {% endfor %}
-                </tbody>
-            </table>
-        """)
-    context = Context({"pipelines": logstash_pipelines})
-    print(logstash_template.render(context))
 
-    return HttpResponse(
-        logstash_template.render(context)
-    )
+
+
+    context['pipelines'] = logstash_pipelines
+    # --- Gets monitoring data from the connection
+    context['instances'] = logstash_metrics.get_instances_centralized(es)
+
+    logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
+    html = logstash_template.render(context)
+    return HttpResponse(html)
