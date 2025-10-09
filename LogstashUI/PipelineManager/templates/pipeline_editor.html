@@ -229,6 +229,22 @@
       return colors[type] || 'bg-gray-700 text-gray-300';
     }
 
+    // Function to update a component and refresh the UI
+    window.updateComponent = function(updatedComponent) {
+      // Find and update the component in the global components object
+      for (const type in components) {
+        const index = components[type].findIndex(c => c.id === updatedComponent.id);
+        if (index !== -1) {
+          // Update the component
+          components[type][index] = { ...updatedComponent };
+          // Refresh the UI
+          loadExistingComponents();
+          return true;
+        }
+      }
+      return false;
+    };
+
     // Initialize the pipeline editor
     document.addEventListener('DOMContentLoaded', function() {
       if (typeof components !== 'undefined') {

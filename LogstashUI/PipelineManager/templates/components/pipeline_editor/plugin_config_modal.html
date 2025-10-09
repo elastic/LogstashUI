@@ -97,6 +97,7 @@ window.PluginConfigModal = (function() {
             <select id="${fieldId}" name="${key}" class="${inputClasses}">
               <option value="true" ${value === true || value === 'true' ? 'selected' : ''}>true</option>
               <option value="false" ${value === false || value === 'false' ? 'selected' : ''}>false</option>
+              <option value="" ${value === '' ? 'selected' : ''}></option>
             </select>
           `;
         }
@@ -278,25 +279,48 @@ window.PluginConfigModal = (function() {
       const input = form.querySelector(`[name="${key}"]`);
       const fieldType = input ? input.dataset.fieldType : null;
       
+      // Skip if the value is empty and not explicitly set
+      if (value === '') {
+        continue;
+      }
+      
       try {
         // Handle different field types
         if (fieldType === 'hash' || fieldType === 'array') {
-          config[key] = JSON.parse(value);
+          const parsedValue = JSON.parse(value);
+          // Only add if the hash/array is not empty
+          if (Object.keys(parsedValue).length > 0 || (Array.isArray(parsedValue) && parsedValue.length > 0)) {
+            config[key] = parsedValue;
+          }
         } else if (value === 'true') {
-          config[key] = true;
+          // Only add boolean if it's different from default
+          if (pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[key]?.default !== true) {
+            config[key] = true;
+          }
         } else if (value === 'false') {
-          config[key] = false;
-        } else if (!isNaN(value) && value !== '') {
-          config[key] = Number(value);
-        } else if (value === '') {
-          // Skip empty values to use defaults
-          continue;
+          // Only add boolean if it's different from default
+          if (pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[key]?.default !== false) {
+            config[key] = false;
+          }
+        } else if (!isNaN(value)) {
+          // Only add number if it's different from default
+          const defaultValue = pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[key]?.default;
+          if (defaultValue === undefined || Number(value) !== defaultValue) {
+            config[key] = Number(value);
+          }
         } else {
-          config[key] = value;
+          // Only add string if it's different from default
+          const defaultValue = pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[key]?.default;
+          if (defaultValue === undefined || value !== defaultValue.toString()) {
+            config[key] = value;
+          }
         }
       } catch (e) {
         console.error(`Error processing field ${key}:`, e);
-        config[key] = value; // Fallback to raw value
+        // Only add if there was an error and the value is not empty
+        if (value !== '') {
+          config[key] = value;
+        }
       }
     }
 

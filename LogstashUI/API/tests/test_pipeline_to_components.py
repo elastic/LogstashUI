@@ -129,3 +129,67 @@ output {
     result = logstash_config_to_components(pipeline)
 
     assert result == expected_component_output
+
+
+def test_plugin_no_config():
+    pipeline = """input {
+	jdbc {
+		jdbc_driver_library => "/usr/share/logstash/vendor/jar/jdbc/mysql-connector-j-9.3.0.jar"
+		jdbc_driver_class => "com.mysql.cj.jdbc.Driver"
+		jdbc_connection_string => "jdbc:mysql://${DB_HOST}:3306/semaphore"
+		jdbc_user => "${DB_USER}"
+		jdbc_password => "${DB_PASSWORD}"
+		schedule => "* * * * *"
+		statement => "select * from event"
+	}
+}
+filter {
+	bytes {
+	}
+}
+output {
+	elasticsearch {
+		cloud_id => "${ELASTIC_CLOUD_ID}"
+		cloud_auth => "${ELASTIC_CLOUD_AUTH}"
+		index => "db-report-test"
+	}
+}"""
+    expected_component_output = json.dumps({
+    "input": [
+        {
+            "id": "input_jdbc_0",
+            "type": "input",
+            "plugin": "jdbc",
+            "config": {
+                "jdbc_driver_library": "/usr/share/logstash/vendor/jar/jdbc/mysql-connector-j-9.3.0.jar",
+                "jdbc_driver_class": "com.mysql.cj.jdbc.Driver",
+                "jdbc_connection_string": "jdbc:mysql://${DB_HOST}:3306/semaphore",
+                "jdbc_user": "${DB_USER}",
+                "jdbc_password": "${DB_PASSWORD}",
+                "schedule": "* * * * *",
+                "statement": "select * from event"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_bytes_2",
+            "type": "filter",
+            "plugin": "bytes",
+            "config": {}
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_4",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "cloud_id": "${ELASTIC_CLOUD_ID}",
+                "cloud_auth": "${ELASTIC_CLOUD_AUTH}",
+                "index": "db-report-test"
+            }}]}, indent=4)
+
+    result = logstash_config_to_components(pipeline)
+
+    assert result == expected_component_output
