@@ -10,7 +10,7 @@ section: section_type "{" [statement+] "}"
 
 statement: plugin | conditional
 
-conditional: "if" condition "{" [statement+] "}" else_if_condition* [else_condition]
+conditional: "if" condition "{" [statement+] "}" (else_if_condition | else_condition)*
 condition: CMP_OPERATORS
 else_if_condition: "else" "if" condition "{" [statement+] "}"
 else_condition: "else" "{" [statement+] "}"
@@ -63,6 +63,7 @@ class LogstashTransformer(Transformer):
         return items[0]
 
     def conditional(self, items):
+        # First item is the if condition, second is the if body
         result = {
             'type': 'conditional',
             'if_condition': items[0],
@@ -70,25 +71,25 @@ class LogstashTransformer(Transformer):
             'else_ifs': [],
             'else_body': None
         }
-
-        # Process else ifs and else
-        i = 2
+        
+        # Process remaining items (else ifs and else)
+        i = 2  # Skip if_condition and if_body
         while i < len(items):
-            if isinstance(items[i], dict) and 'else_if_condition' in str(items[i]):
-                # For else if, the next item is the body
-                result['else_ifs'].append({
-                    'condition': items[i],
-                    'body': items[i + 1] if i + 1 < len(items) else []
-                })
-                i += 2
-            else:
-                # This is the else body
-                result['else_body'] = items[i] if i < len(items) else []
-                i += 1
-
+            item = items[i]
+            if isinstance(item, dict):
+                if item.get('type') == 'else_if_condition':
+                    result['else_ifs'].append({
+                        'condition': item['condition'],
+                        'body': item['body']
+                    })
+                elif item.get('type') == 'else_condition':
+                    result['else_body'] = item['body']
+            i += 1
+            
         return result
 
     def else_if_condition(self, items):
+
         return {
             'type': 'else_if_condition',
             'condition': items[0],
@@ -96,7 +97,10 @@ class LogstashTransformer(Transformer):
         }
 
     def else_condition(self, items):
-        return items[0] if items else []
+        return {
+            'type': 'else_condition',
+            'body': items[0] if items else []
+        }
 
     def number(self, n):
         return float(n[0]) if '.' in n[0] else int(n[0])
@@ -206,20 +210,23 @@ class LogstashTransformer(Transformer):
             # Get the condition string from the else_if_condition
             condition = ''
             if isinstance(else_if, dict) and 'condition' in else_if:
-                if isinstance(else_if['condition'], dict) and 'condition' in else_if['condition']:
-                    condition = else_if['condition']['condition']
+                if isinstance(else_if['condition'], dict):
+                    if 'condition' in else_if['condition']:
+                        condition = else_if['condition']['condition']
+                    elif 'value' in else_if['condition']:
+                        condition = else_if['condition']['value']
                 else:
                     condition = str(else_if['condition'])
-
             # Process the plugins in the else if body
-            elif_plugins, component_count = self._process_plugins(
-                else_if.get('body', []), section_type, component_count
-            )
-
+            elif_plugins = []
+            if 'body' in else_if:
+                elif_plugins, component_count = self._process_plugins(
+                    else_if['body'], section_type, component_count
+                )
             # Add to else_ifs list with proper structure
             if condition:
                 else_ifs.append({
-                    'condition': condition,
+                    'condition': condition.strip(),
                     'plugins': elif_plugins
                 })
 
@@ -230,7 +237,6 @@ class LogstashTransformer(Transformer):
                 cond['else_body'], section_type, component_count
             )
             else_block = {'plugins': else_plugins}
-
         # Create the conditional block using the original component_count
         conditional_block = {
             'id': f"{section_type}_if_{conditional_id}",
@@ -383,6 +389,8 @@ def main():
         if [type] == "apache" {
           pipeline { send_to => weblogs }
         } else if [type] == "system" {
+          pipeline { send_to => syslog }
+        } else if [type] == "test" {
           pipeline { send_to => syslog }
         } else {
           pipeline { send_to => fallback }

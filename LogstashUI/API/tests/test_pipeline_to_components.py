@@ -193,3 +193,96 @@ output {
     result = logstash_config_to_components(pipeline)
 
     assert result == expected_component_output
+
+
+def test_multiple_else_if():
+    pipeline = """    input { beats { port => 5044 } }
+    output {
+        if [type] == "apache" {
+          pipeline { send_to => weblogs }
+        } else if [type] == "system" {
+          pipeline { send_to => syslog }
+        } else if [type] == "test" {
+          pipeline { send_to => syslog }
+        } else {
+          pipeline { send_to => fallback }
+        }
+    }"""
+    expected_component_output = json.dumps({
+        "input": [
+            {
+                "id": "input_beats_0",
+                "type": "input",
+                "plugin": "beats",
+                "config": {
+                    "port": 5044
+                }
+            }
+        ],
+        "filter": [],
+        "output": [
+            {
+                "id": "output_if_2",
+                "type": "output",
+                "plugin": "if",
+                "config": {
+                    "condition": "[type] == \"apache\"",
+                    "plugins": [
+                        {
+                            "id": "output_pipeline_3",
+                            "type": "output",
+                            "plugin": "pipeline",
+                            "config": {
+                                "send_to": "weblogs"
+                            }
+                        }
+                    ],
+                    "else_ifs": [
+                        {
+                            "condition": "[type] == \"system\"",
+                            "plugins": [
+                                {
+                                    "id": "output_pipeline_5",
+                                    "type": "output",
+                                    "plugin": "pipeline",
+                                    "config": {
+                                        "send_to": "syslog"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "condition": "[type] == \"test\"",
+                            "plugins": [
+                                {
+                                    "id": "output_pipeline_7",
+                                    "type": "output",
+                                    "plugin": "pipeline",
+                                    "config": {
+                                        "send_to": "syslog"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "else": {
+                        "plugins": [
+                            {
+                                "id": "output_pipeline_9",
+                                "type": "output",
+                                "plugin": "pipeline",
+                                "config": {
+                                    "send_to": "fallback"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        ]
+    }, indent=4)
+
+    result = logstash_config_to_components(pipeline)
+
+    assert result == expected_component_output
+
