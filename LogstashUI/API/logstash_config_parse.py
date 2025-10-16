@@ -65,17 +65,26 @@ class LogstashTransformer(Transformer):
         return items[0]
 
     def conditional(self, items):
-        # First item is the if condition, second is the if body
+        # First item is the if condition, rest are if_body statements and else clauses
         result = {
             'type': 'conditional',
             'if_condition': items[0],
-            'if_body': items[1] if len(items) > 1 else [],
+            'if_body': [],
             'else_ifs': [],
             'else_body': None
         }
         
+        # Collect if_body statements and else clauses
+        i = 1
+        # Collect all statements until we hit an else_if or else
+        while i < len(items):
+            item = items[i]
+            if isinstance(item, dict) and item.get('type') in ['else_if_condition', 'else_condition']:
+                break
+            result['if_body'].append(item)
+            i += 1
+        
         # Process remaining items (else ifs and else)
-        i = 2  # Skip if_condition and if_body
         while i < len(items):
             item = items[i]
             if isinstance(item, dict):
@@ -91,17 +100,18 @@ class LogstashTransformer(Transformer):
         return result
 
     def else_if_condition(self, items):
-
+        # First item is condition, rest are body statements
         return {
             'type': 'else_if_condition',
             'condition': items[0],
-            'body': items[1] if len(items) > 1 else []
+            'body': items[1:] if len(items) > 1 else []
         }
 
     def else_condition(self, items):
+        # All items are body statements
         return {
             'type': 'else_condition',
-            'body': items[0] if items else []
+            'body': items if items else []
         }
 
     def number(self, n):
@@ -404,7 +414,30 @@ def main():
         } else if [type] == "test" {
           pipeline { send_to => test }
         } else {
+        if [type] == "nested-apache" {
+              pipeline { send_to => "nested-weblogs" }
+            } else if [type] == "nested-system" {
+              pipeline { send_to => "nested-syslog" }
+            } else if [type] == "nested-test" {
+              pipeline { send_to => "nested-syslog" }
+            } else {
+              pipeline { send_to => "nested_fallback" }
+            }
+        } else if [type] == "system" {
+          pipeline { send_to => syslog }
+        } else if [type] == "test" {
+          pipeline { send_to => test }
+        } else {
           pipeline { send_to => fallback-test }
+                      	elasticsearch {
+		hosts => ["http://elasticsearch:9200"]
+		index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+	}
+          pipeline { send_to => fallback-test }
+                      	elasticsearch {
+		hosts => ["http://elasticsearch:9200"]
+		index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+	}
         }
     }""")
     print(condition_output_no_filter)
