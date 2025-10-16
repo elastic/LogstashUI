@@ -314,8 +314,8 @@
     });
   }
 
-  // Render else block
-  if (component.config.else && component.config.else.plugins) {
+  // Render else block (only if it exists and has plugins)
+  if (component.config.else && component.config.else.plugins && component.config.else.plugins.length > 0) {
     const elseBlock = document.createElement('div');
     elseBlock.className = 'mt-2';
     
@@ -327,17 +327,10 @@
     const elsePluginsContainer = document.createElement('div');
     elsePluginsContainer.className = 'ml-4 space-y-2 mt-2';
     
-    if (component.config.else.plugins.length > 0) {
-      component.config.else.plugins.forEach(plugin => {
-        const pluginEl = createComponentElement(plugin, depth + 1);
-        elsePluginsContainer.appendChild(pluginEl);
-      });
-    } else {
-      const emptyMsg = document.createElement('p');
-      emptyMsg.className = 'text-gray-500 text-sm py-2';
-      emptyMsg.textContent = 'No plugins in else block';
-      elsePluginsContainer.appendChild(emptyMsg);
-    }
+    component.config.else.plugins.forEach(plugin => {
+      const pluginEl = createComponentElement(plugin, depth + 1);
+      elsePluginsContainer.appendChild(pluginEl);
+    });
     
     elseBlock.appendChild(elsePluginsContainer);
     container.appendChild(elseBlock);
