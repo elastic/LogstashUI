@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- TODO: Replace with local version instead of CDN -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
+<script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
+
+
+
+<div style="height:100%;width:100%;" id="drawflow">
+
+</div>
+
+
+<script>
+
+    const components = {{ component_data |safe }};
+    const pluginData = {{ plugin_data|safe }};
+
+    var id = document.getElementById("drawflow");
+    const editor = new Drawflow(id);
+    editor.start();
+
+
+    var current_node_position_x = 0
+    var current_node_position_y = 0
+
+
+
+    for (i in components['input']) {
+
+        var component = components['input'][i];
+        var html = `
+            <div style="min-width: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;">
+                <div><strong>${component.type}:</strong> ${component.plugin}</div>
+                <div><small>ID: ${component.id}</small></div>
+                <pre style="font-size: 0.8em; white-space: pre-wrap;">${JSON.stringify(component.config, null, 2)}</pre>
+            </div>
+        `;
+        var data = component.config;
+
+
+        if (i > 0) {
+            current_node_position_x = 200 * i;
+        }
+
+        editor.addNode(component.id, 0, 1, current_node_position_x, current_node_position_y, component.type, data, html);
+    }
+    current_node_position_y += 200;
+    current_node_position_x = 0;
+
+    for (i in components['filter']) {
+        console.log(components['filter'][i]);
+
+
+        var component = components['filter'][i];
+        var html = `
+            <div style="min-width: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;">
+                <div><strong>${component.type}:</strong> ${component.plugin}</div>
+                <div><small>ID: ${component.id}</small></div>
+                <pre style="font-size: 0.8em; white-space: pre-wrap;">${JSON.stringify(component.config, null, 2)}</pre>
+            </div>
+        `;
+        var data = component.config;
+
+
+        editor.addNode(component.id, 1, 1, current_node_position_x, current_node_position_y, component.type, data, html);
+        current_node_position_y += 200;
+    }
+    current_node_position_x = 0;
+
+
+    for (i in components['output']) {
+        console.log(components['output'][i]);
+
+
+        var component = components['output'][i];
+        var html = `
+            <div style="min-width: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;">
+                <div><strong>${component.type}:</strong> ${component.plugin}</div>
+                <div><small>ID: ${component.id}</small></div>
+                <pre style="font-size: 0.8em; white-space: pre-wrap;">${JSON.stringify(component.config, null, 2)}</pre>
+            </div>
+        `;
+        var data = component.config;
+
+
+        if (i > 0) {
+            current_node_position_x = 200 * i;
+        }
+
+        editor.addNode(component.id, 1, 0, current_node_position_x, current_node_position_y, component.type, data, html);
+    }
+</script>
+{% endblock %}

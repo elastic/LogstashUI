@@ -2,12 +2,20 @@
     <table>
         <thead>
             <th>Pipeline Name</th>
+            <th>InlineEditor</th>
+            <th>GraphEditor</th>
         </thead>
         <tbody>
             {% for pipeline in pipelines %}
             <tr>
                 <td>
                     <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">{{ pipeline.name }}</a>
+                </td>
+                <td>
+                    <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">Inline</a>
+                </td>
+                <td>
+                    <a href="/PipelineManager/Pipelines/Graph/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">Graph</a>
                 </td>
             </tr>
             {% endfor %}

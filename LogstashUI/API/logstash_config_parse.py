@@ -26,7 +26,7 @@ section_type: "input" -> input_section
 plugin: CNAME "{" [pair (WS | ";")*]* "}"
 
 
-pair: (CNAME | ESCAPED_STRING) "=>" (CNAME | value)
+pair: (CNAME | ESCAPED_STRING) "=>" (CNAME | value | UNQUOTED_STRING)
 
 ?value: string
       | number
@@ -40,6 +40,9 @@ number: SIGNED_NUMBER
 array: "[" [value ("," value)*] "]"
 hash: "{" [pair (","? pair)*] "}"
 env_var: "${" CNAME "}"
+UNQUOTED_STRING: /[a-zA-Z_][a-zA-Z0-9_-]*/
+
+
 
 %import common.ESCAPED_STRING
 %import common.SIGNED_NUMBER
@@ -387,13 +390,22 @@ def main():
     condition_output_no_filter = logstash_config_to_components("""    input { beats { port => 5044 } }
     output {
         if [type] == "apache" {
-          pipeline { send_to => weblogs }
+          pipeline { send_to => "nested-weblogs" }
+          if [type] == "nested-apache" {
+              pipeline { send_to => "nested-weblogs" }
+            } else if [type] == "nested-system" {
+              pipeline { send_to => "nested-syslog" }
+            } else if [type] == "nested-test" {
+              pipeline { send_to => "nested-syslog" }
+            } else {
+              pipeline { send_to => "nested_fallback" }
+            }
         } else if [type] == "system" {
           pipeline { send_to => syslog }
         } else if [type] == "test" {
-          pipeline { send_to => syslog }
+          pipeline { send_to => test }
         } else {
-          pipeline { send_to => fallback }
+          pipeline { send_to => fallback-test }
         }
     }""")
     print(condition_output_no_filter)
