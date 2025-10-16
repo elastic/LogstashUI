@@ -146,14 +146,23 @@
         // Add each component to the UI
         componentList.forEach(component => {
           const componentEl = createComponentElement(component);
+          console.log("ME");
+
           container.appendChild(componentEl);
         });
       });
     }
 
-    function createComponentElement(component) {
+    function createComponentElement(component, depth = 0) {
+  // Check if this is a conditional block
+  if (component.plugin === 'if') {
+    return createConditionalBlockElement(component, depth);
+  }
+
+  // Alternate background colors based on depth
+  const bgColor = depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600';
   const el = document.createElement('div');
-  el.className = 'bg-gray-700 p-3 rounded mb-2 relative group draggable-item';
+  el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item`;
   el.dataset.id = component.id;
 
   // Get plugin info for description and type
@@ -165,7 +174,7 @@
   if (Object.keys(component.config).length > 0) {
     const configItems = [];
     for (const [key, value] of Object.entries(component.config)) {
-      if (value !== undefined && value !== null && value !== '') {
+      if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
         let displayValue = value;
         if (typeof value === 'object') {
           displayValue = JSON.stringify(value).substring(0, 30) + (JSON.stringify(value).length > 30 ? '...' : '');
@@ -215,6 +224,126 @@
     </div>
   `;
 
+  return el;
+}
+
+    function createConditionalBlockElement(component, depth = 0) {
+  // Alternate background colors based on depth
+  const bgColor = depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600';
+  const el = document.createElement('div');
+  el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item`;
+  el.dataset.id = component.id;
+
+  const typeColor = getPluginTypeColor(component.type);
+
+  // Create the container with border
+  const container = document.createElement('div');
+  container.className = 'border-l-4 border-yellow-500 pl-3';
+
+  // Create header section
+  const header = document.createElement('div');
+  header.className = 'flex justify-between items-start mb-2';
+  header.innerHTML = `
+    <div class="flex-1">
+      <div class="flex items-center">
+        <span class="font-medium text-yellow-300">if</span>
+        <span class="ml-2 text-xs text-gray-400">${component.config.condition || ''}</span>
+        <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
+          ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
+        </span>
+      </div>
+    </div>
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+            onclick="event.stopPropagation(); removeComponent('${component.id}')"
+            title="Remove">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    </button>
+  `;
+  container.appendChild(header);
+
+  // Create if block plugins container
+  const ifPluginsContainer = document.createElement('div');
+  ifPluginsContainer.className = 'ml-4 space-y-2';
+  
+  if (component.config.plugins && component.config.plugins.length > 0) {
+    component.config.plugins.forEach(plugin => {
+      const pluginEl = createComponentElement(plugin, depth + 1);
+      ifPluginsContainer.appendChild(pluginEl);
+    });
+  } else {
+    const emptyMsg = document.createElement('p');
+    emptyMsg.className = 'text-gray-500 text-sm py-2';
+    emptyMsg.textContent = 'No plugins in if block';
+    ifPluginsContainer.appendChild(emptyMsg);
+  }
+  container.appendChild(ifPluginsContainer);
+
+  // Render else-if blocks
+  if (component.config.else_ifs && component.config.else_ifs.length > 0) {
+    component.config.else_ifs.forEach(elseIf => {
+      const elseIfBlock = document.createElement('div');
+      elseIfBlock.className = 'mt-2';
+      
+      const elseIfHeader = document.createElement('div');
+      elseIfHeader.className = 'flex items-center';
+      elseIfHeader.innerHTML = `
+        <span class="font-medium text-yellow-300">else if</span>
+        <span class="ml-2 text-xs text-gray-400">${elseIf.condition || ''}</span>
+      `;
+      elseIfBlock.appendChild(elseIfHeader);
+      
+      const elseIfPluginsContainer = document.createElement('div');
+      elseIfPluginsContainer.className = 'ml-4 space-y-2 mt-2';
+      
+      if (elseIf.plugins && elseIf.plugins.length > 0) {
+        elseIf.plugins.forEach(plugin => {
+          const pluginEl = createComponentElement(plugin, depth + 1);
+          elseIfPluginsContainer.appendChild(pluginEl);
+        });
+      } else {
+        const emptyMsg = document.createElement('p');
+        emptyMsg.className = 'text-gray-500 text-sm py-2';
+        emptyMsg.textContent = 'No plugins in else-if block';
+        elseIfPluginsContainer.appendChild(emptyMsg);
+      }
+      
+      elseIfBlock.appendChild(elseIfPluginsContainer);
+      container.appendChild(elseIfBlock);
+    });
+  }
+
+  // Render else block
+  if (component.config.else && component.config.else.plugins) {
+    const elseBlock = document.createElement('div');
+    elseBlock.className = 'mt-2';
+    
+    const elseHeader = document.createElement('div');
+    elseHeader.className = 'flex items-center';
+    elseHeader.innerHTML = '<span class="font-medium text-yellow-300">else</span>';
+    elseBlock.appendChild(elseHeader);
+    
+    const elsePluginsContainer = document.createElement('div');
+    elsePluginsContainer.className = 'ml-4 space-y-2 mt-2';
+    
+    if (component.config.else.plugins.length > 0) {
+      component.config.else.plugins.forEach(plugin => {
+        const pluginEl = createComponentElement(plugin, depth + 1);
+        elsePluginsContainer.appendChild(pluginEl);
+      });
+    } else {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'text-gray-500 text-sm py-2';
+      emptyMsg.textContent = 'No plugins in else block';
+      elsePluginsContainer.appendChild(emptyMsg);
+    }
+    
+    elseBlock.appendChild(elsePluginsContainer);
+    container.appendChild(elseBlock);
+  }
+
+  el.appendChild(container);
   return el;
 }
 
