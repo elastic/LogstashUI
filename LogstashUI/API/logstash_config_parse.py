@@ -26,7 +26,7 @@ section_type: "input" -> input_section
 plugin: CNAME "{" [pair (WS | ";")*]* "}"
 
 
-pair: (CNAME | ESCAPED_STRING) "=>" (CNAME | value | UNQUOTED_STRING)
+pair: (CNAME | ESCAPED_STRING) "=>" (UNQUOTED_STRING | CNAME | value)
 
 ?value: string
       | number
@@ -40,15 +40,14 @@ number: SIGNED_NUMBER
 array: "[" [value ("," value)*] "]"
 hash: "{" [pair (","? pair)*] "}"
 env_var: "${" CNAME "}"
-UNQUOTED_STRING: /[a-zA-Z_][a-zA-Z0-9_-]*/
-
-
 
 %import common.ESCAPED_STRING
 %import common.SIGNED_NUMBER
 %import common.CNAME
 %import common.WS
 %import common.NEWLINE
+
+UNQUOTED_STRING.2: /[a-zA-Z_][a-zA-Z0-9_-]*/
 %ignore WS
 %ignore /#[^\n]*/
 %ignore /\n+/
