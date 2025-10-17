@@ -146,8 +146,6 @@
         // Add each component to the UI
         componentList.forEach(component => {
           const componentEl = createComponentElement(component);
-          console.log("ME");
-
           container.appendChild(componentEl);
         });
       });
@@ -243,30 +241,64 @@
   // Create header section
   const header = document.createElement('div');
   header.className = 'flex justify-between items-start mb-2';
-  header.innerHTML = `
-    <div class="flex-1">
-      <div class="flex items-center">
-        <span class="font-medium text-yellow-300">if</span>
-        <span class="ml-2 text-xs text-gray-400">${component.config.condition || ''}</span>
-        <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
-          ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
-        </span>
-      </div>
+  
+  const headerLeft = document.createElement('div');
+  headerLeft.className = 'flex-1';
+  headerLeft.innerHTML = `
+    <div class="flex items-center">
+      <span class="font-medium text-yellow-300">if</span>
+      <span class="ml-2 text-xs text-gray-400">${component.config.condition || ''}</span>
+      <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
+        ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
+      </span>
     </div>
-    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-            onclick="event.stopPropagation(); removeComponent('${component.id}')"
-            title="Remove">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-      </svg>
-    </button>
   `;
+  header.appendChild(headerLeft);
+  
+  // Create button container
+  const buttonContainer = document.createElement('div');
+  buttonContainer.className = 'flex space-x-2 ml-2 opacity-0 group-hover:opacity-100 transition-opacity';
+  
+  // Add else-if button with text
+  const addElseIfBtn = document.createElement('button');
+  addElseIfBtn.className = 'px-2 py-1 text-xs bg-yellow-600/80 text-white rounded hover:bg-yellow-600';
+  addElseIfBtn.textContent = '+ else if';
+  addElseIfBtn.setAttribute('data-action', 'add-elseif');
+  addElseIfBtn.setAttribute('data-component-id', component.id);
+  buttonContainer.appendChild(addElseIfBtn);
+  
+  // Add else button (only if else block doesn't exist or has no plugins
+  if (!component.config.else || !component.config.else.plugins || component.config.else.plugins.length === 0) {
+    const addElseBtn = document.createElement('button');
+    addElseBtn.className = 'px-2 py-1 text-xs bg-yellow-600/80 text-white rounded hover:bg-yellow-600';
+    addElseBtn.textContent = '+ else';
+    addElseBtn.setAttribute('data-action', 'add-else');
+    addElseBtn.setAttribute('data-component-id', component.id);
+    buttonContainer.appendChild(addElseBtn);
+  }
+  
+  // Add delete button
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'text-gray-400 hover:text-red-400';
+  deleteBtn.title = 'Remove';
+  deleteBtn.innerHTML = `
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  `;
+  deleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    removeComponent(component.id);
+  };
+  buttonContainer.appendChild(deleteBtn);
+
+  header.appendChild(buttonContainer);
   container.appendChild(header);
 
   // Create if block plugins container
   const ifPluginsContainer = document.createElement('div');
   ifPluginsContainer.className = 'ml-4 space-y-2';
-  
+
   if (component.config.plugins && component.config.plugins.length > 0) {
     component.config.plugins.forEach(plugin => {
       const pluginEl = createComponentElement(plugin, depth + 1);
@@ -285,7 +317,7 @@
     component.config.else_ifs.forEach(elseIf => {
       const elseIfBlock = document.createElement('div');
       elseIfBlock.className = 'mt-2';
-      
+
       const elseIfHeader = document.createElement('div');
       elseIfHeader.className = 'flex items-center';
       elseIfHeader.innerHTML = `
@@ -293,10 +325,10 @@
         <span class="ml-2 text-xs text-gray-400">${elseIf.condition || ''}</span>
       `;
       elseIfBlock.appendChild(elseIfHeader);
-      
+
       const elseIfPluginsContainer = document.createElement('div');
       elseIfPluginsContainer.className = 'ml-4 space-y-2 mt-2';
-      
+
       if (elseIf.plugins && elseIf.plugins.length > 0) {
         elseIf.plugins.forEach(plugin => {
           const pluginEl = createComponentElement(plugin, depth + 1);
@@ -308,7 +340,7 @@
         emptyMsg.textContent = 'No plugins in else-if block';
         elseIfPluginsContainer.appendChild(emptyMsg);
       }
-      
+
       elseIfBlock.appendChild(elseIfPluginsContainer);
       container.appendChild(elseIfBlock);
     });
@@ -318,15 +350,15 @@
   if (component.config.else && component.config.else.plugins && component.config.else.plugins.length > 0) {
     const elseBlock = document.createElement('div');
     elseBlock.className = 'mt-2';
-    
+
     const elseHeader = document.createElement('div');
     elseHeader.className = 'flex items-center';
     elseHeader.innerHTML = '<span class="font-medium text-yellow-300">else</span>';
     elseBlock.appendChild(elseHeader);
-    
+
     const elsePluginsContainer = document.createElement('div');
     elsePluginsContainer.className = 'ml-4 space-y-2 mt-2';
-    
+
     component.config.else.plugins.forEach(plugin => {
       const pluginEl = createComponentElement(plugin, depth + 1);
       elsePluginsContainer.appendChild(pluginEl);
@@ -390,15 +422,80 @@
           }
         });
       }
+
+      // Add global event listener for conditional block buttons
+      document.addEventListener('click', function(event) {
+        const button = event.target.closest('[data-action]');
+        if (!button) return;
+        
+        const action = button.getAttribute('data-action');
+        const componentId = button.getAttribute('data-component-id');
+        
+        if (!componentId) return;
+        
+        event.stopPropagation();
+        event.preventDefault();
+        
+        if (action === 'add-elseif') {
+          addElseIfToConditional(componentId);
+        } else if (action === 'add-else') {
+          addElseToConditional(componentId);
+        }
+      });
     });
 
-    // Helper function to find component by ID
+    // Helper function to find component by ID (recursive for nested conditionals)
     function findComponentById(id) {
       if (!id || !components) return null;
-      for (const type in components) {
-        const found = components[type].find(c => c.id === id);
-        if (found) return found;
+      
+      // Recursive search function
+      function searchInComponent(component) {
+        if (component.id === id) {
+          return component;
+        }
+        
+        // If this is a conditional, search inside it
+        if (component.plugin === 'if' && component.config) {
+          // Search in if block
+          if (component.config.plugins) {
+            for (const plugin of component.config.plugins) {
+              const found = searchInComponent(plugin);
+              if (found) return found;
+            }
+          }
+          
+          // Search in else-if blocks
+          if (component.config.else_ifs) {
+            for (const elseIf of component.config.else_ifs) {
+              if (elseIf.plugins) {
+                for (const plugin of elseIf.plugins) {
+                  const found = searchInComponent(plugin);
+                  if (found) return found;
+                }
+              }
+            }
+          }
+          
+          // Search in else block
+          if (component.config.else && component.config.else.plugins) {
+            for (const plugin of component.config.else.plugins) {
+              const found = searchInComponent(plugin);
+              if (found) return found;
+            }
+          }
+        }
+        
+        return null;
       }
+      
+      // Search through all top-level components
+      for (const type in components) {
+        for (const component of components[type]) {
+          const found = searchInComponent(component);
+          if (found) return found;
+        }
+      }
+      
       return null;
     }
 
@@ -432,6 +529,65 @@
       parent.appendChild(placeholder);
     }
   }
+}
+
+function addElseIfToConditional(componentId) {
+  // Find the conditional component
+  const component = findComponentById(componentId);
+  if (!component || component.plugin !== 'if') {
+    console.error('Component not found or not a conditional:', componentId);
+    return;
+  }
+
+  // Prompt for condition
+  const condition = prompt('Enter the else-if condition:', '[field] == "value"');
+  if (!condition) {
+    return;
+  }
+
+  // Initialize else_ifs array if it doesn't exist
+  if (!component.config.else_ifs) {
+    component.config.else_ifs = [];
+  }
+
+  // Add new else-if block
+  component.config.else_ifs.push({
+    condition: condition,
+    plugins: []
+  });
+
+  // Refresh the UI
+  loadExistingComponents();
+}
+
+function addElseToConditional(componentId) {
+  console.log('addElseToConditional called with:', componentId);
+  
+  // Find the conditional component
+  const component = findComponentById(componentId);
+  console.log('Found component:', component);
+  
+  if (!component || component.plugin !== 'if') {
+    console.error('Component not found or not a conditional:', componentId);
+    return;
+  }
+
+  // Add else block with a default plugin
+  component.config.else = {
+    plugins: [
+      {
+        id: 'output_stdout_' + Date.now(),
+        type: 'output',
+        plugin: 'stdout',
+        config: {}
+      }
+    ]
+  };
+  
+  console.log('Added else block with default plugin, component now:', component);
+
+  // Refresh the UI
+  loadExistingComponents();
 }
 
 
