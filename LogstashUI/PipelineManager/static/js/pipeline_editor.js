@@ -134,8 +134,9 @@ function createConditionalBlockElement(component, depth = 0) {
 <div class="flex items-center">
   <span class="font-medium text-yellow-300">if</span>
   <div class="flex items-center ml-2 group/condition">
-    <span class="text-xs text-gray-400">${component.config.condition || ''}</span>
-    <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity">
+    <span class="text-xs text-gray-400 condition-text">${component.config.condition || ''}</span>
+    <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-condition" 
+            data-component-id="${component.id}">
       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
       </svg>
@@ -337,8 +338,63 @@ window.updateComponent = function (updatedComponent) {
     return false;
 };
 
+// Function to handle condition editing
+function handleEditCondition(componentId) {
+    const component = findComponentById(componentId);
+    if (!component) return;
+
+    const conditionElement = document.querySelector(`[data-id="${componentId}"] .condition-text`);
+    if (!conditionElement) return;
+
+    const currentCondition = component.config.condition || '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentCondition;
+    input.className = 'text-xs text-white bg-gray-700 px-1 py-0.5 rounded w-full';
+    
+    // Save on Enter or blur, cancel on Escape
+    const saveCondition = () => {
+        const newCondition = input.value.trim();
+        component.config.condition = newCondition;
+        conditionElement.textContent = newCondition || ' '; // Keep space to maintain height
+        updateComponent(component);
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        } else if (e.key === 'Escape') {
+            conditionElement.textContent = currentCondition || ' ';
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        saveCondition();
+    });
+
+    conditionElement.textContent = '';
+    conditionElement.appendChild(input);
+    input.focus();
+}
+
 // Initialize the pipeline editor
 document.addEventListener('DOMContentLoaded', function () {
+    // Add event listener for edit condition buttons
+    document.addEventListener('click', function(event) {
+        const editBtn = event.target.closest('.edit-condition') || 
+                       (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-condition'));
+        
+        if (editBtn) {
+            event.preventDefault();
+            event.stopPropagation();
+            const componentId = editBtn.getAttribute('data-component-id');
+            if (componentId) {
+                handleEditCondition(componentId);
+            }
+        }
+    });
+
     if (typeof components !== 'undefined') {
         loadExistingComponents();
     }
