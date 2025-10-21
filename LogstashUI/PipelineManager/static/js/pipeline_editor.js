@@ -223,7 +223,8 @@ Add Plugin
 
 // Render else-if blocks
     if (component.config.else_ifs && component.config.else_ifs.length > 0) {
-        component.config.else_ifs.forEach(elseIf => {
+        component.config.else_ifs.forEach((elseIf, index) => {
+            const elseIfIndex = index; // Capture the index in a local constant
             const elseIfBlock = document.createElement('div');
             elseIfBlock.className = 'mt-2';
 
