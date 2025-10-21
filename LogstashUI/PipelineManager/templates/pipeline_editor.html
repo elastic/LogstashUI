@@ -806,9 +806,6 @@ function addElseToConditional(componentId) {
   
   modal.dataset.context = JSON.stringify(context);
   
-  // Create a unique event name for this specific instance
-  const eventName = `pluginSelected_${Date.now()}`;
-  
   // Show the plugin modal for the appropriate plugin type
   PluginModal.show(component.type || 'output');
   
@@ -852,18 +849,26 @@ function addElseToConditional(componentId) {
     }
     
     // Remove the event listener after handling the selection
-    document.removeEventListener(eventName, handlePluginSelect);
+    document.removeEventListener('pluginSelected', handlePluginSelect);
     
     // Refresh the UI
     loadExistingComponents();
+    
+    // Show the config modal for the new plugin
+    if (typeof window.PluginConfigModal !== 'undefined') {
+      // Use a small timeout to ensure the UI is updated first
+      setTimeout(() => {
+        window.PluginConfigModal.show(newPlugin);
+      }, 50);
+    }
   };
   
-  // Listen for the plugin selection event with our specific event name
-  document.addEventListener(eventName, handlePluginSelect);
+  // Listen for the plugin selection event
+  document.addEventListener('pluginSelected', handlePluginSelect);
   
   // Set a timeout to clean up the listener if the modal is closed without selecting a plugin
   const cleanupTimer = setTimeout(() => {
-    document.removeEventListener(eventName, handlePluginSelect);
+    document.removeEventListener('pluginSelected', handlePluginSelect);
     if (modal.dataset.context) {
       delete modal.dataset.context;
     }
@@ -873,6 +878,7 @@ function addElseToConditional(componentId) {
   const originalHide = PluginModal.hide;
   PluginModal.hide = function() {
     clearTimeout(cleanupTimer);
+    document.removeEventListener('pluginSelected', handlePluginSelect);
     originalHide.call(PluginModal);
     PluginModal.hide = originalHide; // Restore original hide function
   };
