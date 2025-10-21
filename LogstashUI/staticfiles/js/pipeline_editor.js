@@ -347,15 +347,8 @@ document.addEventListener('DOMContentLoaded', function () {
             e.stopPropagation();
             const button = e.target.closest('.insertion-button.add-plugin');
             const type = button.dataset.type;
-            // Delegate to the existing section button so we use the exact same code path
-            const idMap = { input: 'addInputBtn', filter: 'addFilterBtn', output: 'addOutputBtn' };
-            const targetBtnId = idMap[type];
-            const targetBtn = targetBtnId ? document.getElementById(targetBtnId) : null;
-            if (targetBtn) {
-                targetBtn.click();
-            } else if (window.PluginModal && typeof window.PluginModal.show === 'function') {
-                // Fallback to showing the selection modal directly
-                window.PluginModal.show(type);
+            if (window.PluginConfigModal) {
+                window.PluginConfigModal.show(type);
             }
         }
         // Handle Add Condition button in insertion points
