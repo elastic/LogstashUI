@@ -228,11 +228,22 @@ Add Plugin
             const elseIfBlock = document.createElement('div');
             elseIfBlock.className = 'mt-2';
 
+            const conditionId = `condition-${component.id}-${elseIfIndex}`;
             const elseIfHeader = document.createElement('div');
-            elseIfHeader.className = 'flex items-center';
+            elseIfHeader.className = 'flex items-center group-elseif-condition';
             elseIfHeader.innerHTML = `
     <span class="font-medium text-yellow-300">else if</span>
-    <span class="ml-2 text-xs text-gray-400">${elseIf.condition || ''}</span>
+    <div class="flex items-center ml-2">
+      <span id="${conditionId}" class="text-xs text-gray-400 condition-text">${elseIf.condition || ''}</span>
+      <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition" 
+              data-component-id="${component.id}" 
+              data-elseif-index="${elseIfIndex}"
+              data-condition-id="${conditionId}">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+      </button>
+    </div>
   `;
             elseIfBlock.appendChild(elseIfHeader);
 
@@ -379,12 +390,59 @@ function handleEditCondition(componentId) {
     input.focus();
 }
 
+// Function to handle else-if condition editing
+function handleEditElseIfCondition(componentId, elseIfIndex, conditionId) {
+    const component = findComponentById(componentId);
+    if (!component || !component.config.else_ifs || !component.config.else_ifs[elseIfIndex]) return;
+
+    const conditionText = component.config.else_ifs[elseIfIndex].condition || '';
+    const conditionElement = document.getElementById(conditionId);
+    
+    if (!conditionElement) {
+        console.error('Could not find condition element with ID:', conditionId);
+        return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = conditionText;
+    input.className = 'text-xs text-white bg-gray-700 px-1 py-0.5 rounded w-full';
+    
+    // Save on Enter or blur, cancel on Escape
+    const saveCondition = () => {
+        const newCondition = input.value.trim();
+        component.config.else_ifs[elseIfIndex].condition = newCondition;
+        conditionElement.textContent = newCondition || ' '; // Keep space to maintain height
+        updateComponent(component);
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        } else if (e.key === 'Escape') {
+            conditionElement.textContent = conditionText || ' ';
+            input.remove();
+            conditionElement.textContent = conditionText || ' ';
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        saveCondition();
+    });
+
+    conditionElement.textContent = '';
+    conditionElement.appendChild(input);
+    input.focus();
+}
+
 // Initialize the pipeline editor
 document.addEventListener('DOMContentLoaded', function () {
     // Add event listener for edit condition buttons
     document.addEventListener('click', function(event) {
-        const editBtn = event.target.closest('.edit-condition') || 
-                       (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-condition'));
+        // Handle if condition edit
+        let editBtn = event.target.closest('.edit-condition') || 
+                     (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-condition'));
         
         if (editBtn) {
             event.preventDefault();
@@ -392,6 +450,22 @@ document.addEventListener('DOMContentLoaded', function () {
             const componentId = editBtn.getAttribute('data-component-id');
             if (componentId) {
                 handleEditCondition(componentId);
+            }
+            return;
+        }
+
+        // Handle else-if condition edit
+        editBtn = event.target.closest('.edit-elseif-condition') || 
+                 (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-elseif-condition'));
+        
+        if (editBtn) {
+            event.preventDefault();
+            event.stopPropagation();
+            const componentId = editBtn.getAttribute('data-component-id');
+            const elseIfIndex = parseInt(editBtn.getAttribute('data-elseif-index'), 10);
+            const conditionId = editBtn.getAttribute('data-condition-id');
+            if (componentId && !isNaN(elseIfIndex) && conditionId) {
+                handleEditElseIfCondition(componentId, elseIfIndex, conditionId);
             }
         }
     });
