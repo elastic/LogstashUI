@@ -643,11 +643,11 @@ function addElseIfToConditional(componentId) {
         const {pluginName, pluginType} = event.detail;
         const context = JSON.parse(modal.dataset.context);
 
-// Find the component again to ensure we have the latest state
+        // Find the component again to ensure we have the latest state
         const component = findComponentById(context.componentId);
         if (!component) return;
 
-// Ensure the else_ifs array and the specific else-if block exist
+        // Ensure the else_ifs array and the specific else-if block exist
         if (!component.config.else_ifs || !component.config.else_ifs[context.elseIfIndex]) {
             console.error('Invalid else-if index or else_ifs not found');
             return;
@@ -657,7 +657,7 @@ function addElseIfToConditional(componentId) {
             component.config.else_ifs[context.elseIfIndex].plugins = [];
         }
 
-// Create the new plugin with default config
+        // Create the new plugin with default config
         const newPlugin = {
             id: `${pluginType}_${pluginName}_${Date.now()}`,
             type: pluginType,
@@ -665,13 +665,21 @@ function addElseIfToConditional(componentId) {
             config: {}
         };
 
-// Add the plugin to the else-if block
+        // Add the plugin to the else-if block
         component.config.else_ifs[context.elseIfIndex].plugins.push(newPlugin);
 
-// Refresh the UI
+        // Refresh the UI
         loadExistingComponents();
 
-// Remove the event listener after handling the selection
+        // Show the config modal for the new plugin
+        if (typeof window.PluginConfigModal !== 'undefined') {
+            // Use a small timeout to ensure the UI is updated first
+            setTimeout(() => {
+                window.PluginConfigModal.show(newPlugin);
+            }, 50);
+        }
+
+        // Remove the event listener after handling the selection
         document.removeEventListener('pluginSelected', handlePluginSelect);
     };
 
