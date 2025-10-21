@@ -295,9 +295,24 @@
   header.appendChild(buttonContainer);
   container.appendChild(header);
 
-  // Create if block plugins container
+  // Create if block plugins container with add button
   const ifPluginsContainer = document.createElement('div');
   ifPluginsContainer.className = 'ml-4 space-y-2';
+  
+  // Add Plugin button for if block
+  const addIfPluginBtn = document.createElement('button');
+  addIfPluginBtn.className = 'text-xs text-gray-400 hover:text-yellow-400 flex items-center mb-2';
+  addIfPluginBtn.innerHTML = `
+    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+    </svg>
+    Add Plugin
+  `;
+  addIfPluginBtn.onclick = (e) => {
+    e.stopPropagation();
+    addPluginToConditional(component.id, 'if');
+  };
+  ifPluginsContainer.appendChild(addIfPluginBtn);
 
   if (component.config.plugins && component.config.plugins.length > 0) {
     component.config.plugins.forEach(plugin => {
@@ -328,6 +343,21 @@
 
       const elseIfPluginsContainer = document.createElement('div');
       elseIfPluginsContainer.className = 'ml-4 space-y-2 mt-2';
+      
+      // Add Plugin button for else-if block
+      const addElseIfPluginBtn = document.createElement('button');
+      addElseIfPluginBtn.className = 'text-xs text-gray-400 hover:text-yellow-400 flex items-center mb-2';
+      addElseIfPluginBtn.innerHTML = `
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Plugin
+      `;
+      addElseIfPluginBtn.onclick = (e) => {
+        e.stopPropagation();
+        addPluginToConditional(component.id, 'else_if', elseIfIndex);
+      };
+      elseIfPluginsContainer.appendChild(addElseIfPluginBtn);
 
       if (elseIf.plugins && elseIf.plugins.length > 0) {
         elseIf.plugins.forEach(plugin => {
@@ -358,6 +388,21 @@
 
     const elsePluginsContainer = document.createElement('div');
     elsePluginsContainer.className = 'ml-4 space-y-2 mt-2';
+    
+    // Add Plugin button for else block
+    const addElsePluginBtn = document.createElement('button');
+    addElsePluginBtn.className = 'text-xs text-gray-400 hover:text-yellow-400 flex items-center mb-2';
+    addElsePluginBtn.innerHTML = `
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+      </svg>
+      Add Plugin
+    `;
+    addElsePluginBtn.onclick = (e) => {
+      e.stopPropagation();
+      addPluginToConditional(component.id, 'else');
+    };
+    elsePluginsContainer.appendChild(addElsePluginBtn);
 
     component.config.else.plugins.forEach(plugin => {
       const pluginEl = createComponentElement(plugin, depth + 1);
@@ -551,13 +596,179 @@ function addElseIfToConditional(componentId) {
   }
 
   // Add new else-if block
-  component.config.else_ifs.push({
+  const elseIfBlock = {
     condition: condition,
     plugins: []
+  };
+  
+  const elseIfIndex = component.config.else_ifs.push(elseIfBlock) - 1;
+  
+  // Store the context in the modal's dataset
+  const modal = document.getElementById('pluginModal');
+  modal.dataset.context = JSON.stringify({
+    componentId,
+    blockType: 'else_if',
+    elseIfIndex
   });
+  
+  // Show the plugin modal for the appropriate plugin type
+  PluginModal.show(component.type || 'output');
+  
+  // Add a one-time event listener for plugin selection
+  const handlePluginSelect = function(event) {
+    const { pluginName, pluginType } = event.detail;
+    const context = JSON.parse(modal.dataset.context);
+    
+    // Find the component again to ensure we have the latest state
+    const component = findComponentById(context.componentId);
+    if (!component) return;
+    
+    // Ensure the else_ifs array and the specific else-if block exist
+    if (!component.config.else_ifs || !component.config.else_ifs[context.elseIfIndex]) {
+      console.error('Invalid else-if index or else_ifs not found');
+      return;
+    }
+    
+    if (!component.config.else_ifs[context.elseIfIndex].plugins) {
+      component.config.else_ifs[context.elseIfIndex].plugins = [];
+    }
+    
+    // Create the new plugin with default config
+    const newPlugin = {
+      id: `${pluginType}_${pluginName}_${Date.now()}`,
+      type: pluginType,
+      plugin: pluginName,
+      config: {}
+    };
+    
+    // Add the plugin to the else-if block
+    component.config.else_ifs[context.elseIfIndex].plugins.push(newPlugin);
+    
+    // Refresh the UI
+    loadExistingComponents();
+    
+    // Remove the event listener after handling the selection
+    document.removeEventListener('pluginSelected', handlePluginSelect);
+  };
+  
+  // Listen for the plugin selection event
+  document.addEventListener('pluginSelected', handlePluginSelect);
+}
 
-  // Refresh the UI
-  loadExistingComponents();
+function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
+  // Find the conditional component
+  const component = findComponentById(componentId);
+  if (!component || component.plugin !== 'if') {
+    console.error('Component not found or not a conditional:', componentId);
+    return;
+  }
+
+  // Store the context for the plugin selection callback
+  const context = { componentId, blockType, elseIfIndex };
+  
+  // Store the context in the modal's dataset for later use
+  const modal = document.getElementById('pluginModal');
+  
+  // Clean up any existing context first
+  if (modal.dataset.context) {
+    delete modal.dataset.context;
+  }
+  
+  modal.dataset.context = JSON.stringify(context);
+  
+  // Create a unique event name for this specific instance
+  const eventName = `pluginSelected_${Date.now()}`;
+  
+  // Show the plugin modal for the appropriate plugin type
+  PluginModal.show(component.type || 'output');
+  
+  // Add a one-time event listener for plugin selection
+  const handlePluginSelect = function(event) {
+    const { pluginName, pluginType } = event.detail;
+    
+    // Make sure we have a valid context
+    if (!modal.dataset.context) {
+      console.error('No context found for plugin selection');
+      return;
+    }
+    
+    const context = JSON.parse(modal.dataset.context);
+    
+    // Find the component again to ensure we have the latest state
+    const component = findComponentById(context.componentId);
+    if (!component) return;
+    
+    // Determine the target plugin list based on block type
+    let targetPlugins;
+    switch (context.blockType) {
+      case 'if':
+        if (!component.config.plugins) component.config.plugins = [];
+        targetPlugins = component.config.plugins;
+        break;
+      case 'else_if':
+        if (!component.config.else_ifs || !component.config.else_ifs[context.elseIfIndex]) {
+          console.error('Invalid else-if index or else_ifs not found');
+          return;
+        }
+        if (!component.config.else_ifs[context.elseIfIndex].plugins) {
+          component.config.else_ifs[context.elseIfIndex].plugins = [];
+        }
+        targetPlugins = component.config.else_ifs[context.elseIfIndex].plugins;
+        break;
+      case 'else':
+        if (!component.config.else) {
+          component.config.else = { plugins: [] };
+        } else if (!component.config.else.plugins) {
+          component.config.else.plugins = [];
+        }
+        targetPlugins = component.config.else.plugins;
+        break;
+      default:
+        console.error('Invalid block type:', context.blockType);
+        return;
+    }
+    
+    // Create the new plugin with default config
+    const newPlugin = {
+      id: `${pluginType}_${pluginName}_${Date.now()}`,
+      type: pluginType,
+      plugin: pluginName,
+      config: {}
+    };
+    
+    // Add the plugin to the appropriate block
+    targetPlugins.push(newPlugin);
+    
+    // Clean up the context
+    if (modal.dataset.context) {
+      delete modal.dataset.context;
+    }
+    
+    // Remove the event listener after handling the selection
+    document.removeEventListener(eventName, handlePluginSelect);
+    
+    // Refresh the UI
+    loadExistingComponents();
+  };
+  
+  // Listen for the plugin selection event with our specific event name
+  document.addEventListener(eventName, handlePluginSelect);
+  
+  // Set a timeout to clean up the listener if the modal is closed without selecting a plugin
+  const cleanupTimer = setTimeout(() => {
+    document.removeEventListener(eventName, handlePluginSelect);
+    if (modal.dataset.context) {
+      delete modal.dataset.context;
+    }
+  }, 60000); // 60 second timeout
+  
+  // Clean up the timer when the modal is closed
+  const originalHide = PluginModal.hide;
+  PluginModal.hide = function() {
+    clearTimeout(cleanupTimer);
+    originalHide.call(PluginModal);
+    PluginModal.hide = originalHide; // Restore original hide function
+  };
 }
 
 function addElseToConditional(componentId) {
@@ -572,22 +783,99 @@ function addElseToConditional(componentId) {
     return;
   }
 
-  // Add else block with a default plugin
-  component.config.else = {
-    plugins: [
-      {
-        id: 'output_stdout_' + Date.now(),
-        type: 'output',
-        plugin: 'stdout',
-        config: {}
-      }
-    ]
+  // Initialize the else block if it doesn't exist
+  if (!component.config.else) {
+    component.config.else = { plugins: [] };
+  } else if (!component.config.else.plugins) {
+    component.config.else.plugins = [];
+  }
+  
+  // Store the context in the modal's dataset
+  const modal = document.getElementById('pluginModal');
+  
+  // Clean up any existing context first
+  if (modal.dataset.context) {
+    delete modal.dataset.context;
+  }
+  
+  const context = {
+    componentId,
+    blockType: 'else',
+    isNewElseBlock: true
   };
   
-  console.log('Added else block with default plugin, component now:', component);
-
-  // Refresh the UI
-  loadExistingComponents();
+  modal.dataset.context = JSON.stringify(context);
+  
+  // Create a unique event name for this specific instance
+  const eventName = `pluginSelected_${Date.now()}`;
+  
+  // Show the plugin modal for the appropriate plugin type
+  PluginModal.show(component.type || 'output');
+  
+  // Add a one-time event listener for plugin selection
+  const handlePluginSelect = function(event) {
+    const { pluginName, pluginType } = event.detail;
+    
+    // Make sure we have a valid context
+    if (!modal.dataset.context) {
+      console.error('No context found for plugin selection');
+      return;
+    }
+    
+    const context = JSON.parse(modal.dataset.context);
+    
+    // Find the component again to ensure we have the latest state
+    const component = findComponentById(context.componentId);
+    if (!component) return;
+    
+    // Ensure the else block exists
+    if (!component.config.else) {
+      component.config.else = { plugins: [] };
+    } else if (!component.config.else.plugins) {
+      component.config.else.plugins = [];
+    }
+    
+    // Create the new plugin with default config
+    const newPlugin = {
+      id: `${pluginType}_${pluginName}_${Date.now()}`,
+      type: pluginType,
+      plugin: pluginName,
+      config: {}
+    };
+    
+    // Add the plugin to the else block
+    component.config.else.plugins.push(newPlugin);
+    
+    // Clean up the context
+    if (modal.dataset.context) {
+      delete modal.dataset.context;
+    }
+    
+    // Remove the event listener after handling the selection
+    document.removeEventListener(eventName, handlePluginSelect);
+    
+    // Refresh the UI
+    loadExistingComponents();
+  };
+  
+  // Listen for the plugin selection event with our specific event name
+  document.addEventListener(eventName, handlePluginSelect);
+  
+  // Set a timeout to clean up the listener if the modal is closed without selecting a plugin
+  const cleanupTimer = setTimeout(() => {
+    document.removeEventListener(eventName, handlePluginSelect);
+    if (modal.dataset.context) {
+      delete modal.dataset.context;
+    }
+  }, 60000); // 60 second timeout
+  
+  // Clean up the timer when the modal is closed
+  const originalHide = PluginModal.hide;
+  PluginModal.hide = function() {
+    clearTimeout(cleanupTimer);
+    originalHide.call(PluginModal);
+    PluginModal.hide = originalHide; // Restore original hide function
+  };
 }
 
 

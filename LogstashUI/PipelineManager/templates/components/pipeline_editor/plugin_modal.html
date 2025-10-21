@@ -180,44 +180,70 @@ const PluginModal = (function() {
         const pluginType = selectBtn.dataset.type;
         
         if (pluginName && pluginType) {
-          // Create a new component
-          const component = {
-            id: `comp_${Date.now()}`,
-            type: pluginType,
-            plugin: pluginName,
-            config: {}
-          };
+          // Get the modal element
+          const modal = document.getElementById('pluginModal');
           
-          // Add the component to the global components object
-          if (!components[pluginType]) {
-            components[pluginType] = [];
-          }
-          components[pluginType].push(component);
-
-          // Update the UI
-          const container = document.getElementById(`${pluginType}Components`);
-          if (container) {
-            // Remove 'No components' message if present
-            const emptyMessage = container.querySelector('p');
-            if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-              container.removeChild(emptyMessage);
+          // Check if we're in a conditional context
+          if (modal.dataset.context) {
+            // This is a conditional block, dispatch an event with the plugin info
+            const event = new CustomEvent('pluginSelected', {
+              detail: {
+                pluginName,
+                pluginType
+              }
+            });
+            
+            // Store the context and clear it immediately to prevent issues
+            const context = modal.dataset.context;
+            delete modal.dataset.context;
+            
+            // Close the modal first to avoid UI issues
+            hide();
+            
+            // Dispatch the event with the stored context
+            modal.dataset.context = context;
+            document.dispatchEvent(event);
+            delete modal.dataset.context;
+          } else {
+            // Regular plugin addition (non-conditional)
+            const component = {
+              id: `comp_${Date.now()}`,
+              type: pluginType,
+              plugin: pluginName,
+              config: {}
+            };
+            
+            // Add the component to the global components object
+            if (!components[pluginType]) {
+              components[pluginType] = [];
             }
+            components[pluginType].push(component);
 
-            // Add the new component
-            const componentEl = createComponentElement(component);
-            container.appendChild(componentEl);
+            // Update the UI
+            const container = document.getElementById(`${pluginType}Components`);
+            if (container) {
+              // Remove 'No components' message if present
+              const emptyMessage = container.querySelector('p');
+              if (emptyMessage && emptyMessage.textContent.includes('No ')) {
+                container.removeChild(emptyMessage);
+              }
+
+              // Add the new component
+              const componentEl = createComponentElement(component);
+              container.appendChild(componentEl);
+            }
+            
+            // Show the config modal for the new component
+            if (typeof window.PluginConfigModal !== 'undefined') {
+              // Use a small timeout to ensure the modal is properly initialized
+              setTimeout(() => {
+                window.PluginConfigModal.show(component);
+              }, 50);
+            }
+            
+            // Close the modal
+            hide();
           }
-          
-          // Show the config modal for the new component
-          if (typeof window.PluginConfigModal !== 'undefined') {
-            // Use a small timeout to ensure the modal is properly initialized
-            setTimeout(() => {
-              window.PluginConfigModal.show(component);
-            }, 50);
-          }
-          
-          // Close the modal
-          hide();
         }
       }
     });
