@@ -1,15 +1,103 @@
+<!DOCTYPE html>
 {% extends "base.html" %}
 
 {% block content %}
 
 {% load static %}
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
+
+<style>
+  .insertion-point {
+    position: relative;
+    height: 16px;
+    margin: 1px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  
+  .component-container:hover > .insertion-point,
+  .insertion-point:hover {
+    opacity: 1;
+  }
+  
+  .insertion-buttons {
+    display: flex;
+    position: absolute;
+    z-index: 10;
+    background: #374151;
+    border-radius: 3px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    padding: 2px;
+    gap: 2px;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: all 0.15s ease;
+  }
+  
+  .insertion-point:hover .insertion-buttons {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  .insertion-point:hover .insertion-buttons {
+    display: flex;
+  }
+  
+  .insertion-button {
+    padding: 2px 6px;
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    height: 20px;
+  }
+  
+  .insertion-button.add-plugin {
+    background-color: #3b82f6;
+    color: white;
+  }
+  
+  .insertion-button.add-condition {
+    background-color: #f59e0b;
+    color: white;
+  }
+  
+  .insertion-button:hover {
+    opacity: 0.9;
+  }
+  
+  .component-container {
+    position: relative;
+  }
+  
+  .component-container:hover .insertion-point {
+    display: flex;
+  }
+  
+  .empty-section .insertion-point {
+    display: flex !important;
+  }
+  
+  .empty-section .insertion-buttons {
+    position: static;
+    display: flex !important;
+    box-shadow: none;
+    background: transparent;
+    padding: 0;
+    margin-top: 8px;
+  }
+</style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
     <div class="flex space-x-4">
-        <form id="pipelineForm">
             {% csrf_token %}
           <button id="viewCode"
               class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
@@ -61,7 +149,17 @@
                 Add Input
               </button>
             </div>
-            <div id="inputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+            <div id="inputComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="input">
+              <div class="insertion-point">
+                <div class="insertion-buttons">
+                  <button class="insertion-button add-plugin" data-type="input">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Plugin
+                  </button>
+                </div>
+              </div>
               <p class="text-gray-400 text-center py-8">No input components added</p>
             </div>
           </div>
@@ -74,7 +172,23 @@
                 Add Filter
               </button>
             </div>
-            <div id="filterComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+            <div id="filterComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="filter">
+              <div class="insertion-point">
+                <div class="insertion-buttons">
+                  <button class="insertion-button add-plugin" data-type="filter">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Plugin
+                  </button>
+                  <button class="insertion-button add-condition" data-type="filter">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    Add Condition
+                  </button>
+                </div>
+              </div>
               <p class="text-gray-400 text-center py-8">No filter components added</p>
             </div>
           </div>
@@ -87,7 +201,23 @@
                 Add Output
               </button>
             </div>
-            <div id="outputComponents" class="min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600">
+            <div id="outputComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="output">
+              <div class="insertion-point">
+                <div class="insertion-buttons">
+                  <button class="insertion-button add-plugin" data-type="output">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Plugin
+                  </button>
+                  <button class="insertion-button add-condition" data-type="output">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    Add Condition
+                  </button>
+                </div>
+              </div>
               <p class="text-gray-400 text-center py-8">No output components added</p>
             </div>
           </div>

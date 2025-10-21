@@ -1,3 +1,66 @@
+function createInsertionPoint(type, index = 0, isConditional = false, parentId = null) {
+    const insertionPoint = document.createElement('div');
+    insertionPoint.className = 'insertion-point';
+    
+    const buttons = document.createElement('div');
+    buttons.className = 'insertion-buttons';
+    
+    // Always show Add Plugin button
+    const addPluginBtn = document.createElement('button');
+    addPluginBtn.className = 'insertion-button add-plugin';
+    addPluginBtn.innerHTML = `
+        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Plugin
+    `;
+    addPluginBtn.onclick = (e) => {
+        e.stopPropagation();
+        // Handle adding a new plugin at this position
+        showPluginModal(type, index, isConditional, parentId);
+    };
+    
+    buttons.appendChild(addPluginBtn);
+    
+    // Show Add Condition button for filter and output sections, or inside conditionals
+    if ((type === 'filter' || type === 'output' || isConditional) && !parentId) {
+        const addConditionBtn = document.createElement('button');
+        addConditionBtn.className = 'insertion-button add-condition';
+        addConditionBtn.innerHTML = `
+            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+            Add Condition
+        `;
+        addConditionBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Handle adding a new condition at this position
+            addConditionAtPosition(type, index, isConditional, parentId);
+        };
+        buttons.appendChild(addConditionBtn);
+    }
+    
+    insertionPoint.appendChild(buttons);
+    return insertionPoint;
+}
+
+function setupInsertionPoints(container, type, isConditional = false, parentId = null) {
+    // Add insertion point at the beginning
+    if (container.children.length > 0) {
+        container.insertBefore(createInsertionPoint(type, 0, isConditional, parentId), container.firstChild);
+    }
+    
+    // Add insertion points between components
+    const components = Array.from(container.children).filter(el => el.classList.contains('draggable-item'));
+    components.forEach((component, index) => {
+        const insertionPoint = createInsertionPoint(type, index + 1, isConditional, parentId);
+        container.insertBefore(insertionPoint, component.nextSibling);
+    });
+    
+    // Add insertion point at the end
+    container.appendChild(createInsertionPoint(type, components.length, isConditional, parentId));
+}
+
 function loadExistingComponents() {
     // Clears all existing components first
     const componentTypes = ['input', 'filter', 'output'];
@@ -6,14 +69,18 @@ function loadExistingComponents() {
     componentTypes.forEach(type => {
         const container = document.getElementById(`${type}Components`);
         if (container) {
+            // Remove all existing components but keep the empty message and insertion points
             const emptyMessage = container.querySelector('p');
             container.innerHTML = '';
-
-            // Restore 'No components' message if needed
-            if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-                if (!components[type] || components[type].length === 0) {
+            
+            // Add empty section class if no components
+            if (!components[type] || components[type].length === 0) {
+                container.classList.add('empty-section');
+                if (emptyMessage && emptyMessage.textContent.includes('No ')) {
                     container.appendChild(emptyMessage);
                 }
+            } else {
+                container.classList.remove('empty-section');
             }
         }
     });
@@ -23,21 +90,24 @@ function loadExistingComponents() {
         const container = document.getElementById(`${type}Components`);
         if (!container) return;
 
-        // Remove 'No components' message
+        // Remove 'No components' message if it exists
         const emptyMessage = container.querySelector('p');
         if (emptyMessage && emptyMessage.textContent.includes('No ')) {
             container.removeChild(emptyMessage);
         }
 
         // Add each component to the UI
-        componentList.forEach(component => {
+        componentList.forEach((component, index) => {
             const componentEl = createComponentElement(component);
             container.appendChild(componentEl);
         });
+        
+        // Setup insertion points for this container
+        setupInsertionPoints(container, type);
     });
 }
 
-function createComponentElement(component, depth = 0) {
+function createComponentElement(component, depth = 0, isConditional = false, parentId = null) {
 // Check if this is a conditional block
     if (component.plugin === 'if') {
         return createConditionalBlockElement(component, depth);
@@ -437,7 +507,107 @@ function handleEditElseIfCondition(componentId, elseIfIndex, conditionId) {
 }
 
 // Initialize the pipeline editor
+// Function to handle adding a condition at a specific position
+function addConditionAtPosition(type, index, isConditional = false, parentId = null) {
+    // Create a new condition component
+    const conditionId = `condition-${Date.now()}`;
+    const newCondition = {
+        id: conditionId,
+        type: type,
+        plugin: 'if',
+        config: {
+            condition: 'true',
+            plugins: []
+        }
+    };
+    
+    // Add the condition to the appropriate location
+    if (isConditional && parentId) {
+        // Find the parent component and add the condition to its plugins
+        const parentComponent = findComponentById(parentId);
+        if (parentComponent) {
+            if (!parentComponent.config.plugins) {
+                parentComponent.config.plugins = [];
+            }
+            parentComponent.config.plugins.splice(index, 0, newCondition);
+        }
+    } else {
+        // Add to the main components array
+        if (!components[type]) {
+            components[type] = [];
+        }
+        components[type].splice(index, 0, newCondition);
+    }
+    
+    // Refresh the UI
+    loadExistingComponents();
+}
+
+// Function to show the plugin modal at a specific position
+function showPluginModal(type, index, isConditional = false, parentId = null) {
+    // Store the position information in the modal
+    const modal = document.getElementById('pluginModal');
+    modal.dataset.type = type;
+    modal.dataset.index = index;
+    modal.dataset.isConditional = isConditional;
+    modal.dataset.parentId = parentId || '';
+    
+    // Show the modal
+    modal.classList.remove('hidden');
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+    // Add click handlers for the insertion buttons
+    document.addEventListener('click', function(e) {
+        // Handle add plugin button clicks
+        if (e.target.closest('.add-plugin-btn')) {
+            const type = e.target.closest('.add-plugin-btn').dataset.type;
+            showPluginModal(type, components[type] ? components[type].length : 0);
+        }
+    });
+    
+    // Update the existing plugin modal handler to use the position information
+    document.querySelectorAll('.plugin-option').forEach(option => {
+        option.addEventListener('click', function() {
+            const modal = document.getElementById('pluginModal');
+            const type = modal.dataset.type;
+            const index = parseInt(modal.dataset.index || '0');
+            const isConditional = modal.dataset.isConditional === 'true';
+            const parentId = modal.dataset.parentId || null;
+            
+            const pluginType = this.dataset.pluginType;
+            
+            // Create the new plugin
+            const newPlugin = {
+                id: `plugin-${Date.now()}`,
+                type: type,
+                plugin: pluginType,
+                config: {}
+            };
+            
+            // Add the plugin to the appropriate location
+            if (isConditional && parentId) {
+                // Find the parent component and add the plugin to its plugins
+                const parentComponent = findComponentById(parentId);
+                if (parentComponent) {
+                    if (!parentComponent.config.plugins) {
+                        parentComponent.config.plugins = [];
+                    }
+                    parentComponent.config.plugins.splice(index, 0, newPlugin);
+                }
+            } else {
+                // Add to the main components array
+                if (!components[type]) {
+                    components[type] = [];
+                }
+                components[type].splice(index, 0, newPlugin);
+            }
+            
+            // Hide the modal and refresh the UI
+            modal.classList.add('hidden');
+            loadExistingComponents();
+        });
+    });
     // Add event listener for edit condition buttons
     document.addEventListener('click', function(event) {
         // Handle if condition edit
