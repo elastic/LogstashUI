@@ -344,30 +344,30 @@ class ComponentToPipeline:
         if section == "filter" and self.test == True:
             config += f"\tif [plugin_num] >= {self.plugin_num} {{\n"
 
-        config += f'\t{plugin["plugin"]} {{\n'
+        config += f'{plugin["plugin"]} {{\n'
         for plugin_config_name in plugin['config']:
             plugin_config_value = plugin['config'][plugin_config_name]
 
             # print(plugin_config_name, plugin_config_value, type(plugin_config_value))
             if type(plugin_config_value) in [str, int, float]:
-                config += f'\t\t{plugin_config_name} => "{plugin_config_value}"\n'
+                config += f'\t{plugin_config_name} => "{plugin_config_value}"\n'
 
             elif type(plugin_config_value) is dict:
 
-                config += f"\t\t{plugin_config_name} => {{\n"
+                config += f"\t{plugin_config_name} => {{\n"
 
                 for dict_key in plugin_config_value:
-                    config += f'\t\t\t{dict_key} => "{plugin_config_value[dict_key]}"\n'
+                    config += f'\t\t{dict_key} => "{plugin_config_value[dict_key]}"\n'
 
-                config += "\t\t}\n"
+                config += "\t}\n"
             elif type(plugin_config_value) is list:
-                config += "\t\t" + plugin_config_name + " => " + json.dumps(plugin_config_value) + "\n"
+                config += "\t" + plugin_config_name + " => " + json.dumps(plugin_config_value) + "\n"
             elif type(plugin_config_value) is bool:
 
-                config += f'\t\t{plugin_config_name} => {str(plugin_config_value).lower()}\n'
+                config += f'\t{plugin_config_name} => {str(plugin_config_value).lower()}\n'
 
         # Closes the plugin
-        config += "\t}\n"
+        config += "}\n"
 
         if section == "filter" and self.test == True:
             config += "\t}\n"
@@ -376,42 +376,45 @@ class ComponentToPipeline:
         return config
 
     def _add_tab_level(self, input):
-        tabbed_input = ['\t' + line for line in input.split('\n')]
+        lines = input.split('\n')
+        # Don't add tab to the last line if it's empty (trailing newline case)
+        tabbed_input = ['\t' + line if line or i < len(lines) - 1 else line 
+                        for i, line in enumerate(lines)]
         return '\n'.join(tabbed_input)
 
     def _extract_condition_values(self, condition, section):
         config = ""
 
-
         # --- Start if ---
-        config += f"\tif {condition['config']['condition']} {{\n"
+        config += f"if {condition['config']['condition']} {{\n"
         for plugin in condition['config']['plugins']:
             if plugin['plugin'] == 'if':
                 config += self._add_tab_level(self._extract_condition_values(plugin, section))
             else:
                 config += self._add_tab_level(self._extract_plugin_values(plugin, section))
-        config += "\t}\n"
+        config += "}\n"
 
         # --- Start else if ---
         if condition['config']['else_ifs']:
             for plugin in condition['config']['else_ifs']:
-                config += f"\telse if {plugin['condition']}{{\n"
+                config += f"else if {plugin['condition']}{{\n"
                 for nested_plugin in plugin['plugins']:
                     if nested_plugin['plugin'] == 'if':
                         config += self._add_tab_level(self._extract_condition_values(nested_plugin, section))
                     else:
                         config += self._add_tab_level(self._extract_plugin_values(nested_plugin, section))
-                config += "\t}\n"
+                config += "}\n"
 
         # --- Start else ---
-        config += f"\telse {{\n"
-        if condition['config']['else']:
+        if condition['config']['else']['plugins']:
+            config += f"else {{\n"
+
             for plugin in condition['config']['else']['plugins']:
                 if plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
                     config += self._add_tab_level(self._extract_plugin_values(plugin, section))
-        config += "\t}\n"
+            config += "}\n"
 
 
 
@@ -444,26 +447,16 @@ class ComponentToPipeline:
                 }
             }]
 
-
-        for section in self.components['components']:
+        for section in self.components:
             # Adding section, this is static and indentation never changes
             config += section + " {\n"
 
             # plugin_num used for running simulations
-            for plugin in self.components['components'][section]:
+            for plugin in self.components[section]:
                 if plugin['plugin'] == 'if':
-                    config += self._extract_condition_values(plugin, section)
+                    config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
-                    config += self._extract_plugin_values(plugin, section)
-
-
-
-
-
-                # --- Begin processing plugins / conditions ---
-
-
-
+                    config += self._add_tab_level(self._extract_plugin_values(plugin, section))
 
             # ending section, this is static and indentation never changes
             config += "}\n"
@@ -519,7 +512,7 @@ def main():
     # }""")
     # print(condition_output_no_filter)
 
-    z = ComponentToPipeline({"components":{
+    z = ComponentToPipeline({
     "input": [
         {
             "id": "input_beats_0",
@@ -575,7 +568,7 @@ def main():
             }
         }
     ]
-}},test=False)
+},test=False)
     print(z.components_to_logstash_config())
 
 

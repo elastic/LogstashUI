@@ -5,7 +5,7 @@ from django.http import JsonResponse
 
 ## Tables
 from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, test_elastic_connectivity
+from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline
 
 # Custom libraries
 from . import logstash_config_parse
@@ -71,13 +71,15 @@ def DeleteConnection(request, connection_id=None):
 
     return HttpResponse("Connection deleted successfully!")
 
-def GetLogstashCode(request):
-    data = json.loads(request.POST.get("components"))
-    config = logstash_config_parse.components_to_logstash_config(
-        {
-            "components": data
-        }
-    )
+def GetLogstashCode(request, components={}):
+
+    if not components:
+        data = json.loads(request.POST.get("components"))
+    else:
+        data = components
+    parser = logstash_config_parse.ComponentToPipeline(data)
+    config = parser.components_to_logstash_config()
+    print(config)
     
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(
@@ -191,7 +193,8 @@ def SimulatePipeline(request):
     return HttpResponse(html_text)
 
 
-
+def GetDiff(request):
+    pass
 
 
 def GetPipelines(request, connection_id):

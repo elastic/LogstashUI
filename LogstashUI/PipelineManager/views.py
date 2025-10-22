@@ -8,7 +8,7 @@ from .forms import ConnectionForm # Lives here because UI will only be here
 
 ## Tables
 from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection
+from Core.views import get_elastic_connection, get_logstash_pipeline
 
 from API import logstash_config_parse
 import json
@@ -60,15 +60,12 @@ def PipelineEditor(request):
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
 
-        es = get_elastic_connection(es_id)
-        pipeline_doc = es.logstash.get_pipeline(id=pipeline_name)[pipeline_name]
 
-
-        context['pipeline_text'] = pipeline_doc['pipeline']
+        context['pipeline_text'] = get_logstash_pipeline(es_id, pipeline_name)
         context['pipeline_name'] = pipeline_name
 
         try:
-            parsed_config = logstash_config_parse.logstash_config_to_components(pipeline_doc['pipeline'])
+            parsed_config = logstash_config_parse.logstash_config_to_components(context['pipeline_text'])
         except:
             parsed_config = {
                 "input": [],
