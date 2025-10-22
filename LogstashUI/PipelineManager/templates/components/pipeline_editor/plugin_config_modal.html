@@ -256,9 +256,113 @@ window.PluginConfigModal = (function() {
     // Show the modal
     modal.classList.remove('hidden');
 
+    // Populate existing hash and array values after rendering
+    setTimeout(() => {
+      populateExistingValues(component);
+    }, 10);
+
     // Focus the first input field
     const firstInput = configForm.querySelector('input, select, textarea');
     if (firstInput) firstInput.focus();
+  }
+
+  // Populate existing hash and array values
+  function populateExistingValues(component) {
+    const configForm = document.getElementById('configForm');
+    if (!configForm) return;
+
+    // Find all hash containers and populate them
+    configForm.querySelectorAll('[id^="hash-container-"]').forEach(container => {
+      const hiddenField = container.querySelector('input[type="hidden"]');
+      if (!hiddenField) return;
+
+      try {
+        const hashValue = JSON.parse(hiddenField.value);
+        const entries = Object.entries(hashValue);
+        
+        if (entries.length > 0) {
+          // Remove the default empty pair
+          const defaultPair = container.querySelector('.flex.items-center.space-x-2');
+          if (defaultPair) {
+            const inputs = defaultPair.querySelectorAll('input[type="text"]');
+            if (inputs.length === 2 && !inputs[0].value && !inputs[1].value) {
+              defaultPair.remove();
+            }
+          }
+
+          // Add all existing pairs
+          const addButton = container.querySelector('button[onclick*="addHashPair"]');
+          entries.forEach(([key, value]) => {
+            const newPair = document.createElement('div');
+            newPair.className = 'flex items-center space-x-2';
+            newPair.innerHTML = `
+              <input type="text"
+                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                     placeholder="Key"
+                     value="${escapeHtml(key)}"
+                     onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'key')">
+              <span class="text-gray-400">=></span>
+              <input type="text"
+                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                     placeholder="Value"
+                     value="${escapeHtml(value)}"
+                     onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'value')">
+              <button type="button"
+                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      onclick="removeHashPair('${container.id}', this)">
+                Remove
+              </button>
+            `;
+            addButton.parentNode.insertBefore(newPair, addButton);
+          });
+        }
+      } catch (e) {
+        console.error('Error populating hash values:', e);
+      }
+    });
+
+    // Find all array containers and populate them
+    configForm.querySelectorAll('[id^="array-container-"]').forEach(container => {
+      const hiddenField = container.querySelector('input[type="hidden"]');
+      if (!hiddenField) return;
+
+      try {
+        const arrayValue = JSON.parse(hiddenField.value);
+        
+        if (Array.isArray(arrayValue) && arrayValue.length > 0) {
+          // Remove the default empty item
+          const defaultItem = container.querySelector('.flex.items-center.space-x-2');
+          if (defaultItem) {
+            const input = defaultItem.querySelector('input[type="text"]');
+            if (input && !input.value) {
+              defaultItem.remove();
+            }
+          }
+
+          // Add all existing items
+          const addButton = container.querySelector('button[onclick*="addArrayItem"]');
+          arrayValue.forEach((value, index) => {
+            const newItem = document.createElement('div');
+            newItem.className = 'flex items-center space-x-2';
+            newItem.innerHTML = `
+              <input type="text"
+                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                     placeholder="Value"
+                     value="${escapeHtml(value)}"
+                     onchange="updateArrayItem('${container.id}', '${hiddenField.id}', this, ${index})">
+              <button type="button"
+                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      onclick="removeArrayItem('${container.id}', this)">
+                Remove
+              </button>
+            `;
+            addButton.parentNode.insertBefore(newItem, addButton);
+          });
+        }
+      } catch (e) {
+        console.error('Error populating array values:', e);
+      }
+    });
   }
 
   // Hide the configuration modal
@@ -370,6 +474,143 @@ window.PluginConfigModal = (function() {
     saveConfig
   };
 })();
+
+// Hash/Dictionary helper functions
+window.addHashPair = function(containerId, fieldId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  const addButton = container.querySelector('button[onclick*="addHashPair"]');
+  if (!addButton) return;
+  
+  const newPair = document.createElement('div');
+  newPair.className = 'flex items-center space-x-2';
+  newPair.innerHTML = `
+    <input type="text"
+           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+           placeholder="Key"
+           onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
+    <span class="text-gray-400">=></span>
+    <input type="text"
+           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+           placeholder="Value"
+           onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
+    <button type="button"
+            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            onclick="removeHashPair('${containerId}', this)">
+      Remove
+    </button>
+  `;
+  
+  // Insert before the add button
+  addButton.parentNode.insertBefore(newPair, addButton);
+};
+
+window.removeHashPair = function(containerId, button) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  const pairDiv = button.closest('.flex.items-center.space-x-2');
+  if (pairDiv) {
+    pairDiv.remove();
+    // Update the hidden field after removal
+    const fieldId = container.querySelector('input[type="hidden"]').id;
+    updateHashField(containerId, fieldId);
+  }
+};
+
+window.updateHashPair = function(containerId, fieldId, input, type) {
+  updateHashField(containerId, fieldId);
+};
+
+function updateHashField(containerId, fieldId) {
+  const container = document.getElementById(containerId);
+  const hiddenField = document.getElementById(fieldId);
+  if (!container || !hiddenField) return;
+  
+  const pairs = container.querySelectorAll('.flex.items-center.space-x-2');
+  const hashObj = {};
+  
+  pairs.forEach(pair => {
+    const inputs = pair.querySelectorAll('input[type="text"]');
+    if (inputs.length === 2) {
+      const key = inputs[0].value.trim();
+      const value = inputs[1].value.trim();
+      if (key !== '') {
+        hashObj[key] = value;
+      }
+    }
+  });
+  
+  hiddenField.value = JSON.stringify(hashObj);
+}
+
+// Array/List helper functions
+window.addArrayItem = function(containerId, fieldId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  const addButton = container.querySelector('button[onclick*="addArrayItem"]');
+  if (!addButton) return;
+  
+  const existingItems = container.querySelectorAll('.flex.items-center.space-x-2');
+  const newIndex = existingItems.length;
+  
+  const newItem = document.createElement('div');
+  newItem.className = 'flex items-center space-x-2';
+  newItem.innerHTML = `
+    <input type="text"
+           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+           placeholder="Value"
+           onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${newIndex})">
+    <button type="button"
+            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            onclick="removeArrayItem('${containerId}', this)">
+      Remove
+    </button>
+  `;
+  
+  // Insert before the add button
+  addButton.parentNode.insertBefore(newItem, addButton);
+};
+
+window.removeArrayItem = function(containerId, button) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  const itemDiv = button.closest('.flex.items-center.space-x-2');
+  if (itemDiv) {
+    itemDiv.remove();
+    // Update the hidden field after removal
+    const fieldId = container.querySelector('input[type="hidden"]').id;
+    updateArrayField(containerId, fieldId);
+  }
+};
+
+window.updateArrayItem = function(containerId, fieldId, input, index) {
+  updateArrayField(containerId, fieldId);
+};
+
+function updateArrayField(containerId, fieldId) {
+  const container = document.getElementById(containerId);
+  const hiddenField = document.getElementById(fieldId);
+  if (!container || !hiddenField) return;
+  
+  const items = container.querySelectorAll('.flex.items-center.space-x-2');
+  const arrayValues = [];
+  
+  items.forEach(item => {
+    const input = item.querySelector('input[type="text"]');
+    if (input) {
+      const value = input.value.trim();
+      if (value !== '') {
+        arrayValues.push(value);
+      }
+    }
+  });
+  
+  hiddenField.value = JSON.stringify(arrayValues);
+}
 
 // Make it globally available
 window.PluginConfigModal = PluginConfigModal;

@@ -92,6 +92,19 @@
     padding: 0;
     margin-top: 8px;
   }
+  
+  /* Always visible insertion points (for end of sections and empty blocks) */
+  .insertion-point.always-visible {
+    opacity: 1;
+  }
+  
+  .insertion-point.always-visible .insertion-buttons {
+    position: static;
+    opacity: 1;
+    transform: translateY(0);
+    display: flex;
+    margin-top: 4px;
+  }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
@@ -142,12 +155,17 @@
       <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
         <div id="pipelineCanvas" class="min-h-full space-y-8">
           <!-- Input Section -->
-          <div id="inputSection" class="p-4 bg-gray-700 rounded-lg">
-            <div class="flex justify-between items-center mb-4">
-              <h2 class="text-lg font-semibold text-white">Input</h2>
-              <button id="addInputBtn" class="add-plugin-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" data-type="input">
-                Add Input
-              </button>
+          <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
+            <div class="flex items-center mb-4">
+              <div class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <div class="ml-6" style="margin-left:10px;">
+                <h2 class="text-xl font-bold text-white">Input</h2>
+                <p class="text-xs text-gray-400">Define data sources and how data enters the pipeline</p>
+              </div>
             </div>
             <div id="inputComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="input">
               <div class="insertion-point">
@@ -165,12 +183,17 @@
           </div>
 
           <!-- Filter Section -->
-          <div id="filterSection" class="p-4 bg-gray-700 rounded-lg">
-            <div class="flex justify-between items-center mb-4">
-              <h2 class="text-lg font-semibold text-white">Filter</h2>
-              <button id="addFilterBtn" class="add-plugin-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" data-type="filter">
-                Add Filter
-              </button>
+          <div id="filterSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-purple-600">
+            <div class="flex items-center mb-4">
+              <div class="flex items-center justify-center w-10 h-10 bg-purple-600 rounded-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+              </div>
+              <div class="ml-6">
+                <h2 class="text-xl font-bold text-white">Filter</h2>
+                <p class="text-xs text-gray-400">Transform, enrich, and process data with conditions</p>
+              </div>
             </div>
             <div id="filterComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="filter">
               <div class="insertion-point">
@@ -194,12 +217,17 @@
           </div>
 
           <!-- Output Section -->
-          <div id="outputSection" class="p-4 bg-gray-700 rounded-lg">
-            <div class="flex justify-between items-center mb-4">
-              <h2 class="text-lg font-semibold text-white">Output</h2>
-              <button id="addOutputBtn" class="add-plugin-btn px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" data-type="output">
-                Add Output
-              </button>
+          <div id="outputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500">
+            <div class="flex items-center mb-4">
+              <div class="flex items-center justify-center w-10 h-10 bg-green-600 rounded-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+              </div>
+              <div class="ml-6" style="margin-left:10px;">
+                <h2 class="text-xl font-bold text-white">Output</h2>
+                <p class="text-xs text-gray-400">Send processed data to destinations</p>
+              </div>
             </div>
             <div id="outputComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="output">
               <div class="insertion-point">

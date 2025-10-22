@@ -45,20 +45,32 @@ function createInsertionPoint(type, index = 0, isConditional = false, parentId =
 }
 
 function setupInsertionPoints(container, type, isConditional = false, parentId = null) {
-    // Add insertion point at the beginning
-    if (container.children.length > 0) {
-        container.insertBefore(createInsertionPoint(type, 0, isConditional, parentId), container.firstChild);
-    }
-    
-    // Add insertion points between components
+    // Get only the draggable components (not empty messages)
     const components = Array.from(container.children).filter(el => el.classList.contains('draggable-item'));
-    components.forEach((component, index) => {
-        const insertionPoint = createInsertionPoint(type, index + 1, isConditional, parentId);
-        container.insertBefore(insertionPoint, component.nextSibling);
-    });
     
-    // Add insertion point at the end
-    container.appendChild(createInsertionPoint(type, components.length, isConditional, parentId));
+    if (components.length > 0) {
+        // Add insertion point at the beginning
+        container.insertBefore(createInsertionPoint(type, 0, isConditional, parentId), container.firstChild);
+        
+        // Add insertion points between components (but NOT after the last one)
+        components.forEach((component, index) => {
+            // Only add insertion point if it's not after the last component
+            if (index < components.length - 1) {
+                const insertionPoint = createInsertionPoint(type, index + 1, isConditional, parentId);
+                container.insertBefore(insertionPoint, component.nextSibling);
+            }
+        });
+        
+        // Add a final insertion point at the end that's always visible
+        const finalInsertionPoint = createInsertionPoint(type, components.length, isConditional, parentId);
+        finalInsertionPoint.classList.add('always-visible');
+        container.appendChild(finalInsertionPoint);
+    } else {
+        // Empty section - add a single always-visible insertion point
+        const emptyInsertionPoint = createInsertionPoint(type, 0, isConditional, parentId);
+        emptyInsertionPoint.classList.add('always-visible');
+        container.appendChild(emptyInsertionPoint);
+    }
 }
 
 // Setup insertion points for conditional blocks (if, else-if, else)
@@ -110,7 +122,6 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
     // Get only the draggable plugin elements (not empty messages or other elements)
     const pluginElements = Array.from(container.children).filter(el => el.classList.contains('draggable-item'));
     
-    // Only add insertion points if there are plugins
     if (pluginElements.length > 0) {
         // Add insertion point at the beginning
         container.insertBefore(createConditionalInsertionPoint(0), container.firstChild);
@@ -121,8 +132,9 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
             container.insertBefore(insertionPoint, plugin.nextSibling);
         });
     }
-    // Note: We don't add an insertion point at the end because empty blocks
-    // already show insertion points via CSS, and non-empty blocks have one after the last element
+    // Note: For conditional blocks, we don't add a final insertion point at the end
+    // because the last one after the final plugin serves that purpose, and we want
+    // all insertion points in conditionals to only appear on hover
 }
 
 function loadExistingComponents() {

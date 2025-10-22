@@ -159,17 +159,8 @@ const PluginModal = (function() {
 
   // Setup event listeners
   function setupEventListeners() {
-    // Handle add plugin button clicks
+    // Handle plugin selection
     document.addEventListener('click', (e) => {
-      const btn = e.target.closest('.add-plugin-btn');
-      if (btn) {
-        e.preventDefault();
-        const type = btn.dataset.type;
-        if (type) {
-          show(type);
-        }
-      }
-      
       // Handle plugin selection
       const selectBtn = e.target.closest('.select-plugin-btn');
       if (selectBtn) {
