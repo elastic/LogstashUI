@@ -206,31 +206,67 @@ const PluginModal = (function() {
             delete modal.dataset.context;
           } else {
             // Regular plugin addition (non-conditional)
+            // Check if we have insertion point data
+            const insertIndex = modal.dataset.index ? parseInt(modal.dataset.index) : null;
+            const insertType = modal.dataset.type || pluginType;
+            const isConditional = modal.dataset.isConditional === 'true';
+            const parentId = modal.dataset.parentId || null;
+            
             const component = {
               id: `comp_${Date.now()}`,
-              type: pluginType,
+              type: insertType,
               plugin: pluginName,
               config: {}
             };
             
-            // Add the component to the global components object
-            if (!components[pluginType]) {
-              components[pluginType] = [];
-            }
-            components[pluginType].push(component);
-
-            // Update the UI
-            const container = document.getElementById(`${pluginType}Components`);
-            if (container) {
-              // Remove 'No components' message if present
-              const emptyMessage = container.querySelector('p');
-              if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-                container.removeChild(emptyMessage);
+            // Add the component to the appropriate location
+            if (insertIndex !== null) {
+              // Insertion point - use splice to insert at specific position
+              if (isConditional && parentId) {
+                // Find the parent component and add the plugin to its plugins
+                const parentComponent = findComponentById(parentId);
+                if (parentComponent) {
+                  if (!parentComponent.config.plugins) {
+                    parentComponent.config.plugins = [];
+                  }
+                  parentComponent.config.plugins.splice(insertIndex, 0, component);
+                }
+              } else {
+                // Add to the main components array at specific index
+                if (!components[insertType]) {
+                  components[insertType] = [];
+                }
+                components[insertType].splice(insertIndex, 0, component);
               }
+              
+              // Clear the insertion point data
+              delete modal.dataset.type;
+              delete modal.dataset.index;
+              delete modal.dataset.isConditional;
+              delete modal.dataset.parentId;
+              
+              // Refresh the entire UI to rebuild insertion points
+              loadExistingComponents();
+            } else {
+              // Regular "Add Input/Filter/Output" button - append to end
+              if (!components[pluginType]) {
+                components[pluginType] = [];
+              }
+              components[pluginType].push(component);
 
-              // Add the new component
-              const componentEl = createComponentElement(component);
-              container.appendChild(componentEl);
+              // Update the UI
+              const container = document.getElementById(`${pluginType}Components`);
+              if (container) {
+                // Remove 'No components' message if present
+                const emptyMessage = container.querySelector('p');
+                if (emptyMessage && emptyMessage.textContent.includes('No ')) {
+                  container.removeChild(emptyMessage);
+                }
+
+                // Add the new component
+                const componentEl = createComponentElement(component);
+                container.appendChild(componentEl);
+              }
             }
             
             // Show the config modal for the new component

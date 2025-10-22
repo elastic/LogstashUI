@@ -552,8 +552,8 @@ function showPluginModal(type, index, isConditional = false, parentId = null) {
     modal.dataset.isConditional = isConditional;
     modal.dataset.parentId = parentId || '';
     
-    // Show the modal
-    modal.classList.remove('hidden');
+    // Show the modal with proper rendering (just like Add Input/Filter/Output buttons)
+    PluginModal.show(type);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
