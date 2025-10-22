@@ -202,7 +202,7 @@ function loadExistingComponents() {
 }
 
 // Function to trigger animation for pending plugin (called after config modal closes)
-window.triggerPendingAnimation = function() {
+window.triggerPendingAnimation = function () {
     if (pendingAnimationPluginId) {
         highlightAndFocusNewPlugin(pendingAnimationPluginId);
         pendingAnimationPluginId = null;
@@ -341,13 +341,13 @@ function highlightAndFocusNewPlugin(pluginId) {
         if (pluginElement) {
             // Add the animation class
             pluginElement.classList.add('newly-added');
-            
+
             // Scroll to the element smoothly
-            pluginElement.scrollIntoView({ 
-                behavior: 'smooth', 
+            pluginElement.scrollIntoView({
+                behavior: 'smooth',
                 block: 'center'
             });
-            
+
             // Remove the class after animation completes
             setTimeout(() => {
                 pluginElement.classList.remove('newly-added');
@@ -970,30 +970,91 @@ function removeComponent(componentId) {
         return;
     }
 
-// Remove from components object
+    // Helper function to recursively remove from nested conditionals
+    function removeFromConditional(component) {
+        if (!component || component.plugin !== 'if' || !component.config) {
+            return false;
+        }
+
+        // Check in if block
+        if (component.config.plugins) {
+            const index = component.config.plugins.findIndex(c => c.id === componentId);
+            if (index > -1) {
+                component.config.plugins.splice(index, 1);
+                return true;
+            }
+            // Recursively search in nested conditionals
+            for (const plugin of component.config.plugins) {
+                if (removeFromConditional(plugin)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check in else-if blocks
+        if (component.config.else_ifs) {
+            for (const elseIf of component.config.else_ifs) {
+                if (elseIf.plugins) {
+                    const index = elseIf.plugins.findIndex(c => c.id === componentId);
+                    if (index > -1) {
+                        elseIf.plugins.splice(index, 1);
+                        return true;
+                    }
+                    // Recursively search in nested conditionals
+                    for (const plugin of elseIf.plugins) {
+                        if (removeFromConditional(plugin)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check in else block
+        if (component.config.else && component.config.else.plugins) {
+            const index = component.config.else.plugins.findIndex(c => c.id === componentId);
+            if (index > -1) {
+                component.config.else.plugins.splice(index, 1);
+                return true;
+            }
+            // Recursively search in nested conditionals
+            for (const plugin of component.config.else.plugins) {
+                if (removeFromConditional(plugin)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // First, try to remove from top-level components
+    let removed = false;
     for (const type in components) {
         const index = components[type].findIndex(c => c.id === componentId);
         if (index > -1) {
             components[type].splice(index, 1);
+            removed = true;
             break;
         }
     }
 
-// Remove from DOM
-    const element = document.querySelector(`[data-id="${componentId}"]`);
-    if (element) {
-        const parent = element.parentElement;
-        element.remove();
-
-// Show placeholder if no components left
-        if (parent.children.length === 0) {
-            const placeholder = document.createElement('p');
-            placeholder.className = 'text-gray-400 text-center py-8';
-            placeholder.textContent = parent.id === 'inputComponents' ? 'No input components added' :
-                parent.id === 'filterComponents' ? 'No filter components added' :
-                    'No output components added';
-            parent.appendChild(placeholder);
+    // If not found at top level, search recursively in nested conditionals
+    if (!removed) {
+        for (const type in components) {
+            for (const component of components[type]) {
+                if (removeFromConditional(component)) {
+                    removed = true;
+                    break;
+                }
+            }
+            if (removed) break;
         }
+    }
+
+    // Refresh the entire UI to reflect the changes
+    if (removed) {
+        loadExistingComponents();
     }
 }
 
@@ -1064,7 +1125,7 @@ function addElseIfToConditional(componentId) {
 
         // Track the newly added plugin for animation
         newlyAddedPluginId = newPlugin.id;
-        
+
         // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
         pendingAnimationPluginId = newlyAddedPluginId;
 
@@ -1173,7 +1234,7 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 
         // Track the newly added plugin for animation
         newlyAddedPluginId = newPlugin.id;
-        
+
         // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
         pendingAnimationPluginId = newlyAddedPluginId;
 
@@ -1292,7 +1353,7 @@ function addElseToConditional(componentId) {
 
         // Track the newly added plugin for animation
         newlyAddedPluginId = newPlugin.id;
-        
+
         // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
         pendingAnimationPluginId = newlyAddedPluginId;
 

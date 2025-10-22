@@ -331,119 +331,253 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
 
 ################################ Component JSON to Logstash config ################################
 
-def components_to_logstash_config(component_dict, test=False):
-    config = ""
-    # "test" is used for simulating pipelines so that we can send input via stdin
-    # and receive output via stdout
-    if test:
-        component_dict['components']['input'] = [{
-            'id': 'stdin',
-            'type': 'input',
-            'plugin': 'stdin',
-            'config': {
-                "codec": "json"
-            }
-        }]
-        component_dict['components']['output'] = [{
-            'id': 'stdout',
-            'type': 'output',
-            'plugin': 'stdout',
-            'config': {
-                "codec": "json_lines"
-            }
-        }]
-    for section in component_dict['components']:
-        config += section + " {\n"
+class ComponentToPipeline:
+    def __init__(self, components, test=False):
+        self.components = components
+        self.plugin_num = 0
+        self.test = test
 
-        # plugin_num used for running simulations
-        plugin_num = 0
-        for plugin in component_dict['components'][section]:
+    def _extract_plugin_values(self, plugin, section):
+        config = ""
+        # Setup testing
 
-            # Setup testing
-            if section == "filter" and test == True:
-                config += f"\tif [plugin_num] >= {plugin_num} {{\n"
-            config += f'\t{plugin["plugin"]} {{\n'
-            for plugin_config_name in plugin['config']:
-                plugin_config_value = plugin['config'][plugin_config_name]
+        if section == "filter" and self.test == True:
+            config += f"\tif [plugin_num] >= {self.plugin_num} {{\n"
 
-                # print(plugin_config_name, plugin_config_value, type(plugin_config_value))
-                if type(plugin_config_value) in [str, int, float]:
-                    config += f'\t\t{plugin_config_name} => "{plugin_config_value}"\n'
+        config += f'\t{plugin["plugin"]} {{\n'
+        for plugin_config_name in plugin['config']:
+            plugin_config_value = plugin['config'][plugin_config_name]
 
-                elif type(plugin_config_value) is dict:
+            # print(plugin_config_name, plugin_config_value, type(plugin_config_value))
+            if type(plugin_config_value) in [str, int, float]:
+                config += f'\t\t{plugin_config_name} => "{plugin_config_value}"\n'
 
-                    config += f"\t\t{plugin_config_name} => {{\n"
+            elif type(plugin_config_value) is dict:
 
-                    for dict_key in plugin_config_value:
-                        print(dict_key)
-                        config += f'\t\t\t{dict_key} => "{plugin_config_value[dict_key]}"\n'
+                config += f"\t\t{plugin_config_name} => {{\n"
 
-                    config += "\t\t}\n"
-                elif type(plugin_config_value) is list:
-                    # print("LIST", plugin_config, plugin['config'][plugin_config])
-                    config += "\t\t" + plugin_config_name + " => " + json.dumps(plugin_config_value) + "\n"
-                elif type(plugin_config_value) is bool:
-                    config += f'\t\t{plugin_config_name} => {str(plugin_config_value).lower()}\n'
+                for dict_key in plugin_config_value:
+                    config += f'\t\t\t{dict_key} => "{plugin_config_value[dict_key]}"\n'
 
+                config += "\t\t}\n"
+            elif type(plugin_config_value) is list:
+                config += "\t\t" + plugin_config_name + " => " + json.dumps(plugin_config_value) + "\n"
+            elif type(plugin_config_value) is bool:
+
+                config += f'\t\t{plugin_config_name} => {str(plugin_config_value).lower()}\n'
+
+        # Closes the plugin
+        config += "\t}\n"
+
+        if section == "filter" and self.test == True:
             config += "\t}\n"
-            if section == "filter" and test == True:
-                config += "\t}\n"
-            plugin_num += 1
 
-        config += "}\n"
-    # print(config)
-    return config
+        self.plugin_num += 1
+        return config
+
+    def _add_tab_level(self, input):
+        tabbed_input = ['\t' + line for line in input.split('\n')]
+        return '\n'.join(tabbed_input)
+
+    def _extract_condition_values(self, condition, section):
+        config = ""
+
+
+        # --- Start if ---
+        config += f"\tif {condition['config']['condition']} {{\n"
+        for plugin in condition['config']['plugins']:
+            if plugin['plugin'] == 'if':
+                config += self._add_tab_level(self._extract_condition_values(plugin, section))
+            else:
+                config += self._add_tab_level(self._extract_plugin_values(plugin, section))
+        config += "\t}\n"
+
+        # --- Start else if ---
+        if condition['config']['else_ifs']:
+            for plugin in condition['config']['else_ifs']:
+                config += f"\telse if {plugin['condition']}{{\n"
+                for nested_plugin in plugin['plugins']:
+                    if nested_plugin['plugin'] == 'if':
+                        config += self._add_tab_level(self._extract_condition_values(nested_plugin, section))
+                    else:
+                        config += self._add_tab_level(self._extract_plugin_values(nested_plugin, section))
+                config += "\t}\n"
+
+        # --- Start else ---
+        config += f"\telse {{\n"
+        if condition['config']['else']:
+            for plugin in condition['config']['else']['plugins']:
+                if plugin['plugin'] == 'if':
+                    config += self._add_tab_level(self._extract_condition_values(plugin, section))
+                else:
+                    config += self._add_tab_level(self._extract_plugin_values(plugin, section))
+        config += "\t}\n"
+
+
+
+
+        return config
+
+
+
+
+
+    def components_to_logstash_config(self):
+        config = ""
+        # "test" is used for simulating pipelines so that we can send input via stdin
+        # and receive output via stdout
+        if self.test:
+            self.components['components']['input'] = [{
+                'id': 'stdin',
+                'type': 'input',
+                'plugin': 'stdin',
+                'config': {
+                    "codec": "json"
+                }
+            }]
+            self.components['components']['output'] = [{
+                'id': 'stdout',
+                'type': 'output',
+                'plugin': 'stdout',
+                'config': {
+                    "codec": "json_lines"
+                }
+            }]
+
+
+        for section in self.components['components']:
+            # Adding section, this is static and indentation never changes
+            config += section + " {\n"
+
+            # plugin_num used for running simulations
+            for plugin in self.components['components'][section]:
+                if plugin['plugin'] == 'if':
+                    config += self._extract_condition_values(plugin, section)
+                else:
+                    config += self._extract_plugin_values(plugin, section)
+
+
+
+
+
+                # --- Begin processing plugins / conditions ---
+
+
+
+
+            # ending section, this is static and indentation never changes
+            config += "}\n"
+        # print(config)
+        return config
+
 
 
 def main():
-    condition_output_no_filter = logstash_config_to_components("""    input { beats { port => 5044 } }
-    output {
-        if [type] == "apache" {
-          pipeline { send_to => "nested-weblogs" }
-          if [type] == "nested-apache" {
-              pipeline { send_to => "nested-weblogs" }
-            } else if [type] == "nested-system" {
-              pipeline { send_to => "nested-syslog" }
-            } else if [type] == "nested-test" {
-              pipeline { send_to => "nested-syslog" }
-            } else {
-              pipeline { send_to => "nested_fallback" }
-            }
-        } else if [type] == "system" {
-          pipeline { send_to => syslog }
-        } else if [type] == "test" {
-          pipeline { send_to => test }
-        } else {
-        if [type] == "nested-apache" {
-              pipeline { send_to => "nested-weblogs" }
-            } else if [type] == "nested-system" {
-              pipeline { send_to => "nested-syslog" }
-            } else if [type] == "nested-test" {
-              pipeline { send_to => "nested-syslog" }
-            } else {
-              pipeline { send_to => "nested_fallback" }
-            }
-        } else if [type] == "system" {
-          pipeline { send_to => syslog }
-        } else if [type] == "test" {
-          pipeline { send_to => test }
-        } else {
-          pipeline { send_to => fallback-test }
-                      	elasticsearch {
-		hosts => ["http://elasticsearch:9200"]
-		index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
-	}
-          pipeline { send_to => fallback-test }
-                      	elasticsearch {
-		hosts => ["http://elasticsearch:9200"]
-		index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
-	}
-        }
-    }""")
-    print(condition_output_no_filter)
+    # condition_output_no_filter = logstash_config_to_components("""    input { beats { port => 5044 } }
+    # output {
+    #     if [type] == "apache" {
+    #       pipeline { send_to => "nested-weblogs" }
+    #       if [type] == "nested-apache" {
+    #           pipeline { send_to => "nested-weblogs" }
+    #         } else if [type] == "nested-system" {
+    #           pipeline { send_to => "nested-syslog" }
+    #         } else if [type] == "nested-test" {
+    #           pipeline { send_to => "nested-syslog" }
+    #         } else {
+    #           pipeline { send_to => "nested_fallback" }
+    #         }
+    #     } else if [type] == "system" {
+    #       pipeline { send_to => syslog }
+    #     } else if [type] == "test" {
+    #       pipeline { send_to => test }
+    #     } else {
+    #     if [type] == "nested-apache" {
+    #           pipeline { send_to => "nested-weblogs" }
+    #         } else if [type] == "nested-system" {
+    #           pipeline { send_to => "nested-syslog" }
+    #         } else if [type] == "nested-test" {
+    #           pipeline { send_to => "nested-syslog" }
+    #         } else {
+    #           pipeline { send_to => "nested_fallback" }
+    #         }
+    #     } else if [type] == "system" {
+    #       pipeline { send_to => syslog }
+    #     } else if [type] == "test" {
+    #       pipeline { send_to => test }
+    #     } else {
+    #       pipeline { send_to => fallback-test }
+    #                   	elasticsearch {
+	# 	hosts => ["http://elasticsearch:9200"]
+	# 	index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+	# }
+    #       pipeline { send_to => fallback-test }
+    #                   	elasticsearch {
+	# 	hosts => ["http://elasticsearch:9200"]
+	# 	index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+	# }
+    #     }
+    # }""")
+    # print(condition_output_no_filter)
 
-    # z = components_to_logstash_config({'input': [{'id': 'input_jdbc_0', 'type': 'input', 'plugin': 'jdbc', 'config': {'jdbc_driver_library': '/usr/share/logstash/vendor/jar/jdbc/mysql-connector-j-9.3.0.jar', 'jdbc_driver_class': 'com.mysql.cj.jdbc.Driver', 'jdbc_connection_string': 'jdbc:mysql://${DB_HOST}:3306/semaphore', 'jdbc_user': '${DB_USER}', 'jdbc_password': '${DB_PASSWORD}', 'schedule': '* * * * *', 'statement': 'select * from event'}}], 'filter': [], 'output': [{'id': 'output_elasticsearch_1', 'type': 'output', 'plugin': 'elasticsearch', 'config': {'cloud_id': '${ELASTIC_CLOUD_ID}', 'cloud_auth': '${ELASTIC_CLOUD_AUTH}', 'index': 'db-report-test'}}]})
-    # print(z)
+    z = ComponentToPipeline({"components":{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": 5044
+            }
+        }
+    ],
+    "filter": [],
+    "output": [
+        {
+            "id": "output_if_2",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "[type] == \"first_type\"",
+                "plugins": [
+                    {
+                        "id": "output_pipeline_3",
+                        "type": "output",
+                        "plugin": "pipeline",
+                        "config": {
+                            "send_to": "first_type_logs"
+                        }
+                    },
+                    {
+                        "id": "output_if_5",
+                        "type": "output",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "[subtype] == \"first\"",
+                            "plugins": [
+                                {
+                                    "id": "output_elasticsearch_6",
+                                    "type": "output",
+                                    "plugin": "elasticsearch",
+                                    "config": {}
+                                }
+                            ],
+                            "else_ifs": [],
+                            "else": {
+                                "plugins": []
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": []
+                }
+            }
+        }
+    ]
+}},test=False)
+    print(z.components_to_logstash_config())
+
 
 
 if __name__ == "__main__":
