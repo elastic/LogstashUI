@@ -1,10 +1,10 @@
 function createInsertionPoint(type, index = 0, isConditional = false, parentId = null) {
     const insertionPoint = document.createElement('div');
     insertionPoint.className = 'insertion-point';
-    
+
     const buttons = document.createElement('div');
     buttons.className = 'insertion-buttons';
-    
+
     // Always show Add Plugin button
     const addPluginBtn = document.createElement('button');
     addPluginBtn.className = 'insertion-button add-plugin';
@@ -19,9 +19,9 @@ function createInsertionPoint(type, index = 0, isConditional = false, parentId =
         // Handle adding a new plugin at this position
         showPluginModal(type, index, isConditional, parentId);
     };
-    
+
     buttons.appendChild(addPluginBtn);
-    
+
     // Show Add Condition button for filter and output sections, or inside conditionals
     if ((type === 'filter' || type === 'output' || isConditional) && !parentId) {
         const addConditionBtn = document.createElement('button');
@@ -39,7 +39,7 @@ function createInsertionPoint(type, index = 0, isConditional = false, parentId =
         };
         buttons.appendChild(addConditionBtn);
     }
-    
+
     insertionPoint.appendChild(buttons);
     return insertionPoint;
 }
@@ -47,11 +47,11 @@ function createInsertionPoint(type, index = 0, isConditional = false, parentId =
 function setupInsertionPoints(container, type, isConditional = false, parentId = null) {
     // Get only the draggable components (not empty messages)
     const components = Array.from(container.children).filter(el => el.classList.contains('draggable-item'));
-    
+
     if (components.length > 0) {
         // Add insertion point at the beginning
         container.insertBefore(createInsertionPoint(type, 0, isConditional, parentId), container.firstChild);
-        
+
         // Add insertion points between components (but NOT after the last one)
         components.forEach((component, index) => {
             // Only add insertion point if it's not after the last component
@@ -60,7 +60,7 @@ function setupInsertionPoints(container, type, isConditional = false, parentId =
                 container.insertBefore(insertionPoint, component.nextSibling);
             }
         });
-        
+
         // Add a final insertion point at the end that's always visible
         const finalInsertionPoint = createInsertionPoint(type, components.length, isConditional, parentId);
         finalInsertionPoint.classList.add('always-visible');
@@ -76,13 +76,16 @@ function setupInsertionPoints(container, type, isConditional = false, parentId =
 // Setup insertion points for conditional blocks (if, else-if, else)
 function setupInsertionPointsForConditional(container, type, conditionalId, blockType, elseIfIndex) {
     // Create a special insertion point creator for conditionals
-    const createConditionalInsertionPoint = (index) => {
+    const createConditionalInsertionPoint = (index, alwaysVisible = false) => {
         const insertionPoint = document.createElement('div');
         insertionPoint.className = 'insertion-point';
-        
+        if (alwaysVisible) {
+            insertionPoint.classList.add('always-visible');
+        }
+
         const buttons = document.createElement('div');
         buttons.className = 'insertion-buttons';
-        
+
         // Add Plugin button
         const addPluginBtn = document.createElement('button');
         addPluginBtn.className = 'insertion-button add-plugin';
@@ -97,7 +100,7 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
             showPluginModalForConditional(type, conditionalId, blockType, index, elseIfIndex);
         };
         buttons.appendChild(addPluginBtn);
-        
+
         // Add Condition button (for filter and output types)
         if (type === 'filter' || type === 'output') {
             const addConditionBtn = document.createElement('button');
@@ -114,27 +117,28 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
             };
             buttons.appendChild(addConditionBtn);
         }
-        
+
         insertionPoint.appendChild(buttons);
         return insertionPoint;
     };
-    
+
     // Get only the draggable plugin elements (not empty messages or other elements)
     const pluginElements = Array.from(container.children).filter(el => el.classList.contains('draggable-item'));
-    
+
     if (pluginElements.length > 0) {
         // Add insertion point at the beginning
         container.insertBefore(createConditionalInsertionPoint(0), container.firstChild);
-        
+
         // Add insertion points between components
         pluginElements.forEach((plugin, index) => {
             const insertionPoint = createConditionalInsertionPoint(index + 1);
             container.insertBefore(insertionPoint, plugin.nextSibling);
         });
+    } else {
+        // Empty conditional block - add an always-visible insertion point
+        const emptyInsertionPoint = createConditionalInsertionPoint(0, true);
+        container.appendChild(emptyInsertionPoint);
     }
-    // Note: For conditional blocks, we don't add a final insertion point at the end
-    // because the last one after the final plugin serves that purpose, and we want
-    // all insertion points in conditionals to only appear on hover
 }
 
 function loadExistingComponents() {
@@ -148,7 +152,7 @@ function loadExistingComponents() {
             // Remove all existing components but keep the empty message and insertion points
             const emptyMessage = container.querySelector('p');
             container.innerHTML = '';
-            
+
             // Add empty section class if no components
             if (!components[type] || components[type].length === 0) {
                 container.classList.add('empty-section');
@@ -177,7 +181,7 @@ function loadExistingComponents() {
             const componentEl = createComponentElement(component);
             container.appendChild(componentEl);
         });
-        
+
         // Setup insertion points for this container
         setupInsertionPoints(container, type);
     });
@@ -236,6 +240,7 @@ function formatConfigValue(value) {
     }
     return cleanedValue;
 }
+
 function createComponentElement(component, depth = 0, isConditional = false, parentId = null) {
 // Check if this is a conditional block
     if (component.plugin === 'if') {
@@ -400,10 +405,10 @@ function createConditionalBlockElement(component, depth = 0) {
         emptyMsg.textContent = 'No plugins in if block';
         ifPluginsContainer.appendChild(emptyMsg);
     }
-    
+
     // Setup insertion points for this conditional block
     setupInsertionPointsForConditional(ifPluginsContainer, component.type, component.id, 'if', null);
-    
+
     container.appendChild(ifPluginsContainer);
 
 // Render else-if blocks
@@ -449,7 +454,7 @@ function createConditionalBlockElement(component, depth = 0) {
                 emptyMsg.textContent = 'No plugins in else-if block';
                 elseIfPluginsContainer.appendChild(emptyMsg);
             }
-            
+
             // Setup insertion points for this else-if block
             setupInsertionPointsForConditional(elseIfPluginsContainer, component.type, component.id, 'else_if', elseIfIndex);
 
@@ -458,8 +463,8 @@ function createConditionalBlockElement(component, depth = 0) {
         });
     }
 
-// Render else block (only if it exists and has plugins)
-    if (component.config.else && component.config.else.plugins && component.config.else.plugins.length > 0) {
+// Render else block (if it exists)
+    if (component.config.else) {
         const elseBlock = document.createElement('div');
         elseBlock.className = 'mt-2';
 
@@ -473,11 +478,18 @@ function createConditionalBlockElement(component, depth = 0) {
         elsePluginsContainer.dataset.conditionalId = component.id;
         elsePluginsContainer.dataset.blockType = 'else';
 
-        component.config.else.plugins.forEach(plugin => {
-            const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
-            elsePluginsContainer.appendChild(pluginEl);
-        });
-        
+        if (component.config.else.plugins && component.config.else.plugins.length > 0) {
+            component.config.else.plugins.forEach(plugin => {
+                const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
+                elsePluginsContainer.appendChild(pluginEl);
+            });
+        } else {
+            const emptyMsg = document.createElement('p');
+            emptyMsg.className = 'text-gray-500 text-sm py-2';
+            emptyMsg.textContent = 'No plugins in else block';
+            elsePluginsContainer.appendChild(emptyMsg);
+        }
+
         // Setup insertion points for this else block
         setupInsertionPointsForConditional(elsePluginsContainer, component.type, component.id, 'else', null);
 
@@ -529,7 +541,7 @@ function handleEditCondition(componentId) {
     input.type = 'text';
     input.value = currentCondition;
     input.className = 'text-xs text-white bg-gray-700 px-1 py-0.5 rounded w-full';
-    
+
     // Save on Enter or blur, cancel on Escape
     const saveCondition = () => {
         const newCondition = input.value.trim();
@@ -563,7 +575,7 @@ function handleEditElseIfCondition(componentId, elseIfIndex, conditionId) {
 
     const conditionText = component.config.else_ifs[elseIfIndex].condition || '';
     const conditionElement = document.getElementById(conditionId);
-    
+
     if (!conditionElement) {
         console.error('Could not find condition element with ID:', conditionId);
         return;
@@ -573,7 +585,7 @@ function handleEditElseIfCondition(componentId, elseIfIndex, conditionId) {
     input.type = 'text';
     input.value = conditionText;
     input.className = 'text-xs text-white bg-gray-700 px-1 py-0.5 rounded w-full';
-    
+
     // Save on Enter or blur, cancel on Escape
     const saveCondition = () => {
         const newCondition = input.value.trim();
@@ -616,7 +628,7 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
             plugins: []
         }
     };
-    
+
     // Add the condition to the appropriate location
     if (isConditional && parentId) {
         // Find the parent component and add the condition to its plugins
@@ -634,7 +646,7 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
         }
         components[type].splice(index, 0, newCondition);
     }
-    
+
     // Refresh the UI
     loadExistingComponents();
 }
@@ -647,7 +659,7 @@ function showPluginModal(type, index, isConditional = false, parentId = null) {
     modal.dataset.index = index;
     modal.dataset.isConditional = isConditional;
     modal.dataset.parentId = parentId || '';
-    
+
     // Show the modal with proper rendering (just like Add Input/Filter/Output buttons)
     PluginModal.show(type);
 }
@@ -655,7 +667,7 @@ function showPluginModal(type, index, isConditional = false, parentId = null) {
 // Function to show plugin modal for conditional blocks with insertion at specific position
 function showPluginModalForConditional(type, conditionalId, blockType, index, elseIfIndex) {
     const modal = document.getElementById('pluginModal');
-    
+
     // Create context for conditional insertion point
     const context = {
         conditionalInsertion: true,
@@ -665,7 +677,7 @@ function showPluginModalForConditional(type, conditionalId, blockType, index, el
         index: index,
         type: type
     };
-    
+
     modal.dataset.context = JSON.stringify(context);
     PluginModal.show(type);
 }
@@ -674,7 +686,7 @@ function showPluginModalForConditional(type, conditionalId, blockType, index, el
 function addConditionToConditional(type, conditionalId, blockType, index, elseIfIndex) {
     const parentComponent = findComponentById(conditionalId);
     if (!parentComponent) return;
-    
+
     // Create a new nested condition
     const newCondition = {
         id: `condition-${Date.now()}`,
@@ -685,7 +697,7 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
             plugins: []
         }
     };
-    
+
     // Determine which plugin array to insert into
     let targetPlugins;
     switch (blockType) {
@@ -701,42 +713,42 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
             targetPlugins = parentComponent.config.else_ifs[elseIfIndex].plugins;
             break;
         case 'else':
-            if (!parentComponent.config.else) parentComponent.config.else = { plugins: [] };
+            if (!parentComponent.config.else) parentComponent.config.else = {plugins: []};
             if (!parentComponent.config.else.plugins) parentComponent.config.else.plugins = [];
             targetPlugins = parentComponent.config.else.plugins;
             break;
         default:
             return;
     }
-    
+
     // Insert the condition at the specified index
     targetPlugins.splice(index, 0, newCondition);
-    
+
     // Refresh the UI
     loadExistingComponents();
 }
 
 document.addEventListener('DOMContentLoaded', function () {
     // Add click handlers for the insertion buttons
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         // Handle add plugin button clicks
         if (e.target.closest('.add-plugin-btn')) {
             const type = e.target.closest('.add-plugin-btn').dataset.type;
             showPluginModal(type, components[type] ? components[type].length : 0);
         }
     });
-    
+
     // Update the existing plugin modal handler to use the position information
     document.querySelectorAll('.plugin-option').forEach(option => {
-        option.addEventListener('click', function() {
+        option.addEventListener('click', function () {
             const modal = document.getElementById('pluginModal');
             const type = modal.dataset.type;
             const index = parseInt(modal.dataset.index || '0');
             const isConditional = modal.dataset.isConditional === 'true';
             const parentId = modal.dataset.parentId || null;
-            
+
             const pluginType = this.dataset.pluginType;
-            
+
             // Create the new plugin
             const newPlugin = {
                 id: `plugin-${Date.now()}`,
@@ -744,7 +756,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 plugin: pluginType,
                 config: {}
             };
-            
+
             // Add the plugin to the appropriate location
             if (isConditional && parentId) {
                 // Find the parent component and add the plugin to its plugins
@@ -762,18 +774,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 components[type].splice(index, 0, newPlugin);
             }
-            
+
             // Hide the modal and refresh the UI
             modal.classList.add('hidden');
             loadExistingComponents();
         });
     });
     // Add event listener for edit condition buttons
-    document.addEventListener('click', function(event) {
+    document.addEventListener('click', function (event) {
         // Handle if condition edit
-        let editBtn = event.target.closest('.edit-condition') || 
-                     (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-condition'));
-        
+        let editBtn = event.target.closest('.edit-condition') ||
+            (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-condition'));
+
         if (editBtn) {
             event.preventDefault();
             event.stopPropagation();
@@ -785,9 +797,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // Handle else-if condition edit
-        editBtn = event.target.closest('.edit-elseif-condition') || 
-                 (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-elseif-condition'));
-        
+        editBtn = event.target.closest('.edit-elseif-condition') ||
+            (event.target.closest('svg') && event.target.closest('svg').parentElement.closest('.edit-elseif-condition'));
+
         if (editBtn) {
             event.preventDefault();
             event.stopPropagation();

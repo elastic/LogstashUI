@@ -17,12 +17,12 @@
     opacity: 0;
     transition: opacity 0.15s ease;
   }
-  
+
   .component-container:hover > .insertion-point,
   .insertion-point:hover {
     opacity: 1;
   }
-  
+
   .insertion-buttons {
     display: flex;
     position: absolute;
@@ -36,16 +36,16 @@
     transform: translateY(-2px);
     transition: all 0.15s ease;
   }
-  
+
   .insertion-point:hover .insertion-buttons {
     opacity: 1;
     transform: translateY(0);
   }
-  
+
   .insertion-point:hover .insertion-buttons {
     display: flex;
   }
-  
+
   .insertion-button {
     padding: 2px 6px;
     border: none;
@@ -57,33 +57,33 @@
     white-space: nowrap;
     height: 20px;
   }
-  
+
   .insertion-button.add-plugin {
     background-color: #3b82f6;
     color: white;
   }
-  
+
   .insertion-button.add-condition {
     background-color: #f59e0b;
     color: white;
   }
-  
+
   .insertion-button:hover {
     opacity: 0.9;
   }
-  
+
   .component-container {
     position: relative;
   }
-  
+
   .component-container:hover .insertion-point {
     display: flex;
   }
-  
+
   .empty-section .insertion-point {
     display: flex !important;
   }
-  
+
   .empty-section .insertion-buttons {
     position: static;
     display: flex !important;
@@ -92,12 +92,13 @@
     padding: 0;
     margin-top: 8px;
   }
-  
+
   /* Always visible insertion points (for end of sections and empty blocks) */
   .insertion-point.always-visible {
     opacity: 1;
+    display: flex !important;
   }
-  
+
   .insertion-point.always-visible .insertion-buttons {
     position: static;
     opacity: 1;
