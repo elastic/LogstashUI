@@ -1,3 +1,7 @@
+// Track newly added plugin IDs for animation
+let newlyAddedPluginId = null;
+let pendingAnimationPluginId = null; // Plugin waiting for config modal to close
+
 function createInsertionPoint(type, index = 0, isConditional = false, parentId = null) {
     const insertionPoint = document.createElement('div');
     insertionPoint.className = 'insertion-point';
@@ -185,6 +189,25 @@ function loadExistingComponents() {
         // Setup insertion points for this container
         setupInsertionPoints(container, type);
     });
+
+    // Apply animation and focus to newly added plugin (only if not pending config modal)
+    // Don't clear newlyAddedPluginId if there's a pending animation
+    if (newlyAddedPluginId && !pendingAnimationPluginId) {
+        highlightAndFocusNewPlugin(newlyAddedPluginId);
+        newlyAddedPluginId = null; // Reset after use
+    } else if (pendingAnimationPluginId && !newlyAddedPluginId) {
+        // If we only have a pending ID, preserve it
+        newlyAddedPluginId = pendingAnimationPluginId;
+    }
+}
+
+// Function to trigger animation for pending plugin (called after config modal closes)
+window.triggerPendingAnimation = function() {
+    if (pendingAnimationPluginId) {
+        highlightAndFocusNewPlugin(pendingAnimationPluginId);
+        pendingAnimationPluginId = null;
+        newlyAddedPluginId = null;
+    }
 }
 
 // Helper function to format config values for display
@@ -308,6 +331,29 @@ function createComponentElement(component, depth = 0, isConditional = false, par
 `;
 
     return el;
+}
+
+// Function to highlight and focus on a newly added plugin
+function highlightAndFocusNewPlugin(pluginId) {
+    // Use setTimeout to ensure DOM is fully rendered
+    setTimeout(() => {
+        const pluginElement = document.querySelector(`[data-id="${pluginId}"]`);
+        if (pluginElement) {
+            // Add the animation class
+            pluginElement.classList.add('newly-added');
+            
+            // Scroll to the element smoothly
+            pluginElement.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center'
+            });
+            
+            // Remove the class after animation completes
+            setTimeout(() => {
+                pluginElement.classList.remove('newly-added');
+            }, 2000);
+        }
+    }, 100);
 }
 
 function createConditionalBlockElement(component, depth = 0) {
@@ -629,6 +675,9 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
         }
     };
 
+    // Track the newly added condition for animation
+    newlyAddedPluginId = conditionId;
+
     // Add the condition to the appropriate location
     if (isConditional && parentId) {
         // Find the parent component and add the condition to its plugins
@@ -698,6 +747,9 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
         }
     };
 
+    // Track the newly added condition for animation
+    newlyAddedPluginId = newCondition.id;
+
     // Determine which plugin array to insert into
     let targetPlugins;
     switch (blockType) {
@@ -756,6 +808,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 plugin: pluginType,
                 config: {}
             };
+
+            // Track the newly added plugin for animation
+            newlyAddedPluginId = newPlugin.id;
 
             // Add the plugin to the appropriate location
             if (isConditional && parentId) {
@@ -1007,6 +1062,12 @@ function addElseIfToConditional(componentId) {
             config: {}
         };
 
+        // Track the newly added plugin for animation
+        newlyAddedPluginId = newPlugin.id;
+        
+        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
+        pendingAnimationPluginId = newlyAddedPluginId;
+
         // Add the plugin to the else-if block
         component.config.else_ifs[context.elseIfIndex].plugins.push(newPlugin);
 
@@ -1109,6 +1170,12 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
             plugin: pluginName,
             config: {}
         };
+
+        // Track the newly added plugin for animation
+        newlyAddedPluginId = newPlugin.id;
+        
+        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
+        pendingAnimationPluginId = newlyAddedPluginId;
 
 // Add the plugin to the appropriate block
         targetPlugins.push(newPlugin);
@@ -1222,6 +1289,12 @@ function addElseToConditional(componentId) {
             plugin: pluginName,
             config: {}
         };
+
+        // Track the newly added plugin for animation
+        newlyAddedPluginId = newPlugin.id;
+        
+        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
+        pendingAnimationPluginId = newlyAddedPluginId;
 
 // Add the plugin to the else block
         component.config.else.plugins.push(newPlugin);

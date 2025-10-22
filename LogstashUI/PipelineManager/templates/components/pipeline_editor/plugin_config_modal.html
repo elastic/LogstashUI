@@ -368,6 +368,11 @@ window.PluginConfigModal = (function() {
   // Hide the configuration modal
   function hide() {
     document.getElementById('configModal').classList.add('hidden');
+    
+    // Trigger pending animation if there is one
+    if (typeof window.triggerPendingAnimation === 'function') {
+      window.triggerPendingAnimation();
+    }
   }
 
   // Save the configuration
@@ -431,12 +436,20 @@ window.PluginConfigModal = (function() {
     // Update the component's configuration
     currentComponent.config = config;
     
+    // Store the pending animation ID before updating (in case it gets cleared)
+    const savedPendingId = typeof pendingAnimationPluginId !== 'undefined' ? pendingAnimationPluginId : null;
+    
     // If there's a global update function, call it
     if (window.updateComponent) {
       window.updateComponent(currentComponent);
     }
-
-    // Hide the modal
+    
+    // Restore the pending animation ID if it was cleared
+    if (savedPendingId && typeof pendingAnimationPluginId !== 'undefined') {
+      pendingAnimationPluginId = savedPendingId;
+    }
+    
+    // Hide the modal (this will trigger the animation)
     hide();
   }
 

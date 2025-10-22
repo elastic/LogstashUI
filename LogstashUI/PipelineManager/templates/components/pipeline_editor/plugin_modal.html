@@ -191,6 +191,16 @@ const PluginModal = (function() {
                 config: {}
               };
               
+              // Track the newly added plugin for animation
+              if (typeof newlyAddedPluginId !== 'undefined') {
+                newlyAddedPluginId = newPlugin.id;
+              }
+              
+              // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
+              if (typeof pendingAnimationPluginId !== 'undefined' && typeof newlyAddedPluginId !== 'undefined') {
+                pendingAnimationPluginId = newlyAddedPluginId;
+              }
+              
               // Determine which plugin array to insert into
               let targetPlugins;
               switch (context.blockType) {
@@ -266,6 +276,16 @@ const PluginModal = (function() {
               config: {}
             };
             
+            // Track the newly added plugin for animation
+            if (typeof newlyAddedPluginId !== 'undefined') {
+              newlyAddedPluginId = component.id;
+            }
+            
+            // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
+            if (typeof pendingAnimationPluginId !== 'undefined' && typeof newlyAddedPluginId !== 'undefined') {
+              pendingAnimationPluginId = newlyAddedPluginId;
+            }
+            
             // Add the component to the appropriate location
             if (insertIndex !== null) {
               // Insertion point - use splice to insert at specific position
@@ -301,19 +321,8 @@ const PluginModal = (function() {
               }
               components[pluginType].push(component);
 
-              // Update the UI
-              const container = document.getElementById(`${pluginType}Components`);
-              if (container) {
-                // Remove 'No components' message if present
-                const emptyMessage = container.querySelector('p');
-                if (emptyMessage && emptyMessage.textContent.includes('No ')) {
-                  container.removeChild(emptyMessage);
-                }
-
-                // Add the new component
-                const componentEl = createComponentElement(component);
-                container.appendChild(componentEl);
-              }
+              // Refresh the entire UI to rebuild and trigger animation
+              loadExistingComponents();
             }
             
             // Show the config modal for the new component
