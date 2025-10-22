@@ -183,6 +183,59 @@ function loadExistingComponents() {
     });
 }
 
+// Helper function to format config values for display
+function formatConfigValue(value) {
+    // Helper to clean up string values
+    const cleanString = (str) => {
+        // Remove surrounding quotes if they exist
+        if (typeof str === 'string') {
+            return str.replace(/^"|"$/g, '');
+        }
+        return String(str);
+    };
+
+    // Handle arrays/lists
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return '[]';
+        }
+        // Format as: "item1", "item2", "item3"
+        const formattedItems = value.map(item => {
+            return `"${cleanString(item)}"`;
+        });
+        const joined = formattedItems.join(', ');
+        // Truncate if too long
+        if (joined.length > 50) {
+            return joined.substring(0, 50) + '...';
+        }
+        return joined;
+    }
+
+    // Handle objects/hashes/dictionaries
+    if (typeof value === 'object' && value !== null) {
+        const entries = Object.entries(value);
+        if (entries.length === 0) {
+            return '{}';
+        }
+        // Format as: "key1" => "value1", "key2" => "value2"
+        const formattedPairs = entries.map(([k, v]) => {
+            return `"${cleanString(k)}" => "${cleanString(v)}"`;
+        });
+        const joined = formattedPairs.join(', ');
+        // Truncate if too long
+        if (joined.length > 50) {
+            return joined.substring(0, 50) + '...';
+        }
+        return joined;
+    }
+
+    // Handle strings and other primitives
+    const cleanedValue = cleanString(value);
+    if (cleanedValue.length > 30) {
+        return cleanedValue.substring(0, 30) + '...';
+    }
+    return cleanedValue;
+}
 function createComponentElement(component, depth = 0, isConditional = false, parentId = null) {
 // Check if this is a conditional block
     if (component.plugin === 'if') {
@@ -205,12 +258,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         const configItems = [];
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
-                let displayValue = value;
-                if (typeof value === 'object') {
-                    displayValue = JSON.stringify(value).substring(0, 30) + (JSON.stringify(value).length > 30 ? '...' : '');
-                } else if (String(value).length > 20) {
-                    displayValue = String(value).substring(0, 20) + '...';
-                }
+                let displayValue = formatConfigValue(value);
                 configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${displayValue}</span>`);
             }
         }
