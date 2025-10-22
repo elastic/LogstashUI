@@ -185,25 +185,81 @@ const PluginModal = (function() {
           
           // Check if we're in a conditional context
           if (modal.dataset.context) {
-            // This is a conditional block, dispatch an event with the plugin info
-            const event = new CustomEvent('pluginSelected', {
-              detail: {
-                pluginName,
-                pluginType
+            const context = JSON.parse(modal.dataset.context);
+            
+            // Check if this is a conditional insertion point (nested inside a conditional)
+            if (context.conditionalInsertion) {
+              // Handle insertion inside a conditional block at specific position
+              const parentComponent = findComponentById(context.conditionalId);
+              if (!parentComponent) return;
+              
+              const newPlugin = {
+                id: `plugin-${Date.now()}`,
+                type: context.type,
+                plugin: pluginName,
+                config: {}
+              };
+              
+              // Determine which plugin array to insert into
+              let targetPlugins;
+              switch (context.blockType) {
+                case 'if':
+                  if (!parentComponent.config.plugins) parentComponent.config.plugins = [];
+                  targetPlugins = parentComponent.config.plugins;
+                  break;
+                case 'else_if':
+                  if (!parentComponent.config.else_ifs || !parentComponent.config.else_ifs[context.elseIfIndex]) return;
+                  if (!parentComponent.config.else_ifs[context.elseIfIndex].plugins) {
+                    parentComponent.config.else_ifs[context.elseIfIndex].plugins = [];
+                  }
+                  targetPlugins = parentComponent.config.else_ifs[context.elseIfIndex].plugins;
+                  break;
+                case 'else':
+                  if (!parentComponent.config.else) parentComponent.config.else = { plugins: [] };
+                  if (!parentComponent.config.else.plugins) parentComponent.config.else.plugins = [];
+                  targetPlugins = parentComponent.config.else.plugins;
+                  break;
+                default:
+                  return;
               }
-            });
-            
-            // Store the context and clear it immediately to prevent issues
-            const context = modal.dataset.context;
-            delete modal.dataset.context;
-            
-            // Close the modal first to avoid UI issues
-            hide();
-            
-            // Dispatch the event with the stored context
-            modal.dataset.context = context;
-            document.dispatchEvent(event);
-            delete modal.dataset.context;
+              
+              // Insert at the specified index
+              targetPlugins.splice(context.index, 0, newPlugin);
+              
+              // Clean up context
+              delete modal.dataset.context;
+              
+              // Hide modal and refresh UI
+              hide();
+              loadExistingComponents();
+              
+              // Show config modal
+              if (typeof window.PluginConfigModal !== 'undefined') {
+                setTimeout(() => {
+                  window.PluginConfigModal.show(newPlugin);
+                }, 50);
+              }
+            } else {
+              // This is a conditional block (for adding to if/else-if/else), dispatch an event with the plugin info
+              const event = new CustomEvent('pluginSelected', {
+                detail: {
+                  pluginName,
+                  pluginType
+                }
+              });
+              
+              // Store the context and clear it immediately to prevent issues
+              const contextStr = modal.dataset.context;
+              delete modal.dataset.context;
+              
+              // Close the modal first to avoid UI issues
+              hide();
+              
+              // Dispatch the event with the stored context
+              modal.dataset.context = contextStr;
+              document.dispatchEvent(event);
+              delete modal.dataset.context;
+            }
           } else {
             // Regular plugin addition (non-conditional)
             // Check if we have insertion point data
