@@ -107,20 +107,22 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
         return insertionPoint;
     };
     
-    // Add insertion point at the beginning
-    if (container.children.length > 0) {
-        container.insertBefore(createConditionalInsertionPoint(0), container.firstChild);
-    }
-    
-    // Add insertion points between components
+    // Get only the draggable plugin elements (not empty messages or other elements)
     const pluginElements = Array.from(container.children).filter(el => el.classList.contains('draggable-item'));
-    pluginElements.forEach((plugin, index) => {
-        const insertionPoint = createConditionalInsertionPoint(index + 1);
-        container.insertBefore(insertionPoint, plugin.nextSibling);
-    });
     
-    // Add insertion point at the end
-    container.appendChild(createConditionalInsertionPoint(pluginElements.length));
+    // Only add insertion points if there are plugins
+    if (pluginElements.length > 0) {
+        // Add insertion point at the beginning
+        container.insertBefore(createConditionalInsertionPoint(0), container.firstChild);
+        
+        // Add insertion points between components
+        pluginElements.forEach((plugin, index) => {
+            const insertionPoint = createConditionalInsertionPoint(index + 1);
+            container.insertBefore(insertionPoint, plugin.nextSibling);
+        });
+    }
+    // Note: We don't add an insertion point at the end because empty blocks
+    // already show insertion points via CSS, and non-empty blocks have one after the last element
 }
 
 function loadExistingComponents() {
