@@ -92,7 +92,44 @@ window.PluginConfigModal = (function() {
         const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white';
 
         // Create appropriate input based on type
-        if (inputType.includes('boolean') || inputType === 'bool') {
+        if (inputType === 'codec') {
+          // Special handling for codec field
+          const codecData = pluginData.codec || {};
+          const codecNames = Object.keys(codecData).sort();
+          
+          // Get current codec value
+          let currentCodecName = '';
+          let currentCodecConfig = {};
+          if (value && typeof value === 'object') {
+            // value is like {"cef": {"ecs_compatibility": "v1"}}
+            const entries = Object.entries(value);
+            if (entries.length > 0) {
+              [currentCodecName, currentCodecConfig] = entries[0];
+            }
+          }
+          
+          const codecContainerId = `codec-container-${Date.now()}`;
+          const codecSelectId = `codec-select-${Date.now()}`;
+          const codecConfigId = `codec-config-${Date.now()}`;
+          
+          inputField = `
+            <div id="${codecContainerId}" class="space-y-3">
+              <select id="${codecSelectId}" 
+                      class="${inputClasses}"
+                      onchange="handleCodecChange('${codecContainerId}', '${fieldId}', this.value)">
+                <option value="">-- Select Codec --</option>
+                ${codecNames.map(name => `
+                  <option value="${name}" ${name === currentCodecName ? 'selected' : ''}>${name}</option>
+                `).join('')}
+              </select>
+              <div id="${codecConfigId}" class="ml-4 space-y-2 border-l-2 border-gray-600 pl-4">
+                <!-- Codec configuration fields will be inserted here -->
+              </div>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="codec" value='${escapeHtml(JSON.stringify(value || {}))}'>
+            </div>
+          `;
+        }
+        else if (inputType.includes('boolean') || inputType === 'bool') {
           inputField = `
             <select id="${fieldId}" name="${key}" class="${inputClasses}">
               <option value="true" ${value === true || value === 'true' ? 'selected' : ''}>true</option>
@@ -256,9 +293,10 @@ window.PluginConfigModal = (function() {
     // Show the modal
     modal.classList.remove('hidden');
 
-    // Populate existing hash and array values after rendering
+    // Populate existing hash, array, and codec values after rendering
     setTimeout(() => {
       populateExistingValues(component);
+      populateCodecValues(component);
     }, 10);
 
     // Focus the first input field
@@ -365,6 +403,37 @@ window.PluginConfigModal = (function() {
     });
   }
 
+  // Populate codec values
+  function populateCodecValues(component) {
+    const configForm = document.getElementById('configForm');
+    if (!configForm) return;
+
+    // Find all codec containers
+    configForm.querySelectorAll('[id^="codec-container-"]').forEach(container => {
+      const selectElement = container.querySelector('select[id^="codec-select-"]');
+      const hiddenField = container.querySelector('input[type="hidden"]');
+      
+      if (!selectElement || !hiddenField) return;
+
+      try {
+        const codecValue = JSON.parse(hiddenField.value);
+        const entries = Object.entries(codecValue);
+        
+        if (entries.length > 0) {
+          const [codecName, codecConfig] = entries[0];
+          
+          // Set the select value
+          selectElement.value = codecName;
+          
+          // Trigger the codec change to populate fields
+          window.handleCodecChange(container.id, hiddenField.id, codecName);
+        }
+      } catch (e) {
+        console.error('Error populating codec values:', e);
+      }
+    });
+  }
+
   // Hide the configuration modal
   function hide() {
     document.getElementById('configModal').classList.add('hidden');
@@ -395,7 +464,13 @@ window.PluginConfigModal = (function() {
       
       try {
         // Handle different field types
-        if (fieldType === 'hash' || fieldType === 'array') {
+        if (fieldType === 'codec') {
+          const parsedValue = JSON.parse(value);
+          // Only add if codec is selected
+          if (Object.keys(parsedValue).length > 0) {
+            config[key] = parsedValue;
+          }
+        } else if (fieldType === 'hash' || fieldType === 'array') {
           const parsedValue = JSON.parse(value);
           // Only add if the hash/array is not empty
           if (Object.keys(parsedValue).length > 0 || (Array.isArray(parsedValue) && parsedValue.length > 0)) {
@@ -484,7 +559,8 @@ window.PluginConfigModal = (function() {
     init,
     show,
     hide,
-    saveConfig
+    saveConfig,
+    getPluginData: () => pluginData
   };
 })();
 
@@ -624,6 +700,147 @@ function updateArrayField(containerId, fieldId) {
   
   hiddenField.value = JSON.stringify(arrayValues);
 }
+
+// Codec helper functions
+window.handleCodecChange = function(containerId, fieldId, codecName) {
+  const container = document.getElementById(containerId);
+  const hiddenField = document.getElementById(fieldId);
+  if (!container || !hiddenField) return;
+  
+  // Find the codec config container
+  const codecConfigContainer = container.querySelector('[id^="codec-config-"]');
+  if (!codecConfigContainer) return;
+  
+  // Clear previous codec config
+  codecConfigContainer.innerHTML = '';
+  
+  if (!codecName) {
+    // No codec selected, clear the hidden field
+    hiddenField.value = JSON.stringify({});
+    return;
+  }
+  
+  // Get codec options from pluginData
+  const codecData = window.PluginConfigModal.getPluginData();
+  const codecInfo = codecData.codec?.[codecName];
+  
+  if (!codecInfo || !codecInfo.options) {
+    // Codec has no options, just store the codec name with empty config
+    hiddenField.value = JSON.stringify({[codecName]: {}});
+    return;
+  }
+  
+  // Add codec description
+  if (codecInfo.description) {
+    const desc = document.createElement('p');
+    desc.className = 'text-xs text-gray-400 mb-2 italic';
+    desc.textContent = codecInfo.description;
+    codecConfigContainer.appendChild(desc);
+  }
+  
+  // Get existing codec config
+  let existingConfig = {};
+  try {
+    const currentValue = JSON.parse(hiddenField.value);
+    if (currentValue[codecName]) {
+      existingConfig = currentValue[codecName];
+    }
+  } catch (e) {
+    console.error('Error parsing codec value:', e);
+  }
+  
+  // Create fields for codec options
+  Object.entries(codecInfo.options).forEach(([optKey, optInfo]) => {
+    const codecFieldId = `codec-field-${codecName}-${optKey}-${Date.now()}`;
+    const optValue = existingConfig[optKey] || '';
+    const optType = (optInfo.input_type || 'text').toLowerCase();
+    
+    const fieldDiv = document.createElement('div');
+    fieldDiv.className = 'mb-3';
+    
+    let inputHtml = '';
+    const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
+    
+    if (optType.includes('boolean') || optType === 'bool') {
+      inputHtml = `
+        <select id="${codecFieldId}" class="${inputClasses}"
+                onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
+          <option value="">-- Not Set --</option>
+          <option value="true" ${optValue === true || optValue === 'true' ? 'selected' : ''}>true</option>
+          <option value="false" ${optValue === false || optValue === 'false' ? 'selected' : ''}>false</option>
+        </select>
+      `;
+    } else if (optType.includes('number') || optType === 'int' || optType === 'float') {
+      inputHtml = `
+        <input type="number" id="${codecFieldId}" class="${inputClasses}"
+               value="${optValue}"
+               step="${optType === 'float' ? '0.1' : '1'}"
+               onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
+      `;
+    } else if (optType.includes('array')) {
+      inputHtml = `
+        <input type="text" id="${codecFieldId}" class="${inputClasses}"
+               value="${Array.isArray(optValue) ? optValue.join(', ') : optValue}"
+               placeholder="Comma-separated values"
+               onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value.split(',').map(v => v.trim()).filter(v => v))">
+      `;
+    } else {
+      inputHtml = `
+        <input type="text" id="${codecFieldId}" class="${inputClasses}"
+               value="${optValue}"
+               onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
+      `;
+    }
+    
+    fieldDiv.innerHTML = `
+      <label for="${codecFieldId}" class="block text-xs font-medium text-gray-300 mb-1">
+        ${optKey}
+        <span class="text-xs font-normal text-gray-400">
+          (${optInfo.required || 'No'})
+        </span>
+      </label>
+      ${optInfo.description ? `<p class="text-xs text-gray-400 mb-1">${optInfo.description}</p>` : ''}
+      ${inputHtml}
+    `;
+    
+    codecConfigContainer.appendChild(fieldDiv);
+  });
+  
+  // Initialize with empty config for the selected codec
+  const currentValue = {[codecName]: existingConfig};
+  hiddenField.value = JSON.stringify(currentValue);
+};
+
+window.updateCodecField = function(containerId, fieldId, codecName, optKey, value) {
+  const hiddenField = document.getElementById(fieldId);
+  if (!hiddenField) return;
+  
+  try {
+    const currentValue = JSON.parse(hiddenField.value);
+    
+    // Ensure codec object exists
+    if (!currentValue[codecName]) {
+      currentValue[codecName] = {};
+    }
+    
+    // Update or remove the field
+    if (value === '' || value === null || value === undefined) {
+      delete currentValue[codecName][optKey];
+    } else {
+      // Handle boolean conversion
+      if (value === 'true') value = true;
+      else if (value === 'false') value = false;
+      // Handle number conversion
+      else if (!isNaN(value) && value !== '') value = Number(value);
+      
+      currentValue[codecName][optKey] = value;
+    }
+    
+    hiddenField.value = JSON.stringify(currentValue);
+  } catch (e) {
+    console.error('Error updating codec field:', e);
+  }
+};
 
 // Make it globally available
 window.PluginConfigModal = PluginConfigModal;

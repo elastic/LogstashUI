@@ -211,7 +211,7 @@ window.triggerPendingAnimation = function () {
 }
 
 // Helper function to format config values for display
-function formatConfigValue(value) {
+function formatConfigValue(value, key) {
     // Helper to clean up string values
     const cleanString = (str) => {
         // Remove surrounding quotes if they exist
@@ -220,6 +220,25 @@ function formatConfigValue(value) {
         }
         return String(str);
     };
+
+    // Handle codec specially FIRST - it's a nested object like {"rubydebug": {}}
+    if (key === 'codec' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        const codecNames = Object.keys(value);
+        if (codecNames.length > 0) {
+            const codecName = codecNames[0];
+            const codecConfig = value[codecName];
+            
+            // If codec has no config, just show the name
+            if (!codecConfig || Object.keys(codecConfig).length === 0) {
+                return `"${codecName}"`;
+            }
+            
+            // If codec has config, show name with config summary
+            const configCount = Object.keys(codecConfig).length;
+            return `"${codecName}" (${configCount} setting${configCount > 1 ? 's' : ''})`;
+        }
+        return '{}';
+    }
 
     // Handle arrays/lists
     if (Array.isArray(value)) {
@@ -246,6 +265,10 @@ function formatConfigValue(value) {
         }
         // Format as: "key1" => "value1", "key2" => "value2"
         const formattedPairs = entries.map(([k, v]) => {
+            // Skip nested objects - just show the key
+            if (typeof v === 'object' && v !== null) {
+                return `"${cleanString(k)}" => {...}`;
+            }
             return `"${cleanString(k)}" => "${cleanString(v)}"`;
         });
         const joined = formattedPairs.join(', ');
@@ -286,7 +309,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         const configItems = [];
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
-                let displayValue = formatConfigValue(value);
+                let displayValue = formatConfigValue(value, key);
                 configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${displayValue}</span>`);
             }
         }

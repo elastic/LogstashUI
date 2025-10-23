@@ -16,7 +16,6 @@ else_if_condition: "else" "if" condition "{" [statement+] "}"
 else_condition: "else" "{" [statement+] "}"
 
 CMP_OPERATORS: /[^\n{]+/  // Matches anything except newline and {
-
 section_type: "input" -> input_section
             | "filter" -> filter_section
             | "output" -> output_section
@@ -26,7 +25,12 @@ section_type: "input" -> input_section
 plugin: CNAME "{" [pair (WS | ";")*]* "}"
 
 
-pair: (CNAME | ESCAPED_STRING) "=>" (UNQUOTED_STRING | CNAME | value)
+pair: "codec" "=>" CNAME "{" codec_config "}"  -> codec_pair_with_config
+    | "codec" "=>" (CNAME | ESCAPED_STRING)     -> codec_pair_simple
+    | (CNAME | ESCAPED_STRING) "=>" (UNQUOTED_STRING | CNAME | value)  -> regular_pair
+
+codec_config: [codec_setting (","? codec_setting)*]
+codec_setting: (CNAME | ESCAPED_STRING) "=>" (UNQUOTED_STRING | CNAME | value)
 
 ?value: string
       | number
@@ -126,8 +130,56 @@ class LogstashTransformer(Transformer):
     def hash(self, pairs):
         return dict(pairs)
 
+    def codec_setting(self, items):
+        """Transform codec settings into tuples"""
+        if len(items) >= 2:
+            return (items[0], items[1])
+        elif len(items) == 1:
+            return (items[0], None)
+        else:
+            return (None, None)
+    
+    def codec_config(self, items):
+        """Transform codec config into list of tuples"""
+        return [item for item in items if item is not None]
+    
+    def codec_pair_with_config(self, items):
+        """Handle codec => name { config } - return as nested dict"""
+        codec_name = str(items[0])
+        # items[1] is the codec_config (list of tuples)
+        config_list = items[1] if len(items) > 1 and isinstance(items[1], list) else []
+        
+        # Convert list of tuples to dict
+        codec_config = {}
+        for key, value in config_list:
+            codec_config[key] = value
+        
+        # Return as nested dict: {"codec": {"codec_name": {...}}}
+        return ("codec", {codec_name: codec_config})
+    
+    def codec_pair_simple(self, items):
+        """Handle codec => simple_value - return as nested dict with empty config"""
+        codec_name = str(items[0])
+        return ("codec", {codec_name: {}})
+    
+    def regular_pair(self, items):
+        """Handle regular key => value pairs"""
+        if len(items) >= 2:
+            return (items[0], items[1])
+        elif len(items) == 1:
+            # Single item - might be a key with no value
+            return (items[0], None)
+        else:
+            return (None, None)
+    
     def pair(self, items):
-        return (items[0], items[1])
+        """Fallback for pair - should be handled by codec_pair or regular_pair"""
+        if len(items) >= 2:
+            return (items[0], items[1])
+        elif len(items) == 1:
+            return (items[0], None)
+        else:
+            return (None, None)
 
     def plugin(self, items):
         name = items[0]
@@ -366,7 +418,6 @@ class ComponentToPipeline:
 
         if section == "filter" and self.test == True:
             config += f"\tif [plugin_num] >= {self.plugin_num} {{\n"
-
         config += f'{plugin["plugin"]} {{\n'
         for plugin_config_name in plugin['config']:
             plugin_config_value = plugin['config'][plugin_config_name]
@@ -375,8 +426,32 @@ class ComponentToPipeline:
             if type(plugin_config_value) in [str, int, float]:
                 config += f'\t{plugin_config_name} => "{plugin_config_value}"\n'
 
-            elif type(plugin_config_value) is dict:
+            elif type(plugin_config_value) is dict and plugin_config_name == "codec":
+                # Special handling for codec: {"codec_name": {config}}
+                for codec_name, codec_config in plugin_config_value.items():
+                    if codec_config:
+                        # Codec with configuration
+                        config += f"\t{plugin_config_name} => {codec_name} {{\n"
+                        for codec_key, codec_value in codec_config.items():
+                            if type(codec_value) in [str]:
+                                config += f'\t\t{codec_key} => "{codec_value}"\n'
+                            elif type(codec_value) is bool:
+                                config += f'\t\t{codec_key} => {str(codec_value).lower()}\n'
+                            elif type(codec_value) in [int, float]:
+                                config += f'\t\t{codec_key} => {codec_value}\n'
+                            elif type(codec_value) is dict:
+                                # Nested hash in codec
+                                nested = ', '.join([f'{k} => "{v}"' for k, v in codec_value.items()])
+                                config += f'\t\t{codec_key} => {{ {nested} }}\n'
+                            else:
+                                config += f'\t\t{codec_key} => {json.dumps(codec_value)}\n'
+                        config += "\t}\n"
+                    else:
+                        # Codec without configuration
+                        config += f"\t{plugin_config_name} => {codec_name}\n"
 
+            elif type(plugin_config_value) is dict:
+                # Regular dict (not codec)
                 config += f"\t{plugin_config_name} => {{\n"
 
                 for dict_key in plugin_config_value:
@@ -481,7 +556,7 @@ class ComponentToPipeline:
                 'type': 'input',
                 'plugin': 'stdin',
                 'config': {
-                    "codec": "json"
+                    "codec": {"json": {}}
                 }
             }]
             self.components['components']['output'] = [{
@@ -489,7 +564,7 @@ class ComponentToPipeline:
                 'type': 'output',
                 'plugin': 'stdout',
                 'config': {
-                    "codec": "json_lines"
+                    "codec": {"json_lines": {}}
                 }
             }]
 
