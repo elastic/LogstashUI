@@ -142,11 +142,34 @@ class LogstashTransformer(Transformer):
                 elif item is not None:
                     pairs.append(item)
 
-            # Add pairs to settings
+            # Add pairs to settings with merging logic for duplicate keys
             for pair in pairs:
                 if isinstance(pair, (list, tuple)) and len(pair) == 2:
                     k, v = pair
-                    settings[k] = v
+                    
+                    # If key already exists, merge the values
+                    if k in settings:
+                        existing = settings[k]
+                        
+                        # Both are dicts: merge them
+                        if isinstance(existing, dict) and isinstance(v, dict):
+                            settings[k] = {**existing, **v}
+                        
+                        # Both are lists: concatenate them
+                        elif isinstance(existing, list) and isinstance(v, list):
+                            settings[k] = existing + v
+                        
+                        # One is a list: append the other to it
+                        elif isinstance(existing, list):
+                            settings[k] = existing + [v]
+                        elif isinstance(v, list):
+                            settings[k] = [existing] + v
+                        
+                        # Both are scalars: convert to list
+                        else:
+                            settings[k] = [existing, v]
+                    else:
+                        settings[k] = v
         return {"type": "plugin", "name": name, "settings": settings}
 
     def section(self, items):
