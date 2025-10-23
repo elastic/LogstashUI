@@ -12,5 +12,6 @@ urlpatterns = [
     path("GetLogstashCode", views.GetLogstashCode, name="GetLogstashCode"),
     path("GetDiff/", views.GetDiff, name="GetDiff"),
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
-    path("SimulatePipeline/", views.SimulatePipeline, name="SimulatePipeline")
+    path("SimulatePipeline/", views.SimulatePipeline, name="SimulatePipeline"),
+    path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings")
 ]

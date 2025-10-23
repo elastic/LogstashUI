@@ -5,6 +5,7 @@
 
 {% load static %}
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
+<script src="{% static 'js/pipeline_settings.js' %}"></script>
 
 <style>
   .insertion-point {
@@ -183,6 +184,163 @@
         </button>
         <span id="saveStatus" class="ml-2"></span>
       </form>
+    </div>
+  </div>
+
+  <!-- Pipeline Settings Collapsible Section -->
+  <div class="mb-6">
+    <div class="bg-gray-800 rounded-lg overflow-hidden">
+      <!-- Collapsible Header -->
+      <button 
+        id="pipelineSettingsToggle"
+        class="w-full flex items-center justify-between p-4 text-white hover:bg-gray-700 transition-colors"
+        onclick="togglePipelineSettings()">
+        <div class="flex items-center">
+          <svg id="toggleIcon" class="w-5 h-5 mr-2 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <h2 class="text-lg font-semibold">Pipeline Settings</h2>
+        </div>
+        <span class="text-sm text-gray-400">Configure pipeline parameters</span>
+      </button>
+      
+      <!-- Collapsible Content -->
+      <div id="pipelineSettingsContent" class="hidden border-t border-gray-700">
+        <form id="pipelineSettingsForm" class="p-6 space-y-6">
+          {% csrf_token %}
+          <input type="hidden" name="es_id" id="hiddenEsId" value="">
+          <input type="hidden" name="pipeline" id="hiddenPipelineName" value="">
+          <!-- Description -->
+          <div>
+            <label for="pipelineDescription" class="block text-sm font-medium text-gray-300 mb-2">
+              Description
+            </label>
+            <input 
+              type="text" 
+              id="pipelineDescription" 
+              name="description"
+              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter pipeline description"
+              value="{{ pipeline_settings.description|default:'' }}">
+          </div>
+
+          <!-- Grid Layout for Settings -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
+            <!-- Pipeline Workers -->
+            <div class="pb-2">
+              <label for="pipelineWorkers" class="block text-sm font-medium text-gray-300 mb-2">
+                Pipeline Workers
+              </label>
+              <input 
+                type="number" 
+                id="pipelineWorkers" 
+                name="pipeline_workers"
+                min="1"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Number of workers"
+                value="{{ pipeline_settings.pipeline_workers|default:1 }}">
+            </div>
+
+            <!-- Pipeline Batch Size -->
+            <div class="pb-2">
+              <label for="pipelineBatchSize" class="block text-sm font-medium text-gray-300 mb-2">
+                Pipeline Batch Size
+              </label>
+              <input 
+                type="number" 
+                id="pipelineBatchSize" 
+                name="pipeline_batch_size"
+                min="1"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Batch size"
+                value="{{ pipeline_settings.pipeline_batch_size|default:128 }}">
+            </div>
+
+            <!-- Pipeline Batch Delay -->
+            <div class="pb-2">
+              <label for="pipelineBatchDelay" class="block text-sm font-medium text-gray-300 mb-2">
+                Pipeline Batch Delay (ms)
+              </label>
+              <input 
+                type="number" 
+                id="pipelineBatchDelay" 
+                name="pipeline_batch_delay"
+                min="0"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Delay in milliseconds"
+                value="{{ pipeline_settings.pipeline_batch_delay|default:50 }}">
+            </div>
+
+            <!-- Queue Type -->
+            <div class="pb-2">
+              <label for="queueType" class="block text-sm font-medium text-gray-300 mb-2">
+                Queue Type
+              </label>
+              <select 
+                id="queueType" 
+                name="queue_type"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="">Select queue type</option>
+                <option value="memory" {% if pipeline_settings.queue_type == 'memory' %}selected{% endif %}>Memory</option>
+                <option value="persisted" {% if pipeline_settings.queue_type == 'persisted' %}selected{% endif %}>Persisted</option>
+              </select>
+            </div>
+
+            <!-- Queue Max Bytes -->
+            <div class="pb-2">
+              <label for="queueMaxBytes" class="block text-sm font-medium text-gray-300 mb-2">
+                Queue Max Bytes
+              </label>
+              <div class="flex gap-2">
+                <input 
+                  type="number" 
+                  id="queueMaxBytes" 
+                  name="queue_max_bytes"
+                  min="0"
+                  class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Max bytes"
+                  value="{{ pipeline_settings.queue_max_bytes|slice:':-2'|default:1 }}">
+                <select 
+                  id="queueMaxBytesUnit" 
+                  name="queue_max_bytes_unit"
+                  class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <option value="bytes">Bytes</option>
+                  <option value="kilobytes">KB</option>
+                  <option value="megabytes">MB</option>
+                  <option value="gigabytes" selected>GB</option>
+                  <option value="terabytes">TB</option>
+                  <option value="petabytes">PB</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Queue Checkpoint Writes -->
+            <div class="pb-2">
+              <label for="queueCheckpointWrites" class="block text-sm font-medium text-gray-300 mb-2">
+                Queue Checkpoint Writes
+              </label>
+              <input 
+                type="number" 
+                id="queueCheckpointWrites" 
+                name="queue_checkpoint_writes"
+                min="1"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Checkpoint writes"
+                value="{{ pipeline_settings.queue_checkpoint_writes|default:1024 }}">
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex justify-end pt-4 border-t border-gray-700">
+            <button 
+              type="submit"
+              id="applySettingsBtn"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              Apply Settings
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 

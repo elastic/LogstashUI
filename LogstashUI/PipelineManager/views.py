@@ -61,7 +61,21 @@ def PipelineEditor(request):
         pipeline_name = request.GET.get("pipeline")
 
 
-        context['pipeline_text'] = get_logstash_pipeline(es_id, pipeline_name)
+        pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+
+        context['pipeline_text'] = pipeline_config['pipeline']
+        
+        # Flatten pipeline settings with defaults for template access
+        settings = pipeline_config.get('pipeline_settings', {})
+        context['pipeline_settings'] = {
+            'description': pipeline_config.get('description', ''),
+            'pipeline_workers': settings.get('pipeline.workers', 1),
+            'pipeline_batch_size': settings.get('pipeline.batch.size', 128),
+            'pipeline_batch_delay': settings.get('pipeline.batch.delay', 50),
+            'queue_type': settings.get('queue.type', 'memory'),
+            'queue_max_bytes': settings.get('queue.max_bytes', '1gb'),
+            'queue_checkpoint_writes': settings.get('queue.checkpoint.writes', 1024),
+        }
         context['pipeline_name'] = pipeline_name
 
         try:

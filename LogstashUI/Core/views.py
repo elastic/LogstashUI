@@ -16,7 +16,9 @@ def Home(request):
 def get_logstash_pipeline(es_id, pipeline_name):
     es = get_elastic_connection(es_id)
     pipeline_doc = es.logstash.get_pipeline(id=pipeline_name)[pipeline_name]
-    return pipeline_doc['pipeline']
+    return pipeline_doc
+
+
 
 def test_elastic_connectivity(elastic_connection):
     return json.dumps(dict(elastic_connection.info()), indent=4)

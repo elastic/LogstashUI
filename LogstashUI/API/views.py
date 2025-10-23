@@ -18,9 +18,11 @@ import subprocess
 import tempfile
 from deepdiff import DeepDiff
 from PipelineManager.forms import ConnectionForm
-
+from datetime import datetime, timezone
 
 from django.template.loader import get_template
+import traceback
+
 
 def TestConnectivity(request):
     test_id = request.GET.get('test')
@@ -97,11 +99,13 @@ def SavePipeline(request):
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
 
         es.logstash.put_pipeline(id=pipeline_name, body={
-            "pipeline": config,
-            "last_modified": current_pipeline_config[pipeline_name]['last_modified'],
-            "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'],
-            "username": "LogstashUI",
-            "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings']}
+                "pipeline": config,
+                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'],
+                "username": "LogstashUI",
+                "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings'],
+                "description": current_pipeline_config[pipeline_name]['description']
+            }
         )
 
         return HttpResponse("Pipeline saved successfully!")
@@ -152,7 +156,6 @@ def SimulatePipeline(request):
     filter_counter = 0
     test_results = {}
     for test_filter in range(0, len(json.loads(components)['filter'])):
-        print("HERE", filter_counter)
         input_json['plugin_num'] = filter_counter
         proc.stdin.write(json.dumps(input_json)+"\n")
         proc.stdin.flush()
@@ -204,7 +207,7 @@ def GetDiff(request):
         
         try:
             # Get the current pipeline from Elasticsearch
-            current_pipeline = get_logstash_pipeline(es_id, pipeline_name)
+            current_pipeline = get_logstash_pipeline(es_id, pipeline_name)['pipeline']
             
             # Generate the new pipeline from components
             components = json.loads(components_json)
@@ -274,3 +277,81 @@ def GetPipelines(request, connection_id):
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)
     return HttpResponse(html)
+
+
+def UpdatePipelineSettings(request):
+    if request.method == "POST":
+        try:
+            es_id = request.POST.get("es_id")
+            pipeline_name = request.POST.get("pipeline")
+            
+            # Validate required fields
+            if not es_id or not pipeline_name:
+                return HttpResponse(
+                    '<div class="text-red-400 text-sm">Error: Missing pipeline ID or connection ID</div>',
+                    status=400
+                )
+            
+            # Get form values
+            description = request.POST.get("description", "")
+            pipeline_workers = request.POST.get("pipeline_workers")
+            pipeline_batch_size = request.POST.get("pipeline_batch_size")
+            pipeline_batch_delay = request.POST.get("pipeline_batch_delay")
+            queue_type = request.POST.get("queue_type")
+            queue_max_bytes = request.POST.get("queue_max_bytes")
+            queue_max_bytes_unit = request.POST.get("queue_max_bytes_unit")
+            queue_checkpoint_writes = request.POST.get("queue_checkpoint_writes")
+            
+            # Build settings body - only include non-empty values
+            current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+            print(current_pipeline_config)
+            settings_body = {
+                "pipeline": current_pipeline_config['pipeline'],
+                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                "pipeline_metadata": {
+                    "version": current_pipeline_config['pipeline_metadata']['version'] + 1,
+                    "type": "logstash_pipeline"
+                },
+                "username": "LogstashUI",
+                "pipeline": current_pipeline_config['pipeline'],
+                "pipeline_settings":{},
+
+            }
+
+            if 'description' in current_pipeline_config:
+                settings_body['description'] = current_pipeline_config['description']
+            
+            if description:
+                settings_body["description"] = description
+            if pipeline_workers:
+                settings_body['pipeline_settings']["pipeline.workers"] = int(pipeline_workers)
+            if pipeline_batch_size:
+                settings_body['pipeline_settings']["pipeline.batch.size"] = int(pipeline_batch_size)
+            if pipeline_batch_delay:
+                settings_body['pipeline_settings']["pipeline.batch.delay"] = int(pipeline_batch_delay)
+            if queue_type:
+                settings_body['pipeline_settings']["queue.type"] = queue_type
+            if queue_max_bytes:
+                settings_body['pipeline_settings']["queue.max_bytes"] = f"{queue_max_bytes}{queue_max_bytes_unit}"
+            if queue_checkpoint_writes:
+                settings_body['pipeline_settings']["queue.checkpoint.writes"] = int(queue_checkpoint_writes)
+            
+            # Get Elasticsearch connection and update pipeline settings
+            es = get_elastic_connection(es_id)
+            es.logstash.put_pipeline(id=pipeline_name, body=settings_body)
+            # Note: The actual API call depends on your Elasticsearch/Logstash setup
+            # This is a placeholder - adjust based on your actual API structure
+            response = es.logstash.put_pipeline(
+                id=pipeline_name,
+                body=settings_body
+            )
+            
+            # Return empty response - toast notification handled by JavaScript
+            return HttpResponse('', status=200)
+            
+        except Exception as e:
+            # Return simple error message - toast notification handled by JavaScript
+            print(traceback.format_exc())
+            return HttpResponse(str(e), status=500)
+    
+    return HttpResponse('Invalid request method', status=405)
