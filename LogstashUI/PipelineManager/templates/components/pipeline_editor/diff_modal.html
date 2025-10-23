@@ -1,0 +1,270 @@
+<!-- Diff Modal -->
+<div id="diffModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+  <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col" style="height: 90vh; max-height: 90vh;">
+    <!-- Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+      <h3 class="text-lg font-semibold text-white">Review Pipeline Changes</h3>
+      <button onclick="hideDiffModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="p-4 flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
+      <div class="mb-4 flex-shrink-0">
+        <p class="text-gray-300 text-sm">Review the changes below before saving your pipeline.</p>
+      </div>
+
+      <!-- Loading state -->
+      <div id="diffLoading" class="flex-1 flex items-center justify-center" style="min-height: 0;">
+        <div class="text-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p class="text-gray-400">Loading diff...</p>
+        </div>
+      </div>
+
+      <!-- Side-by-side diff view -->
+      <div id="diffContainer" class="flex-1 overflow-hidden hidden" style="min-height: 0;"></div>
+    </div>
+
+    <!-- Footer with actions -->
+    <div class="p-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div class="text-sm text-gray-400">
+        <span id="diffStats"></span>
+      </div>
+      <div class="flex space-x-3">
+        <button onclick="hideDiffModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+          Cancel
+        </button>
+        <button id="confirmSaveButton" onclick="confirmSavePipeline()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          Confirm & Save Pipeline
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function hideDiffModal() {
+  document.getElementById('diffModal').classList.add('hidden');
+}
+
+function showDiffModal() {
+  document.getElementById('diffModal').classList.remove('hidden');
+}
+
+// Function to fetch and display the diff
+async function prepareDiffModal() {
+  // Show the modal first
+  showDiffModal();
+  
+  // Show loading state
+  document.getElementById('diffLoading').classList.remove('hidden');
+  document.getElementById('diffContainer').classList.add('hidden');
+  
+  try {
+    // Get the current pipeline from the server
+    const esId = new URLSearchParams(window.location.search).get('es_id');
+    const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
+    
+    console.log('Fetching diff for:', { esId, pipelineName });
+    
+    // Fetch diff from the server
+    const formData = new FormData();
+    formData.append('es_id', esId);
+    formData.append('pipeline', pipelineName);
+    formData.append('components', JSON.stringify(components));
+    
+    const diffResponse = await fetch('/API/GetDiff/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      },
+      body: formData
+    });
+    
+    console.log('Diff response status:', diffResponse.status);
+    
+    if (!diffResponse.ok) {
+      const errorText = await diffResponse.text();
+      console.error('Diff response error:', errorText);
+      throw new Error(`Failed to fetch diff: ${diffResponse.status} - ${errorText}`);
+    }
+    
+    const diffData = await diffResponse.json();
+    console.log('Diff data received:', diffData);
+    
+    // Hide loading, show container
+    document.getElementById('diffLoading').classList.add('hidden');
+    document.getElementById('diffContainer').classList.remove('hidden');
+    
+    // Display the diff using simple side-by-side comparison
+    const diffContainer = document.getElementById('diffContainer');
+    
+    // Escape HTML to prevent XSS
+    const escapeHtml = (text) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    };
+    
+    // Create side-by-side diff with line numbers and highlighting
+    const currentLines = diffData.current.split('\n');
+    const newLines = diffData.new.split('\n');
+    const maxLines = Math.max(currentLines.length, newLines.length);
+    
+    let currentHtml = '';
+    let newHtml = '';
+    
+    for (let i = 0; i < maxLines; i++) {
+      const currentLine = currentLines[i] !== undefined ? escapeHtml(currentLines[i]) : '';
+      const newLine = newLines[i] !== undefined ? escapeHtml(newLines[i]) : '';
+      
+      // Simple comparison - highlight if different
+      const isDifferent = currentLine !== newLine;
+      const bgClass = isDifferent ? 'bg-red-900/20' : '';
+      const newBgClass = isDifferent ? 'bg-green-900/20' : '';
+      
+      currentHtml += `<div class="flex ${bgClass} hover:bg-gray-700/30">
+        <span class="inline-block w-12 text-gray-500 text-right pr-2 select-none flex-shrink-0">${i + 1}</span>
+        <span style="white-space: pre;">${currentLine || ' '}</span>
+      </div>`;
+      
+      newHtml += `<div class="flex ${newBgClass} hover:bg-gray-700/30">
+        <span class="inline-block w-12 text-gray-500 text-right pr-2 select-none flex-shrink-0">${i + 1}</span>
+        <span style="white-space: pre;">${newLine || ' '}</span>
+      </div>`;
+    }
+    
+    diffContainer.innerHTML = `
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; height: 100%; min-height: 0;">
+        <div style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+          <div class="bg-red-900/30 border border-red-700/50 rounded-t px-3 py-2" style="flex-shrink: 0;">
+            <h4 class="text-sm font-semibold text-red-300">Current Pipeline</h4>
+          </div>
+          <div class="bg-gray-900 border border-gray-700 border-t-0 rounded-b diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+            <div class="p-2 text-sm text-gray-300 font-mono">${currentHtml}</div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+          <div class="bg-green-900/30 border border-green-700/50 rounded-t px-3 py-2" style="flex-shrink: 0;">
+            <h4 class="text-sm font-semibold text-green-300">New Pipeline (After Save)</h4>
+          </div>
+          <div class="bg-gray-900 border border-gray-700 border-t-0 rounded-b diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+            <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Synchronize scrolling between the two panels
+    const panels = diffContainer.querySelectorAll('.diff-scroll-panel');
+    const leftPanel = panels[0];
+    const rightPanel = panels[1];
+    
+    if (leftPanel && rightPanel) {
+      let isScrolling = false;
+      
+      leftPanel.addEventListener('scroll', () => {
+        if (!isScrolling) {
+          isScrolling = true;
+          rightPanel.scrollTop = leftPanel.scrollTop;
+          rightPanel.scrollLeft = leftPanel.scrollLeft;
+          setTimeout(() => { isScrolling = false; }, 10);
+        }
+      });
+      
+      rightPanel.addEventListener('scroll', () => {
+        if (!isScrolling) {
+          isScrolling = true;
+          leftPanel.scrollTop = rightPanel.scrollTop;
+          leftPanel.scrollLeft = rightPanel.scrollLeft;
+          setTimeout(() => { isScrolling = false; }, 10);
+        }
+      });
+    }
+    
+    // Display diff stats
+    document.getElementById('diffStats').textContent = diffData.stats;
+    
+  } catch (error) {
+    console.error('Error preparing diff:', error);
+    document.getElementById('diffLoading').innerHTML = `
+      <div class="text-center">
+        <p class="text-red-400 mb-4">Failed to load pipeline comparison</p>
+        <p class="text-gray-400 text-sm">${error.message}</p>
+        <button onclick="hideDiffModal()" class="mt-4 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+          Close
+        </button>
+      </div>
+    `;
+  }
+}
+
+// Function to confirm and save the pipeline
+async function confirmSavePipeline() {
+  const confirmButton = document.getElementById('confirmSaveButton');
+  const originalText = confirmButton.textContent;
+  
+  // Disable button and show loading state
+  confirmButton.disabled = true;
+  confirmButton.textContent = 'Saving...';
+  confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
+  
+  try {
+    const esId = new URLSearchParams(window.location.search).get('es_id');
+    const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
+    
+    console.log('Saving pipeline:', { esId, pipelineName });
+    
+    const formData = new FormData();
+    formData.append('save_pipeline', 'true');
+    formData.append('es_id', esId);
+    formData.append('pipeline', pipelineName);
+    formData.append('components', JSON.stringify(components));
+    
+    const saveResponse = await fetch('/API/SavePipeline/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      },
+      body: formData
+    });
+    
+    console.log('Save response status:', saveResponse.status);
+    
+    if (!saveResponse.ok) {
+      const errorText = await saveResponse.text();
+      console.error('Save error:', errorText);
+      throw new Error(`Failed to save pipeline: ${saveResponse.status}`);
+    }
+    
+    const responseText = await saveResponse.text();
+    console.log('Save response:', responseText);
+    
+    // Show success message
+    document.getElementById('saveStatus').innerHTML = `
+      <span class="text-green-400">${responseText}</span>
+    `;
+    
+    // Close the modal
+    hideDiffModal();
+    
+    // Clear success message after 3 seconds
+    setTimeout(() => {
+      document.getElementById('saveStatus').innerHTML = '';
+    }, 3000);
+    
+  } catch (error) {
+    console.error('Error saving pipeline:', error);
+    alert('Failed to save pipeline: ' + error.message);
+  } finally {
+    // Re-enable button
+    confirmButton.disabled = false;
+    confirmButton.textContent = originalText;
+    confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+}
+</script>

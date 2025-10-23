@@ -79,7 +79,7 @@ def GetLogstashCode(request, components={}):
         data = components
     parser = logstash_config_parse.ComponentToPipeline(data)
     config = parser.components_to_logstash_config()
-    print(config)
+    #print(config)
     
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(
@@ -91,7 +91,8 @@ def SavePipeline(request):
     data = json.loads(request.POST.get("components"))
     if "save_pipeline" in request.POST:
         pipeline_name = request.POST.get("pipeline")
-        config = logstash_config_parse.components_to_logstash_config({"components": data})
+        parser = logstash_config_parse.ComponentToPipeline(data)
+        config = parser.components_to_logstash_config()
         es = get_elastic_connection(request.POST.get("es_id"))
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
 
@@ -188,19 +189,64 @@ def SimulatePipeline(request):
 {difference}</textarea>'''
         last_result = res
 
-
-
     return HttpResponse(html_text)
 
 
 def GetDiff(request):
-    pass
+    """Generate a unified diff between current and new pipeline configurations"""
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        pipeline_name = request.POST.get("pipeline")
+        components_json = request.POST.get("components")
+        
+        if not es_id or not pipeline_name or not components_json:
+            return JsonResponse({"error": "Missing required parameters"}, status=400)
+        
+        try:
+            # Get the current pipeline from Elasticsearch
+            current_pipeline = get_logstash_pipeline(es_id, pipeline_name)
+            
+            # Generate the new pipeline from components
+            components = json.loads(components_json)
+            parser = logstash_config_parse.ComponentToPipeline(components)
+            new_pipeline = parser.components_to_logstash_config()
+            
+            # Generate unified diff
+            import difflib
+            diff = difflib.unified_diff(
+                current_pipeline.splitlines(keepends=True),
+                new_pipeline.splitlines(keepends=True),
+                fromfile='Current Pipeline',
+                tofile='New Pipeline (After Save)',
+                lineterm=''
+            )
+            
+            # Convert to string
+            diff_text = ''.join(diff)
+            
+            # Calculate stats
+            current_lines = len(current_pipeline.splitlines())
+            new_lines = len(new_pipeline.splitlines())
+            line_diff = new_lines - current_lines
+            diff_sign = '+' if line_diff > 0 else ''
+            stats = f"Current: {current_lines} lines | New: {new_lines} lines ({diff_sign}{line_diff})"
+            
+            return JsonResponse({
+                'diff': diff_text,
+                'stats': stats,
+                'current': current_pipeline,
+                'new': new_pipeline
+            })
+            
+        except Exception as e:
+            return JsonResponse({"error": f"Error generating diff: {str(e)}"}, status=500)
+    
+    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 
 def GetPipelines(request, connection_id):
     context = {}
     connection = ConnectionTable.objects.get(pk=connection_id)
-
 
     logstash_pipelines = []
     if connection.connection_type == "CENTRALIZED":

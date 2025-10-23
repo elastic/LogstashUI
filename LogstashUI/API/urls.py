@@ -10,6 +10,7 @@ urlpatterns = [
 
 
     path("GetLogstashCode", views.GetLogstashCode, name="GetLogstashCode"),
+    path("GetDiff/", views.GetDiff, name="GetDiff"),
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
     path("SimulatePipeline/", views.SimulatePipeline, name="SimulatePipeline")
 ]

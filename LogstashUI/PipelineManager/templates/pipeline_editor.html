@@ -154,48 +154,45 @@
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
     <div class="flex space-x-4">
-        <form>
-            {% csrf_token %}
-          <button id="viewCode"
-              class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-              hx-post="/API/GetLogstashCode"
-              hx-trigger="click"
-              hx-target="#codeContent"
-              hx-swap="innerHTML"
-              hx-vals='js:{"components": components}'
-              onclick="document.getElementById('codeModal').classList.remove('hidden');">
-
-            View Code
-          </button>
-          <button
-            type="button"
-            onclick="document.getElementById('simulationModal').classList.remove('hidden')"
-            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
-            Simulate Pipeline
-          </button>
-            <button type="button"
-                    id="savePipeline"
-                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                    hx-post="/API/SavePipeline/"
-                    hx-include="#pipelineForm"
-                    hx-trigger="click"
-                    hx-target="#saveStatus"
-                    hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'>
-              Save Pipeline
-                <!---TODO: Find a way to validate that the pipeline won't fail before allowing a submit / overwrite -->
-                <!---TODO: Find a way to include logs for the respective logstash instances--->
-            </button>
-            <span id="saveStatus" class="ml-2"></span>
-
-
-        </form>
+      <form>
+        {% csrf_token %}
+        <button id="viewCode"
+            class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+            hx-post="/API/GetLogstashCode"
+            hx-trigger="click"
+            hx-target="#codeContent"
+            hx-swap="innerHTML"
+            hx-vals='js:{"components": components}'
+            onclick="document.getElementById('codeModal').classList.remove('hidden');">
+          View Code
+        </button>
+        <button
+          type="button"
+          onclick="document.getElementById('simulationModal').classList.remove('hidden')"
+          class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
+          Simulate Pipeline
+        </button>
+        <button type="button"
+                id="savePipeline"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                hx-post="/API/SavePipeline/"
+                hx-include="#pipelineForm"
+                hx-trigger="none"
+                hx-target="#saveStatus"
+                hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
+                onclick="prepareDiffModal()">
+          Save Pipeline
+          <!---TODO: Find a way to validate that the pipeline won't fail before allowing a submit / overwrite --->
+          <!---TODO: Find a way to include logs for the respective logstash instances--->
+        </button>
+        <span id="saveStatus" class="ml-2"></span>
+      </form>
     </div>
   </div>
 
   <div class="flex h-[calc(100vh-180px)] gap-4">
     <!-- Main Content Area -->
     <div class="flex-1">
-      <!-- Pipeline Canvas -->
       <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
         <div id="pipelineCanvas" class="min-h-full space-y-8">
           <!-- Input Section -->
