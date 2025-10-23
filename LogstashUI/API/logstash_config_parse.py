@@ -380,7 +380,30 @@ class ComponentToPipeline:
                 config += f"\t{plugin_config_name} => {{\n"
 
                 for dict_key in plugin_config_value:
-                    config += f'\t\t{dict_key} => "{plugin_config_value[dict_key]}"\n'
+                    dict_value = plugin_config_value[dict_key]
+                    # Handle different value types within dictionaries
+                    if type(dict_value) is list:
+                        # Format list with proper indentation and line breaks
+                        config += f"\t\t{dict_key} => [\n"
+                        for i, item in enumerate(dict_value):
+                            comma = "," if i < len(dict_value) - 1 else ""
+                            if type(item) is str:
+                                config += f'\t\t\t"{item}"{comma}\n'
+                            else:
+                                config += f'\t\t\t{json.dumps(item)}{comma}\n'
+                        config += "\t\t]\n"
+                    elif type(dict_value) is dict:
+                        # Nested hash - recursively format it
+                        config += f"\t\t{dict_key} => {{\n"
+                        for nested_key in dict_value:
+                            config += f'\t\t\t{nested_key} => "{dict_value[nested_key]}"\n'
+                        config += "\t\t}\n"
+                    elif type(dict_value) is bool:
+                        config += f"\t\t{dict_key} => {str(dict_value).lower()}\n"
+                    elif type(dict_value) in [int, float]:
+                        config += f"\t\t{dict_key} => {dict_value}\n"
+                    else:
+                        config += f'\t\t{dict_key} => "{dict_value}"\n'
 
                 config += "\t}\n"
             elif type(plugin_config_value) is list:
@@ -538,48 +561,1350 @@ def main():
     z = ComponentToPipeline({
     "input": [
         {
-            "id": "input_beats_0",
+            "id": "input_udp_0",
             "type": "input",
-            "plugin": "beats",
+            "plugin": "udp",
             "config": {
-                "port": 5044
+                "port": 5119
             }
         }
     ],
-    "filter": [],
-    "output": [
+    "filter": [
         {
-            "id": "output_if_2",
-            "type": "output",
+            "id": "filter_mutate_2",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "rename": {
+                    "\"message\"": "log.original",
+                    "\"host\"": "observer.ip"
+                },
+                "copy": {
+                    "\"host\"": "sysloghost"
+                }
+            }
+        },
+        {
+            "id": "filter_grok_4",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "\"log.original\"": [
+                        "%{CISCO_TAGGED_SYSLOG} %{GREEDYDATA:message}",
+                        "^<%{POSINT:syslog_pri}>%{DATA}: %%{DATA:ciscotag}: %{GREEDYDATA:message}",
+                        "^<%{POSINT:syslog_pri}>%%{DATA:ciscotag}: %{GREEDYDATA:message}"
+                    ]
+                }
+            }
+        },
+        {
+            "id": "filter_grok_6",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "\"ciscotag\"": [
+                        "%{WORD}-%{INT:event.severity}-%{INT:event.code}",
+                        "%{WORD}-%{WORD}-%{INT:event.severity}-%{INT:event.code}"
+                    ]
+                }
+            }
+        },
+        {
+            "id": "filter_mutate_8",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "\"event.action\"": "firewall-rule"
+                }
+            }
+        },
+        {
+            "id": "filter_if_10",
+            "type": "filter",
             "plugin": "if",
             "config": {
-                "condition": "[type] == \"first_type\"",
+                "condition": "[event.code] == \"105012\"",
                 "plugins": [
                     {
-                        "id": "output_pipeline_3",
-                        "type": "output",
-                        "plugin": "pipeline",
+                        "id": "filter_grok_11",
+                        "type": "filter",
+                        "plugin": "grok",
                         "config": {
-                            "send_to": "first_type_logs"
+                            "match": {
+                                "\"message\"": [
+                                    "Teardown dynamic %{WORD:network.transport} translation from %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}/%{INT:destination.port} duration %{DATA:cisco.duration_hms}$"
+                                ]
+                            }
                         }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[event.code] == \"106001\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_13",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{network.direction} %{network.transport} connection %{event.outcome} from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} flags %{} on interface %{source_interface}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_15",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
                     },
                     {
-                        "id": "output_if_5",
-                        "type": "output",
-                        "plugin": "if",
-                        "config": {
-                            "condition": "[subtype] == \"first\"",
-                            "plugins": [
-                                {
-                                    "id": "output_elasticsearch_6",
-                                    "type": "output",
-                                    "plugin": "elasticsearch",
-                                    "config": {}
+                        "condition": "[event.code] == \"106002\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_17",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{network.transport} Connection %{event.outcome} by %{network.direction} list %{cisco.list_id} src %{source.address} dest %{destination.address}"
+                                    }
                                 }
-                            ],
-                            "else_ifs": [],
-                            "else": {
-                                "plugins": []
+                            },
+                            {
+                                "id": "filter_mutate_19",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106006\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_21",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.direction} %{network.transport} from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_23",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106007\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_25",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.direction} %{network.transport} from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} due to %{network.protocol} %{}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_27",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106010\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_29",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.direction} %{network.transport} src %{cisco.source_interface}:%{source.address}/%{source.port} %{} dst %{cisco.destination_interface}:%{destination.address}/%{destination.port} %{}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_31",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106013\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_33",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dropping echo request from %{source.address} to PAT address %{destination.address}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_35",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"network.transport\"": "icmp",
+                                        "\"network.direction\"": "inbound"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106014\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_37",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.direction} %{network.transport} src %{cisco.source_interface}:%{source.address} %{}dst %{cisco.destination_interface}:%{destination.address} %{}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_39",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106015\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_41",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.transport} (no connection) from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} flags %{} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_43",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "nat_translation"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106016\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_45",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} IP spoof from (%{source.address}) to %{destination.address} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106017\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_47",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} IP due to Land Attack from %{source.address} to %{destination.address}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106018\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_49",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{network.transport} packet type %{cisco.icmp_type} %{event.outcome} by %{network.direction} list %{cisco.list_id} src %{source.address} dest %{destination.address}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106020\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_51",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} IP teardrop fragment (size = %{}, offset = %{}) from %{source.address} to %{destination.address}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106021\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_53",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.transport} reverse path check from %{source.address} to %{destination.address} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106022\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_55",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.transport} connection spoof from %{source.address} to %{destination.address} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106023\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_57",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "%{WORD:event.outcome} %{WORD:network.transport} src %{WORD:cisco.source_interface}:%{IPORHOST:source.address}?(/%{INT:source.port}) dst %{WORD:cisco.destination_interface}:%{IPORHOST:destination.address}?(/%{INT:destination.port}) by access-group \\\"%{DATA:cisco.list_id}\\\"",
+                                            "%{WORD:event.outcome} %{WORD:network.transport} src %{WORD:cisco.source_interface}:%{IPORHOST:source.address} dst %{WORD:destination.direction}:%{IPORHOST:destination.address} \\(%{DATA}\\) by access-group \\\"%{DATA:cisco.list_id}\\\"",
+                                            "%{WORD:event.outcome} %{WORD:network.transport} src %{WORD:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} dst %{WORD:cisco.destination.interface}:%{IPORHOST:destination.address}/%{INT:destination.port} by access-group \\\"%{DATA:cisco.list_id}\\\""
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_59",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "network_traffic"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106027\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_61",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{} %{event.outcome} src %{source.address} dst %{destination.address} by access-group \\\"%{cisco.list_id}\\\"%{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106100\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_63",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "access-list %{cisco.list_id} %{event.outcome} %{network.transport} %{cisco.source_interface}/%{source.address}(%{source.port}) -> %{cisco.destination_interface}/%{destination.address}(%{destination.port}) %{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106102\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_65",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "access-list %{cisco.list_id} %{event.outcome} %{network.transport} for user %{cisco.username} %{cisco.source_interface}/%{source.address} %{source.port} %{cisco.destination_interface}/%{destination.address} %{destination.port} %{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"106103\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_67",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "access-list %{cisco.list_id} %{event.outcome} %{network.transport} for user %{cisco.username} %{cisco.source_interface}/%{source.address} %{source.port} %{cisco.destination_interface}/%{destination.address} %{destination.port} %{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"113004\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_69",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "AAA user accounting %{WORD:cisco.auth_outcome} : server =%{SPACE}%{IP:source.address} : user =%{SPACE}%{DATA:source.user.name}$"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_71",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "authentication"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_if_73",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[cisco.auth_outcome] == \"Successful\"",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_mutate_74",
+                                            "type": "filter",
+                                            "plugin": "mutate",
+                                            "config": {
+                                                "add_field": {
+                                                    "\"event.action\"": "authentication_success"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": {
+                                        "plugins": [
+                                            {
+                                                "id": "filter_mutate_76",
+                                                "type": "filter",
+                                                "plugin": "mutate",
+                                                "config": {
+                                                    "add_field": {
+                                                        "\"event.action\"": "authentication_failure"
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"302015\" or [event.code] == \"302013\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_78",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "Built %{WORD:network.direction} %{WORD:network.transport} connection %{INT} for %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} \\(%{IP}|\\) to %{DATA:cisco.destination_interface}:%{IPORHOST:destination.address}/%{INT:destination.port} \\(%{DATA}\\)",
+                                            "Built %{WORD:network.direction} %{WORD:network.transport} connection %{INT} for %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} \\(%{DATA}\\)?(\\(%{DATA:cisco.source_username}\\)) to %{DATA:cisco.destination_interface}:%{IPORHOST:destination.address}/%{INT:destination.port} \\(%{DATA}\\) ?(\\(%{DATA:cisco.username}\\))",
+                                            "Built %{WORD:network.direction} %{WORD:network.transport} connection %{INT:cisco.connection_id} for %{WORD:cisco.source_interface}:%{IPORHOST:source.address}\\/%{INT:source.port} \\(%{DATA}\\) to %{WORD:cisco.destination_interface}:%{IPORHOST:destination.address}/%{INT:destination.port}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_80",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "nat_translation"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"110003\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_82",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "%{DATA:cisco.event_error} for %{WORD:network.transport} from %{DATA:cisco.source_interface}:%{IP:source.address}\\/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}\\/%{INT:destination.port}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_84",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "error"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"113019\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_86",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "Group = %{DATA:cisco.group}, Username = %{DATA:user.name}, IP = %{IP:cisco.client_vpn_ip}, %{DATA:cisco.client_vpn_action}\\. Session Type: %{DATA:cisco.session_type}, Duration: %{DATA:cisco.duration}, Bytes xmt: %{INT:cisco.vpn_transmit_byte_summary}, Bytes rcv: %{INT:cisco.vpn_receive_byte_summary}, Reason: %{DATA:cisco.client_vpn_outcome}$"
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"304001\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_88",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{source.address} %{}ccessed URL %{destination.address}:%{url.original}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_90",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.outcome\"": "allow"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"304002\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_92",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Access %{event.outcome} URL %{url.original} SRC %{source.address} %{}EST %{destination.address} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"305011\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_94",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "Built dynamic %{WORD:network.transport} translation from %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}/%{INT:destination.port}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_96",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "nat_translation"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"305012\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_98",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "Teardown dynamic %{WORD:network.transport} translation from %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}/%{INT:destination.port}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_100",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "nat_translation"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"313001\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_102",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.transport} type=%{cisco.icmp_type}, code=%{cisco.icmp_code} from %{source.address} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"313004\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_104",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.transport} type=%{cisco.icmp_type}, from%{}addr %{source.address} on interface %{cisco.source_interface} to %{destination.address}: no matching session"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"313005\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_106",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "No matching connection for %{network.transport} error message: %{} on %{cisco.source_interface} interface.%{}riginal IP payload: %{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"313008\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_108",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} %{network.transport} type=%{cisco.icmp_type} , code=%{cisco.icmp_code} from %{source.address} on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"313009\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_110",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} invalid %{network.transport} code %{cisco.icmp_code} , for %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"322001\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_112",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "%{event.outcome} MAC address %{source.mac}, possible spoof attempt on interface %{cisco.source_interface}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338001\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_114",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic filter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338002\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_116",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_118",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "[destination.domain]"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338003\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_120",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338004\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_122",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338005\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_124",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_126",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "[source.domain]"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338006\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_128",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_130",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338007\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_132",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338008\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_134",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338101\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_136",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_138",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338102\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_140",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_142",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338103\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_144",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338104\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_146",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{}"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338201\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_148",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_150",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338202\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_152",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_154",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338203\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_156",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_158",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338204\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_160",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_162",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.domain\"": "server.domain"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"338301\"",
+                        "plugins": [
+                            {
+                                "id": "filter_dissect_164",
+                                "type": "filter",
+                                "plugin": "dissect",
+                                "config": {
+                                    "mapping": {
+                                        "\"message\"": "Intercepted DNS reply for domain %{source.domain} from %{cisco.source_interface}:%{source.address}/%{source.port} to %{cisco.destination_interface}:%{destination.address}/%{destination.port}, matched %{cisco.list_id}"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_166",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"client.address\"": "client.address"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_168",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"client.port\"": "client.port"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_170",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.address\"": "server.address"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_172",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"server.port\"": "server.port"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] in [\"302014\", \"302016\", \"302018\", \"302021\", \"302036\", \"302304\", \"302306\", \"302020\"]",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_174",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "pattern_definitions": {
+                                        "\"NOTCOLON\"": "[^:]*",
+                                        "\"ECSSOURCEIPORHOST\"": "(?:%{IP:source.address}|%{HOSTNAME:source.domain})",
+                                        "\"ECSDESTIPORHOST\"": "(?:%{IP:destination.address}|%{HOSTNAME:destination.domain})",
+                                        "\"MAPPEDSRC\"": "(?:%{DATA:cisco.mapped_source_ip}|%{HOSTNAME})"
+                                    },
+                                    "match": {
+                                        "\"message\"": [
+                                            "Teardown %{NOTSPACE:network.transport} (?:state-bypass )?connection %{NOTSPACE:cisco.connection_id} (?:for|from) %{NOTCOLON}:%{DATA:source.address}/%{NUMBER:source.port:int}?(\\(%{DATA:cisco.source_username}\\)|) ?to %{NOTCOLON:cisco.destination_interface}:%{DATA:destination.address}/%{NUMBER:destination.port:int}?(\\(%{DATA:cisco.source_username}\\)|) ?(?:duration %{TIME:cisco.duration_hms} bytes %{NUMBER:network.bytes:int})%{GREEDYDATA}",
+                                            "Teardown %{NOTSPACE:network.transport} (?:state-bypass )?connection %{NOTSPACE:cisco.connection_id} (?:for|from) %{NOTCOLON}:%{DATA:source.address}/%{NUMBER:source.port:int} (?:%{NOTSPACE:cisco.source_username} )?to %{NOTCOLON:cisco.destination_interface}:%{DATA:destination.address}/%{NUMBER:destination.port:int} (?:%{NOTSPACE:cisco.destination_username} )?(?:duration %{TIME:cisco.duration_hms} bytes %{NUMBER:network.bytes:int})%{GREEDYDATA}",
+                                            "Teardown %{NOTSPACE:network.transport} connection for faddr (?:%{NOTCOLON:cisco.source_interface}:)?%{ECSDESTIPORHOST}/%{NUMBER} (?:%{NOTSPACE:cisco.destination_username} )?gaddr (?:%{NOTCOLON}:)?%{MAPPEDSRC}/%{NUMBER} laddr (?:%{NOTCOLON:cisco.source_interface}:)?%{ECSSOURCEIPORHOST}/%{NUMBER}(?: %{NOTSPACE:cisco.source_username})?%{GREEDYDATA}",
+                                            "Built %{WORD:network.direction} %{NOTSPACE:network.transport} connection for faddr (?:%{NOTCOLON:cisco.source_interface}:)?%{ECSDESTIPORHOST}/%{NUMBER} (?:%{NOTSPACE:cisco.destination_username} )?gaddr (?:%{NOTCOLON}:)?%{MAPPEDSRC}/%{NUMBER} laddr (?:%{NOTCOLON:cisco.source_interface}:)?%{ECSSOURCEIPORHOST}/%{NUMBER}(?: %{NOTSPACE:cisco.source_username})?%{GREEDYDATA}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_176",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "nat_translation"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"419002\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_178",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "%{DATA:cisco.event_error} from %{WORD:cisco.source_interface}:%{IPORHOST:source.address}\\/%{INT:source.port} to %{WORD:cisco.destination_interface}:%{IPORHOST:destination.address}\\/%{INT:destination.port}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_180",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "error"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] in [\"733100\", \"752015\", \"752012\"]",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_182",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "%{GREEDYDATA:cisco.event_error}"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_mutate_184",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "\"event.category\"": "error"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] == \"716002\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_186",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "Group \\<%{DATA:cisco.group} User \\<%{DATA:user.name}\\> IP \\<%{IP:cisco.client_vpn_ip}\\> WebVPN session %{WORD:cisco.client_vpn_session_outcome}\\: %{DATA:cisco.web_vpn_action}\\."
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.code] in ['722022', '722033', '722055', '722051', '113039', '722023', '722037']",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_188",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "match": {
+                                        "\"message\"": [
+                                            "Group \\<%{DATA:cisco.group} User \\<%{DATA:user.name}\\> IP \\<%{IP:cisco.client_vpn_ip}\\> %{GREEDYDATA:cisco.message}"
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": {
+                    "plugins": [
+                        {
+                            "id": "filter_grok_190",
+                            "type": "filter",
+                            "plugin": "grok",
+                            "config": {
+                                "match": {
+                                    "\"message\"": [
+                                        "forced_failure"
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "filter_if_192",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[event.category] == \"nat_translation\"",
+                "plugins": [
+                    {
+                        "id": "filter_drop_193",
+                        "type": "filter",
+                        "plugin": "drop",
+                        "config": {}
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": []
+                }
+            }
+        },
+        {
+            "id": "filter_if_195",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[source.address]",
+                "plugins": [
+                    {
+                        "id": "filter_grok_196",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "\"source.address\"": [
+                                    "(?:%{IP:source.ip}|%{GREEDYDATA:source.domain})"
+                                ]
                             }
                         }
                     }
@@ -588,6 +1913,310 @@ def main():
                 "else": {
                     "plugins": []
                 }
+            }
+        },
+        {
+            "id": "filter_if_198",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[destination.address]",
+                "plugins": [
+                    {
+                        "id": "filter_grok_199",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "\"destination.address\"": [
+                                    "(?:%{IP:destination.ip}|%{GREEDYDATA:destination.domain})"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": []
+                }
+            }
+        },
+        {
+            "id": "filter_if_201",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[client.address]",
+                "plugins": [
+                    {
+                        "id": "filter_grok_202",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "\"client.address\"": [
+                                    "(?:%{IP:client.ip}|%{GREEDYDATA:client.domain})"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": []
+                }
+            }
+        },
+        {
+            "id": "filter_if_204",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[server.address]",
+                "plugins": [
+                    {
+                        "id": "filter_grok_205",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "\"server.address\"": [
+                                    "(?:%{IP:server.ip}|%{GREEDYDATA:server.domain})"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": []
+                }
+            }
+        },
+        {
+            "id": "filter_mutate_207",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "lowercase": [
+                    "network.transport",
+                    "network.protocol",
+                    "network.direction",
+                    "event.outcome"
+                ]
+            }
+        },
+        {
+            "id": "filter_if_209",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[event.outcome] == \"est-allowed\"",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_210",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "update": {
+                                "\"event.outcome\"": "allow"
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[event.outcome] == \"permitted\"",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_212",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "update": {
+                                        "\"event.outcome\"": "allow"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.outcome] == \"denied\"",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_214",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "update": {
+                                        "\"event.outcome\"": "deny"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[event.outcome] == \"dropped\"",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_216",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "update": {
+                                        "\"event.outcome\"": "deny"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": {
+                    "plugins": []
+                }
+            }
+        },
+        {
+            "id": "filter_if_218",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[network.transport] == \"icmpv6\"",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_219",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "update": {
+                                "\"network.transport\"": "ipv6-icmp"
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": []
+                }
+            }
+        },
+        {
+            "id": "filter_translate_221",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "field": "network.transport",
+                "destination": "network.iana_number",
+                "dictionary": {
+                    "\"icmp\"": "1",
+                    "\"igmp\"": "2",
+                    "\"ipv4\"": "4",
+                    "\"tcp\"": "6",
+                    "\"egp\"": "8",
+                    "\"igp\"": "9",
+                    "\"pup\"": "12",
+                    "\"udp\"": "17",
+                    "\"rdp\"": "27",
+                    "\"irtp\"": "28",
+                    "\"dccp\"": "33",
+                    "\"idpr\"": "35",
+                    "\"ipv6\"": "41",
+                    "\"ipv6-route\"": "43",
+                    "\"ipv6-frag\"": "44",
+                    "\"rsvp\"": "46",
+                    "\"gre\"": "47",
+                    "\"esp\"": "50",
+                    "\"ipv6-icmp\"": "58",
+                    "\"ipv6-nonxt\"": "59",
+                    "\"ipv6-opts\"": "60"
+                }
+            }
+        },
+        {
+            "id": "filter_mutate_223",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "remove_field": [
+                    "ciscotag",
+                    "timestamp"
+                ]
+            }
+        },
+        {
+            "id": "filter_mutate_225",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "\"event.module\"": "cisco",
+                    "\"event.dataset\"": "asa"
+                }
+            }
+        },
+        {
+            "id": "filter_translate_227",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "field": "[event.code]",
+                "destination": "event",
+                "dictionary_path": ""
+            }
+        },
+        {
+            "id": "filter_translate_229",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "field": "[source.ip]",
+                "destination": "threat",
+                "dictionary_path": ""
+            }
+        },
+        {
+            "id": "filter_translate_231",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "field": "[destination.ip]",
+                "destination": "threat",
+                "dictionary_path": ""
+            }
+        },
+        {
+            "id": "filter_translate_233",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "field": "[event.severity]",
+                "destination": "[log.level]",
+                "dictionary": {
+                    "\"0\"": "emergency",
+                    "\"1\"": "alert",
+                    "\"2\"": "critical",
+                    "\"3\"": "error",
+                    "\"4\"": "warning",
+                    "\"5\"": "notification",
+                    "\"6\"": "informational",
+                    "\"7\"": "debug"
+                }
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_235",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "user": "",
+                "password": "",
+                "hosts": [
+                    ""
+                ],
+                "pipeline": "asa",
+                "index": "asa-1.2"
             }
         }
     ]

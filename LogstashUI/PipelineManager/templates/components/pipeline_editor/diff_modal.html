@@ -3,17 +3,22 @@
   <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col" style="height: 90vh; max-height: 90vh;">
     <!-- Header -->
     <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
-      <h3 class="text-lg font-semibold text-white">Review Pipeline Changes</h3>
-      <button onclick="hideDiffModal()" class="text-gray-400 hover:text-white">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+      <h3 id="diffModalTitle" class="text-lg font-semibold text-white">Review Pipeline Changes</h3>
+      <div class="flex space-x-2">
+        <button id="copyCodeButton" class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" onclick="copyDiffCodeToClipboard()">
+          Copy to Clipboard
+        </button>
+        <button onclick="hideDiffModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Content -->
     <div class="p-4 flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
-      <div class="mb-4 flex-shrink-0">
+      <div id="diffDescription" class="mb-4 flex-shrink-0">
         <p class="text-gray-300 text-sm">Review the changes below before saving your pipeline.</p>
       </div>
 
@@ -36,9 +41,9 @@
       </div>
       <div class="flex space-x-3">
         <button onclick="hideDiffModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
-          Cancel
+          Close
         </button>
-        <button id="confirmSaveButton" onclick="confirmSavePipeline()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+        <button id="confirmSaveButton" onclick="confirmSavePipeline()" class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
           Confirm & Save Pipeline
         </button>
       </div>
@@ -47,6 +52,9 @@
 </div>
 
 <script>
+let currentDiffMode = 'save'; // 'save' or 'view'
+let storedNewPipelineCode = '';
+
 function hideDiffModal() {
   document.getElementById('diffModal').classList.add('hidden');
 }
@@ -55,8 +63,133 @@ function showDiffModal() {
   document.getElementById('diffModal').classList.remove('hidden');
 }
 
+// Function to view generated code (no comparison)
+async function viewGeneratedCode() {
+  currentDiffMode = 'view';
+  
+  // Update UI for view mode
+  document.getElementById('diffModalTitle').textContent = 'Generated Pipeline Code';
+  document.getElementById('diffDescription').innerHTML = '<p class="text-gray-300 text-sm">Review the generated Logstash configuration code.</p>';
+  document.getElementById('confirmSaveButton').classList.add('hidden');
+  document.getElementById('copyCodeButton').classList.remove('hidden');
+  
+  // Show the modal first
+  showDiffModal();
+  
+  // Show loading state
+  document.getElementById('diffLoading').classList.remove('hidden');
+  document.getElementById('diffContainer').classList.add('hidden');
+  
+  try {
+    // Generate new pipeline code from current components
+    const formData = new FormData();
+    formData.append('components', JSON.stringify(components));
+    
+    const response = await fetch('/API/GetLogstashCode', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      },
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate code');
+    }
+    
+    const html = await response.text();
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const code = tempDiv.querySelector('code').textContent;
+    
+    storedNewPipelineCode = code;
+    
+    // Hide loading, show container
+    document.getElementById('diffLoading').classList.add('hidden');
+    document.getElementById('diffContainer').classList.remove('hidden');
+    
+    // Display as single code view
+    const diffContainer = document.getElementById('diffContainer');
+    const lines = code.split('\n');
+    
+    const escapeHtml = (text) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    };
+    
+    let codeHtml = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = escapeHtml(lines[i]);
+      codeHtml += `<div class="flex hover:bg-gray-700/30">
+        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${i + 1}</span>
+        <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+      </div>`;
+    }
+    
+    diffContainer.innerHTML = `
+      <div class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500" style="display: flex; flex-direction: column; height: 100%; min-height: 0;">
+        <div class="mb-2" style="flex-shrink: 0;">
+          <h4 class="text-lg font-semibold text-white">Generated Logstash Configuration</h4>
+        </div>
+        <div class="bg-gray-800 rounded border-2 border-dashed border-gray-600" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0;">
+          <div class="p-2 text-sm text-gray-300 font-mono">${codeHtml}</div>
+        </div>
+      </div>
+    `;
+    
+    // Display stats
+    document.getElementById('diffStats').textContent = `Total: ${lines.length} lines`;
+    
+  } catch (error) {
+    console.error('Error generating code:', error);
+    document.getElementById('diffLoading').innerHTML = `
+      <div class="text-center">
+        <p class="text-red-400 mb-4">Failed to generate code</p>
+        <p class="text-gray-400 text-sm">${error.message}</p>
+        <button onclick="hideDiffModal()" class="mt-4 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+          Close
+        </button>
+      </div>
+    `;
+  }
+}
+
+// Function to copy code to clipboard
+function copyDiffCodeToClipboard() {
+  const copyButton = document.getElementById('copyCodeButton');
+  
+  navigator.clipboard.writeText(storedNewPipelineCode).then(() => {
+    const originalText = copyButton.textContent;
+    copyButton.textContent = 'Copied!';
+    copyButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    copyButton.classList.add('bg-green-600', 'hover:bg-green-700');
+    
+    setTimeout(() => {
+      copyButton.textContent = originalText;
+      copyButton.classList.remove('bg-green-600', 'hover:bg-green-700');
+      copyButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    copyButton.textContent = 'Failed!';
+    copyButton.classList.add('bg-red-600');
+    setTimeout(() => {
+      copyButton.textContent = 'Copy to Clipboard';
+      copyButton.classList.remove('bg-red-600');
+    }, 2000);
+  });
+}
+
 // Function to fetch and display the diff
 async function prepareDiffModal() {
+  currentDiffMode = 'save';
+  
+  // Update UI for save mode
+  document.getElementById('diffModalTitle').textContent = 'Review Pipeline Changes';
+  document.getElementById('diffDescription').innerHTML = '<p class="text-gray-300 text-sm">Review the changes below before saving your pipeline.</p>';
+  document.getElementById('confirmSaveButton').classList.remove('hidden');
+  document.getElementById('copyCodeButton').classList.add('hidden');
   // Show the modal first
   showDiffModal();
   
@@ -128,31 +261,31 @@ async function prepareDiffModal() {
       const newBgClass = isDifferent ? 'bg-green-900/20' : '';
       
       currentHtml += `<div class="flex ${bgClass} hover:bg-gray-700/30">
-        <span class="inline-block w-12 text-gray-500 text-right pr-2 select-none flex-shrink-0">${i + 1}</span>
-        <span style="white-space: pre;">${currentLine || ' '}</span>
+        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${i + 1}</span>
+        <span style="white-space: pre; padding-left: 0.5rem;">${currentLine || ' '}</span>
       </div>`;
       
       newHtml += `<div class="flex ${newBgClass} hover:bg-gray-700/30">
-        <span class="inline-block w-12 text-gray-500 text-right pr-2 select-none flex-shrink-0">${i + 1}</span>
-        <span style="white-space: pre;">${newLine || ' '}</span>
+        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${i + 1}</span>
+        <span style="white-space: pre; padding-left: 0.5rem;">${newLine || ' '}</span>
       </div>`;
     }
     
     diffContainer.innerHTML = `
       <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; height: 100%; min-height: 0;">
-        <div style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
-          <div class="bg-red-900/30 border border-red-700/50 rounded-t px-3 py-2" style="flex-shrink: 0;">
-            <h4 class="text-sm font-semibold text-red-300">Current Pipeline</h4>
+        <div class="p-4 bg-gray-700 rounded-lg border-l-4 border-yellow-500" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+          <div class="mb-2" style="flex-shrink: 0;">
+            <h4 class="text-lg font-semibold text-white">Current Pipeline</h4>
           </div>
-          <div class="bg-gray-900 border border-gray-700 border-t-0 rounded-b diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+          <div class="bg-gray-800 rounded border-2 border-dashed border-gray-600 diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
             <div class="p-2 text-sm text-gray-300 font-mono">${currentHtml}</div>
           </div>
         </div>
-        <div style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
-          <div class="bg-green-900/30 border border-green-700/50 rounded-t px-3 py-2" style="flex-shrink: 0;">
-            <h4 class="text-sm font-semibold text-green-300">New Pipeline (After Save)</h4>
+        <div class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+          <div class="mb-2" style="flex-shrink: 0;">
+            <h4 class="text-lg font-semibold text-white">New Pipeline (After Save)</h4>
           </div>
-          <div class="bg-gray-900 border border-gray-700 border-t-0 rounded-b diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+          <div class="bg-gray-800 rounded border-2 border-dashed border-gray-600 diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
             <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
           </div>
         </div>

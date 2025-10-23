@@ -156,14 +156,10 @@
     <div class="flex space-x-4">
       <form>
         {% csrf_token %}
-        <button id="viewCode"
+        <button type="button"
+            id="viewCode"
             class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-            hx-post="/API/GetLogstashCode"
-            hx-trigger="click"
-            hx-target="#codeContent"
-            hx-swap="innerHTML"
-            hx-vals='js:{"components": components}'
-            onclick="document.getElementById('codeModal').classList.remove('hidden');">
+            onclick="viewGeneratedCode()">
           View Code
         </button>
         <button
@@ -298,9 +294,6 @@
 
 <!--- Simulation modal -->
 {% include 'components/pipeline_editor/simulation_modal.html' %}
-
-<!--- View code modal -->
-{% include 'components/pipeline_editor/view_code_Modal.html' %}
 
 <!-- Add Plugin Modal -->
 {% include 'components/pipeline_editor/plugin_modal.html' %}
