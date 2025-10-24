@@ -476,7 +476,290 @@ output {
         }
     ]
 }'''
-    )
+    ),
+    (
+        "test-devopsschool-1",
+        """input {
+	beats {
+		port => "5044"
+	}
+}
+filter {
+	grok {
+		match => {
+			"message" => "%{COMBINEDAPACHELOG}"
+		}
+	}
+}
+output {
+	elasticsearch {
+		hosts => ["http://elasticsearch:9200"]
+		index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+	}
+	stdout {
+		codec => rubydebug
+	}
+}
+""",
+        r'''{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": "5044"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_2",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "\"message\"": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_4",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "http://elasticsearch:9200"
+                ],
+                "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+            }
+        },
+        {
+            "id": "output_stdout_6",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}'''
+    ),
+    (
+        "test-devopsschool-2",
+        """input {
+	beats {
+		port => "5044"
+	}
+}
+filter {
+	grok {
+		match => {
+			"message" => "%{SYSLOGLINE}"
+		}
+	}
+}
+output {
+	stdout {
+		codec => rubydebug
+	}
+}
+""",
+        r'''{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": "5044"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_2",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "\"message\"": "%{SYSLOGLINE}"
+                }
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_stdout_4",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}'''
+    ),
+    (
+        "test-devopsschool-4",
+        """input {
+	file {
+		path => "/var/log/apache2/access.log"
+		start_position => "beginning"
+		sincedb_path => "/dev/null"
+	}
+}
+filter {
+	grok {
+		match => {
+			"message" => "%{COMBINEDAPACHELOG}"
+		}
+	}
+	date {
+		match => ["timestamp", "dd/MMM/yyyy:HH:mm:ss Z"]
+	}
+	geoip {
+		source => "clientip"
+	}
+}
+output {
+	elasticsearch {
+		hosts => ["localhost:9200"]
+	}
+}
+""",
+        r'''{
+    "input": [
+        {
+            "id": "input_file_0",
+            "type": "input",
+            "plugin": "file",
+            "config": {
+                "path": "/var/log/apache2/access.log",
+                "start_position": "beginning",
+                "sincedb_path": "/dev/null"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_2",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "\"message\"": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        },
+        {
+            "id": "filter_date_4",
+            "type": "filter",
+            "plugin": "date",
+            "config": {
+                "match": [
+                    "timestamp",
+                    "dd/MMM/yyyy:HH:mm:ss Z"
+                ]
+            }
+        },
+        {
+            "id": "filter_geoip_6",
+            "type": "filter",
+            "plugin": "geoip",
+            "config": {
+                "source": "clientip"
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_8",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        }
+    ]
+}'''
+    ),
+    (
+        "test-devopsschool-5",
+        """input {
+	beats {
+		port => "5044"
+	}
+}
+filter {
+	grok {
+		match => {
+			"message" => "%{COMBINEDAPACHELOG}"
+		}
+	}
+	geoip {
+		source => "clientip"
+	}
+}
+output {
+	elasticsearch {
+		hosts => ["localhost:9200"]
+	}
+}
+""",
+        r'''{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": "5044"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_2",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "\"message\"": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        },
+        {
+            "id": "filter_geoip_4",
+            "type": "filter",
+            "plugin": "geoip",
+            "config": {
+                "source": "clientip"
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_6",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        }
+    ]
+}'''
+    ),
 ]
 
 

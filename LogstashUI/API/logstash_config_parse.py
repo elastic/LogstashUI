@@ -1,4 +1,4 @@
-from lark import Lark, Transformer
+from lark import Lark, Transformer, UnexpectedToken, UnexpectedCharacters
 from typing import Dict, List, Any
 import json
 
@@ -344,12 +344,85 @@ class LogstashTransformer(Transformer):
         return [conditional_block], component_count
 
 
+def _extract_error_context(config_text: str, line: int, column: int, context_lines: int = 3) -> str:
+    """Extract the code context around an error location.
+    
+    Args:
+        config_text: The full config text
+        line: Line number where error occurred (1-indexed)
+        column: Column number where error occurred (1-indexed)
+        context_lines: Number of lines to show before and after the error
+    
+    Returns:
+        Formatted string showing the error context with a pointer
+    """
+    lines = config_text.split('\n')
+    
+    # Calculate the range of lines to show
+    start_line = max(0, line - context_lines - 1)
+    end_line = min(len(lines), line + context_lines)
+    
+    # Build the context string
+    context_parts = []
+    context_parts.append("\n" + "="*60)
+    context_parts.append("PROBLEMATIC CODE:")
+    context_parts.append("="*60)
+    
+    for i in range(start_line, end_line):
+        line_num = i + 1
+        line_content = lines[i]
+        
+        # Mark the error line with an arrow
+        if line_num == line:
+            context_parts.append(f">>> {line_num:4d} | {line_content}")
+            # Add a pointer to the exact column
+            if column > 0:
+                pointer = " " * (len(f">>> {line_num:4d} | ") + column - 1) + "^"
+                context_parts.append(pointer)
+        else:
+            context_parts.append(f"    {line_num:4d} | {line_content}")
+    
+    context_parts.append("="*60)
+    return "\n".join(context_parts)
+
+
 def parse_logstash_config(config_text: str) -> List[Dict[str, Any]]:
     """Parse Logstash config text into a structured format."""
     parser = Lark(LOGSTASH_GRAMMAR, parser='lalr', transformer=LogstashTransformer())
     try:
         return parser.parse(config_text)
+    except UnexpectedToken as e:
+        # Extract detailed error information
+        error_line = e.line
+        error_column = e.column
+        
+        # Get the code context
+        context = _extract_error_context(config_text, error_line, error_column)
+        
+        # Build a detailed error message
+        error_msg = f"Failed to parse Logstash config at line {error_line}, column {error_column}\n"
+        error_msg += f"Unexpected token: {e.token}\n"
+        error_msg += f"Expected one of: {', '.join(e.expected)}\n"
+        error_msg += context
+        
+        raise ValueError(error_msg)
+    except UnexpectedCharacters as e:
+        # Extract detailed error information
+        error_line = e.line
+        error_column = e.column
+        
+        # Get the code context
+        context = _extract_error_context(config_text, error_line, error_column)
+        
+        # Build a detailed error message
+        error_msg = f"Failed to parse Logstash config at line {error_line}, column {error_column}\n"
+        error_msg += f"Unexpected character(s): {config_text[e.pos_in_stream:e.pos_in_stream+10]}\n"
+        error_msg += f"Expected one of: {', '.join(e.allowed)}\n"
+        error_msg += context
+        
+        raise ValueError(error_msg)
     except Exception as e:
+        # Fallback for other errors
         raise ValueError(f"Failed to parse Logstash config: {str(e)}")
 
 
