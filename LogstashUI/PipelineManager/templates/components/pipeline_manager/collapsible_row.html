@@ -1,33 +1,88 @@
-<td colspan=4">
-    <table>
-        <thead>
-            <th>Pipeline Name</th>
-            <th>InlineEditor</th>
-            <th>GraphEditor</th>
-        </thead>
-        <tbody>
-            {% for pipeline in pipelines %}
-            <tr>
-                <td>
-                    <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">{{ pipeline.name }}</a>
-                </td>
-                <td>
-                    <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">Inline</a>
-                </td>
-                <td>
-                    <a href="/PipelineManager/Pipelines/Graph/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}">Graph</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+
+<td colspan=4>
+    <div class="mb-2">
+        <button onclick="document.getElementById('createPipelineModal').showModal()" class="btn btn-primary btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Create Pipeline
+        </button>
+    </div>
+    <div id="pipelineList">
+        <table class="w-full">
+            <thead>
+                <th class="text-left">Pipeline Name</th>
+            </thead>
+            <tbody>
+                {% for pipeline in pipelines %}
+                <tr>
+                    <td>
+                        <a href="/PipelineManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
+                    </td>
+                    <td class="text-right">
+                        <div class="action-menu relative">
+                            <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                            </button>
+                            <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                                <div class="px-1 py-1">
+                                    <button hx-post="/API/DeletePipeline/"
+                                       hx-confirm="Are you sure you want to delete this pipeline?"
+                                       hx-vals='{"es_id": "{{ pipeline.es_id }}", "pipeline": "{{ pipeline.name }}"}'
+                                       hx-on::after-request="htmx.ajax('GET', '/API/GetPipelines/{{ es_id }}/', {target: '#pipelines-{{ es_id }}', swap: 'innerHTML'})"
+                                       class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
+                                       role="menuitem"
+                                       type="button">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Create Pipeline Modal -->
+    <dialog id="createPipelineModal" class="modal backdrop-brightness-10">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4">Create New Pipeline</h3>
+            <form hx-post="/API/CreatePipeline/" hx-target="#pipelineList" hx-swap="innerHTML">
+                {% csrf_token %}
+                <div class="form-control w-full">
+                    <label class="label">
+                        <span class="label-text">Pipeline Name</span>
+                    </label>
+                    <input type="text" 
+                           name="pipeline" 
+                           class="input input-bordered w-full" 
+                           required
+                           pattern="^[a-zA-Z0-9_-]+$"
+                           title="Only letters, numbers, underscores and hyphens are allowed">
+                    <input type="hidden" name="es_id" value="{{ es_id }}">
+                </div>
+                <div class="modal-action">
+                    <button type="button" onclick="document.getElementById('createPipelineModal').close()" class="btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Pipeline</button>
+                </div>
+            </form>
+        </div>
+
+    </dialog>
 </td>
 
-
-<td colspan=2 style="overflow-x: auto;">
-    <table style="display: block; max-width: 100%;">
+<td colspan=2 class="overflow-x-auto">
+    <table class="w-full">
         <thead>
-            <th>Instance</th>
+            <th class="text-left">Instances</th>
         </thead>
         <tbody>
             {% for node in instances %}
@@ -38,3 +93,50 @@
         </tbody>
     </table>
 </td>
+
+<script>
+    document.body.addEventListener('htmx:configRequest', function(event) {
+        event.detail.headers['X-CSRFToken'] = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    });
+
+    // Handle action menu (3-dot icon) functionality
+    document.addEventListener('click', function(e) {
+        // Close all open action menus when clicking anywhere
+        if (!e.target.closest('.action-menu')) {
+            document.querySelectorAll('.action-menu-items').forEach(menu => {
+                menu.classList.add('hidden');
+            });
+        }
+    });
+
+    // Toggle action menu when clicking the 3-dot icon
+    document.querySelectorAll('.action-menu-button').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const menu = this.nextElementSibling;
+            const isHidden = menu.classList.contains('hidden');
+            
+            // Close all other open menus
+            document.querySelectorAll('.action-menu-items').forEach(m => {
+                if (m !== menu) m.classList.add('hidden');
+            });
+            
+            // Position the menu at the cursor
+            if (isHidden) {
+                const rect = this.getBoundingClientRect();
+                menu.style.left = `${e.clientX}px`;
+                menu.style.top = `${e.clientY}px`;
+            }
+            
+            // Toggle current menu
+            menu.classList.toggle('hidden', !isHidden);
+        });
+    });
+    
+    // Close menu when scrolling
+    window.addEventListener('scroll', function() {
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }, true);
+</script>

@@ -1,7 +1,7 @@
 
 # Django
 from django.shortcuts import render, HttpResponse
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseRedirect
 
 ## Tables
 from Core.models import Connection as ConnectionTable
@@ -256,6 +256,7 @@ def GetPipelines(request, connection_id):
         # --- Gets our pipelines from the connection
         es = get_elastic_connection(connection.id)
         pipelines = es.logstash.get_pipeline()
+
         for pipeline in pipelines:
             logstash_pipelines.append(
                 {
@@ -271,6 +272,7 @@ def GetPipelines(request, connection_id):
 
 
     context['pipelines'] = logstash_pipelines
+    context['es_id'] = connection.id
     # --- Gets monitoring data from the connection
     context['instances'] = logstash_metrics.get_instances_centralized(es)
 
@@ -355,3 +357,48 @@ def UpdatePipelineSettings(request):
             return HttpResponse(str(e), status=500)
     
     return HttpResponse('Invalid request method', status=405)
+
+
+def CreatePipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        pipeline_name = request.POST.get("pipeline")
+
+        print(es_id, pipeline_name)
+
+        es = get_elastic_connection(es_id)
+        pipeline_doc = es.logstash.put_pipeline(
+            id=pipeline_name,
+            body={
+                "pipeline": "input {}\nfilter {}\noutput {}",
+                "last_modified": "2025-10-24T01:30:23.364Z",
+                "pipeline_metadata": {
+                    "version": 1,
+                    "type": "logstash_pipeline"
+                },
+                "username": "LogstashUI",
+                "pipeline_settings": {
+                    "pipeline.batch.delay": 50,
+                    "pipeline.batch.size": 125,
+                    "pipeline.workers": 1,
+                    "queue.checkpoint.writes": 1024,
+                    "queue.max_bytes": "1gb",
+                    "queue.type": "memory"
+                },
+                "description": ""
+            }
+        )
+        response = HttpResponse("Pipeline created successfully!")
+        response['HX-Redirect'] = f'/PipelineManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
+        return response
+
+
+def DeletePipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        pipeline_name = request.POST.get("pipeline")
+
+        es = get_elastic_connection(es_id)
+        es.logstash.delete_pipeline(id=pipeline_name)
+
+        return HttpResponse("Pipeline deleted successfully!")

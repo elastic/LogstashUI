@@ -13,5 +13,8 @@ urlpatterns = [
     path("GetDiff/", views.GetDiff, name="GetDiff"),
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
     path("SimulatePipeline/", views.SimulatePipeline, name="SimulatePipeline"),
-    path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings")
+    path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
+    path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),
+    path("DeletePipeline/", views.DeletePipeline, name="DeletePipeline"),
+
 ]
