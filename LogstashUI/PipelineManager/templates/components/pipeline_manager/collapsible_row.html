@@ -57,7 +57,7 @@
             <h3 class="font-bold text-lg mb-4">Create New Pipeline</h3>
             <form hx-post="/API/CreatePipeline/" hx-target="#pipelineList" hx-swap="innerHTML">
                 {% csrf_token %}
-                <div class="form-control w-full">
+                <div class="form-control w-full mb-4">
                     <label class="label">
                         <span class="label-text">Pipeline Name</span>
                     </label>
@@ -67,6 +67,17 @@
                            required
                            pattern="^[a-zA-Z0-9_-]+$"
                            title="Only letters, numbers, underscores and hyphens are allowed">
+                </div>
+                <div class="form-control w-full">
+                    <label class="label">
+                        <span class="label-text">Pipeline Config (Optional)</span>
+                    </label>
+                    <textarea name="pipeline_config" 
+                              class="textarea textarea-bordered w-full h-32 font-mono text-sm" 
+                              placeholder="input {&#10;  # your input config&#10;}&#10;filter {&#10;  # your filter config&#10;}&#10;output {&#10;  # your output config&#10;}"></textarea>
+                    <label class="label">
+                        <span class="label-text-alt">Import an existing Logstash pipeline configuration</span>
+                    </label>
                     <input type="hidden" name="es_id" value="{{ es_id }}">
                 </div>
                 <div class="modal-action">

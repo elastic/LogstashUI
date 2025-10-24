@@ -363,15 +363,20 @@ def CreatePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
         pipeline_name = request.POST.get("pipeline")
+        pipeline_config = request.POST.get("pipeline_config", "").strip()
 
-        print(es_id, pipeline_name)
+        # Use provided config or default empty config
+        if pipeline_config:
+            pipeline_content = pipeline_config
+        else:
+            pipeline_content = "input {}\nfilter {}\noutput {}"
 
         es = get_elastic_connection(es_id)
         pipeline_doc = es.logstash.put_pipeline(
             id=pipeline_name,
             body={
-                "pipeline": "input {}\nfilter {}\noutput {}",
-                "last_modified": "2025-10-24T01:30:23.364Z",
+                "pipeline": pipeline_content,
+                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
                 "pipeline_metadata": {
                     "version": 1,
                     "type": "logstash_pipeline"
@@ -395,7 +400,6 @@ def CreatePipeline(request):
 
 def DeletePipeline(request):
     if request.method == "POST":
-        es_id = request.POST.get("es_id")
         pipeline_name = request.POST.get("pipeline")
 
         es = get_elastic_connection(es_id)
