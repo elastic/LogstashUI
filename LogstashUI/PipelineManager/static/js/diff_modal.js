@@ -184,25 +184,10 @@ async function viewGeneratedCode() {
     currentDiffMode = 'view';
 
     // Update UI for view mode
-    document.getElementById('diffModalTitle').textContent = 'Generated Pipeline Code';
+    document.getElementById('diffModalTitle').textContent = 'Current Pipeline Code';
     document.getElementById('diffDescription').innerHTML = `
         <div class="flex items-center gap-2">
-            <p class="text-gray-300 text-sm">View the generated Logstash configuration below.</p>
-            <div class="relative group inline-block">
-                <div class="p-1 rounded-full hover:bg-gray-700 transition-colors">
-                    <svg class="w-4 h-4 text-gray-400 hover:text-blue-400 cursor-help transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-                <div class="hidden group-hover:block absolute z-50 w-80 p-4 mt-2 left-0 bg-gray-900 border border-gray-600 rounded-lg shadow-xl text-sm text-gray-300">
-                    <p class="font-semibold text-white mb-2">How this works:</p>
-                    <ul class="list-disc pl-5 space-y-1.5">
-                        <li>If you are using spaces, it will be converted into tabs.</li>
-                        <li>As of right now, comments are removed.</li>
-                        <li>Space is added in the editor to generally keep changes close together.</li>
-                    </ul>
-                </div>
-            </div>
+            <p class="text-gray-300 text-sm">View the current Logstash pipeline configuration from Elasticsearch.</p>
         </div>
     `;
     document.getElementById('confirmSaveButton').classList.add('hidden');
@@ -216,26 +201,24 @@ async function viewGeneratedCode() {
     document.getElementById('diffContainer').classList.add('hidden');
 
     try {
-        // Generate new pipeline code from current components
-        const formData = new FormData();
-        formData.append('components', JSON.stringify(components));
+        // Get es_id and pipeline from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const esId = urlParams.get('es_id');
+        const pipelineName = urlParams.get('pipeline');
 
-        const response = await fetch('/API/GetLogstashCode', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            },
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to generate code');
+        if (!esId || !pipelineName) {
+            throw new Error('Missing pipeline information');
         }
 
-        const html = await response.text();
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        const code = tempDiv.querySelector('code').textContent;
+        // Fetch the current pipeline code from Elasticsearch
+        const response = await fetch(`/API/GetPipeline/?es_id=${esId}&pipeline=${encodeURIComponent(pipelineName)}`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch pipeline code');
+        }
+
+        const data = await response.json();
+        const code = data.code || 'No pipeline code available';
 
         storedNewPipelineCode = code;
 

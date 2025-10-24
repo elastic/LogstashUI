@@ -518,24 +518,24 @@ class ComponentToPipeline:
         # --- Start else if ---
         if condition['config'].get('else_ifs'):
             for plugin in condition['config']['else_ifs']:
-                config += f"else if {plugin['condition']}{{\\n"
+                config += f"else if {plugin['condition']} {{\n"
                 for nested_plugin in plugin['plugins']:
                     if nested_plugin['plugin'] == 'if':
                         config += self._add_tab_level(self._extract_condition_values(nested_plugin, section))
                     else:
                         config += self._add_tab_level(self._extract_plugin_values(nested_plugin, section))
-                config += "}\\n"
+                config += "}\n"
 
         # --- Start else ---
         if condition['config'].get('else') and condition['config']['else'].get('plugins'):
-            config += f"else {{\\n"
+            config += f"else {{\n"
 
             for plugin in condition['config']['else']['plugins']:
                 if plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
                     config += self._add_tab_level(self._extract_plugin_values(plugin, section))
-            config += "}\\n"
+            config += "}\n"
 
         return config
 

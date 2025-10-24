@@ -8,6 +8,123 @@ class EnrichPlugins:
         self.plugins_not_preinstalled = {
             "output": ["Datadog", "Dynatrace", "Syslog"]
         }
+        self.default_plugins = """logstash-codec-avro
+logstash-codec-cef
+logstash-codec-collectd
+logstash-codec-dots
+logstash-codec-edn
+logstash-codec-edn_lines
+logstash-codec-es_bulk
+logstash-codec-fluent
+logstash-codec-graphite
+logstash-codec-json
+logstash-codec-json_lines
+logstash-codec-line
+logstash-codec-msgpack
+logstash-codec-multiline
+logstash-codec-netflow
+logstash-codec-plain
+logstash-codec-rubydebug
+logstash-filter-aggregate
+logstash-filter-anonymize
+logstash-filter-cidr
+logstash-filter-clone
+logstash-filter-csv
+logstash-filter-date
+logstash-filter-de_dot
+logstash-filter-dissect
+logstash-filter-dns
+logstash-filter-drop
+logstash-filter-elastic_integration
+logstash-filter-elasticsearch
+logstash-filter-fingerprint
+logstash-filter-geoip
+logstash-filter-grok
+logstash-filter-http
+logstash-filter-json
+logstash-filter-kv
+logstash-filter-memcached
+logstash-filter-metrics
+logstash-filter-mutate
+logstash-filter-prune
+logstash-filter-ruby
+logstash-filter-sleep
+logstash-filter-split
+logstash-filter-syslog_pri
+logstash-filter-throttle
+logstash-filter-translate
+logstash-filter-truncate
+logstash-filter-urldecode
+logstash-filter-useragent
+logstash-filter-uuid
+logstash-filter-xml
+logstash-input-azure_event_hubs
+logstash-input-beats
+ └── logstash-input-elastic_agent (alias)
+logstash-input-couchdb_changes
+logstash-input-dead_letter_queue
+logstash-input-elastic_serverless_forwarder
+logstash-input-elasticsearch
+logstash-input-exec
+logstash-input-file
+logstash-input-ganglia
+logstash-input-gelf
+logstash-input-generator
+logstash-input-graphite
+logstash-input-heartbeat
+logstash-input-http
+logstash-input-http_poller
+logstash-input-jms
+logstash-input-pipe
+logstash-input-redis
+logstash-input-stdin
+logstash-input-syslog
+logstash-input-tcp
+logstash-input-twitter
+logstash-input-udp
+logstash-input-unix
+logstash-integration-aws
+ ├── logstash-codec-cloudfront
+ ├── logstash-codec-cloudtrail
+ ├── logstash-input-cloudwatch
+ ├── logstash-input-s3
+ ├── logstash-input-sqs
+ ├── logstash-output-cloudwatch
+ ├── logstash-output-s3
+ ├── logstash-output-sns
+ └── logstash-output-sqs
+logstash-integration-jdbc
+ ├── logstash-input-jdbc
+ ├── logstash-filter-jdbc_streaming
+ └── logstash-filter-jdbc_static
+logstash-integration-kafka
+ ├── logstash-input-kafka
+ └── logstash-output-kafka
+logstash-integration-logstash
+ ├── logstash-input-logstash
+ └── logstash-output-logstash
+logstash-integration-rabbitmq
+ ├── logstash-input-rabbitmq
+ └── logstash-output-rabbitmq
+logstash-integration-snmp
+ ├── logstash-input-snmp
+ └── logstash-input-snmptrap
+logstash-output-csv
+logstash-output-elasticsearch
+logstash-output-email
+logstash-output-file
+logstash-output-graphite
+logstash-output-http
+logstash-output-lumberjack
+logstash-output-nagios
+logstash-output-null
+logstash-output-pipe
+logstash-output-redis
+logstash-output-stdout
+logstash-output-tcp
+logstash-output-udp
+logstash-output-webhdfs
+logstash-patterns-core""".split('\n')
 
     def get_plugin_params(self, table_data, plugin_name, plugin_type):
         soup = BeautifulSoup(table_data, 'html.parser')

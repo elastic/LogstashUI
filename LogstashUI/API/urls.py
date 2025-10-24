@@ -9,12 +9,13 @@ urlpatterns = [
     path("GetPipelines/<int:connection_id>/", views.GetPipelines, name="GetPipelines"),
 
 
-    path("GetLogstashCode", views.GetLogstashCode, name="GetLogstashCode"),
+    path("GetCurrentPipelineCode/", views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", views.GetDiff, name="GetDiff"),
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
     path("SimulatePipeline/", views.SimulatePipeline, name="SimulatePipeline"),
+
     path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
     path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),
     path("DeletePipeline/", views.DeletePipeline, name="DeletePipeline"),
-
+    path("GetPipeline/", views.GetPipeline, name="GetPipeline")
 ]

@@ -73,7 +73,7 @@ def DeleteConnection(request, connection_id=None):
 
     return HttpResponse("Connection deleted successfully!")
 
-def GetLogstashCode(request, components={}):
+def GetCurrentPipelineCode(request, components={}):
 
     if not components:
         data = json.loads(request.POST.get("components"))
@@ -407,3 +407,23 @@ def DeletePipeline(request):
         es.logstash.delete_pipeline(id=pipeline_name)
 
         return HttpResponse("Pipeline deleted successfully!")
+
+
+def GetLogstashPipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        pipeline_name = request.POST.get("pipeline")
+
+        es = get_elastic_connection(es_id)
+        pipeline_doc = es.logstash.get_pipeline(id=pipeline_name)
+
+        return HttpResponse(pipeline_doc)
+
+def GetPipeline(request):
+    if request.method == "GET":
+        es_id = request.GET.get("es_id")
+        pipeline_name = request.GET.get("pipeline")
+
+        pipeline_string = get_logstash_pipeline(es_id, pipeline_name)['pipeline']
+
+        return JsonResponse({"code": pipeline_string})

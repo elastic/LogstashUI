@@ -18,13 +18,43 @@
       </div>
     </div>
     <div class="p-4 flex-1 overflow-auto">
-      <pre id="codeContent" class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code id="pipelineCode" class="language-ruby">Click "View Code" to generate the Logstash configuration</code></pre>
+      <pre id="codeContent" class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code id="pipelineCode" class="language-ruby">Click "View Code" to load the Logstash configuration</code></pre>
     </div>
   </div>
 </div>
 
 
 <script>
+function showCodeModal() {
+  const codeElement = document.querySelector('#codeContent code');
+  const modal = document.getElementById('codeModal');
+  
+  // Show loading state
+  codeElement.textContent = 'Loading pipeline code...';
+  modal.classList.remove('hidden');
+  
+  // Fetch the pipeline code
+  fetch('/API/GetCurrentPipelineCode')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      codeElement.textContent = data.code || 'No pipeline code available';
+      // Re-run syntax highlighting if you're using a highlighter like Prism or Highlight.js
+      if (window.Prism) {
+        Prism.highlightElement(codeElement);
+      }
+    })
+    .catch(error => {
+      console.error('Error fetching pipeline code:', error);
+      codeElement.textContent = 'Error loading pipeline code. Please try again.';
+      codeElement.classList.add('text-red-400');
+    });
+}
+
 function hideCodeModal() {
   document.getElementById('codeModal').classList.add('hidden');
 }
