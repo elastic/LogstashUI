@@ -2,6 +2,14 @@
 let newlyAddedPluginId = null;
 let pendingAnimationPluginId = null; // Plugin waiting for config modal to close
 
+// Move mode state
+let moveMode = {
+    active: false,
+    componentId: null,
+    componentType: null,
+    sourceLocation: null // {type, index, parentId, blockType, elseIfIndex}
+};
+
 function createInsertionPoint(type, index = 0, isConditional = false, parentId = null) {
     const insertionPoint = document.createElement('div');
     insertionPoint.className = 'insertion-point';
@@ -227,12 +235,12 @@ function formatConfigValue(value, key) {
         if (codecNames.length > 0) {
             const codecName = codecNames[0];
             const codecConfig = value[codecName];
-            
+
             // If codec has no config, just show the name
             if (!codecConfig || Object.keys(codecConfig).length === 0) {
                 return `"${codecName}"`;
             }
-            
+
             // If codec has config, show name with config summary
             const configCount = Object.keys(codecConfig).length;
             return `"${codecName}" (${configCount} setting${configCount > 1 ? 's' : ''})`;
@@ -319,6 +327,11 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     }
 
     el.innerHTML = `
+<button class="move-handle" data-component-id="${component.id}" title="Click to move this component">
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+  </svg>
+</button>
 <div class="flex justify-between items-start">
   <div class="flex-1">
     <div class="flex items-center">
@@ -391,6 +404,18 @@ function createConditionalBlockElement(component, depth = 0) {
 // Create the container with border
     const container = document.createElement('div');
     container.className = 'border-l-4 border-yellow-500 pl-3';
+
+// Create move handle for conditional block
+    const moveHandle = document.createElement('button');
+    moveHandle.className = 'move-handle';
+    moveHandle.setAttribute('data-component-id', component.id);
+    moveHandle.title = 'Click to move this condition';
+    moveHandle.innerHTML = `
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+  </svg>
+`;
+    el.appendChild(moveHandle);
 
 // Create header section
     const header = document.createElement('div');
@@ -489,20 +514,30 @@ function createConditionalBlockElement(component, depth = 0) {
 
             const conditionId = `condition-${component.id}-${elseIfIndex}`;
             const elseIfHeader = document.createElement('div');
-            elseIfHeader.className = 'flex items-center group-elseif-condition';
+            elseIfHeader.className = 'flex items-center justify-between group-elseif-condition';
             elseIfHeader.innerHTML = `
-    <span class="font-medium text-yellow-300">else if</span>
-    <div class="flex items-center ml-2">
-      <span id="${conditionId}" class="text-xs text-gray-400 condition-text">${elseIf.condition || ''}</span>
-      <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition" 
-              data-component-id="${component.id}" 
-              data-elseif-index="${elseIfIndex}"
-              data-condition-id="${conditionId}">
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-        </svg>
-      </button>
+    <div class="flex items-center">
+      <span class="font-medium text-yellow-300">else if</span>
+      <div class="flex items-center ml-2">
+        <span id="${conditionId}" class="text-xs text-gray-400 condition-text">${elseIf.condition || ''}</span>
+        <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition" 
+                data-component-id="${component.id}" 
+                data-elseif-index="${elseIfIndex}"
+                data-condition-id="${conditionId}">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+      </div>
     </div>
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-elseif-btn" 
+            data-component-id="${component.id}" 
+            data-elseif-index="${elseIfIndex}"
+            title="Remove else-if block">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    </button>
   `;
             elseIfBlock.appendChild(elseIfHeader);
 
@@ -538,8 +573,17 @@ function createConditionalBlockElement(component, depth = 0) {
         elseBlock.className = 'mt-2';
 
         const elseHeader = document.createElement('div');
-        elseHeader.className = 'flex items-center';
-        elseHeader.innerHTML = '<span class="font-medium text-yellow-300">else</span>';
+        elseHeader.className = 'flex items-center justify-between group';
+        elseHeader.innerHTML = `
+    <span class="font-medium text-yellow-300">else</span>
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-else-btn" 
+            data-component-id="${component.id}"
+            title="Remove else block">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    </button>
+  `;
         elseBlock.appendChild(elseHeader);
 
         const elsePluginsContainer = document.createElement('div');
@@ -929,6 +973,37 @@ document.addEventListener('DOMContentLoaded', function () {
             addElseIfToConditional(componentId);
         } else if (action === 'add-else') {
             addElseToConditional(componentId);
+        }
+    });
+
+    // Add event listener for delete else-if buttons
+    document.addEventListener('click', function (event) {
+        const deleteBtn = event.target.closest('.delete-elseif-btn');
+        if (deleteBtn) {
+            event.stopPropagation();
+            event.preventDefault();
+            
+            const componentId = deleteBtn.getAttribute('data-component-id');
+            const elseIfIndex = parseInt(deleteBtn.getAttribute('data-elseif-index'), 10);
+            
+            if (componentId && !isNaN(elseIfIndex)) {
+                deleteElseIfBlock(componentId, elseIfIndex);
+            }
+        }
+    });
+
+    // Add event listener for delete else button
+    document.addEventListener('click', function (event) {
+        const deleteBtn = event.target.closest('.delete-else-btn');
+        if (deleteBtn) {
+            event.stopPropagation();
+            event.preventDefault();
+            
+            const componentId = deleteBtn.getAttribute('data-component-id');
+            
+            if (componentId) {
+                deleteElseBlock(componentId);
+            }
         }
     });
 });
@@ -1422,4 +1497,53 @@ function addElseToConditional(componentId) {
         originalHide.call(PluginModal);
         PluginModal.hide = originalHide; // Restore original hide function
     };
+}
+
+
+// Function to delete an else-if block
+function deleteElseIfBlock(componentId, elseIfIndex) {
+    if (!confirm('Are you sure you want to remove this else-if block and all its plugins?')) {
+        return;
+    }
+
+    const component = findComponentById(componentId);
+    if (!component || component.plugin !== 'if') {
+        console.error('Component not found or not a conditional:', componentId);
+        return;
+    }
+
+    if (!component.config.else_ifs || !component.config.else_ifs[elseIfIndex]) {
+        console.error('else-if block not found at index:', elseIfIndex);
+        return;
+    }
+
+    // Remove the else-if block
+    component.config.else_ifs.splice(elseIfIndex, 1);
+
+    // Refresh the UI
+    loadExistingComponents();
+}
+
+// Function to delete an else block
+function deleteElseBlock(componentId) {
+    if (!confirm('Are you sure you want to remove this else block and all its plugins?')) {
+        return;
+    }
+
+    const component = findComponentById(componentId);
+    if (!component || component.plugin !== 'if') {
+        console.error('Component not found or not a conditional:', componentId);
+        return;
+    }
+
+    if (!component.config.else) {
+        console.error('else block not found');
+        return;
+    }
+
+    // Remove the else block
+    delete component.config.else;
+
+    // Refresh the UI
+    loadExistingComponents();
 }

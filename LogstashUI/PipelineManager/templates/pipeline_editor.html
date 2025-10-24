@@ -6,448 +6,465 @@
 {% load static %}
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
 <script src="{% static 'js/pipeline_settings.js' %}"></script>
-
+<script src="{% static 'js/move_mode.js' %}"></script>
+<link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
 <style>
-  .insertion-point {
-    position: relative;
-    height: 16px;
-    margin: 1px 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-
-  .component-container:hover > .insertion-point,
-  .insertion-point:hover {
-    opacity: 1;
-  }
-
-  .insertion-buttons {
-    display: flex;
-    position: absolute;
-    z-index: 10;
-    background: #374151;
-    border-radius: 3px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    padding: 2px;
-    gap: 2px;
-    opacity: 0;
-    transform: translateY(-2px);
-    transition: all 0.15s ease;
-  }
-
-  .insertion-point:hover .insertion-buttons {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .insertion-point:hover .insertion-buttons {
-    display: flex;
-  }
-
-  .insertion-button {
-    padding: 2px 6px;
-    border: none;
-    border-radius: 3px;
-    font-size: 11px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-    height: 20px;
-  }
-
-  .insertion-button.add-plugin {
-    background-color: #3b82f6;
-    color: white;
-  }
-
-  .insertion-button.add-condition {
-    background-color: #f59e0b;
-    color: white;
-  }
-
-  .insertion-button:hover {
-    opacity: 0.9;
-  }
-
-  .component-container {
-    position: relative;
-  }
-
-  .component-container:hover .insertion-point {
-    display: flex;
-  }
-
-  .empty-section .insertion-point {
-    display: flex !important;
-  }
-
-  .empty-section .insertion-buttons {
-    position: static;
-    display: flex !important;
-    box-shadow: none;
-    background: transparent;
-    padding: 0;
-    margin-top: 8px;
-  }
-
-  /* Always visible insertion points (for end of sections and empty blocks) */
-  .insertion-point.always-visible {
-    opacity: 1;
-    display: flex !important;
-  }
-
-  .insertion-point.always-visible .insertion-buttons {
-    position: static;
-    opacity: 1;
-    transform: translateY(0);
-    display: flex;
-    margin-top: 4px;
-  }
-
-  /* Newly added plugin animation */
-  @keyframes glowPulse {
-    0% {
-      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
-      border-color: rgba(59, 130, 246, 0.8);
+    .insertion-point {
+        position: relative;
+        height: 16px;
+        margin: 1px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.15s ease;
     }
-    50% {
-      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.3);
-      border-color: rgba(59, 130, 246, 1);
-    }
-    100% {
-      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(59, 130, 246, 0);
-      border-color: transparent;
-    }
-  }
 
-  .newly-added {
-    animation: glowPulse 2s ease-out;
-    border: 2px solid rgba(59, 130, 246, 0.8);
-    scroll-margin-top: 100px;
-  }
-
-  .newly-added::before {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    border-radius: inherit;
-    background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
-    z-index: -1;
-    opacity: 0;
-    animation: fadeOut 2s ease-out;
-  }
-
-  @keyframes fadeOut {
-    0% {
-      opacity: 1;
+    .component-container:hover > .insertion-point,
+    .insertion-point:hover {
+        opacity: 1;
     }
-    100% {
-      opacity: 0;
+
+    .insertion-buttons {
+        display: flex;
+        position: absolute;
+        z-index: 10;
+        background: #374151;
+        border-radius: 3px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        padding: 2px;
+        gap: 2px;
+        opacity: 0;
+        transform: translateY(-2px);
+        transition: all 0.15s ease;
     }
-  }
+
+    .insertion-point:hover .insertion-buttons {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .insertion-point:hover .insertion-buttons {
+        display: flex;
+    }
+
+    .insertion-button {
+        padding: 2px 6px;
+        border: none;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        height: 20px;
+    }
+
+    .insertion-button.add-plugin {
+        background-color: #3b82f6;
+        color: white;
+    }
+
+    .insertion-button.add-condition {
+        background-color: #f59e0b;
+        color: white;
+    }
+
+    .insertion-button:hover {
+        opacity: 0.9;
+    }
+
+    .component-container {
+        position: relative;
+    }
+
+    .component-container:hover .insertion-point {
+        display: flex;
+    }
+
+    .empty-section .insertion-point {
+        display: flex !important;
+    }
+
+    .empty-section .insertion-buttons {
+        position: static;
+        display: flex !important;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
+        margin-top: 8px;
+    }
+
+    /* Always visible insertion points (for end of sections and empty blocks) */
+    .insertion-point.always-visible {
+        opacity: 1;
+        display: flex !important;
+    }
+
+    .insertion-point.always-visible .insertion-buttons {
+        position: static;
+        opacity: 1;
+        transform: translateY(0);
+        display: flex;
+        margin-top: 4px;
+    }
+
+    /* Newly added plugin animation */
+    @keyframes glowPulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
+            border-color: rgba(59, 130, 246, 0.8);
+        }
+        50% {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.3);
+            border-color: rgba(59, 130, 246, 1);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(59, 130, 246, 0);
+            border-color: transparent;
+        }
+    }
+
+    .newly-added {
+        animation: glowPulse 2s ease-out;
+        border: 2px solid rgba(59, 130, 246, 0.8);
+        scroll-margin-top: 100px;
+    }
+
+    .newly-added::before {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        border-radius: inherit;
+        background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+        z-index: -1;
+        opacity: 0;
+        animation: fadeOut 2s ease-out;
+    }
+
+    @keyframes fadeOut {
+        0% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
-    <div class="flex space-x-4">
-      <form>
-        {% csrf_token %}
-        <button type="button"
-            id="viewCode"
-            class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-            onclick="viewGeneratedCode()">
-          View Code
-        </button>
-        <button
-          type="button"
-          onclick="document.getElementById('simulationModal').classList.remove('hidden')"
-          class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
-          Simulate Pipeline
-        </button>
-        <button type="button"
-                id="savePipeline"
-                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                hx-post="/API/SavePipeline/"
-                hx-include="#pipelineForm"
-                hx-trigger="none"
-                hx-target="#saveStatus"
-                hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
-                onclick="prepareDiffModal()">
-          Save Pipeline
-          <!---TODO: Find a way to validate that the pipeline won't fail before allowing a submit / overwrite --->
-          <!---TODO: Find a way to include logs for the respective logstash instances--->
-        </button>
-        <span id="saveStatus" class="ml-2"></span>
-      </form>
-    </div>
-  </div>
-
-  <!-- Pipeline Settings Collapsible Section -->
-  <div class="mb-6">
-    <div class="bg-gray-800 rounded-lg overflow-hidden">
-      <!-- Collapsible Header -->
-      <button 
-        id="pipelineSettingsToggle"
-        class="w-full flex items-center justify-between p-4 text-white hover:bg-gray-700 transition-colors"
-        onclick="togglePipelineSettings()">
-        <div class="flex items-center">
-          <svg id="toggleIcon" class="w-5 h-5 mr-2 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-          <h2 class="text-lg font-semibold">Pipeline Settings</h2>
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
+        <div class="flex space-x-4">
+            <form>
+                {% csrf_token %}
+                <button type="button"
+                        id="viewCode"
+                        class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+                        onclick="viewGeneratedCode()">
+                    View Code
+                </button>
+                <button
+                        type="button"
+                        onclick="document.getElementById('simulationModal').classList.remove('hidden')"
+                        class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
+                    Simulate Pipeline
+                </button>
+                <button type="button"
+                        id="savePipeline"
+                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        hx-post="/API/SavePipeline/"
+                        hx-include="#pipelineForm"
+                        hx-trigger="none"
+                        hx-target="#saveStatus"
+                        hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
+                        onclick="prepareDiffModal()">
+                    Save Pipeline
+                    <!---TODO: Find a way to validate that the pipeline won't fail before allowing a submit / overwrite --->
+                    <!---TODO: Find a way to include logs for the respective logstash instances--->
+                </button>
+                <span id="saveStatus" class="ml-2"></span>
+            </form>
         </div>
-        <span class="text-sm text-gray-400">Configure pipeline parameters</span>
-      </button>
-      
-      <!-- Collapsible Content -->
-      <div id="pipelineSettingsContent" class="hidden border-t border-gray-700">
-        <form id="pipelineSettingsForm" class="p-6 space-y-6">
-          {% csrf_token %}
-          <input type="hidden" name="es_id" id="hiddenEsId" value="">
-          <input type="hidden" name="pipeline" id="hiddenPipelineName" value="">
-          <!-- Description -->
-          <div>
-            <label for="pipelineDescription" class="block text-sm font-medium text-gray-300 mb-2">
-              Description
-            </label>
-            <input 
-              type="text" 
-              id="pipelineDescription" 
-              name="description"
-              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter pipeline description"
-              value="{{ pipeline_settings.description|default:'' }}">
-          </div>
+    </div>
 
-          <!-- Grid Layout for Settings -->
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
-            <!-- Pipeline Workers -->
-            <div class="pb-2">
-              <label for="pipelineWorkers" class="block text-sm font-medium text-gray-300 mb-2">
-                Pipeline Workers
-              </label>
-              <input 
-                type="number" 
-                id="pipelineWorkers" 
-                name="pipeline_workers"
-                min="1"
-                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Number of workers"
-                value="{{ pipeline_settings.pipeline_workers|default:1 }}">
-            </div>
-
-            <!-- Pipeline Batch Size -->
-            <div class="pb-2">
-              <label for="pipelineBatchSize" class="block text-sm font-medium text-gray-300 mb-2">
-                Pipeline Batch Size
-              </label>
-              <input 
-                type="number" 
-                id="pipelineBatchSize" 
-                name="pipeline_batch_size"
-                min="1"
-                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Batch size"
-                value="{{ pipeline_settings.pipeline_batch_size|default:128 }}">
-            </div>
-
-            <!-- Pipeline Batch Delay -->
-            <div class="pb-2">
-              <label for="pipelineBatchDelay" class="block text-sm font-medium text-gray-300 mb-2">
-                Pipeline Batch Delay (ms)
-              </label>
-              <input 
-                type="number" 
-                id="pipelineBatchDelay" 
-                name="pipeline_batch_delay"
-                min="0"
-                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Delay in milliseconds"
-                value="{{ pipeline_settings.pipeline_batch_delay|default:50 }}">
-            </div>
-
-            <!-- Queue Type -->
-            <div class="pb-2">
-              <label for="queueType" class="block text-sm font-medium text-gray-300 mb-2">
-                Queue Type
-              </label>
-              <select 
-                id="queueType" 
-                name="queue_type"
-                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                <option value="">Select queue type</option>
-                <option value="memory" {% if pipeline_settings.queue_type == 'memory' %}selected{% endif %}>Memory</option>
-                <option value="persisted" {% if pipeline_settings.queue_type == 'persisted' %}selected{% endif %}>Persisted</option>
-              </select>
-            </div>
-
-            <!-- Queue Max Bytes -->
-            <div class="pb-2">
-              <label for="queueMaxBytes" class="block text-sm font-medium text-gray-300 mb-2">
-                Queue Max Bytes
-              </label>
-              <div class="flex gap-2">
-                <input 
-                  type="number" 
-                  id="queueMaxBytes" 
-                  name="queue_max_bytes"
-                  min="0"
-                  class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Max bytes"
-                  value="{{ pipeline_settings.queue_max_bytes|slice:':-2'|default:1 }}">
-                <select 
-                  id="queueMaxBytesUnit" 
-                  name="queue_max_bytes_unit"
-                  class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  <option value="bytes">Bytes</option>
-                  <option value="kilobytes">KB</option>
-                  <option value="megabytes">MB</option>
-                  <option value="gigabytes" selected>GB</option>
-                  <option value="terabytes">TB</option>
-                  <option value="petabytes">PB</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Queue Checkpoint Writes -->
-            <div class="pb-2">
-              <label for="queueCheckpointWrites" class="block text-sm font-medium text-gray-300 mb-2">
-                Queue Checkpoint Writes
-              </label>
-              <input 
-                type="number" 
-                id="queueCheckpointWrites" 
-                name="queue_checkpoint_writes"
-                min="1"
-                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Checkpoint writes"
-                value="{{ pipeline_settings.queue_checkpoint_writes|default:1024 }}">
-            </div>
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="flex justify-end pt-4 border-t border-gray-700">
-            <button 
-              type="submit"
-              id="applySettingsBtn"
-              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              Apply Settings
+    <!-- Pipeline Settings Collapsible Section -->
+    <div class="mb-6">
+        <div class="bg-gray-800 rounded-lg overflow-hidden">
+            <!-- Collapsible Header -->
+            <button
+                    id="pipelineSettingsToggle"
+                    class="w-full flex items-center justify-between p-4 text-white hover:bg-gray-700 transition-colors"
+                    onclick="togglePipelineSettings()">
+                <div class="flex items-center">
+                    <svg id="toggleIcon" class="w-5 h-5 mr-2 transform transition-transform" fill="none"
+                         stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <h2 class="text-lg font-semibold">Pipeline Settings</h2>
+                </div>
+                <span class="text-sm text-gray-400">Configure pipeline parameters</span>
             </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
 
-  <div class="flex h-[calc(100vh-180px)] gap-4">
-    <!-- Main Content Area -->
-    <div class="flex-1">
-      <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
-        <div id="pipelineCanvas" class="min-h-full space-y-8">
-          <!-- Input Section -->
-          <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
-            <div class="flex items-center mb-4">
-              <div class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-              </div>
-              <div class="ml-6" style="margin-left:10px;">
-                <h2 class="text-xl font-bold text-white">Input</h2>
-                <p class="text-xs text-gray-400">Define data sources and how data enters the pipeline</p>
-              </div>
-            </div>
-            <div id="inputComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="input">
-              <div class="insertion-point">
-                <div class="insertion-buttons">
-                  <button class="insertion-button add-plugin" data-type="input">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Plugin
-                  </button>
-                </div>
-              </div>
-              <p class="text-gray-400 text-center py-8">No input components added</p>
-            </div>
-          </div>
+            <!-- Collapsible Content -->
+            <div id="pipelineSettingsContent" class="hidden border-t border-gray-700">
+                <form id="pipelineSettingsForm" class="p-6 space-y-6">
+                    {% csrf_token %}
+                    <input type="hidden" name="es_id" id="hiddenEsId" value="">
+                    <input type="hidden" name="pipeline" id="hiddenPipelineName" value="">
+                    <!-- Description -->
+                    <div>
+                        <label for="pipelineDescription" class="block text-sm font-medium text-gray-300 mb-2">
+                            Description
+                        </label>
+                        <input
+                                type="text"
+                                id="pipelineDescription"
+                                name="description"
+                                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Enter pipeline description"
+                                value="{{ pipeline_settings.description|default:'' }}">
+                    </div>
 
-          <!-- Filter Section -->
-          <div id="filterSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-purple-600">
-            <div class="flex items-center mb-4">
-              <div class="flex items-center justify-center w-10 h-10 bg-purple-600 rounded-lg">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-              </div>
-              <div class="ml-6">
-                <h2 class="text-xl font-bold text-white">Filter</h2>
-                <p class="text-xs text-gray-400">Transform, enrich, and process data with conditions</p>
-              </div>
-            </div>
-            <div id="filterComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="filter">
-              <div class="insertion-point">
-                <div class="insertion-buttons">
-                  <button class="insertion-button add-plugin" data-type="filter">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Plugin
-                  </button>
-                  <button class="insertion-button add-condition" data-type="filter">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Add Condition
-                  </button>
-                </div>
-              </div>
-              <p class="text-gray-400 text-center py-8">No filter components added</p>
-            </div>
-          </div>
+                    <!-- Grid Layout for Settings -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
+                        <!-- Pipeline Workers -->
+                        <div class="pb-2">
+                            <label for="pipelineWorkers" class="block text-sm font-medium text-gray-300 mb-2">
+                                Pipeline Workers
+                            </label>
+                            <input
+                                    type="number"
+                                    id="pipelineWorkers"
+                                    name="pipeline_workers"
+                                    min="1"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Number of workers"
+                                    value="{{ pipeline_settings.pipeline_workers|default:1 }}">
+                        </div>
 
-          <!-- Output Section -->
-          <div id="outputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500">
-            <div class="flex items-center mb-4">
-              <div class="flex items-center justify-center w-10 h-10 bg-green-600 rounded-lg">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-              </div>
-              <div class="ml-6" style="margin-left:10px;">
-                <h2 class="text-xl font-bold text-white">Output</h2>
-                <p class="text-xs text-gray-400">Send processed data to destinations</p>
-              </div>
+                        <!-- Pipeline Batch Size -->
+                        <div class="pb-2">
+                            <label for="pipelineBatchSize" class="block text-sm font-medium text-gray-300 mb-2">
+                                Pipeline Batch Size
+                            </label>
+                            <input
+                                    type="number"
+                                    id="pipelineBatchSize"
+                                    name="pipeline_batch_size"
+                                    min="1"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Batch size"
+                                    value="{{ pipeline_settings.pipeline_batch_size|default:128 }}">
+                        </div>
+
+                        <!-- Pipeline Batch Delay -->
+                        <div class="pb-2">
+                            <label for="pipelineBatchDelay" class="block text-sm font-medium text-gray-300 mb-2">
+                                Pipeline Batch Delay (ms)
+                            </label>
+                            <input
+                                    type="number"
+                                    id="pipelineBatchDelay"
+                                    name="pipeline_batch_delay"
+                                    min="0"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Delay in milliseconds"
+                                    value="{{ pipeline_settings.pipeline_batch_delay|default:50 }}">
+                        </div>
+
+                        <!-- Queue Type -->
+                        <div class="pb-2">
+                            <label for="queueType" class="block text-sm font-medium text-gray-300 mb-2">
+                                Queue Type
+                            </label>
+                            <select
+                                    id="queueType"
+                                    name="queue_type"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">Select queue type</option>
+                                <option value="memory" {% if pipeline_settings.queue_type == 'memory' %}selected{% endif %}>Memory</option>
+                                <option value="persisted" {% if pipeline_settings.queue_type == 'persisted' %}selected{% endif %}>Persisted</option>
+                            </select>
+                        </div>
+
+                        <!-- Queue Max Bytes -->
+                        <div class="pb-2">
+                            <label for="queueMaxBytes" class="block text-sm font-medium text-gray-300 mb-2">
+                                Queue Max Bytes
+                            </label>
+                            <div class="flex gap-2">
+                                <input
+                                        type="number"
+                                        id="queueMaxBytes"
+                                        name="queue_max_bytes"
+                                        min="0"
+                                        class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Max bytes"
+                                        value="{{ pipeline_settings.queue_max_bytes|slice:':-2'|default:1 }}">
+                                <select
+                                        id="queueMaxBytesUnit"
+                                        name="queue_max_bytes_unit"
+                                        class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="bytes">Bytes</option>
+                                    <option value="kilobytes">KB</option>
+                                    <option value="megabytes">MB</option>
+                                    <option value="gigabytes" selected>GB</option>
+                                    <option value="terabytes">TB</option>
+                                    <option value="petabytes">PB</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Queue Checkpoint Writes -->
+                        <div class="pb-2">
+                            <label for="queueCheckpointWrites" class="block text-sm font-medium text-gray-300 mb-2">
+                                Queue Checkpoint Writes
+                            </label>
+                            <input
+                                    type="number"
+                                    id="queueCheckpointWrites"
+                                    name="queue_checkpoint_writes"
+                                    min="1"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Checkpoint writes"
+                                    value="{{ pipeline_settings.queue_checkpoint_writes|default:1024 }}">
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end pt-4 border-t border-gray-700">
+                        <button
+                                type="submit"
+                                id="applySettingsBtn"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Apply Settings
+                        </button>
+                    </div>
+                </form>
             </div>
-            <div id="outputComponents" class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section" data-type="output">
-              <div class="insertion-point">
-                <div class="insertion-buttons">
-                  <button class="insertion-button add-plugin" data-type="output">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Plugin
-                  </button>
-                  <button class="insertion-button add-condition" data-type="output">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Add Condition
-                  </button>
-                </div>
-              </div>
-              <p class="text-gray-400 text-center py-8">No output components added</p>
-            </div>
-          </div>
         </div>
-      </div>
     </div>
-  </div>
+
+    <div class="flex h-[calc(100vh-180px)] gap-4">
+        <!-- Main Content Area -->
+        <div class="flex-1">
+            <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+                <div id="pipelineCanvas" class="min-h-full space-y-8">
+                    <!-- Input Section -->
+                    <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                </svg>
+                            </div>
+                            <div class="ml-6" style="margin-left:10px;">
+                                <h2 class="text-xl font-bold text-white">Input</h2>
+                                <p class="text-xs text-gray-400">Define data sources and how data enters the
+                                    pipeline</p>
+                            </div>
+                        </div>
+                        <div id="inputComponents"
+                             class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
+                             data-type="input">
+                            <div class="insertion-point">
+                                <div class="insertion-buttons">
+                                    <button class="insertion-button add-plugin" data-type="input">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                        </svg>
+                                        Add Plugin
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-center py-8">No input components added</p>
+                        </div>
+                    </div>
+
+                    <!-- Filter Section -->
+                    <div id="filterSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-purple-600">
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center justify-center w-10 h-10 bg-purple-600 rounded-lg">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                                </svg>
+                            </div>
+                            <div class="ml-6">
+                                <h2 class="text-xl font-bold text-white">Filter</h2>
+                                <p class="text-xs text-gray-400">Transform, enrich, and process data with conditions</p>
+                            </div>
+                        </div>
+                        <div id="filterComponents"
+                             class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
+                             data-type="filter">
+                            <div class="insertion-point">
+                                <div class="insertion-buttons">
+                                    <button class="insertion-button add-plugin" data-type="filter">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                        </svg>
+                                        Add Plugin
+                                    </button>
+                                    <button class="insertion-button add-condition" data-type="filter">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M19 9l-7 7-7-7"/>
+                                        </svg>
+                                        Add Condition
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-center py-8">No filter components added</p>
+                        </div>
+                    </div>
+
+                    <!-- Output Section -->
+                    <div id="outputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500">
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center justify-center w-10 h-10 bg-green-600 rounded-lg">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+                                </svg>
+                            </div>
+                            <div class="ml-6" style="margin-left:10px;">
+                                <h2 class="text-xl font-bold text-white">Output</h2>
+                                <p class="text-xs text-gray-400">Send processed data to destinations</p>
+                            </div>
+                        </div>
+                        <div id="outputComponents"
+                             class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
+                             data-type="output">
+                            <div class="insertion-point">
+                                <div class="insertion-buttons">
+                                    <button class="insertion-button add-plugin" data-type="output">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                        </svg>
+                                        Add Plugin
+                                    </button>
+                                    <button class="insertion-button add-condition" data-type="output">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M19 9l-7 7-7-7"/>
+                                        </svg>
+                                        Add Condition
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-center py-8">No output components added</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!--- Simulation modal -->
@@ -463,8 +480,8 @@
 {% include 'components/pipeline_editor/diff_modal.html' %}
 
 <script>
-const components = {{ component_data |safe }};
-const pluginData = {{ plugin_data|safe }};
+    const components = {{component_data | safe}};
+    const pluginData = {{plugin_data | safe}};
 
 
 </script>
