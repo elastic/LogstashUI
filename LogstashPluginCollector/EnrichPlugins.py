@@ -5,6 +5,9 @@ from bs4 import BeautifulSoup
 class EnrichPlugins:
     def __init__(self):
         self.file_path = "plugins.json"
+        self.plugins_not_preinstalled = {
+            "output": ["Datadog", "Dynatrace", "Syslog"]
+        }
 
     def get_plugin_params(self, table_data, plugin_name, plugin_type):
         soup = BeautifulSoup(table_data, 'html.parser')

@@ -400,6 +400,7 @@ def CreatePipeline(request):
 
 def DeletePipeline(request):
     if request.method == "POST":
+        es_id = request.POST.get("es_id")
         pipeline_name = request.POST.get("pipeline")
 
         es = get_elastic_connection(es_id)
