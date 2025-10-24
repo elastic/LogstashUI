@@ -26,24 +26,30 @@ plugin: CNAME "{" [pair (WS | ";")*]* "}"
 
 
 pair: "codec" "=>" CNAME "{" codec_config "}"  -> codec_pair_with_config
-    | "codec" "=>" (CNAME | ESCAPED_STRING)     -> codec_pair_simple
+    | "codec" "=>" (CNAME | MULTILINE_STRING | ESCAPED_STRING)     -> codec_pair_simple
     | (CNAME | ESCAPED_STRING) "=>" (UNQUOTED_STRING | CNAME | value)  -> regular_pair
 
 codec_config: [codec_setting (","? codec_setting)*]
 codec_setting: (CNAME | ESCAPED_STRING) "=>" (UNQUOTED_STRING | CNAME | value)
 
-?value: string
+?value: multiline_string
+      | string
       | number
       | array
       | hash
       | env_var
       | plugin
 
+multiline_string: MULTILINE_STRING
 string: ESCAPED_STRING
 number: SIGNED_NUMBER
 array: "[" [value ("," value)*] "]"
 hash: "{" [pair (","? pair)*] "}"
 env_var: "${" CNAME "}"
+
+// Multi-line string: matches strings that can span multiple lines
+// Handles both single and double quotes with escaped quotes inside
+MULTILINE_STRING.3: /"([^"\\]|\\.|\n)*"/s | /'([^'\\]|\\.|\n)*'/s
 
 %import common.ESCAPED_STRING
 %import common.SIGNED_NUMBER
@@ -54,11 +60,14 @@ env_var: "${" CNAME "}"
 UNQUOTED_STRING.2: /[a-zA-Z_][a-zA-Z0-9_-]*/
 %ignore WS
 %ignore /#[^\n]*/
-%ignore /\n+/
 """
 
 
 class LogstashTransformer(Transformer):
+    def multiline_string(self, s):
+        # Remove quotes and preserve the content (including newlines)
+        return s[0][1:-1]
+    
     def string(self, s):
         return s[0][1:-1]  # Remove quotes
 

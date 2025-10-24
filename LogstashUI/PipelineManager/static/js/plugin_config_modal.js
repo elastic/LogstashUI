@@ -203,6 +203,14 @@ window.PluginConfigModal = (function () {
                    step="${inputType === 'float' ? '0.1' : '1'}"
                    class="${inputClasses}">
           `;
+                } else if (key.toLowerCase() === 'code') {
+                    // Special handling for "code" field - use textarea with preserved whitespace
+                    inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="10"
+                      class="${inputClasses} font-mono text-sm whitespace-pre"
+                      style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
+          `;
                 } else {
                     // Default to text input
                     inputField = `
