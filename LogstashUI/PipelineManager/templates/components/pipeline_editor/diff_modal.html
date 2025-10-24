@@ -3,8 +3,9 @@
 <script src="{% static 'js/diff_modal.js' %}"></script>
 
 <!-- Diff Modal -->
-<div id="diffModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-    <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col" style="height: 90vh; max-height: 90vh;">
+<div id="diffModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="hideDiffModal()"></div>
+    <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
         <!-- Header -->
         <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
             <h3 id="diffModalTitle" class="text-lg font-semibold text-white">Review Pipeline Changes</h3>

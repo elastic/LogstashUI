@@ -317,8 +317,8 @@ class LogstashTransformer(Transformer):
                     'plugins': elif_plugins
                 })
 
-        # Process else condition - ensure it's always an object with a plugins array
-        else_block = {'plugins': []}
+        # Process else condition - only create if it exists
+        else_block = None
         if 'else_body' in cond and cond['else_body'] is not None:
             else_plugins, component_count = self._process_plugins(
                 cond['else_body'], section_type, component_count
@@ -516,33 +516,28 @@ class ComponentToPipeline:
         config += "}\n"
 
         # --- Start else if ---
-        if condition['config']['else_ifs']:
+        if condition['config'].get('else_ifs'):
             for plugin in condition['config']['else_ifs']:
-                config += f"else if {plugin['condition']}{{\n"
+                config += f"else if {plugin['condition']}{{\\n"
                 for nested_plugin in plugin['plugins']:
                     if nested_plugin['plugin'] == 'if':
                         config += self._add_tab_level(self._extract_condition_values(nested_plugin, section))
                     else:
                         config += self._add_tab_level(self._extract_plugin_values(nested_plugin, section))
-                config += "}\n"
+                config += "}\\n"
 
         # --- Start else ---
-        if condition['config']['else']['plugins']:
-            config += f"else {{\n"
+        if condition['config'].get('else') and condition['config']['else'].get('plugins'):
+            config += f"else {{\\n"
 
             for plugin in condition['config']['else']['plugins']:
                 if plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
                     config += self._add_tab_level(self._extract_plugin_values(plugin, section))
-            config += "}\n"
-
-
-
+            config += "}\\n"
 
         return config
-
-
 
 
 

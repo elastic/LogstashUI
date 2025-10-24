@@ -429,8 +429,8 @@ function createConditionalBlockElement(component, depth = 0) {
     addElseIfBtn.setAttribute('data-component-id', component.id);
     buttonContainer.appendChild(addElseIfBtn);
 
-// Add else button (only if else block doesn't exist or has no plugins
-    if (!component.config.else || !component.config.else.plugins || component.config.else.plugins.length === 0) {
+// Add else button (only if else block doesn't exist)
+    if (!component.config.else) {
         const addElseBtn = document.createElement('button');
         addElseBtn.className = 'px-2 py-1 text-xs bg-yellow-600/80 text-white rounded hover:bg-yellow-600';
         addElseBtn.textContent = '+ else';

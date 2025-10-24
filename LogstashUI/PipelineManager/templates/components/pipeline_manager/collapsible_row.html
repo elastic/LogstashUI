@@ -52,8 +52,9 @@
     </div>
 
     <!-- Create Pipeline Modal -->
-    <dialog id="createPipelineModal" class="modal backdrop-brightness-10">
-        <div class="modal-box">
+    <dialog id="createPipelineModal" class="modal">
+        <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('createPipelineModal').close()"></div>
+        <div class="modal-box relative z-10">
             <h3 class="font-bold text-lg mb-4">Create New Pipeline</h3>
             <form hx-post="/API/CreatePipeline/" hx-target="#pipelineList" hx-swap="innerHTML">
                 {% csrf_token %}
