@@ -2,6 +2,7 @@
 window.PluginConfigModal = (function () {
     let currentComponent = null;
     let pluginData = {};
+    let isNewComponent = false; // Track if this is a newly added component
 
     // Initialize the modal with plugin data
     function init(data) {
@@ -9,14 +10,31 @@ window.PluginConfigModal = (function () {
     }
 
     // Show the configuration modal for a component
-    function show(component) {
+    function show(component, isNew = false) {
         currentComponent = component;
+        isNewComponent = isNew;
         const modal = document.getElementById('configModal');
         const configForm = document.getElementById('configForm');
         const pluginInfo = pluginData[component.type]?.[component.plugin] || {};
 
+        // Set plugin icon (only for input and output plugins)
+        const iconImg = modal.querySelector('#pluginIconImg');
+        if (component.type === 'input' || component.type === 'output') {
+            iconImg.style.display = ''; // Reset display style
+            const iconPath = `/static/images/${component.plugin}.png`;
+            iconImg.src = iconPath;
+            iconImg.onerror = () => {
+                // Hide the icon if the plugin-specific one doesn't exist
+                iconImg.style.display = 'none';
+            };
+        } else {
+            // Hide icon for filter plugins
+            iconImg.style.display = 'none';
+        }
+
         // Set modal title with plugin type badge
-        modal.querySelector('h3').innerHTML = `
+        const titleElement = modal.querySelector('h3');
+        titleElement.innerHTML = `
       <div class="flex items-center">
         <span>${component.plugin}</span>
         <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${getPluginTypeColor(component.type)}">
@@ -499,21 +517,6 @@ window.PluginConfigModal = (function () {
             configForm.appendChild(noOptions);
         }
 
-        // Add save and cancel buttons
-        const actions = document.createElement('div');
-        actions.className = 'flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-700';
-        actions.innerHTML = `
-      <button type="button" onclick="PluginConfigModal.hide()"
-              class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
-        Cancel
-      </button>
-      <button type="button" onclick="PluginConfigModal.saveConfig()"
-              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
-        Save Configuration
-      </button>
-    `;
-        configForm.appendChild(actions);
-
         // Show the modal
         modal.classList.remove('hidden');
 
@@ -661,11 +664,71 @@ window.PluginConfigModal = (function () {
     // Hide the configuration modal
     function hide() {
         document.getElementById('configModal').classList.add('hidden');
+        isNewComponent = false; // Reset flag
 
         // Trigger pending animation if there is one
         if (typeof window.triggerPendingAnimation === 'function') {
             window.triggerPendingAnimation();
         }
+    }
+
+    // Cancel and remove component if it's new
+    function cancel() {
+        if (isNewComponent && currentComponent) {
+            // Remove the component from the components array
+            removeComponentById(currentComponent.id);
+            // Refresh the UI
+            if (typeof loadExistingComponents === 'function') {
+                loadExistingComponents();
+            }
+        }
+        hide();
+    }
+
+    // Helper function to remove a component by ID
+    function removeComponentById(componentId) {
+        // Search through all component types
+        for (const type in components) {
+            const index = components[type].findIndex(c => c.id === componentId);
+            if (index !== -1) {
+                components[type].splice(index, 1);
+                return true;
+            }
+            // Also check nested components in conditionals
+            for (const component of components[type]) {
+                if (component.plugin === 'if') {
+                    // Check if block
+                    if (component.config.plugins) {
+                        const ifIndex = component.config.plugins.findIndex(c => c.id === componentId);
+                        if (ifIndex !== -1) {
+                            component.config.plugins.splice(ifIndex, 1);
+                            return true;
+                        }
+                    }
+                    // Check else-if blocks
+                    if (component.config.else_ifs) {
+                        for (const elseIf of component.config.else_ifs) {
+                            if (elseIf.plugins) {
+                                const elseIfIndex = elseIf.plugins.findIndex(c => c.id === componentId);
+                                if (elseIfIndex !== -1) {
+                                    elseIf.plugins.splice(elseIfIndex, 1);
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    // Check else block
+                    if (component.config.else && component.config.else.plugins) {
+                        const elseIndex = component.config.else.plugins.findIndex(c => c.id === componentId);
+                        if (elseIndex !== -1) {
+                            component.config.else.plugins.splice(elseIndex, 1);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     // Save the configuration
@@ -851,6 +914,7 @@ window.PluginConfigModal = (function () {
         init,
         show,
         hide,
+        cancel,
         saveConfig,
         getPluginData: () => pluginData
     };

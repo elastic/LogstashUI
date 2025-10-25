@@ -94,7 +94,14 @@ const PluginModal = (function() {
     card.innerHTML = `
       <div class="p-4 h-full flex flex-col">
         <div class="flex justify-between items-start mb-2">
-          <h4 class="font-medium text-white">${name}</h4>
+          <div class="flex items-center gap-2">
+            <img src="/static/images/${name.toLowerCase()}.png" 
+                 alt="${name} icon" 
+                 class="w-6 h-6 object-contain"
+                 onerror="this.style.display='none'"
+            >
+            <h4 class="font-medium text-white">${name}</h4>
+          </div>
           <div class="flex gap-1">
             ${plugin.bundled === 'Yes' ?
               '<span class="text-xs bg-green-600 text-white px-2 py-1 rounded flex items-center gap-1" title="Bundled with Logstash"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>Bundled</span>' :
@@ -265,7 +272,7 @@ const PluginModal = (function() {
               // Show config modal
               if (typeof window.PluginConfigModal !== 'undefined') {
                 setTimeout(() => {
-                  window.PluginConfigModal.show(newPlugin);
+                  window.PluginConfigModal.show(newPlugin, true); // Pass true to indicate it's a new component
                 }, 50);
               }
             } else {
@@ -357,7 +364,7 @@ const PluginModal = (function() {
             if (typeof window.PluginConfigModal !== 'undefined') {
               // Use a small timeout to ensure the modal is properly initialized
               setTimeout(() => {
-                window.PluginConfigModal.show(component);
+                window.PluginConfigModal.show(component, true); // Pass true to indicate it's a new component
               }, 50);
             }
             

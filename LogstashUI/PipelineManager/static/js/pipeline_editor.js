@@ -326,6 +326,14 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         }
     }
 
+    // Only show image for input and output plugins
+    const imageHtml = (component.type === 'input' || component.type === 'output') 
+        ? `<img src="/static/images/${component.plugin}.png" 
+                alt="${component.plugin} icon" 
+                class="w-5 h-5 mr-2 object-contain flex-shrink-0"
+                onerror="this.style.display='none';">`
+        : '';
+
     el.innerHTML = `
 <button class="move-handle" data-component-id="${component.id}" title="Click to move this component">
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -335,6 +343,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
 <div class="flex justify-between items-start">
   <div class="flex-1">
     <div class="flex items-center">
+      ${imageHtml}
       <span class="font-medium text-white">${component.plugin}</span>
       <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
         ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
