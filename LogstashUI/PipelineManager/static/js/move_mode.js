@@ -213,9 +213,13 @@ function updateInsertionPointsForMoveMode() {
                 const conditionalId = componentContainer.dataset.conditionalId;
                 
                 // Check if this insertion point is inside the condition being moved
-                if (conditionalId && isDescendantOf(conditionalId, moveMode.componentId)) {
-                    point.classList.add('disabled');
-                    return;
+                // This includes direct children and deeply nested descendants
+                if (conditionalId) {
+                    // Check if the conditionalId is the component being moved OR is a descendant of it
+                    if (conditionalId === moveMode.componentId || isDescendantOf(conditionalId, moveMode.componentId)) {
+                        point.classList.add('disabled');
+                        return;
+                    }
                 }
             }
         }
@@ -255,31 +259,32 @@ function dropComponentAtInsertionPoint(insertionPoint) {
 }
 
 // Helper function to check if a component is a descendant of another
+// Returns true if componentId is a descendant of (nested inside) ancestorId
 function isDescendantOf(componentId, ancestorId) {
     if (componentId === ancestorId) {
         return true;
     }
 
-    const component = findComponentById(componentId);
-    if (!component) return false;
+    const ancestor = findComponentById(ancestorId);
+    if (!ancestor) return false;
 
-    // If the component is a conditional, check its nested components
-    if (component.plugin === 'if' && component.config) {
+    // If the ancestor is a conditional, check if componentId is nested inside it
+    if (ancestor.plugin === 'if' && ancestor.config) {
         // Check if block
-        if (component.config.plugins) {
-            for (const plugin of component.config.plugins) {
-                if (plugin.id === ancestorId || isDescendantOf(plugin.id, ancestorId)) {
+        if (ancestor.config.plugins) {
+            for (const plugin of ancestor.config.plugins) {
+                if (plugin.id === componentId || isDescendantOf(componentId, plugin.id)) {
                     return true;
                 }
             }
         }
 
         // Check else-if blocks
-        if (component.config.else_ifs) {
-            for (const elseIf of component.config.else_ifs) {
+        if (ancestor.config.else_ifs) {
+            for (const elseIf of ancestor.config.else_ifs) {
                 if (elseIf.plugins) {
                     for (const plugin of elseIf.plugins) {
-                        if (plugin.id === ancestorId || isDescendantOf(plugin.id, ancestorId)) {
+                        if (plugin.id === componentId || isDescendantOf(componentId, plugin.id)) {
                             return true;
                         }
                     }
@@ -288,9 +293,9 @@ function isDescendantOf(componentId, ancestorId) {
         }
 
         // Check else block
-        if (component.config.else && component.config.else.plugins) {
-            for (const plugin of component.config.else.plugins) {
-                if (plugin.id === ancestorId || isDescendantOf(plugin.id, ancestorId)) {
+        if (ancestor.config.else && ancestor.config.else.plugins) {
+            for (const plugin of ancestor.config.else.plugins) {
+                if (plugin.id === componentId || isDescendantOf(componentId, plugin.id)) {
                     return true;
                 }
             }
