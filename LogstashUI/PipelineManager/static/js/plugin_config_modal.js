@@ -40,23 +40,34 @@ window.PluginConfigModal = (function () {
 
         // Add configuration fields based on plugin options
         if (pluginInfo.options && Object.keys(pluginInfo.options).length > 0) {
-            // Convert options to array and sort them
-            const sortedOptions = Object.entries(pluginInfo.options)
-                .filter(([key]) => !key.startsWith('_'))  // Skip internal fields
-                .sort((a, b) => {
-                    const [keyA, optA] = a;
-                    const [keyB, optB] = b;
+            // Convert options to array and separate into important and advanced
+            const allOptions = Object.entries(pluginInfo.options)
+                .filter(([key]) => !key.startsWith('_'));  // Skip internal fields
 
-                    // Sort order: Required (Yes) > Optional (No) > Deprecated
-                    const getSortValue = (opt) => {
-                        if (opt.deprecated) return 2;
-                        return opt.required === 'Yes' ? 0 : 1;
-                    };
+            // Separate fields into important (required or important) and advanced
+            const importantOptions = [];
+            const advancedOptions = [];
 
-                    return getSortValue(optA) - getSortValue(optB) || keyA.localeCompare(keyB);
-                });
+            allOptions.forEach(([key, option]) => {
+                const isRequired = option.required === 'Yes';
+                const isImportant = option.important === 'Yes';
+                const isExplicitlyNotImportant = option.important === 'No';
+                
+                // A field is "advanced" only if it's explicitly marked as not important AND not required
+                // If the important field is missing (undefined), treat it as important by default
+                if (isRequired || isImportant || !isExplicitlyNotImportant) {
+                    importantOptions.push([key, option]);
+                } else {
+                    advancedOptions.push([key, option]);
+                }
+            });
 
-            sortedOptions.forEach(([key, option]) => {
+            // Sort each group alphabetically
+            importantOptions.sort((a, b) => a[0].localeCompare(b[0]));
+            advancedOptions.sort((a, b) => a[0].localeCompare(b[0]));
+
+            // Render important fields first
+            importantOptions.forEach(([key, option]) => {
                 const fieldId = `config-${key}`;
                 const value = component.config[key] !== undefined ? component.config[key] : '';
                 const inputType = (option.input_type || 'text').toLowerCase();
@@ -158,20 +169,20 @@ window.PluginConfigModal = (function () {
                 } else if (inputType.includes('array') || inputType === 'list') {
                     // Handle array input type
                     let arrayValue = [];
-                    try {
-                        if (typeof value === 'string' && value.trim() !== '') {
-                            arrayValue = JSON.parse(value);
-                            if (!Array.isArray(arrayValue)) {
-                                arrayValue = [arrayValue];
-                            }
-                        } else if (Array.isArray(value)) {
-                            arrayValue = [...value];
-                        }
-                    } catch (e) {
-                        console.error('Error parsing array value:', e);
-                        if (value !== undefined && value !== '') {
+                    if (Array.isArray(value)) {
+                        arrayValue = [...value];
+                    } else if (typeof value === 'string' && value.trim() !== '') {
+                        // Try to parse as JSON first
+                        try {
+                            const parsed = JSON.parse(value);
+                            arrayValue = Array.isArray(parsed) ? parsed : [parsed];
+                        } catch (e) {
+                            // If not valid JSON, treat as a single string value
                             arrayValue = [value];
                         }
+                    } else if (value !== undefined && value !== null && value !== '') {
+                        // For any other non-empty value, wrap it in an array
+                        arrayValue = [value];
                     }
 
                     const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -251,6 +262,236 @@ window.PluginConfigModal = (function () {
 
                 configForm.appendChild(fieldGroup);
             });
+
+            // Add Advanced Settings section if there are advanced options
+            if (advancedOptions.length > 0) {
+                const advancedSection = document.createElement('div');
+                advancedSection.className = 'mt-6 border-t border-gray-700 pt-4';
+                
+                const advancedHeader = document.createElement('div');
+                advancedHeader.className = 'flex items-center justify-between cursor-pointer mb-4';
+                advancedHeader.onclick = function() {
+                    const content = advancedSection.querySelector('.advanced-content');
+                    const icon = advancedSection.querySelector('.toggle-icon');
+                    if (content.classList.contains('hidden')) {
+                        content.classList.remove('hidden');
+                        icon.textContent = '▼';
+                    } else {
+                        content.classList.add('hidden');
+                        icon.textContent = '▶';
+                    }
+                };
+                
+                advancedHeader.innerHTML = `
+                    <h4 class="text-sm font-semibold text-gray-300">Advanced Settings</h4>
+                    <span class="toggle-icon text-gray-400 text-xs">▶</span>
+                `;
+                
+                advancedSection.appendChild(advancedHeader);
+                
+                const advancedContent = document.createElement('div');
+                advancedContent.className = 'advanced-content hidden space-y-4';
+                
+                // Render advanced fields
+                advancedOptions.forEach(([key, option]) => {
+                    const fieldId = `config-${key}`;
+                    const value = component.config[key] !== undefined ? component.config[key] : '';
+                    const inputType = (option.input_type || 'text').toLowerCase();
+
+                    const fieldGroup = document.createElement('div');
+                    fieldGroup.className = 'mb-4';
+                    fieldGroup.dataset.required = option.required === 'Yes' ? 'true' : 'false';
+                    fieldGroup.dataset.fieldName = key;
+                    fieldGroup.dataset.fieldType = inputType;
+
+                    let inputField = '';
+                    const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white';
+
+                    // Create appropriate input based on type (same logic as above)
+                    if (inputType === 'codec') {
+                        // Special handling for codec field
+                        const codecData = pluginData.codec || {};
+                        const codecNames = Object.keys(codecData).sort();
+
+                        // Get current codec value
+                        let currentCodecName = '';
+                        let currentCodecConfig = {};
+                        if (value && typeof value === 'object') {
+                            // value is like {"cef": {"ecs_compatibility": "v1"}}
+                            const entries = Object.entries(value);
+                            if (entries.length > 0) {
+                                [currentCodecName, currentCodecConfig] = entries[0];
+                            }
+                        }
+
+                        const codecContainerId = `codec-container-${Date.now()}`;
+                        const codecSelectId = `codec-select-${Date.now()}`;
+                        const codecConfigId = `codec-config-${Date.now()}`;
+
+                        inputField = `
+            <div id="${codecContainerId}" class="space-y-3">
+              <select id="${codecSelectId}" 
+                      class="${inputClasses}"
+                      onchange="handleCodecChange('${codecContainerId}', '${fieldId}', this.value)">
+                <option value="">-- Select Codec --</option>
+                ${codecNames.map(name => `
+                  <option value="${name}" ${name === currentCodecName ? 'selected' : ''}>${name}</option>
+                `).join('')}
+              </select>
+              <div id="${codecConfigId}" class="ml-4 space-y-2 border-l-2 border-gray-600 pl-4">
+                <!-- Codec configuration fields will be inserted here -->
+              </div>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="codec" value='${escapeHtml(JSON.stringify(value || {}))}'>
+            </div>
+          `;
+                    } else if (inputType.includes('boolean') || inputType === 'bool') {
+                        inputField = `
+            <select id="${fieldId}" name="${key}" class="${inputClasses}">
+              <option value="true" ${value === true || value === 'true' ? 'selected' : ''}>true</option>
+              <option value="false" ${value === false || value === 'false' ? 'selected' : ''}>false</option>
+              <option value="" ${value === '' ? 'selected' : ''}></option>
+            </select>
+          `;
+                    } else if (inputType.includes('hash') || inputType === 'object') {
+                        // Handle hash/object input type
+                        let hashValue = {};
+                        try {
+                            if (typeof value === 'string' && value.trim() !== '') {
+                                hashValue = JSON.parse(value);
+                            } else if (typeof value === 'object' && value !== null) {
+                                hashValue = {...value};
+                            }
+                        } catch (e) {
+                            console.error('Error parsing hash value:', e);
+                        }
+
+                        const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="flex items-center space-x-2">
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       placeholder="Key"
+                       onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
+                <span class="text-gray-400">=></span>
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       placeholder="Value"
+                       onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
+                <button type="button"
+                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        onclick="removeHashPair('${containerId}', this)">
+                  Remove
+                </button>
+              </div>
+              <button type="button"
+                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      onclick="addHashPair('${containerId}', '${fieldId}')">
+                + Add More
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="hash" value='${escapeHtml(JSON.stringify(hashValue))}'>
+            </div>
+          `;
+                    } else if (inputType.includes('array') || inputType === 'list') {
+                        // Handle array input type
+                        let arrayValue = [];
+                        if (Array.isArray(value)) {
+                            arrayValue = [...value];
+                        } else if (typeof value === 'string' && value.trim() !== '') {
+                            // Try to parse as JSON first
+                            try {
+                                const parsed = JSON.parse(value);
+                                arrayValue = Array.isArray(parsed) ? parsed : [parsed];
+                            } catch (e) {
+                                // If not valid JSON, treat as a single string value
+                                arrayValue = [value];
+                            }
+                        } else if (value !== undefined && value !== null && value !== '') {
+                            // For any other non-empty value, wrap it in an array
+                            arrayValue = [value];
+                        }
+
+                        const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="flex items-center space-x-2">
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       placeholder="Value"
+                       onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
+                <button type="button"
+                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        onclick="removeArrayItem('${containerId}', this)">
+                  Remove
+                </button>
+              </div>
+              <button type="button"
+                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      onclick="addArrayItem('${containerId}', '${fieldId}')">
+                + Add More
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array" value='${escapeHtml(JSON.stringify(arrayValue))}'>
+            </div>
+          `;
+                    } else if (inputType.includes('number') || inputType === 'int' || inputType === 'float') {
+                        inputField = `
+            <input type="number" id="${fieldId}" name="${key}"
+                   value="${escapeHtml(value)}"
+                   step="${inputType === 'float' ? '0.1' : '1'}"
+                   class="${inputClasses}">
+          `;
+                    } else if (key.toLowerCase() === 'code') {
+                        // Special handling for "code" field - use textarea with preserved whitespace
+                        inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="10"
+                      class="${inputClasses} font-mono text-sm whitespace-pre"
+                      style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
+          `;
+                    } else {
+                        // Default to text input
+                        inputField = `
+            <input type="text" id="${fieldId}" name="${key}"
+                   value="${escapeHtml(value)}"
+                   class="${inputClasses}">
+          `;
+                    }
+
+                    fieldGroup.innerHTML = `
+          <div class="flex items-start justify-between">
+            <label for="${fieldId}" class="block text-sm font-medium text-gray-300 mb-1">
+              ${key}
+              <span class="text-xs font-normal">
+                (Required:
+                  <span class="${option.required === 'Yes' ? 'text-green-400' : 'text-red-400'}">
+                    ${option.required || 'No'}
+                  </span>
+                  , Type: ${option.input_type || 'string'}
+                )
+              </span>
+            </label>
+            ${pluginInfo.link && option.setting_link ? `
+              <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
+                 class="text-gray-400 hover:text-blue-400 ml-2"
+                 title="Documentation for ${key}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </a>
+            ` : ''}
+          </div>
+          ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
+          ${inputField}
+          ${option.default_value !== undefined ?
+                        `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+        `;
+
+                    advancedContent.appendChild(fieldGroup);
+                });
+                
+                advancedSection.appendChild(advancedContent);
+                configForm.appendChild(advancedSection);
+            }
         } else {
             const noOptions = document.createElement('p');
             noOptions.className = 'text-gray-400 italic';

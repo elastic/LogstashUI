@@ -5,9 +5,6 @@ from bs4 import BeautifulSoup
 class EnrichPlugins:
     def __init__(self):
         self.file_path = "plugins.json"
-        self.plugins_not_preinstalled = {
-            "output": ["Datadog", "Dynatrace", "Syslog"]
-        }
         self.default_plugins = """logstash-codec-avro
 logstash-codec-cef
 logstash-codec-collectd
@@ -60,7 +57,7 @@ logstash-filter-uuid
 logstash-filter-xml
 logstash-input-azure_event_hubs
 logstash-input-beats
- └── logstash-input-elastic_agent (alias)
+logstash-input-elastic_agent
 logstash-input-couchdb_changes
 logstash-input-dead_letter_queue
 logstash-input-elastic_serverless_forwarder
@@ -84,31 +81,31 @@ logstash-input-twitter
 logstash-input-udp
 logstash-input-unix
 logstash-integration-aws
- ├── logstash-codec-cloudfront
- ├── logstash-codec-cloudtrail
- ├── logstash-input-cloudwatch
- ├── logstash-input-s3
- ├── logstash-input-sqs
- ├── logstash-output-cloudwatch
- ├── logstash-output-s3
- ├── logstash-output-sns
- └── logstash-output-sqs
+logstash-codec-cloudfront
+logstash-codec-cloudtrail
+logstash-input-cloudwatch
+logstash-input-s3
+logstash-input-sqs
+logstash-output-cloudwatch
+logstash-output-s3
+logstash-output-sns
+logstash-output-sqs
 logstash-integration-jdbc
- ├── logstash-input-jdbc
- ├── logstash-filter-jdbc_streaming
- └── logstash-filter-jdbc_static
+logstash-input-jdbc
+logstash-filter-jdbc_streaming
+logstash-filter-jdbc_static
 logstash-integration-kafka
- ├── logstash-input-kafka
- └── logstash-output-kafka
+logstash-input-kafka
+logstash-output-kafka
 logstash-integration-logstash
- ├── logstash-input-logstash
- └── logstash-output-logstash
+logstash-input-logstash
+logstash-output-logstash
 logstash-integration-rabbitmq
- ├── logstash-input-rabbitmq
- └── logstash-output-rabbitmq
+logstash-input-rabbitmq
+logstash-output-rabbitmq
 logstash-integration-snmp
- ├── logstash-input-snmp
- └── logstash-input-snmptrap
+logstash-input-snmp
+logstash-input-snmptrap
 logstash-output-csv
 logstash-output-elasticsearch
 logstash-output-email
@@ -124,7 +121,983 @@ logstash-output-stdout
 logstash-output-tcp
 logstash-output-udp
 logstash-output-webhdfs
-logstash-patterns-core""".split('\n')
+logstash-patterns-core"""
+        self.default_plugins_dict = {}
+        self.plugins = {}
+        self.important_fields = {
+  "input": {
+    "azure_event_hubs": [
+      "event_hub_connections",
+      "storage_connection",
+      "storage_container",
+      "consumer_group",
+      "codec",
+      "tags",
+      "type"
+    ],
+    "beats": [
+      "port",
+      "host",
+      "ssl_certificate",
+      "ssl_key",
+      "ssl_enabled",
+      "client_inactivity_timeout",
+      "codec",
+      "tags",
+      "type"
+    ],
+    "cloudwatch": [
+      "region",
+      "namespace",
+      "metrics",
+      "filters",
+      "access_key_id",
+      "secret_access_key",
+      "codec",
+      "tags"
+    ],
+    "couchdb_changes": [
+      "db",
+      "host",
+      "port",
+      "username",
+      "password",
+      "codec"
+    ],
+    "dead_letter_queue": [
+      "path",
+      "pipeline_id",
+      "codec"
+    ],
+    "elastic_agent": [
+      "port",
+      "host",
+      "ssl_certificate",
+      "ssl_key",
+      "ssl_enabled",
+      "codec",
+      "tags"
+    ],
+    "elastic_serverless_forwarder": [
+      "host",
+      "port",
+      "auth_basic_username",
+      "auth_basic_password",
+      "ssl",
+      "tags"
+    ],
+    "elasticsearch": [
+      "hosts",
+      "cloud_id",
+      "cloud_auth",
+      "api_key",
+      "user",
+      "password",
+      "index",
+      "query",
+      "schedule",
+      "codec",
+      "tags"
+    ],
+    "exec": [
+      "command",
+      "interval",
+      "codec"
+    ],
+    "file": [
+      "path",
+      "start_position",
+      "sincedb_path",
+      "exclude",
+      "ignore_older",
+      "close_older",
+      "codec",
+      "tags",
+      "type"
+    ],
+    "ganglia": [
+      "host",
+      "port",
+      "codec"
+    ],
+    "gelf": [
+      "host",
+      "port",
+      "codec"
+    ],
+    "generator": [
+      "message",
+      "lines",
+      "count",
+      "codec"
+    ],
+    "github": [
+      "port",
+      "secret_token",
+      "codec"
+    ],
+    "google_cloud_storage": [
+      "bucket_id",
+      "json_key_file",
+      "file_matches",
+      "interval",
+      "codec"
+    ],
+    "google_pubsub": [
+      "project_id",
+      "topic",
+      "subscription",
+      "json_key_file",
+      "codec"
+    ],
+    "graphite": [
+      "host",
+      "port",
+      "codec"
+    ],
+    "heartbeat": [
+      "interval",
+      "message",
+      "codec"
+    ],
+    "http": [
+      "host",
+      "port",
+      "ssl_certificate",
+      "ssl_key",
+      "ssl_enabled",
+      "codec",
+      "tags"
+    ],
+    "http_poller": [
+      "urls",
+      "schedule",
+      "request_timeout",
+      "codec",
+      "metadata_target"
+    ],
+    "imap": [
+      "host",
+      "user",
+      "password",
+      "folder",
+      "check_interval",
+      "codec"
+    ],
+    "irc": [
+      "host",
+      "channels",
+      "nick",
+      "codec"
+    ],
+    "java_generator": [
+      "message",
+      "count",
+      "codec"
+    ],
+    "java_stdin": [
+      "codec"
+    ],
+    "jdbc": [
+      "jdbc_driver_library",
+      "jdbc_driver_class",
+      "jdbc_connection_string",
+      "jdbc_user",
+      "jdbc_password",
+      "statement",
+      "schedule",
+      "tracking_column",
+      "use_column_value",
+      "codec"
+    ],
+    "jms": [
+      "destination",
+      "broker_url",
+      "username",
+      "password",
+      "codec"
+    ],
+    "jmx": [
+      "path",
+      "polling_frequency",
+      "codec"
+    ],
+    "kafka": [
+      "bootstrap_servers",
+      "topics",
+      "group_id",
+      "client_id",
+      "consumer_threads",
+      "decorate_events",
+      "codec",
+      "tags"
+    ],
+    "kinesis": [
+      "kinesis_stream_name",
+      "region",
+      "codec"
+    ],
+    "log4j": [
+      "host",
+      "port",
+      "codec"
+    ],
+    "logstash": [
+      "host",
+      "port",
+      "ssl_enabled",
+      "tags"
+    ],
+    "lumberjack": [
+      "host",
+      "port",
+      "ssl_certificate",
+      "ssl_key",
+      "codec"
+    ],
+    "meetup": [
+      "meetupkey",
+      "urlname",
+      "codec"
+    ],
+    "pipe": [
+      "command",
+      "codec"
+    ],
+    "puppet_facter": [
+      "host",
+      "port",
+      "interval",
+      "codec"
+    ],
+    "rabbitmq": [
+      "host",
+      "port",
+      "queue",
+      "exchange",
+      "user",
+      "password",
+      "durable",
+      "codec",
+      "tags"
+    ],
+    "redis": [
+      "host",
+      "port",
+      "data_type",
+      "key",
+      "password",
+      "db",
+      "codec"
+    ],
+    "relp": [
+      "host",
+      "port",
+      "codec"
+    ],
+    "rss": [
+      "url",
+      "interval",
+      "codec"
+    ],
+    "s3": [
+      "bucket",
+      "region",
+      "access_key_id",
+      "secret_access_key",
+      "prefix",
+      "interval",
+      "codec",
+      "tags"
+    ],
+    "s3-sns-sqs": [
+      "queue",
+      "region",
+      "access_key_id",
+      "secret_access_key"
+    ],
+    "salesforce": [
+      "username",
+      "password",
+      "security_token",
+      "client_id",
+      "client_secret",
+      "sfdc_object_name",
+      "codec"
+    ],
+    "snmp": [
+      "hosts",
+      "get",
+      "walk",
+      "interval",
+      "codec"
+    ],
+    "snmptrap": [
+      "host",
+      "port",
+      "community",
+      "codec"
+    ],
+    "sqlite": [
+      "path",
+      "codec"
+    ],
+    "sqs": [
+      "queue",
+      "region",
+      "access_key_id",
+      "secret_access_key",
+      "codec",
+      "tags"
+    ],
+    "stdin": [
+      "codec"
+    ],
+    "stomp": [
+      "destination",
+      "host",
+      "port",
+      "user",
+      "password",
+      "codec"
+    ],
+    "syslog": [
+      "host",
+      "port",
+      "codec",
+      "tags"
+    ],
+    "tcp": [
+      "host",
+      "port",
+      "mode",
+      "ssl_enabled",
+      "ssl_certificate",
+      "ssl_key",
+      "codec",
+      "tags"
+    ],
+    "twitter": [
+      "consumer_key",
+      "consumer_secret",
+      "oauth_token",
+      "oauth_token_secret",
+      "keywords",
+      "codec"
+    ],
+    "udp": [
+      "host",
+      "port",
+      "codec",
+      "tags"
+    ],
+    "unix": [
+      "path",
+      "codec"
+    ],
+    "varnishlog": [
+      "codec"
+    ],
+    "websocket": [
+      "url",
+      "codec"
+    ],
+    "wmi": [
+      "host",
+      "query",
+      "interval",
+      "codec"
+    ],
+    "xmpp": [
+      "host",
+      "user",
+      "password",
+      "rooms",
+      "codec"
+    ]
+  },
+  "filter": {
+    "age": [
+      "target"
+    ],
+    "aggregate": [
+      "task_id",
+      "code",
+      "map_action",
+      "timeout"
+    ],
+    "alter": [
+      "coalesce",
+      "condrewrite"
+    ],
+    "bytes": [
+      "source",
+      "target"
+    ],
+    "cidr": [
+      "address",
+      "network"
+    ],
+    "cipher": [
+      "algorithm",
+      "mode",
+      "key",
+      "source",
+      "target"
+    ],
+    "clone": [
+      "clones"
+    ],
+    "csv": [
+      "source",
+      "separator",
+      "columns",
+      "target"
+    ],
+    "date": [
+      "match",
+      "target",
+      "timezone"
+    ],
+    "de_dot": [
+      "separator"
+    ],
+    "dissect": [
+      "mapping"
+    ],
+    "dns": [
+      "resolve",
+      "action"
+    ],
+    "drop": [
+      "percentage"
+    ],
+    "elapsed": [
+      "start_tag",
+      "end_tag",
+      "unique_id_field"
+    ],
+    "elastic_integration": [
+      "hosts",
+      "cloud_id",
+      "cloud_auth",
+      "api_key",
+      "username",
+      "password",
+      "pipeline_name"
+    ],
+    "elasticsearch": [
+      "hosts",
+      "cloud_id",
+      "cloud_auth",
+      "api_key",
+      "user",
+      "password",
+      "index",
+      "query",
+      "fields",
+      "target"
+    ],
+    "environment": [
+      "add_metadata_from_env"
+    ],
+    "extractnumbers": [
+      "source"
+    ],
+    "fingerprint": [
+      "source",
+      "target",
+      "method"
+    ],
+    "geoip": [
+      "source",
+      "target",
+      "database"
+    ],
+    "grok": [
+      "match",
+      "pattern_definitions",
+      "patterns_dir"
+    ],
+    "http": [
+      "url",
+      "verb",
+      "headers",
+      "body",
+      "target_body",
+      "target_headers"
+    ],
+    "i18n": [
+      "transliterate"
+    ],
+    "java_uuid": [
+      "target"
+    ],
+    "jdbc_streaming": [
+      "jdbc_driver_library",
+      "jdbc_driver_class",
+      "jdbc_connection_string",
+      "jdbc_user",
+      "jdbc_password",
+      "statement",
+      "parameters",
+      "target"
+    ],
+    "json": [
+      "source",
+      "target"
+    ],
+    "json_encode": [
+      "source",
+      "target"
+    ],
+    "kv": [
+      "source",
+      "field_split",
+      "value_split",
+      "target"
+    ],
+    "memcached": [
+      "hosts",
+      "get",
+      "set"
+    ],
+    "metricize": [
+      "metrics"
+    ],
+    "metrics": [
+      "meter",
+      "timer",
+      "flush_interval"
+    ],
+    "mutate": [
+      "convert",
+      "rename",
+      "replace",
+      "gsub",
+      "split",
+      "join",
+      "merge",
+      "lowercase",
+      "uppercase",
+      "strip",
+      "remove_field",
+      "add_field"
+    ],
+    "prune": [
+      "whitelist_names",
+      "blacklist_names"
+    ],
+    "range": [
+      "ranges"
+    ],
+    "ruby": [
+      "code"
+    ],
+    "sleep": [
+      "time"
+    ],
+    "split": [
+      "field",
+      "terminator"
+    ],
+    "syslog_pri": [
+      "syslog_pri_field_name"
+    ],
+    "threats_classifier": [
+      "username",
+      "password"
+    ],
+    "throttle": [
+      "key",
+      "period",
+      "max_age"
+    ],
+    "tld": [
+      "source"
+    ],
+    "translate": [
+      "field",
+      "destination",
+      "dictionary",
+      "dictionary_path",
+      "fallback"
+    ],
+    "truncate": [
+      "fields",
+      "length_bytes"
+    ],
+    "urldecode": [
+      "field"
+    ],
+    "useragent": [
+      "source",
+      "target"
+    ],
+    "uuid": [
+      "target"
+    ],
+    "wurfl_device_detection": [
+      "source"
+    ],
+    "xml": [
+      "source",
+      "target",
+      "xpath"
+    ],
+    "jdbc_static": [
+      "jdbc_connection_string",
+      "jdbc_driver_class",
+      "jdbc_driver_library",
+      "jdbc_user",
+      "jdbc_password",
+      "loaders",
+      "local_lookups"
+    ]
+  },
+  "output": {
+    "boundary": [
+      "api_key",
+      "org_id"
+    ],
+    "circonus": [
+      "api_token",
+      "app_name"
+    ],
+    "cloudwatch": [
+      "namespace",
+      "region",
+      "access_key_id",
+      "secret_access_key"
+    ],
+    "csv": [
+      "path",
+      "fields"
+    ],
+    "datadog": [
+      "api_key",
+      "title",
+      "text"
+    ],
+    "datadog_metrics": [
+      "api_key",
+      "metric_name",
+      "metric_type"
+    ],
+    "dynatrace": [
+      "ingest_endpoint_url",
+      "api_key"
+    ],
+    "elastic_workplace_search": [
+      "url",
+      "source",
+      "access_token"
+    ],
+    "elasticsearch": [
+      "hosts",
+      "cloud_id",
+      "cloud_auth",
+      "api_key",
+      "user",
+      "password",
+      "index",
+      "data_stream",
+      "data_stream_type",
+      "data_stream_dataset",
+      "data_stream_namespace",
+      "pipeline",
+      "document_id",
+      "action",
+      "ilm_enabled",
+      "ilm_rollover_alias",
+      "ilm_policy"
+    ],
+    "email": [
+      "to",
+      "from",
+      "subject",
+      "body",
+      "address"
+    ],
+    "exec": [
+      "command"
+    ],
+    "file": [
+      "path"
+    ],
+    "ganglia": [
+      "host",
+      "port",
+      "metric"
+    ],
+    "gelf": [
+      "host",
+      "port"
+    ],
+    "google_bigquery": [
+      "project_id",
+      "dataset",
+      "json_key_file"
+    ],
+    "google_cloud_storage": [
+      "bucket",
+      "json_key_file"
+    ],
+    "google_pubsub": [
+      "project_id",
+      "topic",
+      "json_key_file"
+    ],
+    "graphite": [
+      "host",
+      "port",
+      "metrics"
+    ],
+    "graphtastic": [
+      "host",
+      "port",
+      "metrics"
+    ],
+    "http": [
+      "url",
+      "http_method",
+      "format",
+      "content_type"
+    ],
+    "influxdb": [
+      "host",
+      "port",
+      "db",
+      "measurement",
+      "user",
+      "password"
+    ],
+    "irc": [
+      "host",
+      "channels"
+    ],
+    "java_stdout": [
+      "codec"
+    ],
+    "juggernaut": [
+      "channels",
+      "host"
+    ],
+    "kafka": [
+      "bootstrap_servers",
+      "topic_id",
+      "codec"
+    ],
+    "librato": [
+      "account_id",
+      "api_token"
+    ],
+    "loggly": [
+      "key"
+    ],
+    "logstash": [
+      "hosts",
+      "ssl_enabled"
+    ],
+    "lumberjack": [
+      "hosts",
+      "port",
+      "ssl_certificate"
+    ],
+    "metriccatcher": [
+      "host",
+      "port"
+    ],
+    "mongodb": [
+      "uri",
+      "database",
+      "collection"
+    ],
+    "nagios": [
+      "commandfile"
+    ],
+    "nagios_nsca": [
+      "host",
+      "nagios_host",
+      "nagios_service"
+    ],
+    "opentsdb": [
+      "host",
+      "port",
+      "metrics"
+    ],
+    "pagerduty": [
+      "service_key",
+      "description"
+    ],
+    "pipe": [
+      "command"
+    ],
+    "rabbitmq": [
+      "host",
+      "exchange",
+      "exchange_type",
+      "key",
+      "user",
+      "password"
+    ],
+    "redis": [
+      "host",
+      "port",
+      "data_type",
+      "key"
+    ],
+    "redmine": [
+      "url",
+      "token",
+      "project_id"
+    ],
+    "riak": [
+      "nodes",
+      "bucket"
+    ],
+    "riemann": [
+      "host",
+      "port"
+    ],
+    "s3": [
+      "bucket",
+      "region",
+      "access_key_id",
+      "secret_access_key",
+      "prefix"
+    ],
+    "sink": [],
+    "sns": [
+      "arn",
+      "region",
+      "access_key_id",
+      "secret_access_key"
+    ],
+    "solr_http": [
+      "solr_url"
+    ],
+    "sqs": [
+      "queue",
+      "region",
+      "access_key_id",
+      "secret_access_key"
+    ],
+    "statsd": [
+      "host",
+      "port",
+      "namespace"
+    ],
+    "stdout": [
+      "codec"
+    ],
+    "stomp": [
+      "destination",
+      "host",
+      "port"
+    ],
+    "syslog": [
+      "host",
+      "port",
+      "protocol"
+    ],
+    "tcp": [
+      "host",
+      "port",
+      "mode"
+    ],
+    "timber": [
+      "api_key"
+    ],
+    "udp": [
+      "host",
+      "port"
+    ],
+    "webhdfs": [
+      "host",
+      "port",
+      "path",
+      "user"
+    ],
+    "websocket": [
+      "host",
+      "port"
+    ],
+    "xmpp": [
+      "host",
+      "user",
+      "password",
+      "message"
+    ],
+    "zabbix": [
+      "zabbix_server_host",
+      "zabbix_host",
+      "zabbix_key"
+    ]
+  },
+  "codec": {
+    "avro": [
+      "schema_uri"
+    ],
+    "cef": [
+      "vendor",
+      "product",
+      "version",
+      "signature",
+      "name",
+      "severity"
+    ],
+    "cloudfront": [],
+    "cloudtrail": [],
+    "collectd": [
+      "typesdb"
+    ],
+    "csv": [
+      "columns",
+      "separator"
+    ],
+    "dots": [],
+    "edn": [],
+    "edn_lines": [],
+    "es_bulk": [],
+    "fluent": [],
+    "graphite": [
+      "metrics_format"
+    ],
+    "gzip_lines": [],
+    "java_line": [
+      "format"
+    ],
+    "java_plain": [
+      "format"
+    ],
+    "jdots": [],
+    "json": [],
+    "json_lines": [],
+    "line": [
+      "format"
+    ],
+    "msgpack": [],
+    "multiline": [
+      "pattern",
+      "what",
+      "negate"
+    ],
+    "netflow": [
+      "versions"
+    ],
+    "nmap": [],
+    "plain": [
+      "format"
+    ],
+    "protobuf": [
+      "class_name",
+      "include_path"
+    ],
+    "rubydebug": []
+  }
+}
+
 
     def get_plugin_params(self, table_data, plugin_name, plugin_type):
         soup = BeautifulSoup(table_data, 'html.parser')
@@ -152,17 +1125,39 @@ logstash-patterns-core""".split('\n')
         f.close()
 
         broken_plugins = self._look_for_broken_plugins()
-        if broken_plugins:
-            # This is basically a bandage to resolve issues with how our docs are shaped
-            self._fix_broken_plugins(broken_plugins)
 
-        else:
-            self._enrich_important_fields()
+        # This is basically a bandage to resolve issues with how our docs are shaped
+        self._fix_broken_plugins(broken_plugins)
+
+        # Our docs don't explicitly say whether or not a plugin is bundled by default
+        self._add_bundled_flag()
+
+        self._enrich_important_fields()
 
         f = open("enriched_plugins.json", "w+")
         f.write(json.dumps(self.plugins, indent=4))
         f.close()
 
+    # whether or not the plugin is bundled by default
+    def _add_bundled_flag(self):
+        for plugin in self.default_plugins.split("\n"):
+            split_plugin = plugin.split("-")
+            plugin_name = split_plugin[2]
+            plugin_type = split_plugin[1]
+
+            if not plugin_type in self.default_plugins_dict:
+                self.default_plugins_dict[plugin_type] = []
+
+            self.default_plugins_dict[plugin_type].append(plugin_name)
+
+
+        for section in self.plugins:
+            if section == "integrations": continue
+            for plugin in self.plugins[section]:
+                if not plugin in self.default_plugins_dict[section]:
+                    self.plugins[section][plugin]['bundled'] = "No"
+                else:
+                    self.plugins[section][plugin]['bundled'] = "Yes"
 
     def _fix_broken_plugins(self, broken_plugins):
         for plugin in broken_plugins:
@@ -484,7 +1479,15 @@ logstash-patterns-core""".split('\n')
         return broken_plugins
 
     def _enrich_important_fields(self):
-        pass
+        for section in self.plugins:
+            if section == "integrations":
+                continue
+            for plugin in self.plugins[section]:
+                for option in self.plugins[section][plugin]['options']:
+                    if option in self.important_fields[section][plugin]:
+                        self.plugins[section][plugin]['options'][option]['important'] = "Yes"
+                    else:
+                        self.plugins[section][plugin]['options'][option]['important'] = "No"
 
 
 

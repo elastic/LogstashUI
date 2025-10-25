@@ -14,12 +14,21 @@
       </button>
     </div>
 
-    <!-- Search Bar -->
-    <div class="p-4 border-b border-gray-700">
+    <!-- Search Bar and Filters -->
+    <div class="p-4 border-b border-gray-700 space-y-3">
       <input type="text"
              id="pluginSearch"
              placeholder="Search plugins..."
              class="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <div class="flex items-center gap-2">
+        <label for="bundledFilter" class="text-sm text-gray-300">Bundled:</label>
+        <select id="bundledFilter"
+                class="p-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">All</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
     </div>
 
     <!-- Plugin Grid Container -->
@@ -80,13 +89,19 @@ const PluginModal = (function() {
   function createPluginCard(name, plugin, type) {
     const card = document.createElement('div');
     card.className = 'bg-gray-700 rounded-lg overflow-hidden hover:shadow-lg transition-shadow';
+    card.dataset.bundled = (plugin.bundled || 'No').toLowerCase();
 
     card.innerHTML = `
       <div class="p-4 h-full flex flex-col">
         <div class="flex justify-between items-start mb-2">
           <h4 class="font-medium text-white">${name}</h4>
-          ${plugin.deprecated ?
-            '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Deprecated</span>' : ''}
+          <div class="flex gap-1">
+            ${plugin.bundled === 'Yes' ?
+              '<span class="text-xs bg-green-600 text-white px-2 py-1 rounded flex items-center gap-1" title="Bundled with Logstash"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>Bundled</span>' :
+              '<span class="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded" title="Not bundled with Logstash">External</span>'}
+            ${plugin.deprecated ?
+              '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">Deprecated</span>' : ''}
+          </div>
         </div>
         ${plugin.description ?
           `<p class="text-sm text-gray-300 mb-3 flex-1">${plugin.description}</p>` : ''}
@@ -141,21 +156,33 @@ const PluginModal = (function() {
   // Setup search functionality
   function setupSearch() {
     const searchInput = document.getElementById('pluginSearch');
+    const bundledFilter = document.getElementById('bundledFilter');
     if (!searchInput) return;
 
     searchInput.value = '';
-    searchInput.oninput = (e) => {
-      const searchTerm = e.target.value.toLowerCase();
+    if (bundledFilter) bundledFilter.value = 'all';
+
+    const filterPlugins = () => {
+      const searchTerm = searchInput.value.toLowerCase();
+      const bundledValue = bundledFilter ? bundledFilter.value : 'all';
       const cards = document.querySelectorAll('#pluginGrid > div');
 
       cards.forEach(card => {
         const name = card.querySelector('h4')?.textContent?.toLowerCase() || '';
         const description = card.querySelector('p')?.textContent?.toLowerCase() || '';
-        card.style.display = (name.includes(searchTerm) || description.includes(searchTerm))
-          ? ''
-          : 'none';
+        const bundled = card.dataset.bundled || 'no';
+        
+        const matchesSearch = name.includes(searchTerm) || description.includes(searchTerm);
+        const matchesBundled = bundledValue === 'all' || bundled === bundledValue;
+        
+        card.style.display = (matchesSearch && matchesBundled) ? '' : 'none';
       });
     };
+
+    searchInput.oninput = filterPlugins;
+    if (bundledFilter) {
+      bundledFilter.onchange = filterPlugins;
+    }
   }
 
   // Setup event listeners
