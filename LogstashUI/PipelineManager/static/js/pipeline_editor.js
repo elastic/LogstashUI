@@ -434,6 +434,11 @@ function createConditionalBlockElement(component, depth = 0) {
     headerLeft.className = 'flex-1';
     headerLeft.innerHTML = `
 <div class="flex items-center">
+  <button class="collapse-toggle mr-2 text-yellow-300 hover:text-yellow-400 transition-colors" data-component-id="${component.id}" title="Collapse/Expand">
+    <svg class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+    </svg>
+  </button>
   <span class="font-medium text-yellow-300">if</span>
   <div class="flex items-center ml-2 group/condition">
     <span class="text-xs text-gray-400 condition-text">${component.config.condition || ''}</span>
@@ -491,6 +496,11 @@ function createConditionalBlockElement(component, depth = 0) {
     header.appendChild(buttonContainer);
     container.appendChild(header);
 
+// Create collapsible content wrapper
+    const collapsibleContent = document.createElement('div');
+    collapsibleContent.className = 'conditional-content';
+    collapsibleContent.dataset.componentId = component.id;
+
 // Create if block plugins container with add button
     const ifPluginsContainer = document.createElement('div');
     ifPluginsContainer.className = 'ml-4 space-y-2 component-container';
@@ -512,7 +522,7 @@ function createConditionalBlockElement(component, depth = 0) {
     // Setup insertion points for this conditional block
     setupInsertionPointsForConditional(ifPluginsContainer, component.type, component.id, 'if', null);
 
-    container.appendChild(ifPluginsContainer);
+    collapsibleContent.appendChild(ifPluginsContainer);
 
 // Render else-if blocks
     if (component.config.else_ifs && component.config.else_ifs.length > 0) {
@@ -572,7 +582,7 @@ function createConditionalBlockElement(component, depth = 0) {
             setupInsertionPointsForConditional(elseIfPluginsContainer, component.type, component.id, 'else_if', elseIfIndex);
 
             elseIfBlock.appendChild(elseIfPluginsContainer);
-            container.appendChild(elseIfBlock);
+            collapsibleContent.appendChild(elseIfBlock);
         });
     }
 
@@ -616,9 +626,10 @@ function createConditionalBlockElement(component, depth = 0) {
         setupInsertionPointsForConditional(elsePluginsContainer, component.type, component.id, 'else', null);
 
         elseBlock.appendChild(elsePluginsContainer);
-        container.appendChild(elseBlock);
+        collapsibleContent.appendChild(elseBlock);
     }
 
+    container.appendChild(collapsibleContent);
     el.appendChild(container);
     return el;
 }
@@ -1556,3 +1567,28 @@ function deleteElseBlock(componentId) {
     // Refresh the UI
     loadExistingComponents();
 }
+
+// Function to toggle collapse/expand of conditional blocks
+document.addEventListener('click', function(e) {
+    const collapseToggle = e.target.closest('.collapse-toggle');
+    if (collapseToggle) {
+        e.stopPropagation();
+        const componentId = collapseToggle.dataset.componentId;
+        const content = document.querySelector(`.conditional-content[data-component-id="${componentId}"]`);
+        const svg = collapseToggle.querySelector('svg');
+        
+        if (content && svg) {
+            const isCollapsed = content.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                // Expand
+                content.classList.remove('collapsed');
+                svg.style.transform = 'rotate(0deg)';
+            } else {
+                // Collapse
+                content.classList.add('collapsed');
+                svg.style.transform = 'rotate(-90deg)';
+            }
+        }
+    }
+});

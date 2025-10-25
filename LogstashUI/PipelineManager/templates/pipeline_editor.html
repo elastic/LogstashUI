@@ -150,6 +150,24 @@
             opacity: 0;
         }
     }
+
+    /* Collapsible conditional blocks */
+    .conditional-content {
+        max-height: 10000px;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+        opacity: 1;
+    }
+
+    .conditional-content.collapsed {
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 0.3s ease-in, opacity 0.3s ease-in;
+    }
+
+    .collapse-toggle svg {
+        transition: transform 0.3s ease;
+    }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
