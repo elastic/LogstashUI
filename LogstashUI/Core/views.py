@@ -10,7 +10,15 @@ from elasticsearch import Elasticsearch
 import json
 
 def Home(request):
-    return render(request, "home.html")
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+    
+    context = {
+        "Connections": connections,
+        "has_connections": len(connections) > 0
+    }
+
+    return render(request, "home.html", context=context)
+
 
 
 def get_logstash_pipeline(es_id, pipeline_name):

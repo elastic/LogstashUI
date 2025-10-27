@@ -140,8 +140,10 @@ def PipelineManager(request):
             return
 
 
-    context['connections'] = ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk")
-
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+    
+    context['connections'] = connections
+    context['has_connections'] = len(connections) > 0
     context['form'] = ConnectionForm()
 
     return render(request, "pipeline_manager.html", context=context)
