@@ -139,8 +139,8 @@ class ConnectionForm(ModelForm):
                 raise forms.ValidationError("Either Host or Cloud URL is required for SSH connections.")
         else:  # CENTRALIZED
             # For Centralized connections, require either cloud_id or cloud_url
-            if not cleaned_data.get('cloud_id') and not cleaned_data.get('cloud_url'):
-                raise forms.ValidationError("Either Cloud ID or Cloud URL is required for centralized connections.")
+            if not cleaned_data.get('cloud_id') and not cleaned_data.get('host'):
+                raise forms.ValidationError("Either Cloud ID or host is required for centralized connections.")
         
         return cleaned_data
 

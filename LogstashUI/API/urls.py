@@ -17,5 +17,10 @@ urlpatterns = [
     path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
     path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),
     path("DeletePipeline/", views.DeletePipeline, name="DeletePipeline"),
-    path("GetPipeline/", views.GetPipeline, name="GetPipeline")
+    path("GetPipeline/", views.GetPipeline, name="GetPipeline"),
+    
+    # Metrics endpoints
+    path("GetNodeMetrics", views.GetNodeMetrics, name="GetNodeMetrics"),
+    path("GetPipelineMetrics", views.GetPipelineMetrics, name="GetPipelineMetrics"),
+    path("GetLogs", views.GetLogs, name="GetLogs")
 ]

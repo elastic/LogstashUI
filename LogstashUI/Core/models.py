@@ -97,7 +97,7 @@ class Connection(models.Model):
                     "Either SSH key or username/password is required for SSH connections"
                 )
         else:  # CENTRALIZED
-            if not (self.cloud_id or self.cloud_url):
+            if not (self.cloud_id or self.host):
                 raise ValidationError(
                     "Either Cloud ID or Cloud URL is required for centralized connections"
                 )

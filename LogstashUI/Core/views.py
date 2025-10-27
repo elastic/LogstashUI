@@ -2,6 +2,7 @@
 # Django
 from django.shortcuts import render
 
+
 ## Tables
 from Core.models import Connection as ConnectionTable
 
@@ -9,13 +10,34 @@ from Core.models import Connection as ConnectionTable
 from elasticsearch import Elasticsearch
 import json
 
+
+## Project
+from Core import logstash_metrics
+
+
+
+
+
+
 def Home(request):
     connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
-    
+
     context = {
         "Connections": connections,
         "has_connections": len(connections) > 0
     }
+
+    context['monitoring_indices'] = logstash_metrics.check_for_monitoring_indices(
+        [{
+            "es": get_elastic_connection(connection_id['pk']),
+            "name": connection_id['name']
+        } for connection_id in context['Connections']]
+    )
+
+    # List out all of the monitoring indices
+
+    print(context['monitoring_indices'])
+
 
     return render(request, "home.html", context=context)
 
@@ -31,7 +53,6 @@ def get_logstash_pipeline(es_id, pipeline_name):
 def test_elastic_connectivity(elastic_connection):
     return json.dumps(dict(elastic_connection.info()), indent=4)
 
-# TODO: Make storing of credentials.. well.. actually secure.
 def _get_creds(connection_id):
 
     connection = ConnectionTable.objects.get(id=connection_id)
@@ -40,7 +61,7 @@ def _get_creds(connection_id):
     if connection.cloud_id:
         connection_data['cloud_id'] = connection.cloud_id
     else:
-        connection_data['host'] = connection.url
+        connection_data['hosts'] = connection.host
 
     if connection.api_key:
         connection_data['api_key'] = connection.api_key
@@ -50,7 +71,6 @@ def _get_creds(connection_id):
     return connection_data
 
 
-# TODO: Expand this to include SSH connection to a logstash node
 def get_elastic_connection(connection_id):
     elastic_creds = _get_creds(connection_id)
     return Elasticsearch(**elastic_creds)
