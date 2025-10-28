@@ -3,13 +3,11 @@ def check_for_monitoring_indices(es_connections):
     monitoring_indices = {}
 
     required_data_streams = [
-        "metrics-logstash.stack_monitoring.node",
         "metrics-logstash.plugins",
         "metrics-logstash.node",
         "metrics-logstash.pipeline",
         "logs-logstash.log",
-        "metrics-logstash.health_report",
-        "metrics-logstash.stack_monitoring"
+        "metrics-logstash.health_report"
     ]
 
     for connection in es_connections:

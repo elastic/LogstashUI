@@ -457,26 +457,36 @@ def GetNodeMetrics(request):
         "heap_memory": 0
     }
     for connection in  list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk")):
-        print(connection)
+
         if connection_name:
             if connection['name'] != connection_name:
                 continue
         if connection['connection_type'] == "CENTRALIZED":
             es = get_elastic_connection(connection['pk'])
-
-            node_stats = es.search(
-                index="metrics-logstash.node-*",
-                query={
-                    "bool": {
-                        "filter": {
+            query = {
+                "bool": {
+                    "filter": [
+                        {
                             "range": {
                                 "@timestamp": {
                                     "gte": "now-30m"
                                 }
                             }
                         }
-                    }
-                },
+                    ]
+                }
+            }
+
+            if logstash_host:
+                query['bool']['filter'].append({
+                  "term": {
+                    "host.hostname": logstash_host
+                  }
+                })
+
+            node_stats = es.search(
+                index="metrics-logstash.node-*",
+                query=query,
                 aggs={
                     "nodes": {
                       "terms": {
@@ -498,16 +508,23 @@ def GetNodeMetrics(request):
                 continue
             else:
                 node_bucket = [bucket for bucket in node_stats['aggregations']['nodes']['buckets']]
-                meta_agg_stats['node_buckets'] = node_bucket
+                meta_agg_stats['node_buckets'] += node_bucket
                 for node in node_bucket:
                     meta_agg_stats['nodes'].append( node['key'] )
-                    last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
+                    try:
+                        last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
+                    except KeyError as e:
+                        print(f"Unable to fetch last_hit for {node['key']}", e)
+                        continue
 
                     meta_agg_stats['reloads']['successes'] += last_hit_doc['node']['stats']['reloads']['successes']
                     meta_agg_stats['reloads']['failures'] += last_hit_doc['node']['stats']['reloads']['failures']
                     meta_agg_stats['events']['in'] += last_hit_doc['node']['stats']['events']['in']
                     meta_agg_stats['events']['out'] += last_hit_doc['node']['stats']['events']['out']
-                    meta_agg_stats['events']['queued'] += last_hit_doc['node']['stats']['queue']['events_count']
+                    try:
+                        meta_agg_stats['events']['queued'] += last_hit_doc['node']['stats']['queue']['events_count']
+                    except Exception as e:
+                        print(f"Unable to fetch events_count for {node['key']}", e)
                     meta_agg_stats['cpu'] += last_hit_doc['node']['stats']['os']['cpu']['percent']
 
                     meta_agg_stats['heap_memory'] += last_hit_doc['node']['stats']['jvm']['mem']['heap_used_percent']
