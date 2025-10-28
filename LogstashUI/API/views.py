@@ -43,7 +43,7 @@ def AddConnection(request):
 
     if request.method == "POST":
         form = ConnectionForm(request.POST)
-        print(request.POST)
+        #print(request.POST)
         if form.is_valid():
             form.save()
         else:
@@ -68,7 +68,6 @@ def AddConnection(request):
 
 def DeleteConnection(request, connection_id=None):
 
-    print(connection_id, "MUAH")
     if connection_id:
         ConnectionTable.objects.filter(id=connection_id).delete()
 
@@ -120,7 +119,7 @@ def SimulatePipeline(request):
     config_str = logstash_config_parse.components_to_logstash_config({"components": data}, test=True)
 
 
-    print(config_str)
+    #print(config_str)
     # 2. Write config to a temp file
     with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
         tmp.write(config_str)
@@ -147,7 +146,7 @@ def SimulatePipeline(request):
 
     while True:
         line = proc.stdout.readline()
-        print(line)
+        #print(line)
         if not line:
             break
         if "Pipelines running" in line:
@@ -162,7 +161,7 @@ def SimulatePipeline(request):
         proc.stdin.flush()
 
         out = proc.stdout.readline()
-        print(out)
+        #print(out)
 
         test_results[filter_counter] = {
             "Result": json.loads(out),
@@ -307,7 +306,7 @@ def UpdatePipelineSettings(request):
             
             # Build settings body - only include non-empty values
             current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
-            print(current_pipeline_config)
+            #print(current_pipeline_config)
             settings_body = {
                 "pipeline": current_pipeline_config['pipeline'],
                 "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
@@ -441,16 +440,16 @@ def GetPipelineMetrics(request):
     connection_name = request.GET.get("connection", "")
     logstash_host = request.GET.get("host", "")
     pipeline = request.GET.get("pipeline", "")
-
     return JsonResponse(logstash_metrics.get_pipeline_metrics(get_elastic_connections_from_list(), connection_name, logstash_host, pipeline))
 
 
 def GetLogs(request):
     logstash_node = request.GET.get("logstash_node", "")
+    pipeline_name = request.GET.get("pipeline_name", "")
 
     all_logs = []
     for connection in list(ConnectionTable.objects.filter(connection_type="CENTRALIZED").values("pk")):
         es = get_elastic_connection(connection['pk'])
-        all_logs += logstash_metrics.get_logs(es, logstash_node)
+        all_logs += logstash_metrics.get_logs(es, logstash_node, pipeline_name)
 
     return JsonResponse(all_logs, safe=False)
