@@ -16,7 +16,14 @@ from Core import logstash_metrics
 
 
 
+def get_elastic_connections_from_list():
+    es_connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
 
+    return [{
+        "es": get_elastic_connection(es_connection['pk']),
+        "name": es_connection['name'],
+        "connection_type": es_connection['connection_type']
+    } for es_connection in es_connections]
 
 
 def Home(request):
@@ -28,15 +35,10 @@ def Home(request):
     }
 
     context['monitoring_indices'] = logstash_metrics.check_for_monitoring_indices(
-        [{
-            "es": get_elastic_connection(connection_id['pk']),
-            "name": connection_id['name']
-        } for connection_id in context['Connections']]
+        get_elastic_connections_from_list()
     )
 
     # List out all of the monitoring indices
-
-    print(context['monitoring_indices'])
 
 
     return render(request, "home.html", context=context)

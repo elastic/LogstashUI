@@ -5,7 +5,7 @@ from django.http import JsonResponse, HttpResponseRedirect
 
 ## Tables
 from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline
+from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, get_elastic_connections_from_list
 
 # Custom libraries
 from . import logstash_config_parse
@@ -430,143 +430,19 @@ def GetPipeline(request):
 
 
 def GetNodeMetrics(request):
-    """
-    Get node-level metrics for Logstash instances.
-    Query parameters:
-    - connection: Filter by connection ID (optional)
-    - host: Filter by host name (optional)
-    - pipeline: Filter by pipeline name (optional)
-    """
-
     connection_name = request.GET.get("connection", "")
     logstash_host = request.GET.get("host", "")
     pipeline = request.GET.get("pipeline", "")
-    meta_agg_stats = {
-        "nodes": [],
-        "node_buckets": [],
-        "reloads": {
-            "successes": 0,
-            "failures": 0
-        },
-        "events": {
-            "in": 0,
-            "out": 0,
-            "queued": 0
-        },
-        "cpu": 0,
-        "heap_memory": 0
-    }
-    for connection in  list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk")):
 
-        if connection_name:
-            if connection['name'] != connection_name:
-                continue
-        if connection['connection_type'] == "CENTRALIZED":
-            es = get_elastic_connection(connection['pk'])
-            query = {
-                "bool": {
-                    "filter": [
-                        {
-                            "range": {
-                                "@timestamp": {
-                                    "gte": "now-30m"
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-
-            if logstash_host:
-                query['bool']['filter'].append({
-                  "term": {
-                    "host.hostname": logstash_host
-                  }
-                })
-
-            node_stats = es.search(
-                index="metrics-logstash.node-*",
-                query=query,
-                aggs={
-                    "nodes": {
-                      "terms": {
-                        "field": "host.hostname",
-                        "size": 1000
-                      },
-                      "aggs": {
-                        "last_hit": {
-                          "top_hits": {
-                            "size": 1
-                          }
-                        }
-                      }
-                    }
-                },
-                size=0
-            )
-            if 'aggregations' not in node_stats:
-                continue
-            else:
-                node_bucket = [bucket for bucket in node_stats['aggregations']['nodes']['buckets']]
-                meta_agg_stats['node_buckets'] += node_bucket
-                for node in node_bucket:
-                    meta_agg_stats['nodes'].append( node['key'] )
-                    try:
-                        last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
-                    except KeyError as e:
-                        print(f"Unable to fetch last_hit for {node['key']}", e)
-                        continue
-
-                    meta_agg_stats['reloads']['successes'] += last_hit_doc['node']['stats']['reloads']['successes']
-                    meta_agg_stats['reloads']['failures'] += last_hit_doc['node']['stats']['reloads']['failures']
-                    meta_agg_stats['events']['in'] += last_hit_doc['node']['stats']['events']['in']
-                    meta_agg_stats['events']['out'] += last_hit_doc['node']['stats']['events']['out']
-                    try:
-                        meta_agg_stats['events']['queued'] += last_hit_doc['node']['stats']['queue']['events_count']
-                    except Exception as e:
-                        print(f"Unable to fetch events_count for {node['key']}", e)
-                    meta_agg_stats['cpu'] += last_hit_doc['node']['stats']['os']['cpu']['percent']
-
-                    meta_agg_stats['heap_memory'] += last_hit_doc['node']['stats']['jvm']['mem']['heap_used_percent']
-
-    if meta_agg_stats['cpu']:
-        meta_agg_stats['cpu'] = round(meta_agg_stats['cpu'] / len(meta_agg_stats['nodes']), 2)
-    if meta_agg_stats['heap_memory']:
-        meta_agg_stats['heap_memory'] = round(meta_agg_stats['heap_memory'] / len(meta_agg_stats['nodes']), 2)
-
-
-    return JsonResponse(meta_agg_stats)
+    return JsonResponse(logstash_metrics.get_node_metrics(get_elastic_connections_from_list(), connection_name, logstash_host, pipeline))
 
 
 def GetPipelineMetrics(request):
-    """
-    Get pipeline-level metrics for Logstash.
-    Query parameters:
-    - connection: Filter by connection ID (optional)
-    - host: Filter by host name (optional)
-    - pipeline: Filter by pipeline name (optional)
-    """
-    if request.method == "GET":
-        try:
-            connection_id = request.GET.get("connection", "")
-            host = request.GET.get("host", "")
-            pipeline = request.GET.get("pipeline", "")
-            
-            # TODO: Implement actual metrics aggregation from Elasticsearch
-            # For now, return placeholder data
-            metrics = {
-                "running_pipelines": 0,
-                "max_duration": 0.0,
-                "total_workers": 0,
-                "queue_current": 0,
-                "queue_max": 0
-            }
-            
-            return JsonResponse(metrics)
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
-    
-    return JsonResponse({"error": "Method not allowed"}, status=405)
+    connection_name = request.GET.get("connection", "")
+    logstash_host = request.GET.get("host", "")
+    pipeline = request.GET.get("pipeline", "")
+
+    return JsonResponse(logstash_metrics.get_pipeline_metrics(get_elastic_connections_from_list(), connection_name, logstash_host, pipeline))
 
 
 def GetLogs(request):

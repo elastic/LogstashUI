@@ -1,3 +1,4 @@
+from Core.models import Connection as ConnectionTable
 
 def check_for_monitoring_indices(es_connections):
     monitoring_indices = {}
@@ -70,3 +71,204 @@ def get_logs(es, logstash_node="", pipeline_name=""):
     )
 
     return [hit['_source'] for hit in logstash_logs['hits']['hits']]
+
+
+def get_node_metrics(es_connections, connection_name="",logstash_host="",pipeline=""):
+    """
+    Get node-level metrics for Logstash instances.
+    Query parameters:
+    - connection: Filter by connection ID (optional)
+    - host: Filter by host name (optional)
+    - pipeline: Filter by pipeline name (optional)
+    """
+
+    meta_agg_stats = {
+        "nodes": [],
+        "node_buckets": [],
+        "reloads": {
+            "successes": 0,
+            "failures": 0
+        },
+        "events": {
+            "in": 0,
+            "out": 0,
+            "queued": 0
+        },
+        "cpu": 0,
+        "heap_memory": 0
+    }
+
+
+    for connection in es_connections:
+
+        if connection_name:
+            if connection['name'] != connection_name:
+                continue
+        if connection['connection_type'] == "CENTRALIZED":
+            es = connection['es']
+            query = {
+                "bool": {
+                    "filter": [
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "gte": "now-30m"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+
+            if logstash_host:
+                query['bool']['filter'].append({
+                    "term": {
+                        "host.hostname": logstash_host
+                    }
+                })
+
+            node_stats = es.search(
+                index="metrics-logstash.node-*",
+                query=query,
+                aggs={
+                    "nodes": {
+                        "terms": {
+                            "field": "host.hostname",
+                            "size": 1000
+                        },
+                        "aggs": {
+                            "last_hit": {
+                                "top_hits": {
+                                    "size": 1
+                                }
+                            }
+                        }
+                    }
+                },
+                size=0
+            )
+            if 'aggregations' not in node_stats:
+                continue
+            else:
+                node_bucket = [bucket for bucket in node_stats['aggregations']['nodes']['buckets']]
+                meta_agg_stats['node_buckets'] += node_bucket
+                for node in node_bucket:
+                    meta_agg_stats['nodes'].append(node['key'])
+                    try:
+                        last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
+                    except KeyError as e:
+
+                        print(f"Unable to fetch last_hit for {node['key']}", e)
+                        continue
+
+                    meta_agg_stats['reloads']['successes'] += last_hit_doc['node']['stats']['reloads']['successes']
+                    meta_agg_stats['reloads']['failures'] += last_hit_doc['node']['stats']['reloads']['failures']
+                    meta_agg_stats['events']['in'] += last_hit_doc['node']['stats']['events']['in']
+                    meta_agg_stats['events']['out'] += last_hit_doc['node']['stats']['events']['out']
+                    try:
+                        meta_agg_stats['events']['queued'] += last_hit_doc['node']['stats']['queue']['events_count']
+                    except Exception as e:
+
+                        print(f"Unable to fetch events_count for {node['key']}", e)
+                    meta_agg_stats['cpu'] += last_hit_doc['node']['stats']['os']['cpu']['percent']
+
+                    meta_agg_stats['heap_memory'] += last_hit_doc['node']['stats']['jvm']['mem']['heap_used_percent']
+
+    if meta_agg_stats['cpu']:
+        meta_agg_stats['cpu'] = round(meta_agg_stats['cpu'] / len(meta_agg_stats['nodes']), 2)
+    if meta_agg_stats['heap_memory']:
+        meta_agg_stats['heap_memory'] = round(meta_agg_stats['heap_memory'] / len(meta_agg_stats['nodes']), 2)
+
+    return meta_agg_stats
+
+
+def get_pipeline_metrics(es_connections, connection_name="",logstash_host="",pipeline=""):
+    query = {
+        "bool": {
+            "filter": [
+                {
+                    "range": {
+                        "@timestamp": {
+                            "gte": "now-30m"
+                        }
+                    }
+                }
+            ]
+        }
+    }
+    aggs = {
+    "hosts": {
+      "terms": {
+        "field": "host.name",
+        "size": 1000
+      },
+      "aggs": {
+        "pipelines": {
+          "terms": {
+            "field": "logstash.pipeline.name",
+            "size": 1000
+          },
+          "aggs": {
+            "last_hit": {
+              "top_hits": {
+                "size": 1
+              }
+            }
+          }
+        }
+      }
+    }
+
+    }
+
+    meta_agg_stats = {
+        "pipelines": [],
+        "pipeline_buckets": [],
+        "reloads": {
+            "successes": 0,
+            "failures": 0
+        },
+        "events": {
+            "in": 0,
+            "out": 0,
+            "queued": 0
+        },
+        "duration": 0
+    }
+
+    for connection in es_connections:
+        if connection_name:
+            if connection['name'] != connection_name:
+                continue
+        if connection['connection_type'] == "CENTRALIZED":
+            es = connection['es']
+            pipeline_stats = es.search(
+                index="metrics-logstash.pipeline-*",
+                query=query,
+                aggs=aggs,
+                size=0
+            )
+            if 'aggregations' not in pipeline_stats:
+                continue
+            else:
+                node_buckets = [bucket for bucket in pipeline_stats['aggregations']['hosts']['buckets']]
+                meta_agg_stats['pipeline_buckets'] += pipeline_bucket
+                for pipeline in pipeline_bucket:
+                    meta_agg_stats['pipelines'].append(pipeline['key'])
+                    try:
+                        last_hit_doc = pipeline['pipelines']['last_hit']['hits']['hits'][0]['_source']['logstash']
+                    except KeyError as e:
+                        print(pipeline)
+                        print(f"Unable to fetch last_hit for {pipeline['key']}", e)
+                        continue
+
+                    meta_agg_stats['reloads']['successes'] += last_hit_doc['pipeline']['stats']['reloads']['successes']
+                    meta_agg_stats['reloads']['failures'] += last_hit_doc['pipeline']['stats']['reloads']['failures']
+                    meta_agg_stats['events']['in'] += last_hit_doc['pipeline']['stats']['events']['in']
+                    meta_agg_stats['events']['out'] += last_hit_doc['pipeline']['stats']['events']['out']
+                    try:
+                        meta_agg_stats['events']['queued'] += last_hit_doc['pipeline']['stats']['queue']['events_count']
+                    except Exception as e:
+                        print(f"Unable to fetch events_count for {pipeline['key']}", e)
+                    meta_agg_stats['duration'] += last_hit_doc['pipeline']['stats']['duration']
+    return meta_agg_stats
