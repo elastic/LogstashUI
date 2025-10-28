@@ -142,9 +142,16 @@ class LogstashTransformer(Transformer):
     def codec_setting(self, items):
         """Transform codec settings into tuples"""
         if len(items) >= 2:
-            return (items[0], items[1])
+            # Handle ESCAPED_STRING tokens for keys - strip quotes
+            key = items[0]
+            if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
+                key = str(key)[1:-1]
+            return (key, items[1])
         elif len(items) == 1:
-            return (items[0], None)
+            key = items[0]
+            if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
+                key = str(key)[1:-1]
+            return (key, None)
         else:
             return (None, None)
     
@@ -165,7 +172,6 @@ class LogstashTransformer(Transformer):
         
         # Return as nested dict: {"codec": {"codec_name": {...}}}
         return ("codec", {codec_name: codec_config})
-    
     def codec_pair_simple(self, items):
         """Handle codec => simple_value - return as nested dict with empty config"""
         codec_name = str(items[0])
@@ -174,19 +180,32 @@ class LogstashTransformer(Transformer):
     def regular_pair(self, items):
         """Handle regular key => value pairs"""
         if len(items) >= 2:
-            return (items[0], items[1])
+            # Handle ESCAPED_STRING tokens for keys - strip quotes
+            key = items[0]
+            if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
+                key = str(key)[1:-1]  # Remove surrounding quotes
+            return (key, items[1])
         elif len(items) == 1:
             # Single item - might be a key with no value
-            return (items[0], None)
+            key = items[0]
+            if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
+                key = str(key)[1:-1]
+            return (key, None)
         else:
             return (None, None)
     
     def pair(self, items):
         """Fallback for pair - should be handled by codec_pair or regular_pair"""
         if len(items) >= 2:
-            return (items[0], items[1])
+            key = items[0]
+            if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
+                key = str(key)[1:-1]
+            return (key, items[1])
         elif len(items) == 1:
-            return (items[0], None)
+            key = items[0]
+            if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
+                key = str(key)[1:-1]
+            return (key, None)
         else:
             return (None, None)
 
@@ -523,7 +542,7 @@ class ComponentToPipeline:
                                 config += f'\t\t{codec_key} => {codec_value}\n'
                             elif type(codec_value) is dict:
                                 # Nested hash in codec
-                                nested = ', '.join([f'{k} => "{v}"' for k, v in codec_value.items()])
+                                nested = ', '.join([f'"{k}" => "{v}"' for k, v in codec_value.items()])
                                 config += f'\t\t{codec_key} => {{ {nested} }}\n'
                             else:
                                 config += f'\t\t{codec_key} => {json.dumps(codec_value)}\n'
@@ -541,7 +560,7 @@ class ComponentToPipeline:
                     # Handle different value types within dictionaries
                     if type(dict_value) is list:
                         # Format list with proper indentation and line breaks
-                        config += f"\t\t{dict_key} => [\n"
+                        config += f'\t\t"{dict_key}" => [\n'
                         for i, item in enumerate(dict_value):
                             comma = "," if i < len(dict_value) - 1 else ""
                             if type(item) is str:
@@ -551,16 +570,16 @@ class ComponentToPipeline:
                         config += "\t\t]\n"
                     elif type(dict_value) is dict:
                         # Nested hash - recursively format it
-                        config += f"\t\t{dict_key} => {{\n"
+                        config += f'\t\t"{dict_key}" => {{\n'
                         for nested_key in dict_value:
-                            config += f'\t\t\t{nested_key} => "{dict_value[nested_key]}"\n'
+                            config += f'\t\t\t"{nested_key}" => "{dict_value[nested_key]}"\n'
                         config += "\t\t}\n"
                     elif type(dict_value) is bool:
-                        config += f"\t\t{dict_key} => {str(dict_value).lower()}\n"
+                        config += f'\t\t"{dict_key}" => {str(dict_value).lower()}\n'
                     elif type(dict_value) in [int, float]:
-                        config += f"\t\t{dict_key} => {dict_value}\n"
+                        config += f'\t\t"{dict_key}" => {dict_value}\n'
                     else:
-                        config += f'\t\t{dict_key} => "{dict_value}"\n'
+                        config += f'\t\t"{dict_key}" => "{dict_value}"\n'
 
                 config += "\t}\n"
             elif type(plugin_config_value) is list:
