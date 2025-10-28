@@ -45,7 +45,7 @@ output {
                     "plugin": "grok",
                     "config": {
                         "match": {
-                            "\"message\"": "%{COMBINEDAPACHELOG}"
+                            "message": "%{COMBINEDAPACHELOG}"
                         }
                     }
                 },
@@ -145,7 +145,7 @@ output {
                         "plugin": "mutate",
                         "config": {
                             "replace": {
-                                "\"type\"": "apache_access"
+                                "type": "apache_access"
                             }
                         }
                     },
@@ -155,7 +155,7 @@ output {
                         "plugin": "grok",
                         "config": {
                             "match": {
-                                "\"message\"": "%{COMBINEDAPACHELOG}"
+                                "message": "%{COMBINEDAPACHELOG}"
                             }
                         }
                     }
@@ -211,7 +211,7 @@ filter {
 	if [path] =~ "access" {
 		mutate {
 			replace => {
-				type => "apache_access"
+				"type" => "apache_access"
 			}
 		}
 		grok {
@@ -226,14 +226,14 @@ filter {
 	else if [path] =~ "error" {
 		mutate {
 			replace => {
-				type => "apache_error"
+				"type" => "apache_error"
 			}
 		}
 	}
 	else {
 		mutate {
 			replace => {
-				type => "random_logs"
+				"type" => "random_logs"
 			}
 		}
 	}
@@ -282,7 +282,7 @@ output {
                         "plugin": "grok",
                         "config": {
                             "match": {
-                                "\"message\"": "%{COMBINEDAPACHELOG}"
+                                "message": "%{COMBINEDAPACHELOG}"
                             }
                         }
                     },
@@ -425,7 +425,7 @@ output {
                         "plugin": "grok",
                         "config": {
                             "match": {
-                                "\"message\"": "%{SYSLOGTIMESTAMP:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\\[%{POSINT:syslog_pid}\\])?: %{GREEDYDATA:syslog_message}"
+                                "message": "%{SYSLOGTIMESTAMP:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\\[%{POSINT:syslog_pid}\\])?: %{GREEDYDATA:syslog_message}"
                             },
                             "add_field": [
                                 "received_at",
@@ -519,7 +519,7 @@ output {
             "plugin": "grok",
             "config": {
                 "match": {
-                    "\"message\"": "%{COMBINEDAPACHELOG}"
+                    "message": "%{COMBINEDAPACHELOG}"
                 }
             }
         }
@@ -587,7 +587,7 @@ output {
             "plugin": "grok",
             "config": {
                 "match": {
-                    "\"message\"": "%{SYSLOGLINE}"
+                    "message": "%{SYSLOGLINE}"
                 }
             }
         }
@@ -654,7 +654,7 @@ output {
             "plugin": "grok",
             "config": {
                 "match": {
-                    "\"message\"": "%{COMBINEDAPACHELOG}"
+                    "message": "%{COMBINEDAPACHELOG}"
                 }
             }
         },
@@ -733,7 +733,7 @@ output {
             "plugin": "grok",
             "config": {
                 "match": {
-                    "\"message\"": "%{COMBINEDAPACHELOG}"
+                    "message": "%{COMBINEDAPACHELOG}"
                 }
             }
         },
