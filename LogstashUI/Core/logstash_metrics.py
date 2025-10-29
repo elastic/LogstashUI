@@ -293,14 +293,25 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                             'successes']
                         meta_agg_stats['reloads']['failures'] += last_hit_doc['pipeline']['total']['reloads'][
                             'failures']
-                        meta_agg_stats['events']['in'] += last_hit_doc['pipeline']['total']['events']['in']
-                        meta_agg_stats['events']['out'] += last_hit_doc['pipeline']['total']['events']['out']
+
+                        try:
+                            meta_agg_stats['events']['in'] += last_hit_doc['pipeline']['total']['events']['in']
+                        except Exception as e:
+                            print(e)
+
+                        try:
+                            meta_agg_stats['events']['out'] += last_hit_doc['pipeline']['total']['events']['out']
+                        except Exception as e:
+                            print(e)
                         try:
                             meta_agg_stats['events']['queued'] += last_hit_doc['pipeline']['total']['queue'][
                                 'events_count']
                         except Exception as e:
                             print(f"Unable to fetch events_count for {pipeline_bucket['key']}", e)
-                        meta_agg_stats['duration'] += last_hit_doc['pipeline']['total']['time']['duration']['ms']
+                        try:
+                            meta_agg_stats['duration'] += last_hit_doc['pipeline']['total']['time']['duration']['ms']
+                        except Exception as e:
+                            print(e)
 
     if meta_agg_stats['duration']:
         meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
