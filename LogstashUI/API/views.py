@@ -254,19 +254,22 @@ def GetPipelines(request, connection_id):
     logstash_pipelines = []
     if connection.connection_type == "CENTRALIZED":
         # --- Gets our pipelines from the connection
-        es = get_elastic_connection(connection.id)
-        pipelines = es.logstash.get_pipeline()
+        try:
+            es = get_elastic_connection(connection.id)
+            pipelines = es.logstash.get_pipeline()
 
-        for pipeline in pipelines:
-            logstash_pipelines.append(
-                {
-                    "es_id": connection.id,
-                    "es_name": connection.name,
-                    "name": pipeline
-                }
-            )
+            for pipeline in pipelines:
+                logstash_pipelines.append(
+                    {
+                        "es_id": connection.id,
+                        "es_name": connection.name,
+                        "name": pipeline
+                    }
+                )
 
-        context['instances'] = logstash_metrics.get_instances_centralized(es)
+            context['instances'] = logstash_metrics.get_instances_centralized(es)
+        except Exception as e:
+            print("Couldn't connect to elastic!!")
 
 
 
@@ -274,7 +277,10 @@ def GetPipelines(request, connection_id):
     context['pipelines'] = logstash_pipelines
     context['es_id'] = connection.id
     # --- Gets monitoring data from the connection
-    context['instances'] = logstash_metrics.get_instances_centralized(es)
+    try:
+        context['instances'] = logstash_metrics.get_instances_centralized(es)
+    except Exception as e:
+        print("Couldn't get Logstash instances!")
 
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)

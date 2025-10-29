@@ -34,9 +34,12 @@ def Home(request):
         "has_connections": len(connections) > 0
     }
 
-    context['monitoring_indices'] = logstash_metrics.check_for_monitoring_indices(
-        get_elastic_connections_from_list()
-    )
+    try:
+        context['monitoring_indices'] = logstash_metrics.check_for_monitoring_indices(
+            get_elastic_connections_from_list()
+        )
+    except Exception as e:
+        print("Couldn't connect!", e)
 
     # List out all of the monitoring indices
 
