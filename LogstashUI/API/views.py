@@ -93,7 +93,8 @@ def SavePipeline(request):
     data = json.loads(request.POST.get("components"))
     if "save_pipeline" in request.POST:
         pipeline_name = request.POST.get("pipeline")
-        parser = logstash_config_parse.ComponentToPipeline(data)
+        add_ids = request.POST.get("add_ids", "false").lower() == "true"
+        parser = logstash_config_parse.ComponentToPipeline(data, add_ids=add_ids)
         config = parser.components_to_logstash_config()
         es = get_elastic_connection(request.POST.get("es_id"))
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
@@ -201,6 +202,7 @@ def GetDiff(request):
         es_id = request.POST.get("es_id")
         pipeline_name = request.POST.get("pipeline")
         components_json = request.POST.get("components")
+        add_ids = request.POST.get("add_ids", "false").lower() == "true"
         
         if not es_id or not pipeline_name or not components_json:
             return JsonResponse({"error": "Missing required parameters"}, status=400)
@@ -211,7 +213,7 @@ def GetDiff(request):
             
             # Generate the new pipeline from components
             components = json.loads(components_json)
-            parser = logstash_config_parse.ComponentToPipeline(components)
+            parser = logstash_config_parse.ComponentToPipeline(components, add_ids=add_ids)
             new_pipeline = parser.components_to_logstash_config()
             
             # Generate unified diff

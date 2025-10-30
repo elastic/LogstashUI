@@ -1,5 +1,6 @@
 let currentDiffMode = 'save'; // 'save' or 'view'
 let storedNewPipelineCode = '';
+let currentAddIdsState = false;
 
 // ===== INLINE DIFF ALGORITHMS =====
 
@@ -316,6 +317,17 @@ function copyDiffCodeToClipboard() {
     });
 }
 
+// Function to handle checkbox change
+function handleAddIdsChange() {
+    const checkbox = document.getElementById('addIdsCheckbox');
+    currentAddIdsState = checkbox.checked;
+    
+    // Only reload if we're in save mode (diff comparison)
+    if (currentDiffMode === 'save') {
+        loadDiffContent();
+    }
+}
+
 // Function to fetch and display the diff
 async function prepareDiffModal() {
     currentDiffMode = 'save';
@@ -344,9 +356,21 @@ async function prepareDiffModal() {
     `;
     document.getElementById('confirmSaveButton').classList.remove('hidden');
     document.getElementById('copyCodeButton').classList.add('hidden');
+    
+    // Reset checkbox state
+    const checkbox = document.getElementById('addIdsCheckbox');
+    checkbox.checked = false;
+    currentAddIdsState = false;
+    
     // Show the modal first
     showDiffModal();
 
+    // Load the diff content
+    await loadDiffContent();
+}
+
+// Separate function to load diff content (can be called when checkbox changes)
+async function loadDiffContent() {
     // Show loading state
     document.getElementById('diffLoading').classList.remove('hidden');
     document.getElementById('diffContainer').classList.add('hidden');
@@ -356,13 +380,14 @@ async function prepareDiffModal() {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
-        console.log('Fetching diff for:', {esId, pipelineName});
+        console.log('Fetching diff for:', {esId, pipelineName, addIds: currentAddIdsState});
 
         // Fetch diff from the server
         const formData = new FormData();
         formData.append('es_id', esId);
         formData.append('pipeline', pipelineName);
         formData.append('components', JSON.stringify(components));
+        formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
 
         const diffResponse = await fetch('/API/GetDiff/', {
             method: 'POST',
@@ -585,6 +610,7 @@ async function confirmSavePipeline() {
         formData.append('es_id', esId);
         formData.append('pipeline', pipelineName);
         formData.append('components', JSON.stringify(components));
+        formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
 
         const saveResponse = await fetch('/API/SavePipeline/', {
             method: 'POST',

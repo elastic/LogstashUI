@@ -508,11 +508,34 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
 ################################ Component JSON to Logstash config ################################
 
 class ComponentToPipeline:
-    def __init__(self, components, test=False):
+    def __init__(self, components, test=False, add_ids=False):
         self.components = components
         self.plugin_num = 0
         self.test = test
+        self.add_ids = add_ids
+        self.plugin_counters = {}  # Track plugin counts for ID generation
 
+    def _generate_plugin_id(self, plugin_name, section):
+        """Generate a predictable and reusable ID for a plugin."""
+        # Create a counter key for this plugin type in this section
+        counter_key = f"{section}_{plugin_name}"
+        
+        # Increment the counter for this plugin type
+        if counter_key not in self.plugin_counters:
+            self.plugin_counters[counter_key] = 0
+        
+        self.plugin_counters[counter_key] += 1
+        
+        # Generate ID in format: section_pluginname_count
+        return f"{section}_{plugin_name}_{self.plugin_counters[counter_key]}"
+
+    def _escape_string(self, value):
+        """Escape special characters in string values for Logstash config."""
+        if not isinstance(value, str):
+            return value
+        # Escape backslashes first, then double quotes
+        return value.replace('\\', '\\\\').replace('"', '\\"')
+    
     def _extract_plugin_values(self, plugin, section):
         config = ""
         # Setup testing
@@ -520,12 +543,22 @@ class ComponentToPipeline:
         if section == "filter" and self.test == True:
             config += f"\tif [plugin_num] >= {self.plugin_num} {{\n"
         config += f'{plugin["plugin"]} {{\n'
+        
+        # Add ID if requested and not already present
+        if self.add_ids and 'id' not in plugin.get('config', {}):
+            generated_id = self._generate_plugin_id(plugin['plugin'], section)
+            config += f'\tid => "{generated_id}"\n'
+        
         for plugin_config_name in plugin['config']:
             plugin_config_value = plugin['config'][plugin_config_name]
 
             # print(plugin_config_name, plugin_config_value, type(plugin_config_value))
             if type(plugin_config_value) in [str, int, float]:
-                config += f'\t{plugin_config_name} => "{plugin_config_value}"\n'
+                if type(plugin_config_value) is str:
+                    escaped_value = self._escape_string(plugin_config_value)
+                    config += f'\t{plugin_config_name} => "{escaped_value}"\n'
+                else:
+                    config += f'\t{plugin_config_name} => "{plugin_config_value}"\n'
 
             elif type(plugin_config_value) is dict and plugin_config_name == "codec":
                 # Special handling for codec: {"codec_name": {config}}
@@ -535,14 +568,15 @@ class ComponentToPipeline:
                         config += f"\t{plugin_config_name} => {codec_name} {{\n"
                         for codec_key, codec_value in codec_config.items():
                             if type(codec_value) in [str]:
-                                config += f'\t\t{codec_key} => "{codec_value}"\n'
+                                escaped_value = self._escape_string(codec_value)
+                                config += f'\t\t{codec_key} => "{escaped_value}"\n'
                             elif type(codec_value) is bool:
                                 config += f'\t\t{codec_key} => {str(codec_value).lower()}\n'
                             elif type(codec_value) in [int, float]:
                                 config += f'\t\t{codec_key} => {codec_value}\n'
                             elif type(codec_value) is dict:
                                 # Nested hash in codec
-                                nested = ', '.join([f'"{k}" => "{v}"' for k, v in codec_value.items()])
+                                nested = ', '.join([f'"{k}" => "{self._escape_string(v)}"' for k, v in codec_value.items()])
                                 config += f'\t\t{codec_key} => {{ {nested} }}\n'
                             else:
                                 config += f'\t\t{codec_key} => {json.dumps(codec_value)}\n'
@@ -564,7 +598,8 @@ class ComponentToPipeline:
                         for i, item in enumerate(dict_value):
                             comma = "," if i < len(dict_value) - 1 else ""
                             if type(item) is str:
-                                config += f'\t\t\t"{item}"{comma}\n'
+                                escaped_item = self._escape_string(item)
+                                config += f'\t\t\t"{escaped_item}"{comma}\n'
                             else:
                                 config += f'\t\t\t{json.dumps(item)}{comma}\n'
                         config += "\t\t]\n"
@@ -572,14 +607,16 @@ class ComponentToPipeline:
                         # Nested hash - recursively format it
                         config += f'\t\t"{dict_key}" => {{\n'
                         for nested_key in dict_value:
-                            config += f'\t\t\t"{nested_key}" => "{dict_value[nested_key]}"\n'
+                            escaped_nested_value = self._escape_string(dict_value[nested_key])
+                            config += f'\t\t\t"{nested_key}" => "{escaped_nested_value}"\n'
                         config += "\t\t}\n"
                     elif type(dict_value) is bool:
                         config += f'\t\t"{dict_key}" => {str(dict_value).lower()}\n'
                     elif type(dict_value) in [int, float]:
                         config += f'\t\t"{dict_key}" => {dict_value}\n'
                     else:
-                        config += f'\t\t"{dict_key}" => "{dict_value}"\n'
+                        escaped_dict_value = self._escape_string(dict_value)
+                        config += f'\t\t"{dict_key}" => "{escaped_dict_value}"\n'
 
                 config += "\t}\n"
             elif type(plugin_config_value) is list:
