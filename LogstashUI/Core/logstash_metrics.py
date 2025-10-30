@@ -316,5 +316,5 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
     if meta_agg_stats['duration']:
         meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
     import json
-    print(json.dumps(meta_agg_stats))
+    #print(json.dumps(meta_agg_stats))
     return meta_agg_stats

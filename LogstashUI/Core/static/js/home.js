@@ -1,9 +1,7 @@
 // Metrics Dashboard JavaScript
 (function () {
     let currentFilters = {
-        connection: '',
-        host: '',
-        pipeline: ''
+        connection: '', host: '', pipeline: ''
     };
 
     // Initialize on page load
@@ -131,20 +129,21 @@
             ${createMetricCard('Avg Heap Memory', `${avgMemory.toFixed(1)}%`, 'text-orange-400', 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4')}
         `;
     }
-function renderPipelineMetrics(data) {
-    const warningsContainer = document.getElementById('pipelineWarnings');
-    const metricsContainer = document.getElementById('pipelineMetrics');
-    const pipelineCount = data.pipelines ? data.pipelines.length : 0;
-    const reloadSuccess = data.reloads ? data.reloads.successes || 0 : 0;
-    const reloadFailures = data.reloads ? data.reloads.failures || 0 : 0;
-    const eventsIn = data.events ? data.events.in || 0 : 0;
-    const eventsOut = data.events ? data.events.out || 0 : 0;
-    const avgDuration = data.duration || 0;
 
-    // Render warnings in separate container for full width
-    if (data.connections_with_no_data && data.connections_with_no_data.length > 0) {
-        const connectionNames = data.connections_with_no_data.map(c => c.name).join(', ');
-        warningsContainer.innerHTML = `
+    function renderPipelineMetrics(data) {
+        const warningsContainer = document.getElementById('pipelineWarnings');
+        const metricsContainer = document.getElementById('pipelineMetrics');
+        const pipelineCount = data.pipelines ? data.pipelines.length : 0;
+        const reloadSuccess = data.reloads ? data.reloads.successes || 0 : 0;
+        const reloadFailures = data.reloads ? data.reloads.failures || 0 : 0;
+        const eventsIn = data.events ? data.events.in || 0 : 0;
+        const eventsOut = data.events ? data.events.out || 0 : 0;
+        const avgDuration = data.duration || 0;
+
+        // Render warnings in separate container for full width
+        if (data.connections_with_no_data && data.connections_with_no_data.length > 0) {
+            const connectionNames = data.connections_with_no_data.map(c => c.name).join(', ');
+            warningsContainer.innerHTML = `
             <div class="bg-yellow-900/20 border border-yellow-600/50 rounded-lg p-4">
                 <div class="flex items-start gap-3">
                     <svg class="w-6 h-6 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,21 +165,21 @@ function renderPipelineMetrics(data) {
                 </div>
             </div>
         `;
-    } else {
-        warningsContainer.innerHTML = '';
-    }
+        } else {
+            warningsContainer.innerHTML = '';
+        }
 
-    // Render metric cards in grid container
-    metricsContainer.innerHTML = `
+        // Render metric cards in grid container
+        metricsContainer.innerHTML = `
         ${createMetricCard('Active Pipelines', pipelineCount, 'text-green-400', 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z')}
         ${createMetricCard('Reloads', `${reloadSuccess} / ${reloadFailures}`, reloadFailures > 0 ? 'text-red-400' : 'text-green-400', 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', 'Success / Failures')}
         ${createMetricCard('Events In/Out', `${formatNumber(eventsIn)} / ${formatNumber(eventsOut)}`, 'text-purple-400', 'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4')}
         ${createMetricCard('Avg Duration', `${avgDuration.toFixed(2)}ms`, 'text-blue-400', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}
     `;
 
-    // Render pipeline breakdown table
-    renderPipelineBreakdownTable(data.pipeline_buckets || []);
-}
+        // Render pipeline breakdown table
+        renderPipelineBreakdownTable(data.pipeline_buckets || []);
+    }
 
     function createMetricCard(title, value, colorClass, iconPath, subtitle = '') {
         return `
@@ -241,9 +240,7 @@ function renderPipelineMetrics(data) {
             const reloadFailures = nodeData.reloads.failures || 0;
 
             const statusColor = {
-                'green': 'bg-green-500',
-                'yellow': 'bg-yellow-500',
-                'red': 'bg-red-500'
+                'green': 'bg-green-500', 'yellow': 'bg-yellow-500', 'red': 'bg-red-500'
             }[status] || 'bg-gray-500';
 
             const rowId = `node-row-${index}`;
@@ -390,12 +387,10 @@ function renderPipelineMetrics(data) {
         }
 
         // Filter logs by level if not 'ALL'
-        const filteredLogs = filterLevel === 'ALL'
-            ? logs
-            : logs.filter(log => {
-                const level = log.log?.level || 'INFO';
-                return level === filterLevel;
-            });
+        const filteredLogs = filterLevel === 'ALL' ? logs : logs.filter(log => {
+            const level = log.log?.level || 'INFO';
+            return level === filterLevel;
+        });
 
         if (filteredLogs.length === 0) {
             logsContent.innerHTML = `
@@ -425,8 +420,8 @@ function renderPipelineMetrics(data) {
                 <div class="border-b border-gray-700 py-3 hover:bg-gray-700/30 transition-colors">
                     <div class="flex items-start gap-3">
                         <span class="px-2 py-1 rounded text-xs font-semibold ${levelColor}">${level}</span>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm text-gray-300 break-words">${message}</p>
+                        <div class="flex-1 min-w-0 overflow-hidden">
+                            <p class="text-sm text-gray-300 break-all whitespace-pre-wrap">${message}</p>
                             <p class="text-xs text-gray-500 mt-1">${timestamp}</p>
                         </div>
                     </div>
@@ -461,39 +456,40 @@ function renderPipelineMetrics(data) {
     // Make functions available globally
     window.toggleLogs = toggleLogs;
     window.filterLogs = filterLogs;
-function renderPipelineBreakdownTable(pipelineBuckets) {
-    const tbody = document.getElementById('pipelineBreakdownBody');
 
-    if (!pipelineBuckets || pipelineBuckets.length === 0) {
-        tbody.innerHTML = `
+    function renderPipelineBreakdownTable(pipelineBuckets) {
+        const tbody = document.getElementById('pipelineBreakdownBody');
+
+        if (!pipelineBuckets || pipelineBuckets.length === 0) {
+            tbody.innerHTML = `
             <tr>
                 <td colspan="10" class="px-6 py-8 text-center text-gray-400">
                     No pipeline data available
                 </td>
             </tr>
         `;
-        return;
-    }
+            return;
+        }
 
-    tbody.innerHTML = pipelineBuckets.map((bucket, index) => {
-        try {
-            const pipelineData = bucket.last_hit.hits.hits[0]._source.logstash.pipeline;
+        tbody.innerHTML = pipelineBuckets.map((bucket, index) => {
+            try {
+                const pipelineData = bucket.last_hit.hits.hits[0]._source.logstash.pipeline;
 
-            const pipelineName = bucket.key;
-            const hostName = pipelineData.host.name || 'N/A';
-            const workers = pipelineData.info.workers || 0;
-            const batchSize = pipelineData.info.batch_size || 0;
-            const eventsIn = pipelineData.total.events.in || 0;
-            const eventsOut = pipelineData.total.events.out || 0;
-            const eventsFiltered = pipelineData.total.events.filtered || 0;
-            const duration = pipelineData.total.time.duration.ms || 0;
-            const reloadSuccess = pipelineData.total.reloads.successes || 0;
-            const reloadFailures = pipelineData.total.reloads.failures || 0;
+                const pipelineName = bucket.key;
+                const hostName = pipelineData.host.name || 'N/A';
+                const workers = pipelineData.info.workers || 0;
+                const batchSize = pipelineData.info.batch_size || 0;
+                const eventsIn = pipelineData.total.events.in || 0;
+                const eventsOut = pipelineData.total.events.out || 0;
+                const eventsFiltered = pipelineData.total.events.filtered || 0;
+                const duration = pipelineData.total.time.duration.ms || 0;
+                const reloadSuccess = pipelineData.total.reloads.successes || 0;
+                const reloadFailures = pipelineData.total.reloads.failures || 0;
 
-            const rowId = `pipeline-row-${index}`;
-            const logsRowId = `pipeline-logs-row-${index}`;
+                const rowId = `pipeline-row-${index}`;
+                const logsRowId = `pipeline-logs-row-${index}`;
 
-            return `
+                return `
             <tr class="hover:bg-gray-700/50 transition-colors" id="${rowId}">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                     <button onclick="togglePipelineLogs('${pipelineName}', ${index})" class="text-blue-400 hover:text-blue-300 focus:outline-none" id="pipeline-expand-btn-${index}">
@@ -545,12 +541,12 @@ function renderPipelineBreakdownTable(pipelineBuckets) {
                 </td>
             </tr>
         `;
-        } catch (error) {
-            console.error('Error rendering pipeline row:', error, bucket);
-            return '';
-        }
-    }).join('');
-}
+            } catch (error) {
+                console.error('Error rendering pipeline row:', error, bucket);
+                return '';
+            }
+        }).join('');
+    }
 
     // Pipeline logs cache and filter state
     let pipelineLogsCache = {};
@@ -633,12 +629,10 @@ function renderPipelineBreakdownTable(pipelineBuckets) {
         }
 
         // Filter logs by level if not 'ALL'
-        const filteredLogs = filterLevel === 'ALL'
-            ? logs
-            : logs.filter(log => {
-                const level = log.log?.level || 'INFO';
-                return level === filterLevel;
-            });
+        const filteredLogs = filterLevel === 'ALL' ? logs : logs.filter(log => {
+            const level = log.log?.level || 'INFO';
+            return level === filterLevel;
+        });
 
         if (filteredLogs.length === 0) {
             logsContent.innerHTML = `
@@ -667,8 +661,8 @@ function renderPipelineBreakdownTable(pipelineBuckets) {
             return `
                 <div class="border-b border-gray-700 py-3 hover:bg-gray-700/30 transition-colors">
                     <div class="flex items-start gap-3">
-                        <span class="px-2 py-1 rounded text-xs font-semibold ${levelColor}">${level}</span>
-                        <div class="flex-1 min-w-0">
+                        <span class="px-2 py-1 rounded text-xs font-semibold ${levelColor} whitespace-nowrap">${level}</span>
+                        <div class="flex-1 min-w-0 overflow-hidden">
                             <p class="text-sm text-gray-300 break-words">${message}</p>
                             <p class="text-xs text-gray-500 mt-1">${timestamp}</p>
                         </div>
