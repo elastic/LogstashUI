@@ -102,6 +102,7 @@ class LogstashTransformer(Transformer):
     
     def multiline_string(self, s):
         # Remove quotes and unescape the content
+        # Don't strip or normalize - preserve original formatting
         return self._unescape_string(s[0][1:-1])
     
     def string(self, s):
@@ -691,12 +692,51 @@ class ComponentToPipeline:
         self.plugin_num += 1
         return config
 
-    def _add_tab_level(self, input):
+    def _add_tab_level(self, input, skip_string_content=False):
         lines = input.split('\n')
-        # Don't add tab to the last line if it's empty (trailing newline case)
-        tabbed_input = ['\t' + line if line or i < len(lines) - 1 else line 
-                        for i, line in enumerate(lines)]
-        return '\n'.join(tabbed_input)
+        result = []
+        in_multiline_string = False
+        skip_this_string = False
+        
+        for i, line in enumerate(lines):
+            # Determine if we should add a tab to this line BEFORE updating state
+            should_add_tab = True
+            
+            # Check if we should skip this line (if we're inside a code/script/body string)
+            if skip_this_string and in_multiline_string and 'code =>' not in line and 'script =>' not in line and 'body =>' not in line:
+                should_add_tab = False
+            
+            # Now check if this line starts or continues a multi-line string
+            if '=>' in line and '"' in line:
+                # Check if this is a code/script/body parameter
+                if 'code =>' in line or 'script =>' in line or 'body =>' in line:
+                    skip_this_string = True
+                
+                # Count quotes after the =>
+                after_arrow = line.split('=>', 1)[1] if '=>' in line else line
+                quote_count = after_arrow.count('"')
+                # Odd number of quotes means we're starting/ending a multi-line string
+                if quote_count % 2 == 1:
+                    in_multiline_string = not in_multiline_string
+                    if not in_multiline_string:
+                        skip_this_string = False  # Reset when exiting string
+            elif '"' in line:
+                # Check if this line ends the multi-line string
+                quote_count = line.count('"')
+                if quote_count % 2 == 1:
+                    in_multiline_string = not in_multiline_string
+                    if not in_multiline_string:
+                        skip_this_string = False  # Reset when exiting string
+            
+            # Add tab unless we're skipping or it's the last empty line
+            if not should_add_tab:
+                result.append(line)
+            elif line or i < len(lines) - 1:
+                result.append('\t' + line)
+            else:
+                result.append(line)
+        
+        return '\n'.join(result)
 
     def _extract_condition_values(self, condition, section):
         config = ""
