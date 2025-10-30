@@ -12,19 +12,43 @@
           </button>
         </div>
         <div class="flex-1 overflow-y-auto p-6">
+          <!-- Error message container -->
+          <div id="connectionErrorContainer"></div>
+          
           <form id="connectionForm"
               hx-post="/API/AddConnection"
-              hx-target="body"
-              hx-swap="none"
+              hx-target="#connectionErrorContainer"
+              hx-swap="innerHTML swap:500ms"
+              hx-on:htmx:before-swap="
+                  // Always swap content, even on error responses
+                  if (event.detail.xhr.status === 400) {
+                      event.detail.shouldSwap = true;
+                      event.detail.isError = false;
+                  }
+              "
               hx-indicator=".loading"
+              hx-on::before-request="document.getElementById('connectionErrorContainer').innerHTML = '';"
               hx-on::after-request="
-                  if (event.detail.successful) {
-                      showToast('Connection created successfully!', 'success');
-                      closeFlyout();
-                      setTimeout(() => window.location.reload(), 3000);
-                  } else {
-                      showToast('Error creating connection', 'error');
-                  }">
+                  console.log('Response status:', event.detail.xhr.status);
+                  console.log('Response text:', event.detail.xhr.responseText);
+                  
+                  // Check if the response contains error content
+                  const errorContainer = document.getElementById('connectionErrorContainer');
+                  const hasError = errorContainer && errorContainer.innerHTML.trim().length > 0;
+                  
+                  if (hasError) {
+                      // Error occurred - don't show success toast
+                      showToast('Connection test failed - check the error message above', 'error');
+                      // Scroll error into view
+                      setTimeout(() => {
+                          errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      }, 100);
+                  } else if (event.detail.successful) {
+                      // Success - close modal and reload
+                      showToast('Connection created and tested successfully!', 'success');
+                      // The success response includes a script that will reload the page
+                  }
+              ">
               {% csrf_token %}
 
               <!-- Connection Name Field -->
@@ -243,6 +267,69 @@
       document.getElementById('apiKeyField').classList.toggle('hidden', this.value !== 'apiKey');
     });
   });
+
+  // Parse URL in host field to extract scheme and port
+  const hostInput = document.querySelector('input[name="host"]');
+  const portInput = document.querySelector('input[name="port"]');
+  
+  if (hostInput && portInput) {
+    hostInput.addEventListener('blur', function() {
+      let url = this.value.trim();
+      
+      // Only process if in URL mode (not Cloud ID mode)
+      if (!document.getElementById('nodeUrlField').classList.contains('hidden')) {
+        // Check if URL has a scheme
+        if (url && !url.match(/^https?:\/\//i)) {
+          // No scheme provided, show error
+          showToast('Please include http:// or https:// in the URL', 'warning');
+          return;
+        }
+        
+        if (url.match(/^https?:\/\//i)) {
+          try {
+            const urlObj = new URL(url);
+            
+            // Extract hostname (without port)
+            const hostname = urlObj.hostname;
+            
+            // Extract port if present, otherwise use default based on scheme
+            let port = urlObj.port;
+            if (!port) {
+              port = urlObj.protocol === 'https:' ? '443' : '80';
+            }
+            
+            // Update the host field with just the scheme and hostname
+            this.value = urlObj.protocol + '//' + hostname;
+            
+            // Update the port field
+            portInput.value = port;
+            
+          } catch (e) {
+            showToast('Invalid URL format. Please use http://hostname or https://hostname', 'error');
+          }
+        }
+      }
+    });
+    
+    // Also validate on form submit
+    const connectionForm = document.getElementById('connectionForm');
+    connectionForm.addEventListener('submit', function(e) {
+      const connectionMode = document.querySelector('input[name="connection_mode"]:checked');
+      
+      // Only validate if using Node URL mode (not Cloud ID)
+      if (connectionMode && connectionMode.value === 'url') {
+        const hostValue = hostInput.value.trim();
+        
+        if (hostValue && !hostValue.match(/^https?:\/\//i)) {
+          e.preventDefault();
+          e.stopPropagation();
+          showToast('Elastic Node URL must start with http:// or https://', 'error');
+          hostInput.focus();
+          return false;
+        }
+      }
+    });
+  }
 
     function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');

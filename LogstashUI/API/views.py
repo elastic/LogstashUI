@@ -22,36 +22,105 @@ from datetime import datetime, timezone
 
 from django.template.loader import get_template
 import traceback
+from django.views.decorators.csrf import csrf_exempt
 
 
-def TestConnectivity(request):
-    test_id = request.GET.get('test')
-    if request.GET.get("test"):
-
-        elastic_connection = get_elastic_connection(test_id)
-
-        return HttpResponse("""
-            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
-                onload="setTimeout(() => this.remove(), 3000);">
-                <p>{0}</p>
-            </div>
-        """.format(
-            test_elastic_connectivity(elastic_connection))
-        )
+def TestConnectivity(request=None, connection_id=None):
+    # Allow calling from request (frontend) or directly with connection_id (backend)
+    if request:
+        test_id = request.GET.get('test')
+    else:
+        test_id = connection_id
+    
+    if test_id:
+        try:
+            elastic_connection = get_elastic_connection(test_id)
+            result = test_elastic_connectivity(elastic_connection)
+            
+            # If called from request, return HTML response
+            if request:
+                return HttpResponse("""
+                    <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
+                        onload="setTimeout(() => this.remove(), 3000);">
+                        <p>{0}</p>
+                    </div>
+                """.format(result))
+            # If called programmatically, return tuple (success, message)
+            else:
+                return (True, result)
+        except Exception as e:
+            error_msg = str(e)
+            # If called from request, return HTML error response
+            if request:
+                return HttpResponse("""
+                    <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
+                        <p>Connection failed: {0}</p>
+                    </div>
+                """.format(error_msg))
+            # If called programmatically, return tuple (failure, error message)
+            else:
+                return (False, error_msg)
+    
+    return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
 
 def AddConnection(request):
-
+    print("=== AddConnection called ===")
+    print(f"Method: {request.method}")
+    
     if request.method == "POST":
+        print(f"POST data: {request.POST}")
         form = ConnectionForm(request.POST)
-        #print(request.POST)
+        print(f"Form is valid: {form.is_valid()}")
+        
         if form.is_valid():
-            form.save()
+            # Save the connection temporarily
+            new_connection = form.save()
+            print(f"Connection saved with ID: {new_connection.id}")
+            
+            # Test the connection
+            print("Testing connectivity...")
+            success, message = TestConnectivity(connection_id=new_connection.id)
+            print(f"Test result - Success: {success}, Message: {message}")
+            
+            if not success:
+                # If test fails, delete the connection and show error
+                new_connection.delete()
+                print("Connection deleted due to test failure")
+                # Escape HTML in error message to prevent injection but preserve formatting
+                import html
+                escaped_message = html.escape(str(message))
+                response = HttpResponse(f"""
+                    <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
+                        <h3 class="font-bold mb-2 text-lg">❌ Connection Test Failed</h3>
+                        <p class="mb-3">The connection could not be established. Please check your credentials and try again.</p>
+                        <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded">
+                            <p class="font-semibold mb-1 text-sm">Error Details:</p>
+                            <pre class="text-xs overflow-auto whitespace-pre-wrap break-words max-h-64">{escaped_message}</pre>
+                        </div>
+                    </div>
+                """)
+                response['HX-Retarget'] = '#connectionErrorContainer'
+                response['HX-Reswap'] = 'innerHTML'
+                print(f"Returning error response")
+                return response
+            
+            # Connection test succeeded, proceed with success response
         else:
-            raise Exception(form.errors)
+            print(f"Form validation errors: {form.errors}")
+            response = HttpResponse(f"""
+                <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg">
+                    <h3 class="font-bold mb-2">Form Validation Error</h3>
+                    <div class="text-sm">{form.errors}</div>
+                </div>
+            """)
+            response['HX-Retarget'] = '#connectionErrorContainer'
+            response['HX-Reswap'] = 'innerHTML'
+            print("Returning form validation error response")
+            return response
 
     return HttpResponse("""
         <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-            Connection created successfully!
+            Connection created and tested successfully!
             <script>
                 // Close the flyout after a short delay
                 setTimeout(() => {
@@ -61,7 +130,7 @@ def AddConnection(request):
                     }
                     // Reload the page to show the new connection
                     window.location.reload();
-                }, 100000);
+                }, 500);
             </script>
         </div>
     """)
@@ -71,7 +140,17 @@ def DeleteConnection(request, connection_id=None):
     if connection_id:
         ConnectionTable.objects.filter(id=connection_id).delete()
 
-    return HttpResponse("Connection deleted successfully!")
+    return HttpResponse("""
+        <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
+            Connection deleted successfully!
+            <script>
+                // Reload the page to show the updated connections
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            </script>
+        </div>
+    """)
 
 def GetCurrentPipelineCode(request, components={}):
 

@@ -67,7 +67,7 @@ class ConnectionForm(ModelForm):
             }),
             'host': forms.TextInput(attrs={
                 'class': 'input input-bordered w-full',
-                'placeholder': 'elasticsearch.example.com',
+                'placeholder': 'https://elasticsearch.example.com',
                 'required': False,
             }),
             'port': forms.NumberInput(attrs={

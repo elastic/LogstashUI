@@ -31,6 +31,24 @@
         scrollbar-width: thin;
         scrollbar-color: #4b5563 #1f2937;
     }
+
+    /* Pulsing glow animation */
+    @keyframes glowPulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        50% {
+            box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.3);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(59, 130, 246, 0);
+        }
+    }
+
+    .glow-button {
+        animation: glowPulse 2s ease-in-out infinite;
+        position: relative;
+    }
 </style>
 {% if not has_connections %}
 <div class="flex items-center justify-center min-h-[calc(100vh-6rem)] p-6">
@@ -45,30 +63,18 @@
                     </svg>
                 </div>
                 <h1 class="text-4xl font-bold text-white mb-4">Welcome to LogstashUI! 🚀</h1>
-                <p class="text-lg text-gray-300 max-w-2xl mx-auto">It looks like you're just getting started. Set up
-                    your first connection to Logstash to begin managing your pipelines with ease.</p>
-            </div>
-
-            <div class="bg-gray-700/30 p-8 rounded-lg max-w-2xl mx-auto">
-                <div class="flex flex-col items-center text-center">
-                    <div class="w-16 h-16 bg-blue-600/30 rounded-full flex items-center justify-center mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none"
-                             viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                        </svg>
-                    </div>
-                    <h2 class="text-2xl font-bold text-white mb-2">Get Started</h2>
-                    <p class="mb-8 text-gray-300">You haven't added any connections yet. Let's set up your first
-                        one!</p>
-                    <a href="/PipelineManager"
-                       class="btn btn-primary btn-wide gap-2 text-md hover:bg-blue-600 transition-colors mb-8">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <p class="text-lg text-gray-300 max-w-2xl mx-auto mb-8">It looks like you're just getting started. Set up
+                    a connection to <span class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">Elastic's Logstash Pipeline Management</span> (Direct Logstash connection coming soon!) to begin managing your pipelines.</p>
+                
+                <div class="flex justify-center">
+                    <a href="/ConnectionManager"
+                       class="btn btn-primary btn-lg gap-3 text-lg px-8 py-4 hover:bg-blue-600 transition-colors glow-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd"
                                   d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
                                   clip-rule="evenodd"/>
                         </svg>
-                        Add Your First Connection
+                        Take me to the Connection Manager!
                     </a>
                 </div>
             </div>

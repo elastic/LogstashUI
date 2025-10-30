@@ -22,7 +22,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('', include('Core.urls')),
-    path('PipelineManager/', include('PipelineManager.urls')),
+    path('ConnectionManager/', include('PipelineManager.urls')),
     path('API/', include('API.urls'))
 ]
 

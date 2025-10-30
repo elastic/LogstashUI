@@ -42,6 +42,7 @@
 
     let logsCache = {};
     let logsFilterLevel = {};
+    let indexToNodeName = {};
 
     async function toggleLogs(nodeName, index) {
         const logsRow = document.getElementById(`logs-row-${index}`);
@@ -51,6 +52,9 @@
             // Expand
             logsRow.classList.remove('hidden');
             expandIcon.style.transform = 'rotate(90deg)';
+
+            // Store the mapping between index and node name
+            indexToNodeName[index] = nodeName;
 
             // Load logs if not cached
             if (!logsCache[nodeName]) {
@@ -97,10 +101,8 @@
             }
         });
 
-        // Find the node name for this index
-        const nodeName = Object.keys(logsCache).find((name, idx) => {
-            return document.getElementById(`logs-content-${index}`) !== null;
-        });
+        // Get the node name from our mapping
+        const nodeName = indexToNodeName[index];
 
         if (nodeName && logsCache[nodeName]) {
             renderLogs(logsCache[nodeName], index, level);

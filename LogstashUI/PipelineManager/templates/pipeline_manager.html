@@ -172,11 +172,10 @@
                           <a hx-post="/API/DeleteConnection/{{ connection.pk }}/"
                            hx-trigger="click" 
                            hx-confirm="Are you sure you want to delete this connection?" 
-                           hx-swap="afterend" 
-                           hx-get-response="#connections" 
+                           hx-swap="beforeend" 
+                           hx-target="body" 
                            class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" 
-                           role="menuitem" 
-                           onclick="setTimeout(() => window.location.reload(), 10)">
+                           role="menuitem">
                           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
@@ -253,21 +252,14 @@
     document.getElementById('sshFields').classList.remove('hidden');
   });
 
-  // Handle action menu (3-dot icon) functionality
+  // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
-    // Close all open action menus when clicking anywhere
-    if (!e.target.closest('.action-menu')) {
-      document.querySelectorAll('.action-menu-items').forEach(menu => {
-        menu.classList.add('hidden');
-      });
-    }
-  });
-
-  // Toggle action menu when clicking the 3-dot icon
-  document.querySelectorAll('.action-menu-button').forEach(button => {
-    button.addEventListener('click', function(e) {
+    // Check if clicked on action menu button
+    const actionButton = e.target.closest('.action-menu-button');
+    
+    if (actionButton) {
       e.stopPropagation();
-      const menu = this.nextElementSibling;
+      const menu = actionButton.nextElementSibling;
       const isHidden = menu.classList.contains('hidden');
       
       // Close all other open menus
@@ -277,14 +269,18 @@
       
       // Position the menu at the cursor
       if (isHidden) {
-        const rect = this.getBoundingClientRect();
         menu.style.left = `${e.clientX}px`;
         menu.style.top = `${e.clientY}px`;
       }
       
       // Toggle current menu
       menu.classList.toggle('hidden', !isHidden);
-    });
+    } else if (!e.target.closest('.action-menu')) {
+      // Close all open action menus when clicking anywhere else
+      document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+      });
+    }
   });
   
   // Close menu when scrolling
