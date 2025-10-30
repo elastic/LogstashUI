@@ -1,6 +1,30 @@
 from Core.models import Connection as ConnectionTable
 
 
+def _safe_get_numeric(data, default=0):
+    """
+    Safely extract a numeric value from data.
+    Handles cases where data might be a list, None, or invalid.
+    Returns default if value cannot be converted to a number.
+    """
+    if data is None:
+        return default
+    
+    # If it's a list, try to get the first element
+    if isinstance(data, list):
+        if len(data) == 0:
+            return default
+        data = data[0]
+    
+    # Try to convert to the appropriate numeric type
+    try:
+        if isinstance(data, (int, float)):
+            return data
+        return float(data) if '.' in str(data) else int(data)
+    except (ValueError, TypeError):
+        return default
+
+
 def check_for_monitoring_indices(es_connections):
     monitoring_indices = {}
 
@@ -92,7 +116,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
     - host: Filter by host name (optional)
     - pipeline: Filter by pipeline name (optional)
     """
-
+    print(f"get_node_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     meta_agg_stats = {
         "nodes": [],
         "node_buckets": [],
@@ -149,7 +173,17 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                         "aggs": {
                             "last_hit": {
                                 "top_hits": {
-                                    "size": 1
+                                    "size": 1,
+                                    "sort": [
+                                        {
+                                            "@timestamp": {
+                                                "order": "desc"
+                                            }
+                                        }
+                                    ],
+                                    "_source": {
+                                        "includes": ["logstash.node.*", "host.*", "@timestamp"]
+                                    }
                                 }
                             }
                         }
@@ -171,18 +205,14 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                         print(f"Unable to fetch last_hit for {node['key']}", e)
                         continue
 
-                    meta_agg_stats['reloads']['successes'] += last_hit_doc['node']['stats']['reloads']['successes']
-                    meta_agg_stats['reloads']['failures'] += last_hit_doc['node']['stats']['reloads']['failures']
-                    meta_agg_stats['events']['in'] += last_hit_doc['node']['stats']['events']['in']
-                    meta_agg_stats['events']['out'] += last_hit_doc['node']['stats']['events']['out']
-                    try:
-                        meta_agg_stats['events']['queued'] += last_hit_doc['node']['stats']['queue']['events_count']
-                    except Exception as e:
-
-                        print(f"Unable to fetch events_count for {node['key']}", e)
-                    meta_agg_stats['cpu'] += last_hit_doc['node']['stats']['os']['cpu']['percent']
-
-                    meta_agg_stats['heap_memory'] += last_hit_doc['node']['stats']['jvm']['mem']['heap_used_percent']
+                    # Use safe numeric extraction to handle lists and missing values
+                    meta_agg_stats['reloads']['successes'] += _safe_get_numeric(last_hit_doc['node']['stats']['reloads'].get('successes'))
+                    meta_agg_stats['reloads']['failures'] += _safe_get_numeric(last_hit_doc['node']['stats']['reloads'].get('failures'))
+                    meta_agg_stats['events']['in'] += _safe_get_numeric(last_hit_doc['node']['stats']['events'].get('in'))
+                    meta_agg_stats['events']['out'] += _safe_get_numeric(last_hit_doc['node']['stats']['events'].get('out'))
+                    meta_agg_stats['events']['queued'] += _safe_get_numeric(last_hit_doc['node']['stats'].get('queue', {}).get('events_count'))
+                    meta_agg_stats['cpu'] += _safe_get_numeric(last_hit_doc['node']['stats'].get('os', {}).get('cpu', {}).get('percent'))
+                    meta_agg_stats['heap_memory'] += _safe_get_numeric(last_hit_doc['node']['stats'].get('jvm', {}).get('mem', {}).get('heap_used_percent'))
 
     if meta_agg_stats['cpu']:
         meta_agg_stats['cpu'] = round(meta_agg_stats['cpu'] / len(meta_agg_stats['nodes']), 2)
@@ -193,19 +223,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
 
 
 def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", pipeline=""):
-    query = {
-        "bool": {
-            "filter": [
-                {
-                    "range": {
-                        "@timestamp": {
-                            "gte": "now-30m"
-                        }
-                    }
-                }
-            ]
-        }
-    }
+    print(f"get_pipeline_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     aggs = {
         "hosts": {
             "terms": {
@@ -221,7 +239,17 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                     "aggs": {
                         "last_hit": {
                             "top_hits": {
-                                "size": 1
+                                "size": 1,
+                                "sort": [
+                                    {
+                                        "@timestamp": {
+                                            "order": "desc"
+                                        }
+                                    }
+                                ],
+                                "_source": {
+                                    "includes": ["logstash.pipeline.*", "host.*", "@timestamp"]
+                                }
                             }
                         }
                     }
@@ -249,14 +277,39 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
     }
 
     for connection in es_connections:
+
+
         print(f"Processing connection: {connection.get('name', 'UNKNOWN')}, Type: {connection.get('connection_type', 'UNKNOWN')}")
         if connection_name:
             print(f"  Filtering for: {connection_name}")
             if connection['name'] != connection_name:
                 print(f"  Skipping {connection['name']}")
                 continue
+        if connection_name:
+            if connection['name'] != connection_name:
+                continue
         if connection['connection_type'] == "CENTRALIZED":
             es = connection['es']
+            query = {
+                "bool": {
+                    "filter": [
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "gte": "now-30m"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+
+            if logstash_host:
+                query['bool']['filter'].append({
+                    "term": {
+                        "logstash.pipeline.host.name": logstash_host
+                    }
+                })
             pipeline_stats = es.search(
                 index="metrics-logstash.pipeline-*",
                 query=query,
@@ -270,17 +323,28 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                 host_buckets = pipeline_stats['aggregations']['hosts']['buckets']
                 print(f"  Found {len(host_buckets)} host buckets for {connection['name']}")
                 if len(host_buckets) == 0:
-                    print(f"  WARNING: No pipeline data found in aggregations for {connection['name']}")
-                    print(f"  Total hits: {pipeline_stats.get('hits', {}).get('total', {})}")
-                    meta_agg_stats['connections_with_no_data'].append({
-                        'name': connection['name'],
-                        'reason': 'No pipeline metrics found in the last 30 minutes'
-                    })
+                    # Only add to warnings if we're not filtering (which would naturally exclude data)
+                    if not logstash_host and not connection_name:
+                        print(f"  WARNING: No pipeline data found in aggregations for {connection['name']}")
+                        print(f"  Total hits: {pipeline_stats.get('hits', {}).get('total', {})}")
+                        meta_agg_stats['connections_with_no_data'].append({
+                            'name': connection['name'],
+                            'reason': 'No pipeline metrics found in the last 30 minutes'
+                        })
+                    else:
+                        print(f"  No data for {connection['name']} (filtered by connection_name='{connection_name}' or host='{logstash_host}')")
                 for bucket in host_buckets:
 
                     meta_agg_stats['hosts'].append(bucket['key'])
                     for pipeline_bucket in bucket['pipelines']['buckets']:
                         meta_agg_stats['pipelines'].append(pipeline_bucket['key'])
+                        # Add connection_id to pipeline_bucket for linking
+                        # Try 'id' first, then '_id', then 'es_id'
+                        conn_id = connection.get('id') or connection.get('_id') or connection.get('es_id')
+                        pipeline_bucket['connection_id'] = conn_id
+                        pipeline_bucket['connection_name'] = connection.get('name')
+                        if not conn_id:
+                            print(f"  WARNING: No connection ID found for {connection.get('name')}. Available keys: {connection.keys()}")
                         meta_agg_stats['pipeline_buckets'].append(pipeline_bucket)
 
                         try:
@@ -289,32 +353,16 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                             print(f"Unable to fetch last_hit for {pipeline_bucket['key']}", e)
                             continue
 
-                        meta_agg_stats['reloads']['successes'] += last_hit_doc['pipeline']['total']['reloads'][
-                            'successes']
-                        meta_agg_stats['reloads']['failures'] += last_hit_doc['pipeline']['total']['reloads'][
-                            'failures']
-
-                        try:
-                            meta_agg_stats['events']['in'] += last_hit_doc['pipeline']['total']['events']['in']
-                        except Exception as e:
-                            print(e)
-
-                        try:
-                            meta_agg_stats['events']['out'] += last_hit_doc['pipeline']['total']['events']['out']
-                        except Exception as e:
-                            print(e)
-                        try:
-                            meta_agg_stats['events']['queued'] += last_hit_doc['pipeline']['total']['queue'][
-                                'events_count']
-                        except Exception as e:
-                            print(f"Unable to fetch events_count for {pipeline_bucket['key']}", e)
-                        try:
-                            meta_agg_stats['duration'] += last_hit_doc['pipeline']['total']['time']['duration']['ms']
-                        except Exception as e:
-                            print(e)
+                        # Use safe numeric extraction to handle lists and missing values
+                        pipeline_total = last_hit_doc['pipeline']['total']
+                        meta_agg_stats['reloads']['successes'] += _safe_get_numeric(pipeline_total.get('reloads', {}).get('successes'))
+                        meta_agg_stats['reloads']['failures'] += _safe_get_numeric(pipeline_total.get('reloads', {}).get('failures'))
+                        meta_agg_stats['events']['in'] += _safe_get_numeric(pipeline_total.get('events', {}).get('in'))
+                        meta_agg_stats['events']['out'] += _safe_get_numeric(pipeline_total.get('events', {}).get('out'))
+                        meta_agg_stats['events']['queued'] += _safe_get_numeric(pipeline_total.get('queue', {}).get('events_count'))
+                        meta_agg_stats['duration'] += _safe_get_numeric(pipeline_total.get('time', {}).get('duration', {}).get('ms'))
 
     if meta_agg_stats['duration']:
         meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
-    import json
-    print(json.dumps(meta_agg_stats))
+
     return meta_agg_stats

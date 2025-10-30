@@ -22,6 +22,7 @@ def get_elastic_connections_from_list():
     return [{
         "es": get_elastic_connection(es_connection['pk']),
         "name": es_connection['name'],
+        "id": es_connection['pk'],
         "connection_type": es_connection['connection_type']
     } for es_connection in es_connections]
 

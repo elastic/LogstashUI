@@ -142,13 +142,19 @@
     <!-- Filter Dropdowns -->
     <div class="bg-gray-800 rounded-lg p-6 mb-6">
         <div class="flex items-end gap-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
                 <!-- Connection Selector -->
                 <div>
                     <label for="connectionSelect"
                            class="block text-sm font-medium text-gray-300 mb-2">Connection</label>
                     <select id="connectionSelect"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            name="connection"
+                            hx-get="/API/GetNodeMetrics"
+                            hx-target="#nodeMetricsContainer"
+                            hx-include="[name='connection'],[name='host']"
+                            hx-trigger="change"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onchange="document.getElementById('hostSelect').value=''; htmx.ajax('GET', '/API/GetPipelineMetrics?connection=' + this.value + '&host=', {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
                         <option value="">All Connections</option>
                         {% for connection in Connections %}
                         <option value="{{ connection.name }}">{{ connection.name }}</option>
@@ -160,18 +166,15 @@
                 <div>
                     <label for="hostSelect" class="block text-sm font-medium text-gray-300 mb-2">Logstash Host</label>
                     <select id="hostSelect"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            name="host"
+                            hx-get="/API/GetNodeMetrics"
+                            hx-target="#nodeMetricsContainer"
+                            hx-include="[name='connection'],[name='host']"
+                            hx-trigger="change"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onchange="htmx.ajax('GET', '/API/GetPipelineMetrics?connection=' + document.getElementById('connectionSelect').value + '&host=' + this.value, {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
                         <option value="">All Hosts</option>
-                    </select>
-                </div>
-
-                <!-- Pipeline Selector -->
-                <div>
-                    <label for="pipelineSelect" class="block text-sm font-medium text-gray-300 mb-2">Logstash
-                        Pipeline</label>
-                    <select id="pipelineSelect"
-                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Pipelines</option>
+                        <!-- Options will be populated by JavaScript after node metrics load -->
                     </select>
                 </div>
             </div>
@@ -179,6 +182,7 @@
             <!-- Refresh Button -->
             <div>
                 <button id="refreshMetrics"
+                        onclick="htmx.trigger('body', 'refreshMetrics'); this.querySelector('svg').classList.add('animate-spin'); setTimeout(() => this.querySelector('svg').classList.remove('animate-spin'), 1000);"
                         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -193,75 +197,28 @@
     <!-- Node Metrics -->
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-white mb-4">Node Metrics Summary</h2>
-        <div id="nodeMetrics" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <!-- Metric cards will be populated by JavaScript -->
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-        </div>
-
-        <!-- Node Breakdown Table -->
-        <div class="mt-6">
-            <h3 class="text-xl font-bold text-white mb-4">Node Breakdown</h3>
-            <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table id="nodeBreakdownTable" class="w-full">
-                        <thead>
-                        <tr class="bg-gray-700 border-b border-gray-600">
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-12"></th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Node
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Status
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Version
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Uptime
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                CPU %
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Heap %
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Events In
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Events Out
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Queued
-                            </th>
-                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Reloads (S/F)
-                            </th>
-                        </tr>
-                        </thead>
-                        <tbody id="nodeBreakdownBody" class="bg-gray-800 divide-y divide-gray-700">
-                        <tr>
-                            <td colspan="11" class="px-6 py-8 text-center text-gray-400">
-                                <div class="animate-pulse">Loading node data...</div>
-                            </td>
-                        </tr>
-                        </tbody>
-                    </table>
+        <div id="nodeMetricsContainer" 
+             hx-get="/API/GetNodeMetrics"
+             hx-include="[name='connection'],[name='host']"
+             hx-trigger="load, refreshMetrics from:body"
+             hx-swap="innerHTML">
+            <!-- Loading state -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
                 </div>
             </div>
         </div>
@@ -270,77 +227,33 @@
     <!-- Pipeline Metrics -->
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-white mb-4">Pipeline Metrics</h2>
-        <div id="pipelineWarnings" class="mb-4"></div>
-        <div id="pipelineMetrics" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Metric cards will be populated by JavaScript -->
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
-                <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+        <div id="pipelineMetricsContainer" 
+             hx-get="/API/GetPipelineMetrics"
+             hx-include="[name='connection'],[name='host']"
+             hx-trigger="load, refreshMetrics from:body, htmx:trigger"
+             hx-swap="innerHTML">
+            <!-- Loading state -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Pipeline Breakdown Table -->
-    <div class="mt-6">
-        <h3 class="text-xl font-bold text-white mb-4">Pipeline Breakdown</h3>
-        <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-            <div class="overflow-x-auto">
-                <table id="pipelineBreakdownTable" class="w-full">
-                    <thead>
-                    <tr class="bg-gray-700 border-b border-gray-600">
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-12"></th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Pipeline
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Host
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Workers
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Batch Size
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Events In
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Events Out
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Filtered
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Duration (ms)
-                        </th>
-                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                            Reloads (S/F)
-                        </th>
-                    </tr>
-                    </thead>
-                    <tbody id="pipelineBreakdownBody" class="bg-gray-800 divide-y divide-gray-700">
-                    <tr>
-                        <td colspan="10" class="px-6 py-8 text-center text-gray-400">
-                            <div class="animate-pulse">Loading pipeline data...</div>
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 </div>
 {% endif %}
 {% endblock %}
