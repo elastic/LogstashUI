@@ -96,6 +96,24 @@ def SavePipeline(request):
         add_ids = request.POST.get("add_ids", "false").lower() == "true"
         parser = logstash_config_parse.ComponentToPipeline(data, add_ids=add_ids)
         config = parser.components_to_logstash_config()
+        
+        # Validate that the generated config can be converted back to components
+        try:
+            logstash_config_parse.logstash_config_to_components(config)
+        except Exception as e:
+            # If conversion fails, return detailed error to user
+            error_message = str(e)
+            return HttpResponse(
+                f"""<div class="p-4 bg-red-900/20 border border-red-600 rounded-lg">
+                    <h3 class="text-lg font-semibold text-red-400 mb-2">We're sorry! Something went wrong in the conversion of your pipeline!</h3>
+                    <div class="bg-gray-900 p-4 rounded mt-2 text-sm text-gray-300 font-mono whitespace-pre-wrap overflow-auto max-h-96">
+{error_message}
+                    </div>
+                    <p class="mt-4 text-gray-300">Please report this issue to us so we can fix it!!</p>
+                </div>""",
+                status=400
+            )
+        
         es = get_elastic_connection(request.POST.get("es_id"))
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
 

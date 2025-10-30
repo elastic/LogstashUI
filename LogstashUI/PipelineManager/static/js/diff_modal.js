@@ -195,7 +195,7 @@ async function viewGeneratedCode() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                 </div>
-                <div class="hidden group-hover:block absolute z-50 w-80 p-4 mt-2 left-0 bg-gray-900 border border-gray-600 rounded-lg shadow-xl text-sm text-gray-300">
+                <div class="hidden group-hover:block absolute z-50 w-96 p-4 mt-2 left-1/2 transform -translate-x-1/2 bg-gray-900 border border-gray-600 rounded-lg shadow-xl text-sm text-gray-300">
                     <p class="font-semibold text-white mb-2">How this works:</p>
                     <ul class="list-disc pl-5 space-y-1.5">
                         <li>If you are using spaces, it will be converted into tabs.</li>
@@ -208,6 +208,7 @@ async function viewGeneratedCode() {
     `;
     document.getElementById('confirmSaveButton').classList.add('hidden');
     document.getElementById('copyCodeButton').classList.remove('hidden');
+    document.getElementById('addIdsContainer').classList.add('hidden');
 
     // Show the modal first
     showDiffModal();
@@ -356,6 +357,7 @@ async function prepareDiffModal() {
     `;
     document.getElementById('confirmSaveButton').classList.remove('hidden');
     document.getElementById('copyCodeButton').classList.add('hidden');
+    document.getElementById('addIdsContainer').classList.remove('hidden');
     
     // Reset checkbox state
     const checkbox = document.getElementById('addIdsCheckbox');
@@ -622,13 +624,22 @@ async function confirmSavePipeline() {
 
         console.log('Save response status:', saveResponse.status);
 
+        const responseText = await saveResponse.text();
+        
         if (!saveResponse.ok) {
-            const errorText = await saveResponse.text();
-            console.error('Save error:', errorText);
-            throw new Error(`Failed to save pipeline: ${saveResponse.status}`);
+            console.error('Save error:', responseText);
+            
+            // Display the error HTML in the modal
+            document.getElementById('diffLoading').classList.add('hidden');
+            document.getElementById('diffContainer').innerHTML = responseText;
+            document.getElementById('diffContainer').classList.remove('hidden');
+            
+            // Hide the save button since we can't proceed
+            confirmButton.classList.add('hidden');
+            
+            return; // Don't proceed with success flow
         }
 
-        const responseText = await saveResponse.text();
         console.log('Save response:', responseText);
 
         // Show success message
@@ -648,9 +659,11 @@ async function confirmSavePipeline() {
         console.error('Error saving pipeline:', error);
         alert('Failed to save pipeline: ' + error.message);
     } finally {
-        // Re-enable button
-        confirmButton.disabled = false;
-        confirmButton.textContent = originalText;
-        confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        // Re-enable button (unless it was hidden due to error)
+        if (!confirmButton.classList.contains('hidden')) {
+            confirmButton.disabled = false;
+            confirmButton.textContent = originalText;
+            confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
     }
 }

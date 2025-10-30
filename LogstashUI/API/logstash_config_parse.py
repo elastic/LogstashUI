@@ -64,12 +64,49 @@ UNQUOTED_STRING.2: /[a-zA-Z_][a-zA-Z0-9_-]*/
 
 
 class LogstashTransformer(Transformer):
+    def _unescape_string(self, s):
+        """Unescape special characters in parsed strings."""
+        # Process escape sequences in the correct order
+        # We need to handle \\\\ -> \\ first, then other escapes
+        result = []
+        i = 0
+        while i < len(s):
+            if i < len(s) - 1 and s[i] == '\\':
+                next_char = s[i + 1]
+                if next_char == 'n':
+                    result.append('\n')
+                    i += 2
+                elif next_char == 't':
+                    result.append('\t')
+                    i += 2
+                elif next_char == 'r':
+                    result.append('\r')
+                    i += 2
+                elif next_char == '"':
+                    result.append('"')
+                    i += 2
+                elif next_char == "'":
+                    result.append("'")
+                    i += 2
+                elif next_char == '\\':
+                    result.append('\\')
+                    i += 2
+                else:
+                    # Unknown escape sequence, keep as-is
+                    result.append(s[i])
+                    i += 1
+            else:
+                result.append(s[i])
+                i += 1
+        return ''.join(result)
+    
     def multiline_string(self, s):
-        # Remove quotes and preserve the content (including newlines)
-        return s[0][1:-1]
+        # Remove quotes and unescape the content
+        return self._unescape_string(s[0][1:-1])
     
     def string(self, s):
-        return s[0][1:-1]  # Remove quotes
+        # Remove quotes and unescape the content
+        return self._unescape_string(s[0][1:-1])
 
     def condition(self, items):
         return items[0].strip()
@@ -533,8 +570,28 @@ class ComponentToPipeline:
         """Escape special characters in string values for Logstash config."""
         if not isinstance(value, str):
             return value
-        # Escape backslashes first, then double quotes
-        return value.replace('\\', '\\\\').replace('"', '\\"')
+        # Only escape double quotes and backslashes that precede special chars
+        # Preserve backslashes in patterns like \[ \] \d etc.
+        result = []
+        i = 0
+        while i < len(value):
+            if value[i] == '"':
+                result.append('\\"')
+                i += 1
+            elif value[i] == '\\' and i + 1 < len(value):
+                next_char = value[i + 1]
+                # Only escape backslash if it's followed by a char that creates an escape sequence
+                # in double-quoted strings: \n, \t, \r, \", \\
+                if next_char in ['n', 't', 'r', '"', '\\']:
+                    result.append('\\\\')
+                else:
+                    # Keep backslash as-is for patterns like \[, \], \d, etc.
+                    result.append('\\')
+                i += 1
+            else:
+                result.append(value[i])
+                i += 1
+        return ''.join(result)
     
     def _extract_plugin_values(self, plugin, section):
         config = ""
