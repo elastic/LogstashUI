@@ -499,7 +499,7 @@ def CreatePipeline(request):
             }
         )
         response = HttpResponse("Pipeline created successfully!")
-        response['HX-Redirect'] = f'/PipelineManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
+        response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
         return response
 
 
