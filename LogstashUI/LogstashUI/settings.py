@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'PipelineManager',
     'API',
     'Core',
+    'Management',
 
     # Frameworks
     'django_htmx',
@@ -64,7 +65,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_htmx.middleware.HtmxMiddleware'
+    'django_htmx.middleware.HtmxMiddleware',
+    'login_required.middleware.LoginRequiredMiddleware'
 ]
 
 ROOT_URLCONF = 'LogstashUI.urls'
@@ -157,3 +159,14 @@ if DEBUG:
     MIDDLEWARE += [
         "django_browser_reload.middleware.BrowserReloadMiddleware",
     ]
+
+
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/Management/Login/"
+LOGIN_URL = "/Management/Login/"
+
+LOGIN_REQUIRED_IGNORE_PATHS = [
+    "/Management/Login/",
+    "/Management/Logout/",
+    "/static/"
+]

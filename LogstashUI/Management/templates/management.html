@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <!-- User Management Card -->
+        <a href="/Management/Users" class="group">
+            <div class="bg-base-200 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center text-center group-hover:bg-primary group-hover:text-primary-content">
+                <div class="bg-primary/10 p-4 rounded-full mb-4 group-hover:bg-primary-content/20 transition-colors duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-primary group-hover:text-primary-content" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">User Management</h3>
+                <p class="text-sm opacity-80 group-hover:opacity-100">Manage user accounts and permissions</p>
+            </div>
+        </a>
+        
+        <!-- Add more cards here as needed -->
+        <!-- 
+        <a href="#" class="group">
+            <div class="bg-base-200 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center text-center group-hover:bg-primary group-hover:text-primary-content">
+                <div class="bg-primary/10 p-4 rounded-full mb-4 group-hover:bg-primary-content/20 transition-colors duration-300">
+                    <svg class="h-12 w-12 text-primary group-hover:text-primary-content" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">Another Feature</h3>
+                <p class="text-sm opacity-80 group-hover:opacity-100">Description of the feature</p>
+            </div>
+        </a>
+        -->
+    </div>
+</div>
+{% endblock %}
