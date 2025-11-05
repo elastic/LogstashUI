@@ -1,16 +1,17 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import views as auth_views
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth import login
 from django.http import HttpResponse
 from django.contrib import messages
-
+from django import forms
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 
 class BootstrapLoginView(auth_views.LoginView):
     template_name = "registration/login.html"
-
     def get_form_class(self):
         # Dynamically choose between login form and registration form
         if not User.objects.exists():
@@ -91,29 +92,62 @@ def Users(request):
         if action == 'add':
             username = request.POST.get('username')
             password = request.POST.get('password')
+            password2 = request.POST.get('password2')
             email = request.POST.get('email', '')
             
+            # Validate username
             if User.objects.filter(username=username).exists():
-                return HttpResponse('<div class="alert alert-error mb-4">Username already exists</div>')
-            else:
-                User.objects.create_user(username=username, password=password, email=email)
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Username already exists</div>')
+            
+            # Check if passwords match
+            if password != password2:
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">The two password fields didn\'t match.</div>')
+            
+            # Validate password using Django's validators
+            try:
+                # Create a temporary user object for validation
+                temp_user = User(username=username, email=email)
+                validate_password(password, user=temp_user)
+                
+                # If validation passes, create the user
+                user = User.objects.create_user(username=username, password=password, email=email)
+                user.is_superuser = True
+                user.is_staff = True
+                user.save()
+                
                 # Return success and trigger page reload
                 return HttpResponse('<script>window.location.reload();</script>')
+            except ValidationError as e:
+                # Return password validation errors
+                error_messages = '<br>'.join(e.messages)
+                return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
         
         elif action == 'update':
             user_id = request.POST.get('user_id')
             new_password = request.POST.get('new_password')
+            new_password2 = request.POST.get('new_password2')
             
             try:
                 user = User.objects.get(id=user_id)
                 if new_password:
-                    user.set_password(new_password)
-                    user.save()
-                    return HttpResponse('<script>window.location.reload();</script>')
+                    # Check if passwords match
+                    if new_password != new_password2:
+                        return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">The two password fields didn\'t match.</div>')
+                    
+                    # Validate password using Django's validators
+                    try:
+                        validate_password(new_password, user=user)
+                        user.set_password(new_password)
+                        user.save()
+                        return HttpResponse('<script>window.location.reload();</script>')
+                    except ValidationError as e:
+                        # Return password validation errors
+                        error_messages = '<br>'.join(e.messages)
+                        return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
                 else:
-                    return HttpResponse('<div class="alert alert-error mb-4">Password cannot be empty</div>')
+                    return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Password cannot be empty</div>')
             except User.DoesNotExist:
-                return HttpResponse('<div class="alert alert-error mb-4">User not found</div>')
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">User not found</div>')
         
         elif action == 'delete':
             user_id = request.POST.get('user_id')
