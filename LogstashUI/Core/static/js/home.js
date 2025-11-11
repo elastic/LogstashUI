@@ -181,6 +181,7 @@
     // Pipeline logs cache and filter state
     let pipelineLogsCache = {};
     let pipelineLogsFilterLevel = {};
+    let indexToPipelineName = {};
 
     async function togglePipelineLogs(pipelineName, index) {
         const logsRow = document.getElementById(`pipeline-logs-row-${index}`);
@@ -190,6 +191,9 @@
             // Expand
             logsRow.classList.remove('hidden');
             expandIcon.style.transform = 'rotate(90deg)';
+
+            // Store the mapping between index and pipeline name
+            indexToPipelineName[index] = pipelineName;
 
             // Load logs if not cached
             if (!pipelineLogsCache[pipelineName]) {
@@ -236,10 +240,8 @@
             }
         });
 
-        // Find the pipeline name for this index
-        const pipelineName = Object.keys(pipelineLogsCache).find((name, idx) => {
-            return document.getElementById(`pipeline-logs-content-${index}`) !== null;
-        });
+        // Get the pipeline name from our mapping
+        const pipelineName = indexToPipelineName[index];
 
         if (pipelineName && pipelineLogsCache[pipelineName]) {
             renderPipelineLogs(pipelineLogsCache[pipelineName], index, level);
