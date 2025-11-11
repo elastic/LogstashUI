@@ -404,5 +404,28 @@ def get_pipeline_health_report(es, pipeline_name=""):
             ]
         }
     }
+    index = "metrics-logstash.health_report-*"
+    query = {
+        "bool": {
+            "filter": {
+                "match": {
+                    "logstash.pipeline.id": pipeline_name
+                }
+            }
+        }
+    }
+
+    results = es.search(
+        query=query,
+        index=index,
+        size=1
+    )
+
+
+    if results['hits']['hits']:
+        print(results['hits']['hits'][0]['_source'])
+        return results['hits']['hits'][0]['_source']
+    else:
+        return {}
 
 

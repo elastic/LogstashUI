@@ -195,10 +195,31 @@
             // Store the mapping between index and pipeline name
             indexToPipelineName[index] = pipelineName;
 
+            // Load health report and logs in parallel
+            const logsPromise = !pipelineLogsCache[pipelineName] 
+                ? fetch(`/API/GetLogs?pipeline_name=${encodeURIComponent(pipelineName)}&connection_id=${encodeURIComponent(connectionId)}`)
+                : Promise.resolve(null);
+            
+            const healthPromise = fetch(`/API/GetPipelineHealthReport?pipeline=${encodeURIComponent(pipelineName)}&connection_id=${encodeURIComponent(connectionId)}`);
+
+            try {
+                // Fetch health report
+                const healthResponse = await healthPromise;
+                const healthData = await healthResponse.json();
+                renderPipelineHealthReport(healthData, index);
+            } catch (error) {
+                console.error('Error loading health report:', error);
+                document.getElementById(`pipeline-health-content-${index}`).innerHTML = `
+                    <div class="text-center text-red-400 py-4">
+                        Failed to load health report. Please try again.
+                    </div>
+                `;
+            }
+
             // Load logs if not cached
             if (!pipelineLogsCache[pipelineName]) {
                 try {
-                    const response = await fetch(`/API/GetLogs?pipeline_name=${encodeURIComponent(pipelineName)}&connection_id=${encodeURIComponent(connectionId)}`);
+                    const response = await logsPromise;
                     const logs = await response.json();
                     // Sort logs by timestamp (newest first) immediately after fetching
                     pipelineLogsCache[pipelineName] = logs.sort((a, b) => {
@@ -304,6 +325,130 @@
                 </div>
             `;
         }).join('');
+    }
+
+    function renderPipelineHealthReport(healthData, index) {
+        const healthContent = document.getElementById(`pipeline-health-content-${index}`);
+        
+        // Check if we have health data - now expecting direct _source object
+        if (!healthData || Object.keys(healthData).length === 0) {
+            healthContent.innerHTML = `
+                <div class="text-center text-gray-400 py-4">
+                    No health report data available
+                </div>
+            `;
+            return;
+        }
+
+        // healthData is now the _source directly
+        const pipeline = healthData.logstash?.pipeline;
+        
+        if (!pipeline) {
+            healthContent.innerHTML = `
+                <div class="text-center text-gray-400 py-4">
+                    No pipeline health data found
+                </div>
+            `;
+            return;
+        }
+
+        // Determine status color
+        const statusColors = {
+            'green': 'bg-green-500',
+            'yellow': 'bg-yellow-500',
+            'red': 'bg-red-500',
+            'unknown': 'bg-gray-500'
+        };
+        const statusColor = statusColors[pipeline.status] || 'bg-gray-500';
+        
+        // Build the health report HTML
+        let html = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Status -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full ${statusColor}"></span>
+                        <div>
+                            <p class="text-xs text-gray-400">Status</p>
+                            <p class="text-lg font-semibold text-white uppercase">${pipeline.status || 'Unknown'}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- State -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <p class="text-xs text-gray-400">State</p>
+                    <p class="text-lg font-semibold text-white">${pipeline.state || 'Unknown'}</p>
+                </div>
+            </div>
+        `;
+
+        // Add symptom if exists
+        if (pipeline.symptom) {
+            html += `
+                <div class="mt-4 bg-yellow-900/20 border border-yellow-600/50 rounded-lg p-4">
+                    <p class="text-sm font-semibold text-yellow-400 mb-1">Symptom</p>
+                    <p class="text-sm text-gray-300">${pipeline.symptom}</p>
+                </div>
+            `;
+        }
+
+        // Add diagnosis if exists
+        if (pipeline.diagnosis) {
+            const diagnosis = pipeline.diagnosis;
+            html += `
+                <div class="mt-4 bg-red-900/20 border border-red-600/50 rounded-lg p-4">
+                    <p class="text-sm font-semibold text-red-400 mb-2">Diagnosis</p>
+                    <div class="space-y-2 text-sm">
+                        ${diagnosis.cause ? `<p><span class="text-gray-400">Cause:</span> <span class="text-gray-300">${diagnosis.cause}</span></p>` : ''}
+                        ${diagnosis.action ? `<p><span class="text-gray-400">Action:</span> <span class="text-gray-300">${diagnosis.action}</span></p>` : ''}
+                        ${diagnosis.help_url ? `<p><a href="${diagnosis.help_url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">View Documentation →</a></p>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add impacts if exists
+        if (pipeline.impacts) {
+            const impacts = pipeline.impacts;
+            const severityColors = {
+                1: 'text-red-400',
+                2: 'text-yellow-400',
+                3: 'text-blue-400'
+            };
+            const severityColor = severityColors[impacts.severity] || 'text-gray-400';
+            
+            html += `
+                <div class="mt-4 bg-orange-900/20 border border-orange-600/50 rounded-lg p-4">
+                    <p class="text-sm font-semibold text-orange-400 mb-2">Impact</p>
+                    <div class="space-y-2 text-sm">
+                        <p><span class="text-gray-400">Severity:</span> <span class="${severityColor} font-semibold">${impacts.severity}</span></p>
+                        ${impacts.description ? `<p><span class="text-gray-400">Description:</span> <span class="text-gray-300">${impacts.description}</span></p>` : ''}
+                        ${impacts.impact_areas ? `<p><span class="text-gray-400">Areas:</span> <span class="text-gray-300">${impacts.impact_areas.join(', ')}</span></p>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add worker utilization if exists
+        if (pipeline.flow && pipeline.flow.worker_utilization) {
+            const wu = pipeline.flow.worker_utilization;
+            html += `
+                <div class="mt-4 bg-gray-700 rounded-lg p-4">
+                    <p class="text-sm font-semibold text-white mb-3">Worker Utilization</p>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                        <div><span class="text-gray-400">Current:</span> <span class="text-white font-semibold">${wu.current}%</span></div>
+                        <div><span class="text-gray-400">1 Minute:</span> <span class="text-white">${wu.last_1_minute}%</span></div>
+                        <div><span class="text-gray-400">5 Minutes:</span> <span class="text-white">${wu.last_5_minutes}%</span></div>
+                        <div><span class="text-gray-400">15 Minutes:</span> <span class="text-white">${wu.last_15_minutes}%</span></div>
+                        <div><span class="text-gray-400">1 Hour:</span> <span class="text-white">${wu.last_1_hour}%</span></div>
+                        <div><span class="text-gray-400">Lifetime:</span> <span class="text-white">${wu.lifetime}%</span></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        healthContent.innerHTML = html;
     }
 
     // Make pipeline functions available globally

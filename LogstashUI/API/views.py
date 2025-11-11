@@ -641,13 +641,12 @@ def _safe_extract_value(data, default=0):
 
 
 def GetPipelineHealthReport(request):
-    connection_name = request.GET.get("connection", "")
+    connection_id = request.GET.get("connection_id", "")
     pipeline = request.GET.get("pipeline", "")
 
     # Get the health report data
     health_report_data = logstash_metrics.get_pipeline_health_report(
-        get_elastic_connection(),
-        connection_name,
+        get_elastic_connection(connection_id),
         pipeline
     )
 
