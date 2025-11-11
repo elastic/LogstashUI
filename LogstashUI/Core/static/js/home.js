@@ -44,7 +44,7 @@
     let logsFilterLevel = {};
     let indexToNodeName = {};
 
-    async function toggleLogs(nodeName, index) {
+    async function toggleLogs(nodeName, index, connectionId) {
         const logsRow = document.getElementById(`logs-row-${index}`);
         const expandIcon = document.getElementById(`expand-icon-${index}`);
 
@@ -59,7 +59,7 @@
             // Load logs if not cached
             if (!logsCache[nodeName]) {
                 try {
-                    const response = await fetch(`/API/GetLogs?logstash_node=${encodeURIComponent(nodeName)}`);
+                    const response = await fetch(`/API/GetLogs?logstash_node=${encodeURIComponent(nodeName)}&connection_id=${encodeURIComponent(connectionId)}`);
                     const logs = await response.json();
                     // Sort logs by timestamp (newest first) immediately after fetching
                     logsCache[nodeName] = logs.sort((a, b) => {
@@ -183,7 +183,7 @@
     let pipelineLogsFilterLevel = {};
     let indexToPipelineName = {};
 
-    async function togglePipelineLogs(pipelineName, index) {
+    async function togglePipelineLogs(pipelineName, index, connectionId) {
         const logsRow = document.getElementById(`pipeline-logs-row-${index}`);
         const expandIcon = document.getElementById(`pipeline-expand-icon-${index}`);
 
@@ -198,7 +198,7 @@
             // Load logs if not cached
             if (!pipelineLogsCache[pipelineName]) {
                 try {
-                    const response = await fetch(`/API/GetLogs?pipeline_name=${encodeURIComponent(pipelineName)}`);
+                    const response = await fetch(`/API/GetLogs?pipeline_name=${encodeURIComponent(pipelineName)}&connection_id=${encodeURIComponent(connectionId)}`);
                     const logs = await response.json();
                     // Sort logs by timestamp (newest first) immediately after fetching
                     pipelineLogsCache[pipelineName] = logs.sort((a, b) => {

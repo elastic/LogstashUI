@@ -1,4 +1,4 @@
-﻿{% load custom_filters %}
+{% load custom_filters %}
 
 <div id="nodeMetrics" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
     <!-- Logstash Nodes -->
@@ -93,7 +93,7 @@
                     {% for node in processed_node_buckets %}
                         <tr class="hover:bg-gray-700/50 transition-colors" id="node-row-{{ forloop.counter0 }}">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                <button onclick="toggleLogs('{{ node.node_name }}', {{ forloop.counter0 }})" 
+                                <button onclick="toggleLogs('{{ node.node_name }}', {{ forloop.counter0 }}, '{{ node.connection_id }}')" 
                                         class="text-blue-400 hover:text-blue-300 focus:outline-none" 
                                         id="expand-btn-{{ forloop.counter0 }}">
                                     <svg class="w-5 h-5 transform transition-transform" id="expand-icon-{{ forloop.counter0 }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -60,6 +60,18 @@ def get_instances_centralized(es):
     instances = es.search(
         size=0,
         index="metrics-logstash*,logs-logstash*",
+        query={
+            "bool": {
+                "filter": {
+                    "range": {
+                        "@timestamp": {
+                            "gte": "now-2h"
+                        }
+                    }
+                }
+            }
+
+        },
         aggs={
             "logstash_nodes": {
                 "terms": {
@@ -142,11 +154,16 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
             es = connection['es']
             query = {
                 "bool": {
+                    "must": {
+                        "exists": {
+                            "field": "logstash"
+                        }
+                    },
                     "filter": [
                         {
                             "range": {
                                 "@timestamp": {
-                                    "gte": "now-30m"
+                                    "gte": "now-2h"
                                 }
                             }
                         }
@@ -191,17 +208,24 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                 },
                 size=0
             )
+
+
             if 'aggregations' not in node_stats:
                 continue
             else:
                 node_bucket = [bucket for bucket in node_stats['aggregations']['nodes']['buckets']]
+                # Add connection_id to each node bucket for linking
+                conn_id = connection.get('id') or connection.get('_id') or connection.get('es_id')
+                for bucket in node_bucket:
+                    bucket['connection_id'] = conn_id
+                    bucket['connection_name'] = connection.get('name')
                 meta_agg_stats['node_buckets'] += node_bucket
                 for node in node_bucket:
                     meta_agg_stats['nodes'].append(node['key'])
                     try:
                         last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
                     except KeyError as e:
-
+                        print(node)
                         print(f"Unable to fetch last_hit for {node['key']}", e)
                         continue
 
@@ -256,7 +280,6 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                 }
             }
         }
-
     }
 
     meta_agg_stats = {
@@ -296,7 +319,7 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                         {
                             "range": {
                                 "@timestamp": {
-                                    "gte": "now-30m"
+                                    "gte": "now-2h"
                                 }
                             }
                         }
@@ -366,3 +389,20 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
         meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
 
     return meta_agg_stats
+
+
+
+def get_pipeline_health_report(es, pipeline_name=""):
+    query = {
+        "bool": {
+            "filter": [
+                {
+                    "term": {
+                        "logstash.pipeline.name": pipeline_name
+                    }
+                }
+            ]
+        }
+    }
+
+

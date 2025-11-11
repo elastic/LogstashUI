@@ -587,8 +587,13 @@ def GetNodeMetrics(request):
             reload_success = node_data.get('reloads', {}).get('successes', 0)
             reload_failures = node_data.get('reloads', {}).get('failures', 0)
             
+            conn_id = bucket.get('connection_id')
+            conn_name = bucket.get('connection_name')
+            
             processed_buckets.append({
                 'node_name': node_name,
+                'connection_id': conn_id,
+                'connection_name': conn_name,
                 'status': status,
                 'version': version,
                 'uptime': uptime,
@@ -633,6 +638,20 @@ def _safe_extract_value(data, default=0):
                 return v
         return default
     return data
+
+
+def GetPipelineHealthReport(request):
+    connection_name = request.GET.get("connection", "")
+    pipeline = request.GET.get("pipeline", "")
+
+    # Get the health report data
+    health_report_data = logstash_metrics.get_pipeline_health_report(
+        get_elastic_connection(),
+        connection_name,
+        pipeline
+    )
+
+    return JsonResponse(health_report_data)
 
 
 def GetPipelineMetrics(request):
@@ -724,9 +743,16 @@ def GetPipelineMetrics(request):
 def GetLogs(request):
     logstash_node = request.GET.get("logstash_node", "")
     pipeline_name = request.GET.get("pipeline_name", "")
-    all_logs = []
-    for connection in list(ConnectionTable.objects.filter(connection_type="CENTRALIZED").values("pk")):
-        es = get_elastic_connection(connection['pk'])
-        all_logs += logstash_metrics.get_logs(es, logstash_node, pipeline_name)
-
-    return JsonResponse(all_logs, safe=False)
+    connection_id = request.GET.get("connection_id", "")
+    
+    # Require connection_id to be provided
+    if not connection_id:
+        return JsonResponse({"error": "connection_id is required"}, status=400)
+    
+    try:
+        es = get_elastic_connection(connection_id)
+        all_logs = logstash_metrics.get_logs(es, logstash_node, pipeline_name)
+        return JsonResponse(all_logs, safe=False)
+    except Exception as e:
+        print(f"Error fetching logs for connection {connection_id}: {e}")
+        return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)

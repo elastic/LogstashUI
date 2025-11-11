@@ -95,7 +95,7 @@
                     {% for pipeline in processed_pipeline_buckets %}
                         <tr class="hover:bg-gray-700/50 transition-colors" id="pipeline-row-{{ forloop.counter0 }}">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                <button onclick="togglePipelineLogs('{{ pipeline.pipeline_name }}', {{ forloop.counter0 }})" 
+                                <button onclick="togglePipelineLogs('{{ pipeline.pipeline_name }}', {{ forloop.counter0 }}, '{{ pipeline.connection_id }}')" 
                                         class="text-blue-400 hover:text-blue-300 focus:outline-none" 
                                         id="pipeline-expand-btn-{{ forloop.counter0 }}">
                                     <svg class="w-5 h-5 transform transition-transform" id="pipeline-expand-icon-{{ forloop.counter0 }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
