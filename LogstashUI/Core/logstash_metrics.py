@@ -109,6 +109,13 @@ def get_logs(es, logstash_node="", pipeline_name=""):
     logstash_logs = es.search(
         size=1000,
         index="logs-logstash.log-*",
+        sort=[
+            {
+                "@timestamp": {
+                    "order": "desc"
+                }
+            }
+        ],
         source=[
             "log.level",
             "message",
@@ -154,11 +161,6 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
             es = connection['es']
             query = {
                 "bool": {
-                    "must": {
-                        "exists": {
-                            "field": "logstash"
-                        }
-                    },
                     "filter": [
                         {
                             "range": {
@@ -177,6 +179,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                         "host.hostname": logstash_host
                     }
                 })
+
 
             node_stats = es.search(
                 index="metrics-logstash.node-*",
@@ -334,11 +337,13 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                     }
                 })
             pipeline_stats = es.search(
-                index="metrics-logstash.pipeline-*",
+                index="metrics-logstash.pipeline-*,metrics-logstash.health_report-*",
                 query=query,
                 aggs=aggs,
                 size=0
             )
+
+
             if 'aggregations' not in pipeline_stats:
                 print(f"  No aggregations found for {connection['name']}")
                 continue
@@ -393,17 +398,7 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
 
 
 def get_pipeline_health_report(es, pipeline_name=""):
-    query = {
-        "bool": {
-            "filter": [
-                {
-                    "term": {
-                        "logstash.pipeline.name": pipeline_name
-                    }
-                }
-            ]
-        }
-    }
+
     index = "metrics-logstash.health_report-*"
     query = {
         "bool": {
@@ -423,7 +418,6 @@ def get_pipeline_health_report(es, pipeline_name=""):
 
 
     if results['hits']['hits']:
-        print(results['hits']['hits'][0]['_source'])
         return results['hits']['hits'][0]['_source']
     else:
         return {}
