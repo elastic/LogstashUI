@@ -20,6 +20,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 
+# Custom error handlers
+handler400 = 'Core.error_handlers.handler400'
+handler403 = 'Core.error_handlers.handler403'
+handler404 = 'Core.error_handlers.handler404'
+handler500 = 'Core.error_handlers.handler500'
 
 urlpatterns = [
 

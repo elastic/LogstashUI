@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-4)q@pud0b5-^-fplbv3db*2!p!4*10n^5%=9e!8lr%&t!x9+(4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -59,6 +59,7 @@ TAILWIND_APP_NAME = "theme"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -66,7 +67,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
-    'login_required.middleware.LoginRequiredMiddleware'
+    'login_required.middleware.LoginRequiredMiddleware',
+
 ]
 
 ROOT_URLCONF = 'LogstashUI.urls'
