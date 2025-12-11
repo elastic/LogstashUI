@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ error_code }} - {{ error_title }} | LogstashUI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full bg-gray-900 text-gray-100">
+    <div class="min-h-full flex items-center justify-center px-4">
+        <div class="max-w-md w-full text-center">
+            <!-- Error Code -->
+            <h1 class="text-8xl font-bold text-red-500 mb-4">{{ error_code }}</h1>
+            
+            <!-- Error Title -->
+            <h2 class="text-2xl font-semibold text-gray-300 mb-4">{{ error_title }}</h2>
+            
+            <!-- Error Message -->
+            <p class="text-gray-400 mb-8">{{ error_message }}</p>
+
+            {% if path %}
+            <p class="text-sm text-gray-500 mb-4">Path: <code class="text-gray-400">{{ path }}</code></p>
+            {% endif %}
+
+            {% if exception or stack_trace %}
+            <!-- Error Details -->
+            <div class="text-left bg-gray-800 border border-gray-700 rounded-lg p-4 mb-8 overflow-auto max-h-64">
+                {% if exception %}
+                <p class="text-red-400 font-mono text-sm mb-2">{{ exception }}</p>
+                {% endif %}
+                {% if stack_trace %}
+                <details class="mt-2">
+                    <summary class="text-gray-400 text-sm cursor-pointer hover:text-gray-300">Stack Trace</summary>
+                    <pre class="text-xs text-gray-500 mt-2 whitespace-pre-wrap">{{ stack_trace }}</pre>
+                </details>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Action Buttons -->
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="/" 
+                   class="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors">
+                    Go to Home
+                </a>
+                
+                <a href="https://github.com/Codyjackson0321/LogstashUI/issues" 
+                   target="_blank"
+                   class="inline-flex items-center justify-center px-6 py-3 border border-gray-600 text-gray-300 hover:bg-gray-800 font-medium rounded-md transition-colors">
+                    Report Issue
+                </a>
+            </div>
+
+            <!-- Back Link -->
+            <p class="mt-8 text-sm text-gray-500">
+                <button onclick="history.back()" class="text-blue-400 hover:text-blue-300 underline">
+                    ← Go Back
+                </button>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
