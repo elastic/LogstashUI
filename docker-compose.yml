@@ -1,0 +1,15 @@
+services:
+  logstashui:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - logstashui_data:/app/LogstashUI/data
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - ALLOWED_HOSTS=*
+    restart: unless-stopped
+
+volumes:
+  logstashui_data:
