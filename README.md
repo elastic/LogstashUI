@@ -32,7 +32,7 @@ git clone https://github.com/Codyjackson0321/LogstashUI.git
 
 ### 2. Start the docker compose
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 ### 3. Navigate to https://{your_server_ip_or_hostname} and create your initial user
