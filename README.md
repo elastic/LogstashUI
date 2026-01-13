@@ -42,6 +42,7 @@ docker compose up
 <img width="939" height="475" alt="image" src="https://github.com/user-attachments/assets/7b093ee3-1148-4208-80db-e6f5722b37d3" />
 
 ### 5. Add a connection
+![addconnection](https://github.com/user-attachments/assets/0ab9330d-c9fe-434d-a322-6524d1bc4098)
 
 
 
