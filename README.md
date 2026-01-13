@@ -44,6 +44,13 @@ docker compose up
 ### 5. Add a connection
 ![addconnection](https://github.com/user-attachments/assets/0ab9330d-c9fe-434d-a322-6524d1bc4098)
 
+### 6. Start managing pipelines!
+<img width="1596" height="888" alt="image" src="https://github.com/user-attachments/assets/7ac83f23-3f36-4a3f-bec1-2aa4867e1a11" />
+
+### 7. [Optional] Add monitoring to your connections:
+Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. As long as the data is being indexed to one of your existing Elasticsearch connections, you'll see metrics and logs like this!
+<img width="1570" height="876" alt="image" src="https://github.com/user-attachments/assets/01f402ca-0a88-4eb0-a8b3-b6fba15fcba5" />
+
 
 
 ## Reporting Issues
