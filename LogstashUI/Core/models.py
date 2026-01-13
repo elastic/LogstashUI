@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinLengthValidator
+from .encryption import encrypt_credential, decrypt_credential
 
 
 class Connection(models.Model):
@@ -41,7 +42,7 @@ class Connection(models.Model):
         help_text="Username for authentication"
     )
     password = models.CharField(
-        max_length=255,
+        max_length=512,
         blank=True,
         null=True,
         help_text="Password for authentication (leave empty if using SSH key)"
@@ -65,7 +66,7 @@ class Connection(models.Model):
         help_text="Elastic Cloud URL (alternative to Cloud ID)"
     )
     api_key = models.CharField(
-        max_length=255,
+        max_length=512,
         blank=True,
         null=True,
         help_text="API key for authentication (alternative to username/password)"
@@ -108,4 +109,29 @@ class Connection(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
+        
+        # Encrypt sensitive fields before saving
+        if self.password and not self._is_encrypted(self.password):
+            self.password = encrypt_credential(self.password)
+        if self.ssh_key and not self._is_encrypted(self.ssh_key):
+            self.ssh_key = encrypt_credential(self.ssh_key)
+        if self.api_key and not self._is_encrypted(self.api_key):
+            self.api_key = encrypt_credential(self.api_key)
+        
         super().save(*args, **kwargs)
+    
+    def _is_encrypted(self, value):
+        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        return value and value.startswith('gAAAAA')
+    
+    def get_password(self):
+        """Get decrypted password"""
+        return decrypt_credential(self.password) if self.password else None
+    
+    def get_ssh_key(self):
+        """Get decrypted SSH key"""
+        return decrypt_credential(self.ssh_key) if self.ssh_key else None
+    
+    def get_api_key(self):
+        """Get decrypted API key"""
+        return decrypt_credential(self.api_key) if self.api_key else None

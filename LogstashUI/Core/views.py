@@ -70,9 +70,9 @@ def _get_creds(connection_id):
         connection_data['hosts'] = connection.host
 
     if connection.api_key:
-        connection_data['api_key'] = connection.api_key
+        connection_data['api_key'] = connection.get_api_key()
     else:
-        connection_data['http_auth'] = (connection.username, connection.password)
+        connection_data['http_auth'] = (connection.username, connection.get_password())
 
     return connection_data
 
