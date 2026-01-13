@@ -36,6 +36,7 @@ docker compose up
 ```
 
 ### 3. Navigate to https://{server_ip} and create your initial user
+<img width="729" height="887" alt="image" src="https://github.com/user-attachments/assets/c19c6dfb-ce8c-427b-be40-c9cfeaf6ab50" />
 
 
 
