@@ -172,3 +172,21 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/Management/Logout/",
     "/static/"
 ]
+
+# Proxy/HTTPS settings for nginx reverse proxy
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+
+# CSRF Trusted Origins - configurable via environment variable
+# For self-hosted deployments, users should set CSRF_TRUSTED_ORIGINS env var
+# Example: CSRF_TRUSTED_ORIGINS=https://myserver.com,https://192.168.1.100
+csrf_origins_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if csrf_origins_env:
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(',')]
+else:
+    # Default for local development
+    CSRF_TRUSTED_ORIGINS = [
+        'https://localhost',
+        'https://127.0.0.1',
+    ]

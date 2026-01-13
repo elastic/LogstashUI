@@ -1,15 +1,45 @@
 services:
   logstashui:
     build: .
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     volumes:
       - logstashui_data:/app/LogstashUI/data
     environment:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - ALLOWED_HOSTS=*
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
     restart: unless-stopped
+    networks:
+      - logstashui_network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_certs:/etc/nginx/certs
+    depends_on:
+      - logstashui
+    restart: unless-stopped
+    networks:
+      - logstashui_network
+    entrypoint: /bin/sh -c "
+      if [ ! -f /etc/nginx/certs/cert.pem ]; then
+        apk add --no-cache openssl &&
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048
+          -keyout /etc/nginx/certs/key.pem
+          -out /etc/nginx/certs/cert.pem
+          -subj '/CN=localhost';
+      fi &&
+      nginx -g 'daemon off;'"
 
 volumes:
   logstashui_data:
+  nginx_certs:
+
+networks:
+  logstashui_network:
