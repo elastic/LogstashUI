@@ -53,6 +53,13 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 <img width="1570" height="876" alt="image" src="https://github.com/user-attachments/assets/01f402ca-0a88-4eb0-a8b3-b6fba15fcba5" />
 
 
+## Coming soon!
+- Re-implementation of the 'simulate' feature, which will allow the user to input a JSON and see how it gets transformed by each filter plugin
+- Direct implementation of routing input/output between Logstash nodes
+- More detailed logging for reporting issues
+- Reusable grok and regex patterns
+- Git backups for configuration
+- Loggy AI Assistant
 
 ## Reporting Issues
 
