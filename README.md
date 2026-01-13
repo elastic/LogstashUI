@@ -38,6 +38,10 @@ docker compose up
 ### 3. Navigate to https://{server_ip} and create your initial user
 <img width="729" height="887" alt="image" src="https://github.com/user-attachments/assets/c19c6dfb-ce8c-427b-be40-c9cfeaf6ab50" />
 
+### 4. Navigate to the Connection Manager
+<img width="939" height="475" alt="image" src="https://github.com/user-attachments/assets/7b093ee3-1148-4208-80db-e6f5722b37d3" />
+
+### 5. Add a connection
 
 
 
