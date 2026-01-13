@@ -56,7 +56,7 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 
 ## Reporting Issues
 
-Found a bug or have a feature request? [Open an issue](https://github.com/Codyjackson0321/LogstashUI/issues/new).
+Found a bug or have a feature request? [Open an issue](https://github.com/Codyjackson0321/LogstashUI/issues/new?template=issue.md).
 
 ## License
 
