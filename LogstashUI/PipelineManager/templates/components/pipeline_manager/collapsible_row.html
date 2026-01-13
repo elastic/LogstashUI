@@ -1,6 +1,6 @@
 
 
-<td colspan=4>
+<td colspan=6>
     <div class="mb-2">
         <button onclick="document.getElementById('createPipelineModal').showModal()" class="btn btn-primary btn-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -91,6 +91,7 @@
     </dialog>
 </td>
 
+<!-- DISABLED: Instances table can cause issues
 <td colspan=2 class="overflow-x-auto">
     <table class="w-full">
         <thead>
@@ -105,6 +106,7 @@
         </tbody>
     </table>
 </td>
+-->
 
 <script>
     document.body.addEventListener('htmx:configRequest', function(event) {

@@ -366,7 +366,8 @@ def GetPipelines(request, connection_id):
                     }
                 )
 
-            context['instances'] = logstash_metrics.get_instances_centralized(es)
+            # DISABLED: Instances table can cause issues
+            # context['instances'] = logstash_metrics.get_instances_centralized(es)
         except Exception as e:
             print("Couldn't connect to elastic!!")
 
@@ -376,10 +377,11 @@ def GetPipelines(request, connection_id):
     context['pipelines'] = logstash_pipelines
     context['es_id'] = connection.id
     # --- Gets monitoring data from the connection
-    try:
-        context['instances'] = logstash_metrics.get_instances_centralized(es)
-    except Exception as e:
-        print("Couldn't get Logstash instances!")
+    # DISABLED: Instances table can cause issues
+    # try:
+    #     context['instances'] = logstash_metrics.get_instances_centralized(es)
+    # except Exception as e:
+    #     print("Couldn't get Logstash instances!")
 
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)
