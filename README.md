@@ -35,7 +35,7 @@ git clone https://github.com/Codyjackson0321/LogstashUI.git
 docker compose up
 ```
 
-### 3. Navigate to https://{server_ip} and create your initial user
+### 3. Navigate to https://{your_server_ip_or_hostname} and create your initial user
 <img width="729" height="887" alt="image" src="https://github.com/user-attachments/assets/c19c6dfb-ce8c-427b-be40-c9cfeaf6ab50" />
 
 ### 4. Navigate to the Connection Manager
@@ -45,7 +45,8 @@ docker compose up
 ![addconnection](https://github.com/user-attachments/assets/0ab9330d-c9fe-434d-a322-6524d1bc4098)
 
 ### 6. Start managing pipelines!
-<img width="1596" height="888" alt="image" src="https://github.com/user-attachments/assets/7ac83f23-3f36-4a3f-bec1-2aa4867e1a11" />
+![addmoveplugin](https://github.com/user-attachments/assets/f2f8013d-b8d6-4deb-8a7a-689e1258d450)
+
 
 ### 7. [Optional] Add monitoring to your connections:
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. As long as the data is being indexed to one of your existing Elasticsearch connections, you'll see metrics and logs like this!
