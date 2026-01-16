@@ -56,7 +56,22 @@
         <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('createPipelineModal').close()"></div>
         <div class="modal-box relative z-10">
             <h3 class="font-bold text-lg mb-4">Create New Pipeline</h3>
-            <form hx-post="/API/CreatePipeline/" hx-target="#pipelineList" hx-swap="innerHTML">
+            
+            <!-- Error container -->
+            <div id="createPipelineError" class="mb-4"></div>
+            
+            <form hx-post="/API/CreatePipeline/" 
+                  hx-target="#pipelineList" 
+                  hx-swap="innerHTML"
+                  hx-on::before-request="document.getElementById('createPipelineError').innerHTML = ''"
+                  hx-on::response-error="
+                    const errorDiv = document.getElementById('createPipelineError');
+                    errorDiv.innerHTML = `
+                      <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
+                        <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while creating the pipeline'}</p>
+                      </div>
+                    `;
+                  ">
                 {% csrf_token %}
                 <div class="form-control w-full mb-4">
                     <label class="label">
@@ -66,8 +81,8 @@
                            name="pipeline" 
                            class="input input-bordered w-full" 
                            required
-                           pattern="^[a-zA-Z0-9_-]+$"
-                           title="Only letters, numbers, underscores and hyphens are allowed">
+                           pattern="^[a-zA-Z_][a-zA-Z0-9_\-]*$"
+                           title="Pipeline name must begin with a letter or underscore and can contain only letters, underscores, dashes, and numbers">
                 </div>
                 <div class="form-control w-full">
                     <label class="label">

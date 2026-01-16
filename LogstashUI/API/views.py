@@ -23,6 +23,35 @@ from datetime import datetime, timezone
 from django.template.loader import get_template
 import traceback
 from django.views.decorators.csrf import csrf_exempt
+import re
+
+
+def validate_pipeline_name(pipeline_name):
+    """
+    Validate pipeline name according to Elasticsearch rules.
+    
+    Pipeline ID must:
+    - Begin with a letter or underscore
+    - Contain only letters, underscores, dashes, hyphens, and numbers
+    
+    Args:
+        pipeline_name (str): The pipeline name to validate
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not pipeline_name:
+        return False, "Pipeline name cannot be empty"
+    
+    # Check if starts with letter or underscore
+    if not re.match(r'^[a-zA-Z_]', pipeline_name):
+        return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
+    
+    # Check if contains only valid characters
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\-]*$', pipeline_name):
+        return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
+    
+    return True, None
 
 
 def TestConnectivity(request=None, connection_id=None):
@@ -172,6 +201,15 @@ def SavePipeline(request):
     data = json.loads(request.POST.get("components"))
     if "save_pipeline" in request.POST:
         pipeline_name = request.POST.get("pipeline")
+        
+        # Validate pipeline name
+        is_valid, error_msg = validate_pipeline_name(pipeline_name)
+        if not is_valid:
+            return HttpResponse(
+                f'<div class="p-4 bg-red-900/20 border border-red-600 rounded-lg"><p class="text-red-400">{error_msg}</p></div>',
+                status=400
+            )
+        
         add_ids = request.POST.get("add_ids", "false").lower() == "true"
         parser = logstash_config_parse.ComponentToPipeline(data, add_ids=add_ids)
         config = parser.components_to_logstash_config()
@@ -401,6 +439,14 @@ def UpdatePipelineSettings(request):
                     status=400
                 )
             
+            # Validate pipeline name
+            is_valid, error_msg = validate_pipeline_name(pipeline_name)
+            if not is_valid:
+                return HttpResponse(
+                    f'<div class="text-red-400 text-sm">{error_msg}</div>',
+                    status=400
+                )
+            
             # Get form values
             description = request.POST.get("description", "")
             pipeline_workers = request.POST.get("pipeline_workers")
@@ -472,6 +518,11 @@ def CreatePipeline(request):
         pipeline_name = request.POST.get("pipeline")
         pipeline_config = request.POST.get("pipeline_config", "").strip()
 
+        # Validate pipeline name
+        is_valid, error_msg = validate_pipeline_name(pipeline_name)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
         # Use provided config or default empty config
         if pipeline_config:
             pipeline_content = pipeline_config
@@ -509,6 +560,11 @@ def DeletePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
         pipeline_name = request.POST.get("pipeline")
+
+        # Validate pipeline name
+        is_valid, error_msg = validate_pipeline_name(pipeline_name)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
 
         es = get_elastic_connection(es_id)
         es.logstash.delete_pipeline(id=pipeline_name)
