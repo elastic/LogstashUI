@@ -80,3 +80,15 @@ def _get_creds(connection_id):
 def get_elastic_connection(connection_id):
     elastic_creds = _get_creds(connection_id)
     return Elasticsearch(**elastic_creds)
+
+
+def health_check(request):
+    """
+    Health check endpoint for monitoring and container orchestration.
+    Returns 200 OK if the application is running.
+    """
+    from django.http import JsonResponse
+    return JsonResponse({
+        'status': 'healthy',
+        'service': 'LogstashUI'
+    })
