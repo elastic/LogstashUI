@@ -196,3 +196,36 @@ else:
         'https://localhost',
         'https://127.0.0.1',
     ]
+
+# Security Headers
+# These settings protect against common web vulnerabilities
+# Only enforce in production (when DEBUG=False)
+if not DEBUG:
+    # Ensure cookies are only sent over HTTPS
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # HTTP Strict Transport Security (HSTS)
+    # Tells browsers to only access the site via HTTPS for the next year
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # Redirect all HTTP requests to HTTPS at Django level
+    # Note: nginx already does this, but this adds defense in depth
+    SECURE_SSL_REDIRECT = True
+    
+    # Prevent the site from being embedded in iframes (clickjacking protection)
+    X_FRAME_OPTIONS = 'DENY'
+    
+    # Prevent browsers from guessing content types
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    
+    # Enable browser's XSS filtering
+    SECURE_BROWSER_XSS_FILTER = True
+else:
+    # Development mode - allow HTTP for local testing
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+    X_FRAME_OPTIONS = 'SAMEORIGIN'

@@ -31,9 +31,21 @@ RUN python manage.py tailwind build
 # Collect static files
 RUN python manage.py collectstatic --noinput
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Create data directory and set permissions
+RUN mkdir -p /app/LogstashUI/data && \
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app
+
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && \
+    chown appuser:appuser /entrypoint.sh
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8080

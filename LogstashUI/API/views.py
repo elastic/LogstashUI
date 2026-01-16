@@ -208,89 +208,89 @@ def SavePipeline(request):
 
         return HttpResponse("Pipeline saved successfully!")
 
-def SimulatePipeline(request):
-    components = request.POST.get("components")
-    data = json.loads(components)
-    input_json = json.loads(request.POST.get("log_text"))
-
-    # 1. Generate the Logstash config
-    config_str = logstash_config_parse.components_to_logstash_config({"components": data}, test=True)
-
-
-    #print(config_str)
-    # 2. Write config to a temp file
-    with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
-        tmp.write(config_str)
-        tmp_path = tmp.name
-
-    container_conf = "/usr/share/logstash/pipeline/simulate.conf"
-
-    # 3. Spin up logstash container with the config
-    cmd = [
-        "docker", "run", "--rm", "-i",
-        "-v", f"{tmp_path}:{container_conf}:ro",
-        "docker.elastic.co/logstash/logstash:9.1.4",
-        "-f", container_conf,
-        "--pipeline.ecs_compatibility=disabled"
-    ]
-
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
-
-    while True:
-        line = proc.stdout.readline()
-        #print(line)
-        if not line:
-            break
-        if "Pipelines running" in line:
-            ready = True
-            break
-
-    filter_counter = 0
-    test_results = {}
-    for test_filter in range(0, len(json.loads(components)['filter'])):
-        input_json['plugin_num'] = filter_counter
-        proc.stdin.write(json.dumps(input_json)+"\n")
-        proc.stdin.flush()
-
-        out = proc.stdout.readline()
-        #print(out)
-
-        test_results[filter_counter] = {
-            "Result": json.loads(out),
-            "Action": json.loads(components)['filter'][test_filter]['plugin'] + " / " + json.loads(components)['filter'][test_filter]['id']
-        }
-
-
-        filter_counter += 1
-
-    # 5. Cleanup temp file
-    os.remove(tmp_path)
-
-    html_text = ""
-    last_result = input_json
-    for result in test_results:
-        step = test_results[result]['Action']
-        res = test_results[result]['Result']
-
-        html_text += f"<h1>{step}</h1>"
-
-        difference = DeepDiff(last_result, res).to_dict()
-
-
-        html_text += f'''<textarea class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" rows="10">
-
-{json.dumps(res,indent=4)}
-
-{difference}</textarea>'''
-        last_result = res
-
-    return HttpResponse(html_text)
+# def SimulatePipeline(request):
+#     components = request.POST.get("components")
+#     data = json.loads(components)
+#     input_json = json.loads(request.POST.get("log_text"))
+#
+#     # 1. Generate the Logstash config
+#     config_str = logstash_config_parse.components_to_logstash_config({"components": data}, test=True)
+#
+#
+#     #print(config_str)
+#     # 2. Write config to a temp file
+#     with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
+#         tmp.write(config_str)
+#         tmp_path = tmp.name
+#
+#     container_conf = "/usr/share/logstash/pipeline/simulate.conf"
+#
+#     # 3. Spin up logstash container with the config
+#     cmd = [
+#         "docker", "run", "--rm", "-i",
+#         "-v", f"{tmp_path}:{container_conf}:ro",
+#         "docker.elastic.co/logstash/logstash:9.1.4",
+#         "-f", container_conf,
+#         "--pipeline.ecs_compatibility=disabled"
+#     ]
+#
+#     proc = subprocess.Popen(
+#         cmd,
+#         stdin=subprocess.PIPE,
+#         stdout=subprocess.PIPE,
+#         stderr=subprocess.STDOUT,
+#         text=True
+#     )
+#
+#     while True:
+#         line = proc.stdout.readline()
+#         #print(line)
+#         if not line:
+#             break
+#         if "Pipelines running" in line:
+#             ready = True
+#             break
+#
+#     filter_counter = 0
+#     test_results = {}
+#     for test_filter in range(0, len(json.loads(components)['filter'])):
+#         input_json['plugin_num'] = filter_counter
+#         proc.stdin.write(json.dumps(input_json)+"\n")
+#         proc.stdin.flush()
+#
+#         out = proc.stdout.readline()
+#         #print(out)
+#
+#         test_results[filter_counter] = {
+#             "Result": json.loads(out),
+#             "Action": json.loads(components)['filter'][test_filter]['plugin'] + " / " + json.loads(components)['filter'][test_filter]['id']
+#         }
+#
+#
+#         filter_counter += 1
+#
+#     # 5. Cleanup temp file
+#     os.remove(tmp_path)
+#
+#     html_text = ""
+#     last_result = input_json
+#     for result in test_results:
+#         step = test_results[result]['Action']
+#         res = test_results[result]['Result']
+#
+#         html_text += f"<h1>{step}</h1>"
+#
+#         difference = DeepDiff(last_result, res).to_dict()
+#
+#
+#         html_text += f'''<textarea class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" rows="10">
+#
+# {json.dumps(res,indent=4)}
+#
+# {difference}</textarea>'''
+#         last_result = res
+#
+#     return HttpResponse(html_text)
 
 
 def GetDiff(request):
