@@ -28,6 +28,12 @@ def get_elastic_connections_from_list():
 
 
 def Home(request):
+    """New home page with app information and useful links"""
+    return render(request, "home.html")
+
+
+def Monitoring(request):
+    """Monitoring page showing Logstash metrics and health"""
     connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
 
     context = {
@@ -42,10 +48,7 @@ def Home(request):
     except Exception as e:
         print("Couldn't connect!", e)
 
-    # List out all of the monitoring indices
-
-
-    return render(request, "home.html", context=context)
+    return render(request, "monitoring.html", context=context)
 
 
 

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% load static %}
+<script src="{% static 'js/home.js' %}"></script>
+
+<style>
+    /* Custom scrollbar styling for log viewer */
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: #1f2937;
+        border-radius: 4px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #4b5563;
+        border-radius: 4px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: #6b7280;
+    }
+
+    /* Firefox scrollbar */
+    .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: #4b5563 #1f2937;
+    }
+
+    /* Pulsing glow animation */
+    @keyframes glowPulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        50% {
+            box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.3);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(59, 130, 246, 0);
+        }
+    }
+
+    .glow-button {
+        animation: glowPulse 2s ease-in-out infinite;
+        position: relative;
+    }
+</style>
+{% if not has_connections %}
+<div class="flex items-center justify-center min-h-[calc(100vh-6rem)] p-6">
+    <div class="w-full max-w-4xl">
+        <div class="bg-gray-800/95 rounded-lg p-8 shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-blue-600/20 rounded-full mb-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-400" fill="none"
+                         viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </div>
+                <h1 class="text-4xl font-bold text-white mb-4">Welcome to LogstashUI! 🚀</h1>
+                <p class="text-lg text-gray-300 max-w-2xl mx-auto mb-8">It looks like you're just getting started. Set up
+                    a connection to <span class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">Elastic's Logstash Pipeline Management</span> (Direct Logstash connection coming soon!) to begin managing your pipelines.</p>
+                
+                <div class="flex justify-center">
+                    <a href="/ConnectionManager"
+                       class="btn btn-primary btn-lg gap-3 text-lg px-8 py-4 hover:bg-blue-600 transition-colors glow-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+                                  clip-rule="evenodd"/>
+                        </svg>
+                        Take me to the Connection Manager!
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="p-6">
+    <!-- Welcome Header -->
+    <div class="mb-8">
+        <h1 class="text-4xl font-bold text-white mb-2">Welcome! 👋</h1>
+        <p class="text-gray-400">Here's an overview of your Logstash infrastructure</p>
+    </div>
+
+    <!-- Monitoring Warnings -->
+    {% if monitoring_indices %}
+    <div class="mb-6 space-y-3">
+        {% for connection_name, status in monitoring_indices.items %}
+        {% if status.has_none %}
+        <div class="bg-yellow-900/20 border border-yellow-600/50 rounded-lg p-4 flex items-start gap-3 warning-alert">
+            <svg class="w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <div class="flex-1">
+                <h3 class="text-yellow-500 font-semibold mb-1">Warning: {{ connection_name }} connection has no
+                    monitoring indices</h3>
+                <p class="text-gray-300 text-sm">This might be intentional if you're using one Elastic instance to do
+                    all of your monitoring, if so, please disregard. If you want monitoring, please use the Logstash
+                    integration with the Elastic Agent. <a
+                            href="https://www.elastic.co/docs/reference/logstash/dashboard-monitoring-with-elastic-agent"
+                            target="_blank" class="text-blue-400 hover:text-blue-300 underline">Learn more</a></p>
+            </div>
+            <button onclick="this.closest('.warning-alert').remove()"
+                    class="text-yellow-500 hover:text-yellow-400 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        {% elif not status.has_all %}
+        <div class="bg-orange-900/20 border border-orange-600/50 rounded-lg p-4 flex items-start gap-3 warning-alert">
+            <svg class="w-6 h-6 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <div class="flex-1">
+                <h3 class="text-orange-500 font-semibold mb-1">Warning: {{ connection_name }} connection doesn't have
+                    all logstash monitoring indices</h3>
+                <p class="text-gray-300 text-sm mb-2">It's missing: <span class="font-mono text-xs">{{ status.missing|join:", " }}</span>
+                </p>
+                <p class="text-gray-300 text-sm">Please review your configuration with <a
+                        href="https://www.elastic.co/docs/reference/logstash/dashboard-monitoring-with-elastic-agent"
+                        target="_blank" class="text-blue-400 hover:text-blue-300 underline">this document</a> to make
+                    sure you're ingesting all of the necessary data into Elastic.</p>
+            </div>
+            <button onclick="this.closest('.warning-alert').remove()"
+                    class="text-orange-500 hover:text-orange-400 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Filter Dropdowns -->
+    <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <div class="flex items-end gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                <!-- Connection Selector -->
+                <div>
+                    <label for="connectionSelect"
+                           class="block text-sm font-medium text-gray-300 mb-2">Connection</label>
+                    <select id="connectionSelect"
+                            name="connection"
+                            hx-get="/API/GetNodeMetrics"
+                            hx-target="#nodeMetricsContainer"
+                            hx-include="[name='connection'],[name='host']"
+                            hx-trigger="change"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onchange="document.getElementById('hostSelect').value=''; htmx.ajax('GET', '/API/GetPipelineMetrics?connection=' + this.value + '&host=', {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
+                        <option value="">All Connections</option>
+                        {% for connection in Connections %}
+                        <option value="{{ connection.name }}">{{ connection.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Logstash Host Selector -->
+                <div>
+                    <label for="hostSelect" class="block text-sm font-medium text-gray-300 mb-2">Logstash Host</label>
+                    <select id="hostSelect"
+                            name="host"
+                            hx-get="/API/GetNodeMetrics"
+                            hx-target="#nodeMetricsContainer"
+                            hx-include="[name='connection'],[name='host']"
+                            hx-trigger="change"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onchange="htmx.ajax('GET', '/API/GetPipelineMetrics?connection=' + document.getElementById('connectionSelect').value + '&host=' + this.value, {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
+                        <option value="">All Hosts</option>
+                        <!-- Options will be populated by JavaScript after node metrics load -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Refresh Button -->
+            <div>
+                <button id="refreshMetrics"
+                        onclick="htmx.trigger('body', 'refreshMetrics'); this.querySelector('svg').classList.add('animate-spin'); setTimeout(() => this.querySelector('svg').classList.remove('animate-spin'), 1000);"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node Metrics -->
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-white mb-4">Node Metrics Summary</h2>
+        <div id="nodeMetricsContainer" 
+             hx-get="/API/GetNodeMetrics"
+             hx-include="[name='connection'],[name='host']"
+             hx-trigger="load, refreshMetrics from:body"
+             hx-swap="innerHTML">
+            <!-- Loading state -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pipeline Metrics -->
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-white mb-4">Pipeline Metrics</h2>
+        <div id="pipelineMetricsContainer" 
+             hx-get="/API/GetPipelineMetrics"
+             hx-include="[name='connection'],[name='host']"
+             hx-trigger="load, refreshMetrics from:body, htmx:trigger"
+             hx-swap="innerHTML">
+            <!-- Loading state -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-700 rounded w-3/4 mb-4"></div>
+                    <div class="h-8 bg-gray-700 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endif %}
+{% endblock %}
