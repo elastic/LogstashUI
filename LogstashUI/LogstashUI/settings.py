@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os, platform
+from Core.encryption import get_django_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,12 +22,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4)q@pud0b5-^-fplbv3db*2!p!4*10n^5%=9e!8lr%&t!x9+(4'
+# Automatically generates and persists a unique key per deployment in data/.django_secret_key
+# Can be overridden with SECRET_KEY environment variable
+SECRET_KEY = get_django_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Set DEBUG=False in production via environment variable
+DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ['*']
+# SECURITY WARNING: Set ALLOWED_HOSTS to your domain(s) in production
+# Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition

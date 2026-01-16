@@ -1,5 +1,6 @@
 services:
   logstashui:
+    image: 7739324658779593/logstashui:latest
     build: .
     expose:
       - "8080"
@@ -7,8 +8,11 @@ services:
       - logstashui_data:/app/LogstashUI/data
     environment:
       - DEBUG=False
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - ALLOWED_HOSTS=*
+      # SECRET_KEY: Optional - will auto-generate and persist in data/.django_secret_key if not set
+      # - SECRET_KEY=${SECRET_KEY}
+      # ALLOWED_HOSTS: Set to your domain(s) in production (comma-separated)
+      # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com,192.168.1.100
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
     restart: unless-stopped
     networks:
