@@ -60,6 +60,7 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 - Reusable grok and regex patterns
 - Git backups for configuration
 - Loggy AI Assistant
+- Text editor for pipelines
 
 ## Reporting Issues
 
