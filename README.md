@@ -61,6 +61,7 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 - Git backups for configuration
 - Loggy AI Assistant
 - Text editor for pipelines
+- Grok debugger
 
 ## Reporting Issues
 
