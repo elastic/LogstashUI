@@ -77,16 +77,19 @@ def PipelineEditor(request):
             'queue_checkpoint_writes': settings.get('queue.checkpoint.writes', 1024),
         }
         context['pipeline_name'] = pipeline_name
+        context['parsing_error'] = None
 
         try:
             parsed_config = logstash_config_parse.logstash_config_to_components(context['pipeline_text'])
-        except:
-            parsed_config = {
+            context['component_data'] = parsed_config
+        except Exception as e:
+            # Capture the parsing error to show to the user
+            context['parsing_error'] = str(e)
+            context['component_data'] = {
                 "input": [],
                 "filter": [],
                 "output": []
             }
-        context['component_data'] = parsed_config
 
     return render(request, "pipeline_editor.html", context=context)
 

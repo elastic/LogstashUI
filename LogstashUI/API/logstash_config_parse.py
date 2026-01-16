@@ -539,8 +539,10 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
         return json.dumps(data, indent=4)
 
     except Exception as e:
-        print(f"Error converting config to components: {str(e)} Line: {str(e.__traceback__.tb_lineno)}")
-        return []
+        # Re-raise the exception so the view can handle it and show to the user
+        error_msg = str(e)
+        print(f"Error converting config to components: {error_msg}")
+        raise Exception(f"Error converting config to components: {error_msg}")
 
 
 ################################ Component JSON to Logstash config ################################
