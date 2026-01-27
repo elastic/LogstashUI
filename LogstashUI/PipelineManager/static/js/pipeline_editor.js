@@ -356,8 +356,8 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     ${configSummary}
   </div>
   <div class="flex space-x-1 ml-2">
-    <button class="text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-            onclick="event.stopPropagation(); showConfigModal(${JSON.stringify(component).replace(/"/g, '&quot;')})"
+    <button class="config-btn text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+            data-component-id="${component.id}"
             title="Configure">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -647,7 +647,65 @@ function getPluginTypeColor(type) {
 
 // Function to update a component and refresh the UI
 window.updateComponent = function (updatedComponent) {
-    // Find and update the component in the global components object
+    // Helper function to recursively update in nested conditionals
+    function updateInConditional(component) {
+        if (!component || component.plugin !== 'if' || !component.config) {
+            return false;
+        }
+
+        // Check in if block
+        if (component.config.plugins) {
+            const index = component.config.plugins.findIndex(c => c.id === updatedComponent.id);
+            if (index !== -1) {
+                component.config.plugins[index] = {...updatedComponent};
+                return true;
+            }
+            // Recursively search in nested conditionals
+            for (const plugin of component.config.plugins) {
+                if (updateInConditional(plugin)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check in else-if blocks
+        if (component.config.else_ifs) {
+            for (const elseIf of component.config.else_ifs) {
+                if (elseIf.plugins) {
+                    const index = elseIf.plugins.findIndex(c => c.id === updatedComponent.id);
+                    if (index !== -1) {
+                        elseIf.plugins[index] = {...updatedComponent};
+                        return true;
+                    }
+                    // Recursively search in nested conditionals
+                    for (const plugin of elseIf.plugins) {
+                        if (updateInConditional(plugin)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check in else block
+        if (component.config.else && component.config.else.plugins) {
+            const index = component.config.else.plugins.findIndex(c => c.id === updatedComponent.id);
+            if (index !== -1) {
+                component.config.else.plugins[index] = {...updatedComponent};
+                return true;
+            }
+            // Recursively search in nested conditionals
+            for (const plugin of component.config.else.plugins) {
+                if (updateInConditional(plugin)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // First, try to update at top-level
     for (const type in components) {
         const index = components[type].findIndex(c => c.id === updatedComponent.id);
         if (index !== -1) {
@@ -658,6 +716,18 @@ window.updateComponent = function (updatedComponent) {
             return true;
         }
     }
+
+    // If not found at top level, search recursively in nested conditionals
+    for (const type in components) {
+        for (const component of components[type]) {
+            if (updateInConditional(component)) {
+                // Refresh the UI
+                loadExistingComponents();
+                return true;
+            }
+        }
+    }
+
     return false;
 };
 

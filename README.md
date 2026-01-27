@@ -62,6 +62,9 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 - Loggy AI Assistant
 - Text editor for pipelines
 - Grok debugger
+- Git backups for configuration
+- Inidividual Logstash Nodes
+- Keychain management - JKS Management
 
 ## Reporting Issues
 
