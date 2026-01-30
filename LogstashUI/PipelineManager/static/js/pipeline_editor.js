@@ -218,6 +218,16 @@ window.triggerPendingAnimation = function () {
     }
 }
 
+// Helper function to check if a field is sensitive (password/api_key)
+function isSensitiveField(fieldName) {
+    const lowerFieldName = fieldName.toLowerCase();
+    return lowerFieldName.includes('password') || 
+           lowerFieldName.includes('api_key') || 
+           lowerFieldName.includes('apikey') ||
+           lowerFieldName === 'token' ||
+           lowerFieldName.includes('secret');
+}
+
 // Helper function to format config values for display
 function formatConfigValue(value, key) {
     // Helper to clean up string values
@@ -228,6 +238,15 @@ function formatConfigValue(value, key) {
         }
         return String(str);
     };
+
+    // Check if this is a sensitive field - redact the value
+    if (isSensitiveField(key)) {
+        const valueStr = String(value);
+        if (valueStr && valueStr.length > 0) {
+            return '••••••••';
+        }
+        return '';
+    }
 
     // Handle codec specially FIRST - it's a nested object like {"rubydebug": {}}
     if (key === 'codec' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -318,7 +337,28 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
                 let displayValue = formatConfigValue(value, key);
-                configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${displayValue}</span>`);
+                
+                // Add eye icon for sensitive fields
+                if (isSensitiveField(key)) {
+                    const actualValue = String(value).length > 30 ? String(value).substring(0, 30) + '...' : String(value);
+                    const escapedActualValue = actualValue.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    configItems.push(`
+                        <span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                            ${key}: <span class="sensitive-value" data-actual="${escapedActualValue}">${displayValue}</span>
+                            <button type="button" 
+                                    class="text-gray-400 hover:text-gray-200 inline-flex items-center"
+                                    onclick="toggleSensitiveValue(this, event)"
+                                    title="Show/Hide">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </span>
+                    `);
+                } else {
+                    configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${displayValue}</span>`);
+                }
             }
         }
         if (configItems.length > 0) {
@@ -1662,3 +1702,35 @@ document.addEventListener('click', function(e) {
         }
     }
 });
+
+// Function to toggle sensitive value visibility in component row preview
+window.toggleSensitiveValue = function(button, event) {
+    event.stopPropagation();
+    
+    const valueSpan = button.previousElementSibling;
+    if (!valueSpan || !valueSpan.classList.contains('sensitive-value')) return;
+    
+    const actualValue = valueSpan.dataset.actual;
+    const currentText = valueSpan.textContent;
+    
+    if (currentText === '••••••••') {
+        // Show actual value
+        valueSpan.textContent = actualValue;
+        // Change icon to eye-slash
+        button.innerHTML = `
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+            </svg>
+        `;
+    } else {
+        // Hide value
+        valueSpan.textContent = '••••••••';
+        // Change icon back to eye
+        button.innerHTML = `
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+        `;
+    }
+};
