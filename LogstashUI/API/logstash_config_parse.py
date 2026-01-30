@@ -504,6 +504,8 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
     """
     try:
         parsed = parse_logstash_config(config_text)
+        
+        # Initialize data with all three sections (even if not in input)
         data = {
             "input": [],
             "filter": [],
@@ -513,8 +515,27 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
         component_count = 0
         transformer = LogstashTransformer()
 
+        # Handle case where parsed might not be a list or could be empty
+        if not isinstance(parsed, list):
+            parsed = [parsed] if parsed else []
+
         for section in parsed:
+            # Defensive check: ensure section is a dict with 'type' key
+            if not isinstance(section, dict):
+                print(f"Warning: Skipping non-dict section: {type(section)}")
+                continue
+            
+            if 'type' not in section:
+                print(f"Warning: Section missing 'type' key: {section}")
+                continue
+            
             section_type = section['type']
+            
+            # Validate section_type is one of the expected values
+            if section_type not in ['input', 'filter', 'output']:
+                print(f"Warning: Unknown section type '{section_type}', skipping")
+                continue
+            
             section_components = []
 
             for stmt in section.get('statements', []):
