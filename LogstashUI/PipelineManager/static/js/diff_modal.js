@@ -1,6 +1,7 @@
 let currentDiffMode = 'save'; // 'save' or 'view'
 let storedNewPipelineCode = '';
 let currentAddIdsState = false;
+let quoteValidationWarnings = [];
 
 // ===== INLINE DIFF ALGORITHMS =====
 
@@ -171,6 +172,145 @@ function renderInlineDiff(changes, side) {
 }
 
 // ===== END DIFF ALGORITHMS =====
+
+// ===== QUOTE VALIDATION =====
+
+/**
+ * Validate components for fields that mix single and double quotes
+ * Returns array of warnings with plugin info and problematic fields
+ */
+function validateQuoteMixing(components) {
+    const warnings = [];
+    
+    function checkValue(value, path) {
+        if (typeof value === 'string') {
+            // Check if string contains both single and double quotes
+            if (value.includes('"') && value.includes("'")) {
+                return {
+                    path: path,
+                    value: value,
+                    preview: value.length > 50 ? value.substring(0, 50) + '...' : value
+                };
+            }
+        }
+        return null;
+    }
+    
+    function scanObject(obj, basePath) {
+        const issues = [];
+        
+        if (typeof obj !== 'object' || obj === null) {
+            return issues;
+        }
+        
+        for (const [key, value] of Object.entries(obj)) {
+            const currentPath = basePath ? `${basePath}.${key}` : key;
+            
+            if (typeof value === 'string') {
+                const issue = checkValue(value, currentPath);
+                if (issue) {
+                    issues.push(issue);
+                }
+            } else if (typeof value === 'object' && value !== null) {
+                issues.push(...scanObject(value, currentPath));
+            }
+        }
+        
+        return issues;
+    }
+    
+    // Scan all sections
+    for (const section of ['input', 'filter', 'output']) {
+        if (!components[section]) continue;
+        
+        for (let i = 0; i < components[section].length; i++) {
+            const component = components[section][i];
+            const pluginName = component.plugin || 'unknown';
+            const pluginId = component.id || `${section}_${i}`;
+            
+            // Scan the config object for quote mixing
+            const issues = scanObject(component.config, 'config');
+            
+            if (issues.length > 0) {
+                warnings.push({
+                    section: section,
+                    plugin: pluginName,
+                    id: pluginId,
+                    issues: issues
+                });
+            }
+        }
+    }
+    
+    return warnings;
+}
+
+/**
+ * Display quote validation warnings in the modal
+ */
+function displayQuoteWarnings(warnings) {
+    const warningContainer = document.getElementById('quoteWarningContainer');
+    
+    if (warnings.length === 0) {
+        warningContainer.classList.add('hidden');
+        return;
+    }
+    
+    const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+    
+    let warningHtml = `
+        <div class="bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded">
+            <div class="flex items-start">
+                <svg class="w-6 h-6 text-yellow-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+                <div class="flex-1">
+                    <h4 class="text-yellow-400 font-semibold mb-2">Quote Mixing Warning</h4>
+                    <p class="text-yellow-200 text-sm mb-3">
+                        The following fields contain both single (') and double (") quotes. Logstash cannot properly escape these values, which may cause parsing errors.
+                    </p>
+                    <div class="space-y-3">
+    `;
+    
+    for (const warning of warnings) {
+        warningHtml += `
+            <div class="bg-gray-800/50 p-3 rounded text-sm">
+                <div class="text-white font-medium mb-1">
+                    ${escapeHtml(warning.section)} → ${escapeHtml(warning.plugin)} <span class="text-gray-400">(${escapeHtml(warning.id)})</span>
+                </div>
+        `;
+        
+        for (const issue of warning.issues) {
+            warningHtml += `
+                <div class="ml-4 mt-2 text-gray-300">
+                    <span class="text-yellow-400">Field:</span> <code class="bg-gray-900 px-2 py-0.5 rounded">${escapeHtml(issue.path)}</code><br>
+                    <span class="text-yellow-400">Preview:</span> <code class="bg-gray-900 px-2 py-0.5 rounded text-xs">${escapeHtml(issue.preview)}</code>
+                </div>
+            `;
+        }
+        
+        warningHtml += `</div>`;
+    }
+    
+    warningHtml += `
+                    </div>
+                    <p class="text-yellow-200 text-sm mt-3">
+                        <strong>Recommendation:</strong> Modify these fields to use only single quotes or only double quotes.
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    warningContainer.innerHTML = warningHtml;
+    warningContainer.classList.remove('hidden');
+}
+
+// ===== END QUOTE VALIDATION =====
 
 function hideDiffModal() {
     document.getElementById('diffModal').classList.add('hidden');
@@ -367,12 +507,20 @@ async function prepareDiffModal() {
     // Show the modal first
     showDiffModal();
 
+    // Validate for quote mixing
+    quoteValidationWarnings = validateQuoteMixing(components);
+    displayQuoteWarnings(quoteValidationWarnings);
+
     // Load the diff content
     await loadDiffContent();
 }
 
 // Separate function to load diff content (can be called when checkbox changes)
 async function loadDiffContent() {
+    // Re-validate and display warnings (in case components changed)
+    quoteValidationWarnings = validateQuoteMixing(components);
+    displayQuoteWarnings(quoteValidationWarnings);
+    
     // Show loading state
     document.getElementById('diffLoading').classList.remove('hidden');
     document.getElementById('diffContainer').classList.add('hidden');

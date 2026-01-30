@@ -569,12 +569,25 @@ class ComponentToPipeline:
         # Generate ID in format: section_pluginname_count
         return f"{section}_{plugin_name}_{self.plugin_counters[counter_key]}"
 
-    def _escape_string(self, value):
-        """Escape special characters in string values for Logstash config."""
+    def _format_string_value(self, value):
+        """Format a string value for Logstash config, choosing appropriate quoting.
+        
+        If the string contains double quotes (like JSON or Ruby code), use single quotes.
+        Otherwise, use double quotes and escape as needed.
+        """
         if not isinstance(value, str):
             return value
-        # Only escape double quotes and backslashes that precede special chars
-        # Preserve backslashes in patterns like \[ \] \d etc.
+        
+        # If string contains double quotes but no single quotes, use single quotes
+        if '"' in value and "'" not in value:
+            return f"'{value}'"
+        
+        # If string contains single quotes but no double quotes, use double quotes (no escaping needed)
+        if "'" in value and '"' not in value:
+            return f'"{value}"'
+        
+        # If string contains both or neither, use double quotes and escape double quotes
+        # Also handle backslashes properly
         result = []
         i = 0
         while i < len(value):
@@ -594,7 +607,7 @@ class ComponentToPipeline:
             else:
                 result.append(value[i])
                 i += 1
-        return ''.join(result)
+        return f'"{"".join(result)}"'
     
     def _extract_plugin_values(self, plugin, section):
         config = ""
@@ -615,8 +628,8 @@ class ComponentToPipeline:
             # print(plugin_config_name, plugin_config_value, type(plugin_config_value))
             if type(plugin_config_value) in [str, int, float]:
                 if type(plugin_config_value) is str:
-                    escaped_value = self._escape_string(plugin_config_value)
-                    config += f'\t{plugin_config_name} => "{escaped_value}"\n'
+                    formatted_value = self._format_string_value(plugin_config_value)
+                    config += f'\t{plugin_config_name} => {formatted_value}\n'
                 else:
                     config += f'\t{plugin_config_name} => "{plugin_config_value}"\n'
 
@@ -628,15 +641,15 @@ class ComponentToPipeline:
                         config += f"\t{plugin_config_name} => {codec_name} {{\n"
                         for codec_key, codec_value in codec_config.items():
                             if type(codec_value) in [str]:
-                                escaped_value = self._escape_string(codec_value)
-                                config += f'\t\t{codec_key} => "{escaped_value}"\n'
+                                formatted_value = self._format_string_value(codec_value)
+                                config += f'\t\t{codec_key} => {formatted_value}\n'
                             elif type(codec_value) is bool:
                                 config += f'\t\t{codec_key} => {str(codec_value).lower()}\n'
                             elif type(codec_value) in [int, float]:
                                 config += f'\t\t{codec_key} => {codec_value}\n'
                             elif type(codec_value) is dict:
                                 # Nested hash in codec
-                                nested = ', '.join([f'"{k}" => "{self._escape_string(v)}"' for k, v in codec_value.items()])
+                                nested = ', '.join([f'"{k}" => {self._format_string_value(v)}' for k, v in codec_value.items()])
                                 config += f'\t\t{codec_key} => {{ {nested} }}\n'
                             else:
                                 config += f'\t\t{codec_key} => {json.dumps(codec_value)}\n'
@@ -658,8 +671,8 @@ class ComponentToPipeline:
                         for i, item in enumerate(dict_value):
                             comma = "," if i < len(dict_value) - 1 else ""
                             if type(item) is str:
-                                escaped_item = self._escape_string(item)
-                                config += f'\t\t\t"{escaped_item}"{comma}\n'
+                                formatted_item = self._format_string_value(item)
+                                config += f'\t\t\t{formatted_item}{comma}\n'
                             else:
                                 config += f'\t\t\t{json.dumps(item)}{comma}\n'
                         config += "\t\t]\n"
@@ -667,16 +680,16 @@ class ComponentToPipeline:
                         # Nested hash - recursively format it
                         config += f'\t\t"{dict_key}" => {{\n'
                         for nested_key in dict_value:
-                            escaped_nested_value = self._escape_string(dict_value[nested_key])
-                            config += f'\t\t\t"{nested_key}" => "{escaped_nested_value}"\n'
+                            formatted_nested_value = self._format_string_value(dict_value[nested_key])
+                            config += f'\t\t\t"{nested_key}" => {formatted_nested_value}\n'
                         config += "\t\t}\n"
                     elif type(dict_value) is bool:
                         config += f'\t\t"{dict_key}" => {str(dict_value).lower()}\n'
                     elif type(dict_value) in [int, float]:
                         config += f'\t\t"{dict_key}" => {dict_value}\n'
                     else:
-                        escaped_dict_value = self._escape_string(dict_value)
-                        config += f'\t\t"{dict_key}" => "{escaped_dict_value}"\n'
+                        formatted_dict_value = self._format_string_value(dict_value)
+                        config += f'\t\t"{dict_key}" => {formatted_dict_value}\n'
 
                 config += "\t}\n"
             elif type(plugin_config_value) is list:
