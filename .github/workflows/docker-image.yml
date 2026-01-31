@@ -2,8 +2,6 @@ name: Build & Push Docker Image
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
 
@@ -49,6 +47,3 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.vars.outputs.tags }}
-          build-args: |
-            APP_VERSION=${{ steps.vars.outputs.app_version }}
-            BUILD_SHA=${{ github.sha }}
