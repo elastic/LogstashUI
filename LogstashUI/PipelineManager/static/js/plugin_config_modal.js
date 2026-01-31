@@ -144,6 +144,37 @@ window.PluginConfigModal = (function () {
               <option value="" ${value === '' ? 'selected' : ''}></option>
             </select>
           `;
+                } else if (inputType === 'array_of_hashes') {
+                    // Handle array of hashes input type (e.g., SNMP hosts)
+                    let arrayValue = [];
+                    if (Array.isArray(value)) {
+                        arrayValue = [...value];
+                    } else if (typeof value === 'string' && value.trim() !== '') {
+                        try {
+                            const parsed = JSON.parse(value);
+                            arrayValue = Array.isArray(parsed) ? parsed : [parsed];
+                        } catch (e) {
+                            arrayValue = [];
+                        }
+                    }
+
+                    const containerId = `array-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    const hashOptions = option.options || {};
+                    const optionsJson = escapeHtml(JSON.stringify(hashOptions));
+                    
+                    inputField = `
+            <div id="${containerId}" class="space-y-3" data-hash-options='${optionsJson}'>
+              <div class="p-3 bg-gray-900/50 border border-gray-600 rounded">
+                <div class="text-xs text-gray-400 mb-2">No entries yet. Click "+ Add Entry" to add one.</div>
+              </div>
+              <button type="button"
+                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      onclick="addArrayOfHashesItem('${containerId}', '${fieldId}')">
+                + Add Entry
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array_of_hashes" value='${escapeHtml(JSON.stringify(arrayValue))}'>
+            </div>
+          `;
                 } else if (inputType.includes('hash') || inputType === 'object') {
                     // Handle hash/object input type
                     let hashValue = {};
@@ -393,6 +424,37 @@ window.PluginConfigModal = (function () {
               <option value="" ${value === '' ? 'selected' : ''}></option>
             </select>
           `;
+                    } else if (inputType === 'array_of_hashes') {
+                        // Handle array of hashes input type (e.g., SNMP hosts)
+                        let arrayValue = [];
+                        if (Array.isArray(value)) {
+                            arrayValue = [...value];
+                        } else if (typeof value === 'string' && value.trim() !== '') {
+                            try {
+                                const parsed = JSON.parse(value);
+                                arrayValue = Array.isArray(parsed) ? parsed : [parsed];
+                            } catch (e) {
+                                arrayValue = [];
+                            }
+                        }
+
+                        const containerId = `array-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        const hashOptions = option.options || {};
+                        const optionsJson = escapeHtml(JSON.stringify(hashOptions));
+                        
+                        inputField = `
+            <div id="${containerId}" class="space-y-3" data-hash-options='${optionsJson}'>
+              <div class="p-3 bg-gray-900/50 border border-gray-600 rounded">
+                <div class="text-xs text-gray-400 mb-2">No entries yet. Click "+ Add Entry" to add one.</div>
+              </div>
+              <button type="button"
+                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      onclick="addArrayOfHashesItem('${containerId}', '${fieldId}')">
+                + Add Entry
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array_of_hashes" value='${escapeHtml(JSON.stringify(arrayValue))}'>
+            </div>
+          `;
                     } else if (inputType.includes('hash') || inputType === 'object') {
                         // Handle hash/object input type
                         let hashValue = {};
@@ -566,10 +628,11 @@ window.PluginConfigModal = (function () {
         // Show the modal
         modal.classList.remove('hidden');
 
-        // Populate existing hash, array, and codec values after rendering
+        // Populate existing hash, array, and array_of_hashes values
         setTimeout(() => {
             populateExistingValues(component);
             populateCodecValues(component);
+            populateArrayOfHashesValues(component);
         }, 10);
 
         // Focus the first input field
@@ -812,7 +875,7 @@ window.PluginConfigModal = (function () {
                     if (Object.keys(parsedValue).length > 0) {
                         config[key] = parsedValue;
                     }
-                } else if (fieldType === 'hash' || fieldType === 'array') {
+                } else if (fieldType === 'hash' || fieldType === 'array' || fieldType === 'array_of_hashes') {
                     const parsedValue = JSON.parse(value);
                     // Only add if the hash/array is not empty
                     if (Object.keys(parsedValue).length > 0 || (Array.isArray(parsedValue) && parsedValue.length > 0)) {
@@ -905,7 +968,7 @@ window.PluginConfigModal = (function () {
                         isEmpty = true;
                     }
                 }
-            } else if (fieldType === 'array' || fieldType === 'list') {
+            } else if (fieldType === 'array' || fieldType === 'list' || fieldType === 'array_of_hashes') {
                 const hiddenInput = fieldGroup.querySelector('input[type="hidden"]');
                 if (hiddenInput) {
                     try {
@@ -1111,6 +1174,235 @@ function updateArrayField(containerId, fieldId) {
     });
 
     hiddenField.value = JSON.stringify(arrayValues);
+}
+
+// Array of Hashes helper functions
+window.addArrayOfHashesItem = function (containerId, fieldId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const addButton = container.querySelector('button[onclick*="addArrayOfHashesItem"]');
+    if (!addButton) return;
+
+    // Get hash options from container data attribute
+    const hashOptionsJson = container.dataset.hashOptions;
+    let hashOptions = {};
+    try {
+        hashOptions = JSON.parse(hashOptionsJson);
+    } catch (e) {
+        console.error('Error parsing hash options:', e);
+        return;
+    }
+
+    // Remove the "no entries" placeholder if it exists (but not actual entries)
+    // The placeholder doesn't have a data-entry-id attribute
+    const allDivs = container.querySelectorAll('.bg-gray-900\\/50, [class*="bg-gray-900/50"]');
+    allDivs.forEach(div => {
+        if (!div.dataset.entryId && div.textContent.includes('No entries yet')) {
+            div.remove();
+        }
+    });
+
+    // Create unique ID for this hash entry
+    const entryId = `hash-entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Build the hash entry with fields based on options
+    const entryDiv = document.createElement('div');
+    entryDiv.className = 'p-3 bg-gray-900/50 border border-gray-600 rounded space-y-2';
+    entryDiv.dataset.entryId = entryId;
+
+    let fieldsHtml = '';
+    for (const [optKey, optInfo] of Object.entries(hashOptions)) {
+        const optType = (optInfo.type || 'string').toLowerCase();
+        const inputClass = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
+        
+        let inputHtml = '';
+        if (optType === 'number') {
+            inputHtml = `<input type="number" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" onchange="updateArrayOfHashesField('${containerId}', '${fieldId}')">`;
+        } else if (optType === 'boolean') {
+            inputHtml = `
+                <select class="${inputClass}" data-field="${optKey}" onchange="updateArrayOfHashesField('${containerId}', '${fieldId}')">
+                    <option value="">-- Not Set --</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+            `;
+        } else {
+            inputHtml = `<input type="text" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" onchange="updateArrayOfHashesField('${containerId}', '${fieldId}')">`;
+        }
+
+        fieldsHtml += `
+            <div>
+                <label class="block text-xs font-medium text-gray-300 mb-1">${optKey}</label>
+                ${inputHtml}
+            </div>
+        `;
+    }
+
+    entryDiv.innerHTML = `
+        ${fieldsHtml}
+        <button type="button"
+                class="mt-2 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm w-full"
+                onclick="removeArrayOfHashesItem('${containerId}', '${fieldId}', this)">
+            Remove Entry
+        </button>
+    `;
+
+    // Insert before the add button
+    addButton.parentNode.insertBefore(entryDiv, addButton);
+    
+    // Update the hidden field
+    updateArrayOfHashesField(containerId, fieldId);
+};
+
+window.removeArrayOfHashesItem = function (containerId, fieldId, button) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const entryDiv = button.closest('[data-entry-id]');
+    if (entryDiv) {
+        entryDiv.remove();
+        
+        // Check if there are any entries left
+        const remainingEntries = container.querySelectorAll('[data-entry-id]');
+        if (remainingEntries.length === 0) {
+            // Add back the placeholder
+            const addButton = container.querySelector('button[onclick*="addArrayOfHashesItem"]');
+            if (addButton) {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'p-3 bg-gray-900/50 border border-gray-600 rounded';
+                placeholder.innerHTML = '<div class="text-xs text-gray-400 mb-2">No entries yet. Click "+ Add Entry" to add one.</div>';
+                addButton.parentNode.insertBefore(placeholder, addButton);
+            }
+        }
+        
+        // Update the hidden field
+        updateArrayOfHashesField(containerId, fieldId);
+    }
+};
+
+window.updateArrayOfHashesField = function (containerId, fieldId) {
+    const container = document.getElementById(containerId);
+    const hiddenField = document.getElementById(fieldId);
+    if (!container || !hiddenField) return;
+
+    const entries = container.querySelectorAll('[data-entry-id]');
+    const arrayValue = [];
+
+    entries.forEach(entry => {
+        const hashObj = {};
+        const inputs = entry.querySelectorAll('[data-field]');
+        
+        inputs.forEach(input => {
+            const fieldName = input.dataset.field;
+            let value = input.value.trim();
+            
+            if (value !== '') {
+                // Convert boolean strings to actual booleans
+                if (value === 'true') value = true;
+                else if (value === 'false') value = false;
+                // Convert numbers
+                else if (input.type === 'number' && !isNaN(value)) value = Number(value);
+                
+                hashObj[fieldName] = value;
+            }
+        });
+
+        // Only add the hash if it has at least one field
+        if (Object.keys(hashObj).length > 0) {
+            arrayValue.push(hashObj);
+        }
+    });
+
+    hiddenField.value = JSON.stringify(arrayValue);
+};
+
+// Populate existing array_of_hashes values
+function populateArrayOfHashesValues(component) {
+    const configForm = document.getElementById('configForm');
+    if (!configForm) return;
+
+    // Find all array-hash containers and populate them
+    configForm.querySelectorAll('[id^="array-hash-container-"]').forEach(container => {
+        const hiddenField = container.querySelector('input[type="hidden"]');
+        if (!hiddenField) return;
+
+        try {
+            const arrayValue = JSON.parse(hiddenField.value);
+
+            if (Array.isArray(arrayValue) && arrayValue.length > 0) {
+                // Remove the placeholder (but not actual entries)
+                const allDivs = container.querySelectorAll('.bg-gray-900\\/50, [class*="bg-gray-900/50"]');
+                allDivs.forEach(div => {
+                    if (!div.dataset.entryId && div.textContent.includes('No entries yet')) {
+                        div.remove();
+                    }
+                });
+
+                // Get hash options
+                const hashOptionsJson = container.dataset.hashOptions;
+                let hashOptions = {};
+                try {
+                    hashOptions = JSON.parse(hashOptionsJson);
+                } catch (e) {
+                    console.error('Error parsing hash options:', e);
+                    return;
+                }
+
+                // Add all existing entries
+                const addButton = container.querySelector('button[onclick*="addArrayOfHashesItem"]');
+                arrayValue.forEach((hashObj, index) => {
+                    const entryId = `hash-entry-${Date.now()}-${index}`;
+                    const entryDiv = document.createElement('div');
+                    entryDiv.className = 'p-3 bg-gray-900/50 border border-gray-600 rounded space-y-2';
+                    entryDiv.dataset.entryId = entryId;
+
+                    let fieldsHtml = '';
+                    for (const [optKey, optInfo] of Object.entries(hashOptions)) {
+                        const optType = (optInfo.type || 'string').toLowerCase();
+                        const inputClass = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
+                        const existingValue = hashObj[optKey] || '';
+                        
+                        let inputHtml = '';
+                        if (optType === 'number') {
+                            inputHtml = `<input type="number" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" value="${existingValue}" onchange="updateArrayOfHashesField('${container.id}', '${hiddenField.id}')">`;
+                        } else if (optType === 'boolean') {
+                            inputHtml = `
+                                <select class="${inputClass}" data-field="${optKey}" onchange="updateArrayOfHashesField('${container.id}', '${hiddenField.id}')">
+                                    <option value="">-- Not Set --</option>
+                                    <option value="true" ${existingValue === true || existingValue === 'true' ? 'selected' : ''}>true</option>
+                                    <option value="false" ${existingValue === false || existingValue === 'false' ? 'selected' : ''}>false</option>
+                                </select>
+                            `;
+                        } else {
+                            const escapedValue = String(existingValue).replace(/"/g, '&quot;');
+                            inputHtml = `<input type="text" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" value="${escapedValue}" onchange="updateArrayOfHashesField('${container.id}', '${hiddenField.id}')">`;
+                        }
+
+                        fieldsHtml += `
+                            <div>
+                                <label class="block text-xs font-medium text-gray-300 mb-1">${optKey}</label>
+                                ${inputHtml}
+                            </div>
+                        `;
+                    }
+
+                    entryDiv.innerHTML = `
+                        ${fieldsHtml}
+                        <button type="button"
+                                class="mt-2 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm w-full"
+                                onclick="removeArrayOfHashesItem('${container.id}', '${hiddenField.id}', this)">
+                            Remove Entry
+                        </button>
+                    `;
+
+                    addButton.parentNode.insertBefore(entryDiv, addButton);
+                });
+            }
+        } catch (e) {
+            console.error('Error populating array_of_hashes values:', e);
+        }
+    });
 }
 
 // Codec helper functions

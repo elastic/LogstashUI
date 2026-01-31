@@ -6436,10 +6436,27 @@
                 },
                 "hosts": {
                     "setting": "hosts",
-                    "input_type": "array",
+                    "input_type": "array_of_hashes",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-hosts",
-                    "important": "Yes"
+                    "important": "Yes",
+                    "options": {
+                        "host": {
+                            "type": "string"
+                        },
+                        "community": {
+                            "type": "string"
+                        },
+                        "version": {
+                            "type": "string"
+                        },
+                        "retries": {
+                            "type": "number"
+                        },
+                        "timeout": {
+                            "type": "number"
+                        }
+                    }
                 },
                 "interval": {
                     "setting": "interval",

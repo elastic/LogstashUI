@@ -1119,6 +1119,37 @@ logstash-patterns-core"""
                     except Exception as e:
                         print("ERROR", e, table_row)
 
+    def make_arrays_of_hashes_work(self):
+      should_be_array_of_hashes = {
+        "input": {
+          "snmp": {
+            "hosts": {
+              "host": {
+                "type": "string",
+              },
+              "community": {
+                "type": "string",
+              },
+              "version": {
+                "type": "string",
+              },
+              "retries": {
+                "type": "number"
+              },
+              "timeout": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+
+      for section in should_be_array_of_hashes:
+        for plugin in should_be_array_of_hashes[section]:
+          for option in should_be_array_of_hashes[section][plugin]:
+            self.plugins[section][plugin]['options'][option]['input_type'] = "array_of_hashes"
+            self.plugins[section][plugin]['options'][option]['options'] = should_be_array_of_hashes[section][plugin][option]
+
     def start(self):
         f = open(self.file_path, "r")
         self.plugins = json.loads(f.read())
@@ -1133,6 +1164,8 @@ logstash-patterns-core"""
         self._add_bundled_flag()
 
         self._enrich_important_fields()
+
+        self.make_arrays_of_hashes_work()
 
         f = open("enriched_plugins.json", "w+")
         f.write(json.dumps(self.plugins, indent=4))

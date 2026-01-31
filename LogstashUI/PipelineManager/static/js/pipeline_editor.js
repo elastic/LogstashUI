@@ -272,6 +272,14 @@ function formatConfigValue(value, key) {
         if (value.length === 0) {
             return '[]';
         }
+        
+        // Check if this is an array of objects (array_of_hashes)
+        const firstItem = value[0];
+        if (typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem)) {
+            // This is an array of hashes - show count instead of content
+            return `[${value.length} ${value.length === 1 ? 'entry' : 'entries'}]`;
+        }
+        
         // Format as: "item1", "item2", "item3"
         const formattedItems = value.map(item => {
             return `"${cleanString(item)}"`;
