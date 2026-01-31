@@ -1,4 +1,5 @@
 from django import template
+from django.conf import settings
 
 register = template.Library()
 
@@ -14,3 +15,8 @@ def format_number(num):
         return str(int(num))
     except (ValueError, TypeError):
         return num
+
+@register.simple_tag
+def app_version():
+    """Get the application version from settings"""
+    return getattr(settings, '__VERSION__', 'unknown')

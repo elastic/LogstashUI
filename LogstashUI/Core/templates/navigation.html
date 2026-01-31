@@ -1,3 +1,4 @@
+{% load custom_filters %}
 <!-- Sidebar Content -->
 <aside class="w-64 h-screen bg-base-200 text-base-content flex flex-col sticky top-0 overflow-y-auto">
   <!-- Sidebar Header -->
@@ -63,6 +64,10 @@
 
   <!-- User Section at Bottom -->
   <div class="p-4 border-t border-base-300 mt-auto">
+    <!-- Version Number -->
+    <div class="text-xs text-base-content/60 text-center mb-3">
+      LogstashUI v{% app_version %}
+    </div>
     <!-- Quick Links Icons -->
     <div class="flex items-center justify-center gap-2 mb-4 pb-3 border-b border-base-300">
       <!-- GitHub -->
