@@ -136,6 +136,17 @@ window.PluginConfigModal = (function () {
               <input type="hidden" id="${fieldId}" name="${key}" data-field-type="codec" value='${escapeHtml(JSON.stringify(value || {}))}'>
             </div>
           `;
+                } else if (inputType === 'dropdown') {
+                    // Handle dropdown input type
+                    const dropdownOptions = option.options || [];
+                    inputField = `
+            <select id="${fieldId}" name="${key}" class="${inputClasses}">
+              <option value="">-- Select an option --</option>
+              ${dropdownOptions.map(opt => `
+                <option value="${escapeHtml(opt)}" ${value === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>
+              `).join('')}
+            </select>
+          `;
                 } else if (inputType.includes('boolean') || inputType === 'bool') {
                     inputField = `
             <select id="${fieldId}" name="${key}" class="${inputClasses}">
@@ -271,14 +282,9 @@ window.PluginConfigModal = (function () {
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
           `;
-                } else {
-                    // Check if this is a sensitive field
-                    const isSensitive = isSensitiveField(key);
-                    const inputType = isSensitive ? 'password' : 'text';
-                    
-                    // Default to text input (or password for sensitive fields)
-                    if (isSensitive) {
-                        inputField = `
+                } else if (inputType === 'password') {
+                    // Handle password input type with show/hide functionality
+                    inputField = `
             <div class="relative">
               <input type="password" id="${fieldId}" name="${key}"
                      value="${escapeHtml(value)}"
@@ -294,13 +300,13 @@ window.PluginConfigModal = (function () {
               </button>
             </div>
           `;
-                    } else {
-                        inputField = `
+                } else {
+                    // Default to text input
+                    inputField = `
             <input type="text" id="${fieldId}" name="${key}"
                    value="${escapeHtml(value)}"
                    class="${inputClasses}">
           `;
-                    }
                 }
 
                 fieldGroup.innerHTML = `
@@ -415,6 +421,17 @@ window.PluginConfigModal = (function () {
               </div>
               <input type="hidden" id="${fieldId}" name="${key}" data-field-type="codec" value='${escapeHtml(JSON.stringify(value || {}))}'>
             </div>
+          `;
+                    } else if (inputType === 'dropdown') {
+                        // Handle dropdown input type
+                        const dropdownOptions = option.options || [];
+                        inputField = `
+            <select id="${fieldId}" name="${key}" class="${inputClasses}">
+              <option value="">-- Select an option --</option>
+              ${dropdownOptions.map(opt => `
+                <option value="${escapeHtml(opt)}" ${value === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>
+              `).join('')}
+            </select>
           `;
                     } else if (inputType.includes('boolean') || inputType === 'bool') {
                         inputField = `
@@ -551,14 +568,9 @@ window.PluginConfigModal = (function () {
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
           `;
-                    } else {
-                        // Check if this is a sensitive field
-                        const isSensitive = isSensitiveField(key);
-                        const inputType = isSensitive ? 'password' : 'text';
-                        
-                        // Default to text input (or password for sensitive fields)
-                        if (isSensitive) {
-                            inputField = `
+                    } else if (inputType === 'password') {
+                        // Handle password input type with show/hide functionality
+                        inputField = `
             <div class="relative">
               <input type="password" id="${fieldId}" name="${key}"
                      value="${escapeHtml(value)}"
@@ -574,13 +586,13 @@ window.PluginConfigModal = (function () {
               </button>
             </div>
           `;
-                        } else {
-                            inputField = `
+                    } else {
+                        // Default to text input
+                        inputField = `
             <input type="text" id="${fieldId}" name="${key}"
                    value="${escapeHtml(value)}"
                    class="${inputClasses}">
           `;
-                        }
                     }
 
                     fieldGroup.innerHTML = `

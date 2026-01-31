@@ -714,7 +714,34 @@ class ComponentToPipeline:
 
                 config += "\t}\n"
             elif type(plugin_config_value) is list:
-                config += "\t" + plugin_config_name + " => " + json.dumps(plugin_config_value) + "\n"
+                # Check if this is an array of hashes (list of dictionaries)
+                if plugin_config_value and isinstance(plugin_config_value[0], dict):
+                    # Array of hashes - format each hash using Logstash syntax
+                    config += f"\t{plugin_config_name} => [\n"
+                    for i, hash_item in enumerate(plugin_config_value):
+                        # Build the hash content
+                        hash_pairs = []
+                        for key, value in hash_item.items():
+                            if isinstance(value, str):
+                                formatted_value = self._format_string_value(value)
+                                hash_pairs.append(f'{key} => {formatted_value}')
+                            elif isinstance(value, bool):
+                                hash_pairs.append(f'{key} => {str(value).lower()}')
+                            elif isinstance(value, (int, float)):
+                                hash_pairs.append(f'{key} => {value}')
+                            else:
+                                # Fallback to JSON for complex types
+                                hash_pairs.append(f'{key} => {json.dumps(value)}')
+                        
+                        # Join pairs with spaces and wrap in braces
+                        hash_content = ' '.join(hash_pairs)
+                        # Add comma after each entry except the last one
+                        comma = ',' if i < len(plugin_config_value) - 1 else ''
+                        config += f"\t\t{{ {hash_content} }}{comma}\n"
+                    config += "\t]\n"
+                else:
+                    # Regular array - use JSON format
+                    config += "\t" + plugin_config_name + " => " + json.dumps(plugin_config_value) + "\n"
             elif type(plugin_config_value) is bool:
 
                 config += f'\t{plugin_config_name} => {str(plugin_config_value).lower()}\n'

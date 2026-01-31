@@ -1119,7 +1119,10 @@ logstash-patterns-core"""
                     except Exception as e:
                         print("ERROR", e, table_row)
 
-    def make_arrays_of_hashes_work(self):
+    def _optimize_datatypes(self):
+
+      print("Optimizing datatypes")
+      ## Section converts arrays that are composed of hashes into the correct format
       should_be_array_of_hashes = {
         "input": {
           "snmp": {
@@ -1150,6 +1153,44 @@ logstash-patterns-core"""
             self.plugins[section][plugin]['options'][option]['input_type'] = "array_of_hashes"
             self.plugins[section][plugin]['options'][option]['options'] = should_be_array_of_hashes[section][plugin][option]
 
+      # Section detects and converts more generic data types
+      for section in self.plugins:
+        for plugin in self.plugins[section]:
+          for option in self.plugins[section][plugin]['options']:
+            input_type = self.plugins[section][plugin]['options'][option]['input_type']
+            if "string one of" in input_type or "string, one of" in input_type:
+              options = input_type.split(" one of ")[1].strip()
+
+              if "nil" in options:
+                options = options.replace("nil", '"nil"')
+
+              if "IPV4" in options:
+                options = options.replace("IPV4", '"IPV4')
+
+
+              try:
+                self.plugins[section][plugin]['options'][option]['options'] = json.loads(options)
+              except Exception as e:
+
+                print("ERROR", e)
+                print("THIS --->", self.plugins[section][plugin]['options'][option]['input_type'].split("one of ")[1])
+              self.plugins[section][plugin]['options'][option]['input_type'] = "dropdown"
+              #self.plugins[section][plugin]['options'][option]['options'] = json.loads(input_type.split("one of")[1].strip())
+            elif "boolean" in input_type:
+              self.plugins[section][plugin]['options'][option]['input_type'] = "boolean"
+              self.plugins[section][plugin]['options'][option]['options'] = ["true", "false"]
+
+            elif input_type == "bytes":
+              self.plugins[section][plugin]['options'][option]['input_type'] = "number"
+            elif "list of path" in input_type or "list of string" in input_type:
+              self.plugins[section][plugin]['options'][option]['input_type'] = "array"
+            elif input_type in ['string', 'number', 'array', "hash", "City or ASN", "password", "path", "a valid filesystem path", "codec", "uri"]:
+              continue
+
+            else:
+              print("Unaccounted for types", input_type)
+
+
     def start(self):
         f = open(self.file_path, "r")
         self.plugins = json.loads(f.read())
@@ -1163,9 +1204,11 @@ logstash-patterns-core"""
         # Our docs don't explicitly say whether or not a plugin is bundled by default
         self._add_bundled_flag()
 
+        # Important fields are required fields, should probably rename
         self._enrich_important_fields()
 
-        self.make_arrays_of_hashes_work()
+        # Makes UI elements more descriptive by honoring documented formatting
+        self._optimize_datatypes()
 
         f = open("enriched_plugins.json", "w+")
         f.write(json.dumps(self.plugins, indent=4))
