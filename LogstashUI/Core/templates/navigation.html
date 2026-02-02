@@ -29,6 +29,16 @@
         </a>
       </li>
 
+      <!-- ConnectionManager -->
+      <li>
+        <a href="/ConnectionManager/" class="nav-item {% if '/ConnectionManager' in request.path %}active bg-base-300{% endif %}">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="nav-text">Connection Manager</span>
+        </a>
+      </li>
+
       <!-- Monitoring -->
       <li>
         <a href="/Monitoring/" class="nav-item {% if '/Monitoring' in request.path %}active bg-base-300{% endif %}">
@@ -39,14 +49,28 @@
         </a>
       </li>
 
-      <!-- ConnectionManager -->
+
+
+      <!-- Utilities -->
       <li>
-        <a href="/ConnectionManager/" class="nav-item {% if '/ConnectionManager' in request.path %}active bg-base-300{% endif %}">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span class="nav-text">Connection Manager</span>
-        </a>
+        <details open>
+          <summary class="nav-item {% if '/Utilities' in request.path %}active bg-base-300{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
+            </svg>
+            <span class="nav-text">Utilities</span>
+          </summary>
+          <ul>
+            <li>
+              <a href="/Utilities/GrokDebugger/" class="nav-item {% if '/Utilities/GrokDebugger' in request.path %}active bg-base-300{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span class="nav-text">Grok Debugger</span>
+              </a>
+            </li>
+          </ul>
+        </details>
       </li>
 
       <!-- Settings -->

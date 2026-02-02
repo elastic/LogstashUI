@@ -31,7 +31,8 @@ urlpatterns = [
     path('', include('Core.urls')),
     path('ConnectionManager/', include('PipelineManager.urls')),
     path('API/', include('API.urls')),
-    path('Management/', include('Management.urls'))
+    path('Management/', include('Management.urls')),
+    path('Utilities/', include('Utilities.urls')),
 ]
 
 
