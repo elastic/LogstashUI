@@ -58,10 +58,17 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
 
 ```bash
+git pull
 docker-compose down
 docker-compose pull
 docker-compose up -d
 ```
+
+**What this does:**
+- `git pull` - Updates configuration files (nginx.conf, docker-compose.yml, entrypoint.sh, etc.)
+- `docker-compose down` - Stops and removes the containers
+- `docker-compose pull` - Pulls the latest image from Docker Hub
+- `docker-compose up -d` - Starts the containers with the new version
 
 Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
 
