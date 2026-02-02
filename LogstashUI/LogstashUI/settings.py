@@ -90,6 +90,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'Core.context_processors.version_update_info',
             ],
         },
     },
@@ -193,6 +194,8 @@ if csrf_origins_env:
 else:
     # Default for local development
     CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:8080',
+        'http://127.0.0.1:8080',
         'https://localhost',
         'https://127.0.0.1',
     ]

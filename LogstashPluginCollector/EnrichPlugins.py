@@ -135,6 +135,7 @@ logstash-patterns-core"""
       "tags",
       "type"
     ],
+
     "beats": [
       "port",
       "host",
@@ -1191,6 +1192,58 @@ logstash-patterns-core"""
               print("Unaccounted for types", input_type)
 
 
+    def _add_missing(self):
+        missing_plugins = {
+            "input": {
+                "pipeline": {
+                    "name": "pipeline",
+                    "link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                    "description": "receives input from another pipeline",
+                    "repo_link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                    "options": {
+                        "address": {
+                            "setting":"address",
+                            "input_type": "string",
+                            "required": "Yes",
+                            "setting_link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                            "important": "Yes"
+                        }
+                    },
+                    "Bundled": "Yes"
+                }
+            },
+            "output": {
+                "pipeline": {
+                    "name": "pipeline",
+                    "link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                    "description": "Sends output to another pipeline",
+                    "repo_link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                    "options": {
+                        "send_to": {
+                            "setting": "send_to",
+                            "input_type": "list",
+                            "required": "Yes",
+                            "setting_link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                            "important": "Yes"
+                        },
+                        "ensure_delivery": {
+                            "setting": "ensure_delivery",
+                            "input_type": "boolean",
+                            "required": "No",
+                            "setting_link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
+                            "important": "No"
+                        }
+                    },
+                    "Bundled": "Yes"
+                }
+            }
+        }
+
+        for section in missing_plugins:
+            for plugin in missing_plugins[section]:
+                self.plugins[section][plugin] = missing_plugins[section][plugin]
+
+
     def start(self):
         f = open(self.file_path, "r")
         self.plugins = json.loads(f.read())
@@ -1209,6 +1262,9 @@ logstash-patterns-core"""
 
         # Makes UI elements more descriptive by honoring documented formatting
         self._optimize_datatypes()
+
+        # Add missing plugins
+        self._add_missing()
 
         f = open("enriched_plugins.json", "w+")
         f.write(json.dumps(self.plugins, indent=4))
