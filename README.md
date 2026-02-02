@@ -53,6 +53,18 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 <img width="1570" height="876" alt="image" src="https://github.com/user-attachments/assets/01f402ca-0a88-4eb0-a8b3-b6fba15fcba5" />
 
 
+## Updating
+
+LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
+
+```bash
+docker-compose down
+docker-compose pull
+docker-compose up -d
+```
+
+Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
+
 ## Coming soon!
 - Re-implementation of the 'simulate' feature, which will allow the user to input a JSON and see how it gets transformed by each filter plugin
 - Direct implementation of routing input/output between Logstash nodes

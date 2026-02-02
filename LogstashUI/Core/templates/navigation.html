@@ -68,6 +68,30 @@
     <div class="text-xs text-base-content/60 text-center mb-3">
       LogstashUI v{% app_version %}
     </div>
+    
+    <!-- Update Available Banner -->
+    {% if version_update %}
+    <div class="mb-3 p-2 text-xs bg-purple-600/20 border border-purple-600 rounded-lg">
+      <div class="flex items-start gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-purple-600 shrink-0 w-4 h-4 mt-0.5">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <div class="flex flex-col gap-1">
+          <span class="font-semibold text-purple-300">Update Available: v{{ version_update.latest_version }}</span>
+          <div class="flex gap-2">
+            <a href="{{ version_update.release_url }}" target="_blank" rel="noopener noreferrer" class="text-purple-400 underline hover:no-underline hover:text-purple-300">
+              View changes
+            </a>
+            <span class="text-purple-500">•</span>
+            <a href="https://github.com/Codyjackson0321/LogstashUI?tab=readme-ov-file#updating" target="_blank" rel="noopener noreferrer" class="text-purple-400 underline hover:no-underline hover:text-purple-300">
+              How to update
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
     <!-- Quick Links Icons -->
     <div class="flex items-center justify-center gap-2 mb-4 pb-3 border-b border-base-300">
       <!-- GitHub -->
