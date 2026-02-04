@@ -1,5 +1,6 @@
 from django.urls import path, include
 from . import views
+from . import snmp_views
 
 urlpatterns = [
     path('TestConnectivity', views.TestConnectivity, name='TestConnectivity'),
@@ -23,5 +24,11 @@ urlpatterns = [
     path("GetNodeMetrics", views.GetNodeMetrics, name="GetNodeMetrics"),
     path("GetPipelineMetrics", views.GetPipelineMetrics, name="GetPipelineMetrics"),
     path("GetLogs", views.GetLogs, name="GetLogs"),
-    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport")
+    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport"),
+    
+    # SNMP endpoints
+    path("SNMP/AddCredential/", snmp_views.AddCredential, name="AddSNMPCredential"),
+    path("SNMP/UpdateCredential/<int:credential_id>/", snmp_views.UpdateCredential, name="UpdateSNMPCredential"),
+    path("SNMP/GetCredential/<int:credential_id>/", snmp_views.GetCredential, name="GetSNMPCredential"),
+    path("SNMP/DeleteCredential/<int:credential_id>/", snmp_views.DeleteCredential, name="DeleteSNMPCredential"),
 ]

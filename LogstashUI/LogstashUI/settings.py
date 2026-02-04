@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'Core',
     'Management',
     'Utilities',
+    'SNMP',
 
     # Frameworks
     'django_htmx',
