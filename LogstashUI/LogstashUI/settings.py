@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'API',
     'Core',
     'Management',
+    'Utilities',
 
     # Frameworks
     'django_htmx',
