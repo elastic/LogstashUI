@@ -1,0 +1,75 @@
+<!-- SNMP Device Form Modal -->
+<div id="deviceFormModal" class="hidden fixed inset-0 overflow-hidden z-50">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDeviceModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="modalTitle" class="text-xl font-bold">Add SNMP Device</h2>
+        <button onclick="closeDeviceModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Error message container -->
+        <div id="deviceErrorContainer"></div>
+        
+        <form id="deviceForm">
+          <input type="hidden" id="deviceId" name="device_id">
+          
+          <!-- Device Name -->
+          <div class="mb-4">
+            <label for="deviceName" class="block text-sm font-medium text-gray-300 mb-2">
+              Device Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="deviceName" name="name" class="input input-bordered w-full" required placeholder="e.g., Core Switch 1">
+            <p class="text-gray-400 text-xs mt-1">A descriptive name for this device</p>
+          </div>
+
+          <!-- IP Address / Hostname -->
+          <div class="mb-4">
+            <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
+              IP Address / Hostname <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" required placeholder="192.168.1.1 or switch.local">
+            <p class="text-gray-400 text-xs mt-1">IP address or hostname of the device</p>
+          </div>
+
+          <!-- Credential Selection -->
+          <div class="mb-4">
+            <label for="deviceCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              SNMP Credential
+            </label>
+            <select id="deviceCredentialSelect" name="credential" class="select select-bordered w-full">
+              <option value="">Select a credential...</option>
+              <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
+            </select>
+            <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for this device</p>
+          </div>
+
+          <!-- Network Selection -->
+          <div class="mb-4">
+            <label for="deviceNetworkSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              Network
+            </label>
+            <select id="deviceNetworkSelect" name="network" class="select select-bordered w-full">
+              <option value="">Select a network...</option>
+              <option value="add_new" class="font-bold text-primary">+ Add Network</option>
+            </select>
+            <p class="text-gray-400 text-xs mt-1">Select the network this device belongs to</p>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeDeviceModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Device
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

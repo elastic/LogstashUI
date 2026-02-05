@@ -44,9 +44,26 @@
                           errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                       }, 100);
                   } else if (event.detail.successful) {
-                      // Success - close modal and reload
-                      showToast('Connection created and tested successfully!', 'success');
-                      // The success response includes a script that will reload the page
+                      // Success - parse JSON response
+                      try {
+                          const response = JSON.parse(event.detail.xhr.responseText);
+                          if (response.success) {
+                              // Store the new connection ID for later use
+                              window.lastCreatedConnectionId = response.connection_id;
+                              
+                              // Show success toast
+                              showToast(response.message || 'Connection created and tested successfully!', 'success');
+                              
+                              // Close the modal
+                              closeFlyout();
+                              
+                              // Clear the form
+                              document.getElementById('connectionForm').reset();
+                              errorContainer.innerHTML = '';
+                          }
+                      } catch (e) {
+                          console.error('Error parsing response:', e);
+                      }
                   }
               ">
               {% csrf_token %}
@@ -185,6 +202,10 @@
   </div>
 
   <script>
+    function openFlyout() {
+        document.getElementById('connectionFormFlyout').classList.remove('hidden');
+    }
+
     function closeFlyout() {
         document.getElementById('connectionFormFlyout').classList.add('hidden');
     }

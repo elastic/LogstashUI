@@ -1,9 +1,12 @@
 // SNMP Network Modal JavaScript
 
 // Open modal for adding new network
-document.getElementById('addNetworkBtn').addEventListener('click', function() {
-  openNetworkModal();
-});
+const addNetworkBtn = document.getElementById('addNetworkBtn');
+if (addNetworkBtn) {
+  addNetworkBtn.addEventListener('click', function() {
+    openNetworkModal();
+  });
+}
 
 // Open network modal (for add or edit)
 function openNetworkModal(networkData = null) {
@@ -11,9 +14,14 @@ function openNetworkModal(networkData = null) {
   const form = document.getElementById('networkForm');
   const modalTitle = document.getElementById('modalTitle');
   
+  networkModalIsOpen = true;
+  
   // Reset form
   form.reset();
   document.getElementById('networkErrorContainer').innerHTML = '';
+  
+  // Load connections into dropdown
+  loadConnections(networkData ? networkData.connection : null);
   
   if (networkData) {
     // Edit mode
@@ -21,7 +29,7 @@ function openNetworkModal(networkData = null) {
     document.getElementById('networkId').value = networkData.id;
     document.getElementById('networkName').value = networkData.name;
     document.getElementById('networkRange').value = networkData.network_range;
-    document.getElementById('logstashName').value = networkData.logstash_name;
+    document.getElementById('logstashName').value = networkData.logstash_name || '';
     
     // Set discovery enabled radio
     const discoveryValue = networkData.discovery_enabled ? 'true' : 'false';
@@ -36,12 +44,105 @@ function openNetworkModal(networkData = null) {
   modal.classList.remove('hidden');
 }
 
+// Load connections into dropdown
+function loadConnections(selectedConnectionId = null) {
+  const connectionSelect = document.getElementById('networkConnection');
+  
+  fetch('/API/GetConnections/')
+    .then(response => response.json())
+    .then(connections => {
+      connectionSelect.innerHTML = '<option value="">Select a connection...</option>';
+      connectionSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Connection</option>';
+      
+      connections.forEach(connection => {
+        const option = document.createElement('option');
+        option.value = connection.id;
+        option.textContent = `${connection.name} (${connection.connection_type})`;
+        if (selectedConnectionId && connection.id == selectedConnectionId) {
+          option.selected = true;
+        }
+        connectionSelect.appendChild(option);
+      });
+    })
+    .catch(error => {
+      console.error('Error loading connections:', error);
+    });
+}
+
+// Handle connection selection change
+function handleNetworkConnectionSelection(event) {
+  if (event.target.value === 'add_new') {
+    // Open connection modal
+    openConnectionModalFromNetwork();
+    // Reset selection to empty
+    event.target.value = '';
+  }
+}
+
+// Open connection modal from network modal
+function openConnectionModalFromNetwork() {
+  // Check if openFlyout function exists (from connection modal)
+  if (typeof openFlyout === 'function') {
+    openFlyout();
+  } else {
+    console.error('openFlyout function not found');
+  }
+}
+
+// Track if network modal is open
+let networkModalIsOpen = false;
+
+// Store original closeFlyout function
+let originalCloseFlyoutForNetwork = null;
+
+// Override closeFlyout to keep network modal open
+if (typeof closeFlyout !== 'undefined') {
+  originalCloseFlyoutForNetwork = closeFlyout;
+}
+
+window.closeFlyout = function() {
+  const connectionModal = document.getElementById('connectionFormFlyout');
+  const networkModal = document.getElementById('networkFormModal');
+  const wasNetworkModalOpen = networkModalIsOpen;
+  
+  // Close connection modal
+  if (connectionModal) {
+    connectionModal.classList.add('hidden');
+  }
+  
+  // Call original close function if it exists
+  if (originalCloseFlyoutForNetwork && typeof originalCloseFlyoutForNetwork === 'function') {
+    originalCloseFlyoutForNetwork();
+  }
+  
+  // If network modal was open, reopen it and refresh connections
+  if (wasNetworkModalOpen) {
+    networkModal.classList.remove('hidden');
+    loadConnections(window.lastCreatedConnectionId);
+    window.lastCreatedConnectionId = null;
+  }
+};
+
 // Close network modal
 function closeNetworkModal() {
+  networkModalIsOpen = false;
   document.getElementById('networkFormModal').classList.add('hidden');
   document.getElementById('networkForm').reset();
   document.getElementById('networkErrorContainer').innerHTML = '';
 }
+
+// Add event listeners for connection selection
+document.addEventListener('DOMContentLoaded', function() {
+  const connectionSelect = document.getElementById('networkConnection');
+  if (connectionSelect) {
+    connectionSelect.addEventListener('change', handleNetworkConnectionSelection);
+    // Refresh dropdown when clicked/focused, preserving current selection
+    connectionSelect.addEventListener('focus', function() {
+      const currentValue = this.value;
+      loadConnections(currentValue);
+    });
+  }
+});
 
 // Validate CIDR and show warning for large networks
 function validateNetworkSize() {
@@ -112,16 +213,32 @@ document.getElementById('networkForm').addEventListener('submit', function(e) {
         throw new Error(text || 'Failed to save network');
       });
     }
-    return response.text();
+    return response.json();
   })
   .then(data => {
-    showToast(networkId ? 'Network updated successfully!' : 'Network created successfully!', 'success');
-    closeNetworkModal();
+    // Get the new network ID from response
+    const newNetworkId = data.id || data.network_id || null;
     
-    // Reload page to show updated networks
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    showToast(networkId ? 'Network updated successfully!' : 'Network created successfully!', 'success');
+    
+    // Check if device modal is open (called from device modal)
+    const deviceModal = document.getElementById('deviceFormModal');
+    const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
+    
+    if (isCalledFromDeviceModal) {
+      // Store the new network ID for device modal to use (if we got one)
+      if (newNetworkId) {
+        window.lastCreatedNetworkId = newNetworkId;
+      }
+      closeNetworkModal();
+      // Don't reload - let device modal handle the refresh
+    } else {
+      closeNetworkModal();
+      // Reload page to show updated networks
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    }
   })
   .catch(error => {
     const errorContainer = document.getElementById('networkErrorContainer');

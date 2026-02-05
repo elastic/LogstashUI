@@ -7,6 +7,26 @@ from django.core.exceptions import ValidationError
 import json
 
 
+@require_http_methods(["GET"])
+def GetCredentials(request):
+    """Get all SNMP credentials"""
+    try:
+        credentials = Credential.objects.all().values('id', 'name', 'version', 'description')
+        return JsonResponse(list(credentials), safe=False, status=200)
+    except Exception as e:
+        return HttpResponse(f"Error fetching credentials: {str(e)}", status=500)
+
+
+@require_http_methods(["GET"])
+def GetNetworks(request):
+    """Get all SNMP networks"""
+    try:
+        networks = Network.objects.all().values('id', 'name', 'network_range', 'logstash_name')
+        return JsonResponse(list(networks), safe=False, status=200)
+    except Exception as e:
+        return HttpResponse(f"Error fetching networks: {str(e)}", status=500)
+
+
 @require_http_methods(["POST"])
 def AddCredential(request):
     """Add a new SNMP credential"""
@@ -43,7 +63,7 @@ def AddCredential(request):
         # Save (this will trigger validation and encryption)
         credential.save()
         
-        return HttpResponse("Credential created successfully!", status=200)
+        return JsonResponse({'id': credential.id, 'message': 'Credential created successfully!'}, status=200)
         
     except ValidationError as e:
         error_msg = str(e)
@@ -201,7 +221,7 @@ def AddNetwork(request):
         # Save (this will trigger validation)
         network.save()
         
-        return HttpResponse("Network created successfully!", status=200)
+        return JsonResponse({'id': network.id, 'message': 'Network created successfully!'}, status=200)
         
     except ValidationError as e:
         error_msg = str(e)
@@ -284,3 +304,204 @@ def DeleteNetwork(request, network_id):
         return HttpResponse("Network not found", status=404)
     except Exception as e:
         return HttpResponse(f"Error deleting network: {str(e)}", status=500)
+
+
+# ============================================================================
+# Device API Endpoints
+# ============================================================================
+
+@require_http_methods(["GET"])
+def GetDevices(request):
+    """Get paginated SNMP devices with search, filter, and sort"""
+    try:
+        from SNMP.models import Device
+        from django.db.models import Q
+        from django.core.paginator import Paginator
+        
+        # Get query parameters
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 25))
+        search = request.GET.get('search', '').strip()
+        network_filter = request.GET.get('network', '').strip()
+        sort_by = request.GET.get('sort_by', '-created_at')
+        
+        # Start with all devices
+        queryset = Device.objects.select_related('credential', 'network')
+        
+        # Apply search filter (name or IP address)
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) | Q(ip_address__icontains=search)
+            )
+        
+        # Apply network filter
+        if network_filter:
+            queryset = queryset.filter(network_id=network_filter)
+        
+        # Apply sorting
+        valid_sort_fields = ['name', '-name', 'ip_address', '-ip_address', 'created_at', '-created_at']
+        if sort_by in valid_sort_fields:
+            queryset = queryset.order_by(sort_by)
+        
+        # Get total count before pagination
+        total_count = queryset.count()
+        
+        # Apply pagination
+        paginator = Paginator(queryset, page_size)
+        page_obj = paginator.get_page(page)
+        
+        # Serialize devices
+        devices = []
+        for device in page_obj:
+            devices.append({
+                'id': device.id,
+                'name': device.name,
+                'ip_address': device.ip_address,
+                'credential_id': device.credential.id if device.credential else None,
+                'credential_name': device.credential.name if device.credential else None,
+                'network_id': device.network.id if device.network else None,
+                'network_name': device.network.name if device.network else None,
+                'created_at': device.created_at.isoformat(),
+            })
+        
+        return JsonResponse({
+            'devices': devices,
+            'total': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': paginator.num_pages,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+        })
+        
+    except Exception as e:
+        return HttpResponse(f"Error fetching devices: {str(e)}", status=500)
+
+
+@require_http_methods(["POST"])
+def AddDevice(request):
+    """Add a new SNMP device"""
+    try:
+        from SNMP.models import Device
+        
+        # Extract form data
+        name = request.POST.get('name')
+        ip_address = request.POST.get('ip_address')
+        credential_id = request.POST.get('credential')
+        network_id = request.POST.get('network')
+        
+        # Create device object
+        device = Device(
+            name=name,
+            ip_address=ip_address
+        )
+        
+        # Set optional foreign keys
+        if credential_id:
+            device.credential_id = credential_id
+        if network_id:
+            device.network_id = network_id
+        
+        # Save (this will trigger validation)
+        device.save()
+        
+        return JsonResponse({'id': device.id, 'message': 'Device created successfully!'}, status=200)
+        
+    except ValidationError as e:
+        error_msg = str(e)
+        if hasattr(e, 'message_dict'):
+            error_msg = '<br>'.join([f"{k}: {', '.join(v)}" for k, v in e.message_dict.items()])
+        return HttpResponse(error_msg, status=400)
+    except Exception as e:
+        return HttpResponse(f"Error creating device: {str(e)}", status=500)
+
+
+@require_http_methods(["POST"])
+def UpdateDevice(request, device_id):
+    """Update an existing SNMP device"""
+    try:
+        from SNMP.models import Device
+        
+        device = Device.objects.get(pk=device_id)
+        
+        # Update fields
+        device.name = request.POST.get('name', device.name)
+        device.ip_address = request.POST.get('ip_address', device.ip_address)
+        
+        # Update optional foreign keys
+        credential_id = request.POST.get('credential')
+        if credential_id:
+            device.credential_id = credential_id
+        else:
+            device.credential = None
+            
+        network_id = request.POST.get('network')
+        if network_id:
+            device.network_id = network_id
+        else:
+            device.network = None
+        
+        # Save (this will trigger validation)
+        device.save()
+        
+        return JsonResponse({'id': device.id, 'message': 'Device updated successfully!'}, status=200)
+        
+    except Device.DoesNotExist:
+        return HttpResponse("Device not found", status=404)
+    except ValidationError as e:
+        error_msg = str(e)
+        if hasattr(e, 'message_dict'):
+            error_msg = '<br>'.join([f"{k}: {', '.join(v)}" for k, v in e.message_dict.items()])
+        return HttpResponse(error_msg, status=400)
+    except Exception as e:
+        return HttpResponse(f"Error updating device: {str(e)}", status=500)
+
+
+@require_http_methods(["GET"])
+def GetDevice(request, device_id):
+    """Get a single device"""
+    try:
+        from SNMP.models import Device
+        
+        device = Device.objects.get(pk=device_id)
+        
+        data = {
+            'id': device.id,
+            'name': device.name,
+            'ip_address': device.ip_address,
+            'credential': device.credential_id if device.credential else None,
+            'network': device.network_id if device.network else None,
+        }
+        
+        return JsonResponse(data)
+        
+    except Device.DoesNotExist:
+        return JsonResponse({'error': 'Device not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def DeleteDevice(request, device_id):
+    """Delete a device"""
+    try:
+        from SNMP.models import Device
+        
+        device = Device.objects.get(pk=device_id)
+        device.delete()
+        
+        return HttpResponse("""
+            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
+                Device deleted successfully!
+                <script>
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                </script>
+            </div>
+        """)
+        
+    except Device.DoesNotExist:
+        return HttpResponse("Device not found", status=404)
+    except Exception as e:
+        return HttpResponse(f"Error deleting device: {str(e)}", status=500)

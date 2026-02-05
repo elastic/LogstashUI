@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from Core.encryption import encrypt_credential, decrypt_credential
+from Core.models import Connection
 import ipaddress
 
 
@@ -20,9 +21,19 @@ class Network(models.Model):
         help_text="Network in CIDR notation (e.g., 192.168.1.0/24)"
     )
     
+    connection = models.ForeignKey(
+        Connection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='snmp_networks',
+        help_text="Logstash connection that will monitor this network"
+    )
+    
     logstash_name = models.CharField(
         max_length=255,
-        help_text="Name of the Logstash node that will monitor this network"
+        blank=True,
+        help_text="Name of the Logstash node that will monitor this network (deprecated, use connection instead)"
     )
     
     discovery_enabled = models.BooleanField(
@@ -75,6 +86,80 @@ class Network(models.Model):
             }
         except ValueError:
             return {}
+
+
+class Device(models.Model):
+    """
+    SNMP Device model for individual devices to monitor
+    """
+    
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Friendly name for this device"
+    )
+    
+    ip_address = models.CharField(
+        max_length=255,
+        help_text="IP address or hostname of the device"
+    )
+    
+    credential = models.ForeignKey(
+        'Credential',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='devices',
+        help_text="SNMP credential to use for this device"
+    )
+    
+    network = models.ForeignKey(
+        'Network',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='devices',
+        help_text="Network this device belongs to"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'SNMP Device'
+        verbose_name_plural = 'SNMP Devices'
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['ip_address']),
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['network', 'name']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.ip_address})"
+    
+    def clean(self):
+        """
+        Validate device fields
+        """
+        super().clean()
+        
+        # Validate IP address or hostname
+        if self.ip_address:
+            try:
+                # Try to parse as IP address
+                ipaddress.ip_address(self.ip_address)
+            except ValueError:
+                # If not a valid IP, check if it's a reasonable hostname
+                if not self.ip_address.replace('-', '').replace('.', '').replace('_', '').isalnum():
+                    raise ValidationError({
+                        'ip_address': 'Must be a valid IP address or hostname'
+                    })
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class Credential(models.Model):
