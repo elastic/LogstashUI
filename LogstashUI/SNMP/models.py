@@ -1,6 +1,80 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from Core.encryption import encrypt_credential, decrypt_credential
+import ipaddress
+
+
+class Network(models.Model):
+    """
+    SNMP Network model for defining networks to monitor
+    """
+    
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Friendly name for this network"
+    )
+    
+    network_range = models.CharField(
+        max_length=50,
+        help_text="Network in CIDR notation (e.g., 192.168.1.0/24)"
+    )
+    
+    logstash_name = models.CharField(
+        max_length=255,
+        help_text="Name of the Logstash node that will monitor this network"
+    )
+    
+    discovery_enabled = models.BooleanField(
+        default=True,
+        help_text="Enable automatic device discovery on this network"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'SNMP Network'
+        verbose_name_plural = 'SNMP Networks'
+    
+    def __str__(self):
+        return f"{self.name} ({self.network_range})"
+    
+    def clean(self):
+        """
+        Validate network_range is a valid CIDR notation
+        """
+        super().clean()
+        
+        if self.network_range:
+            try:
+                # Validate CIDR notation
+                ipaddress.ip_network(self.network_range, strict=False)
+            except ValueError as e:
+                raise ValidationError({
+                    'network_range': f'Invalid CIDR notation: {str(e)}'
+                })
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
+    def get_network_info(self):
+        """
+        Get network information as a dictionary
+        """
+        try:
+            network = ipaddress.ip_network(self.network_range, strict=False)
+            return {
+                'network_address': str(network.network_address),
+                'broadcast_address': str(network.broadcast_address),
+                'netmask': str(network.netmask),
+                'num_addresses': network.num_addresses,
+                'hosts': network.num_addresses - 2 if network.num_addresses > 2 else 0
+            }
+        except ValueError:
+            return {}
 
 
 class Credential(models.Model):

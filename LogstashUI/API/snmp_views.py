@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from SNMP.models import Credential
+from SNMP.models import Credential, Network
 from django.core.exceptions import ValidationError
 import json
 
@@ -174,3 +174,113 @@ def DeleteCredential(request, credential_id):
         return HttpResponse("Credential not found", status=404)
     except Exception as e:
         return HttpResponse(f"Error deleting credential: {str(e)}", status=500)
+
+
+# ============================================================================
+# Network CRUD Operations
+# ============================================================================
+
+@require_http_methods(["POST"])
+def AddNetwork(request):
+    """Add a new SNMP network"""
+    try:
+        # Extract form data
+        name = request.POST.get('name')
+        network_range = request.POST.get('network_range')
+        logstash_name = request.POST.get('logstash_name')
+        discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
+        
+        # Create network object
+        network = Network(
+            name=name,
+            network_range=network_range,
+            logstash_name=logstash_name,
+            discovery_enabled=discovery_enabled
+        )
+        
+        # Save (this will trigger validation)
+        network.save()
+        
+        return HttpResponse("Network created successfully!", status=200)
+        
+    except ValidationError as e:
+        error_msg = str(e)
+        if hasattr(e, 'message_dict'):
+            error_msg = '<br>'.join([f"{k}: {', '.join(v)}" for k, v in e.message_dict.items()])
+        return HttpResponse(error_msg, status=400)
+    except Exception as e:
+        return HttpResponse(f"Error creating network: {str(e)}", status=500)
+
+
+@require_http_methods(["POST"])
+def UpdateNetwork(request, network_id):
+    """Update an existing SNMP network"""
+    try:
+        network = Network.objects.get(pk=network_id)
+        
+        # Update fields
+        network.name = request.POST.get('name', network.name)
+        network.network_range = request.POST.get('network_range', network.network_range)
+        network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
+        network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
+        
+        # Save (this will trigger validation)
+        network.save()
+        
+        return HttpResponse("Network updated successfully!", status=200)
+        
+    except Network.DoesNotExist:
+        return HttpResponse("Network not found", status=404)
+    except ValidationError as e:
+        error_msg = str(e)
+        if hasattr(e, 'message_dict'):
+            error_msg = '<br>'.join([f"{k}: {', '.join(v)}" for k, v in e.message_dict.items()])
+        return HttpResponse(error_msg, status=400)
+    except Exception as e:
+        return HttpResponse(f"Error updating network: {str(e)}", status=500)
+
+
+@require_http_methods(["GET"])
+def GetNetwork(request, network_id):
+    """Get a single network"""
+    try:
+        network = Network.objects.get(pk=network_id)
+        
+        data = {
+            'id': network.id,
+            'name': network.name,
+            'network_range': network.network_range,
+            'logstash_name': network.logstash_name,
+            'discovery_enabled': network.discovery_enabled,
+        }
+        
+        return JsonResponse(data)
+        
+    except Network.DoesNotExist:
+        return JsonResponse({'error': 'Network not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def DeleteNetwork(request, network_id):
+    """Delete a network"""
+    try:
+        network = Network.objects.get(pk=network_id)
+        network.delete()
+        
+        return HttpResponse("""
+            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
+                Network deleted successfully!
+                <script>
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                </script>
+            </div>
+        """)
+        
+    except Network.DoesNotExist:
+        return HttpResponse("Network not found", status=404)
+    except Exception as e:
+        return HttpResponse(f"Error deleting network: {str(e)}", status=500)
