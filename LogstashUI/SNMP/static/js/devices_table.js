@@ -102,6 +102,16 @@ function renderDevices(devices) {
       year: 'numeric'
     });
     
+    // Render profile pills
+    let profilesHtml = '';
+    if (device.profiles && device.profiles.length > 0) {
+      profilesHtml = device.profiles.map(profile => 
+        `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-1 mb-1">${escapeHtml(profile)}</span>`
+      ).join('');
+    } else {
+      profilesHtml = '<span class="text-gray-500 italic">None</span>';
+    }
+    
     row.innerHTML = `
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
@@ -112,6 +122,9 @@ function renderDevices(devices) {
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.network_name ? escapeHtml(device.network_name) : '<span class="text-gray-500 italic">None</span>'}
+      </td>
+      <td class="px-6 py-4 text-sm text-gray-300">
+        <div class="flex flex-wrap">${profilesHtml}</div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${createdDate}</td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -143,9 +156,6 @@ function renderDevices(devices) {
     
     tableBody.appendChild(row);
   });
-  
-  // Reattach action menu handlers
-  attachActionMenuHandlers();
 }
 
 // Update pagination controls
@@ -259,38 +269,6 @@ function loadNetworkFilter() {
     });
 }
 
-// Attach action menu handlers
-function attachActionMenuHandlers() {
-  document.addEventListener('click', function(e) {
-    const actionButton = e.target.closest('.action-menu-button');
-    
-    if (actionButton) {
-      e.stopPropagation();
-      const menu = actionButton.nextElementSibling;
-      const isHidden = menu.classList.contains('hidden');
-      
-      // Close all other open menus
-      document.querySelectorAll('.action-menu-items').forEach(m => {
-        if (m !== menu) m.classList.add('hidden');
-      });
-      
-      // Position the menu at the cursor
-      if (isHidden) {
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
-      }
-      
-      // Toggle current menu
-      menu.classList.toggle('hidden', !isHidden);
-    } else if (!e.target.closest('.action-menu')) {
-      // Close all open action menus when clicking anywhere else
-      document.querySelectorAll('.action-menu-items').forEach(menu => {
-        menu.classList.add('hidden');
-      });
-    }
-  });
-}
-
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -327,6 +305,36 @@ document.addEventListener('DOMContentLoaded', function() {
     pageSize = parseInt(e.target.value);
     currentPage = 1;
     loadDevices();
+  });
+  
+  // Action menu handlers using event delegation (only attach once)
+  document.addEventListener('click', function(e) {
+    const actionButton = e.target.closest('.action-menu-button');
+    
+    if (actionButton) {
+      e.stopPropagation();
+      const menu = actionButton.nextElementSibling;
+      const isHidden = menu.classList.contains('hidden');
+      
+      // Close all other open menus
+      document.querySelectorAll('.action-menu-items').forEach(m => {
+        if (m !== menu) m.classList.add('hidden');
+      });
+      
+      // Position the menu at the cursor
+      if (isHidden) {
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+      }
+      
+      // Toggle current menu
+      menu.classList.toggle('hidden', !isHidden);
+    } else if (!e.target.closest('.action-menu')) {
+      // Close all open action menus when clicking anywhere else
+      document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+      });
+    }
   });
 });
 

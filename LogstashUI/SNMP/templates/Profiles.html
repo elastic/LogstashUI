@@ -1,1 +1,176 @@
-Networks.html{% extends 'base.html' %}
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="p-6">
+  <!-- Header with Add Button -->
+  <div class="page-header flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-white">SNMP Profiles</h1>
+    <button id="addProfileBtn" class="btn btn-primary flex items-center gap-x-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+      </svg>
+      Add Profile
+    </button>
+  </div>
+
+  <!-- Profiles Table -->
+  <div class="mt-6">
+    <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+      <table class="table w-full">
+        <thead>
+          <tr class="bg-gray-700 border-b border-gray-600">
+            <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Official</th>
+            <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profile Name</th>
+            <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-gray-800 divide-y divide-gray-700">
+          {% for profile in profiles %}
+          <tr class="hover:bg-gray-700/50 transition-colors">
+            <!-- Official Column -->
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+              {% if profile.is_official %}
+              <div class="flex flex-col items-center">
+                <svg class="w-5 h-5 text-yellow-400 mb-1" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                <span class="text-xs text-gray-400">Official</span>
+              </div>
+              {% else %}
+              <span class="text-xs text-gray-500">-</span>
+              {% endif %}
+            </td>
+            
+            <!-- Profile Name -->
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+              {{ profile.display_name }}
+            </td>
+            
+            <!-- Actions -->
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <div class="action-menu relative">
+                <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                  <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                  </svg>
+                </button>
+
+                <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                  <div class="px-1 py-1">
+                    <button onclick="viewProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View
+                    </button>
+                    {% if not profile.is_official %}
+                    <button onclick="editProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                    <button onclick="deleteProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="px-6 py-8 text-center text-gray-400">
+              No profiles found. Add your first custom profile to get started!
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Profile Form Modal -->
+  {% include 'components/snmp_profile_modal.html' %}
+
+</div>
+
+<script src="{% static 'js/snmp_profile_modal.js' %}"></script>
+<script>
+  // Handle action menu (3-dot icon) functionality using event delegation
+  document.addEventListener('click', function(e) {
+    const actionButton = e.target.closest('.action-menu-button');
+    
+    if (actionButton) {
+      e.stopPropagation();
+      const menu = actionButton.nextElementSibling;
+      const isHidden = menu.classList.contains('hidden');
+      
+      // Close all other open menus
+      document.querySelectorAll('.action-menu-items').forEach(m => {
+        if (m !== menu) m.classList.add('hidden');
+      });
+      
+      // Position the menu at the cursor
+      if (isHidden) {
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+      }
+      
+      // Toggle current menu
+      menu.classList.toggle('hidden', !isHidden);
+    } else if (!e.target.closest('.action-menu')) {
+      // Close all open action menus when clicking anywhere else
+      document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+      });
+    }
+  });
+  
+  // Close menu when scrolling
+  window.addEventListener('scroll', function() {
+    document.querySelectorAll('.action-menu-items').forEach(menu => {
+      menu.classList.add('hidden');
+    });
+  }, true);
+
+  // Profile action functions
+  function viewProfile(profileName, isOfficial) {
+    openProfileModal(profileName, isOfficial, true); // true = view mode
+  }
+
+  function editProfile(profileName) {
+    openProfileModal(profileName, false, false); // false = edit mode
+  }
+
+  function deleteProfile(profileName) {
+    if (confirm(`Are you sure you want to delete the profile "${profileName}"?`)) {
+      fetch(`/API/SNMP/DeleteProfile/${profileName}/`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast('Profile deleted successfully!', 'success');
+          setTimeout(() => window.location.reload(), 500);
+        } else {
+          showToast(data.message || 'Failed to delete profile', 'error');
+        }
+      })
+      .catch(error => {
+        showToast('Error deleting profile: ' + error, 'error');
+      });
+    }
+  }
+</script>
+
+{% endblock %}

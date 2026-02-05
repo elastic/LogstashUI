@@ -163,7 +163,12 @@ document.getElementById('credentialForm').addEventListener('submit', function(e)
       if (newCredentialId) {
         window.lastCreatedCredentialId = newCredentialId;
       }
-      closeCredentialModal();
+      // Use window.closeCredentialModal to ensure device modal override is called
+      if (typeof window.closeCredentialModal === 'function') {
+        window.closeCredentialModal();
+      } else {
+        closeCredentialModal();
+      }
       // Don't reload - let device modal handle the refresh
     } else {
       closeCredentialModal();

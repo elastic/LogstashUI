@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from Core.encryption import encrypt_credential, decrypt_credential
 from Core.models import Connection
 import ipaddress
+import json
 
 
 class Network(models.Model):
@@ -120,6 +121,13 @@ class Device(models.Model):
         blank=True,
         related_name='devices',
         help_text="Network this device belongs to"
+    )
+    
+    profiles = models.ManyToManyField(
+        'Profile',
+        blank=True,
+        related_name='devices',
+        help_text="SNMP profiles to apply to this device"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -410,3 +418,72 @@ class Credential(models.Model):
                 config['priv_pass'] = self.priv_pass
         
         return config
+
+
+class Profile(models.Model):
+    """
+    SNMP Profile model for storing user-created device profiles
+    Official profiles are stored in SNMP/data/official_profiles/ as JSON files
+    User-created profiles are stored in the database
+    """
+    
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Unique name for this profile (e.g., 'cisco_custom', 'my_switch_profile')"
+    )
+    
+    profile_data = models.JSONField(
+        help_text="JSON blob containing the profile configuration (OIDs, metrics, etc.)"
+    )
+    
+    description = models.TextField(
+        blank=True,
+        help_text="Optional description of what this profile is for"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'SNMP Profile'
+        verbose_name_plural = 'SNMP Profiles'
+    
+    def __str__(self):
+        return self.name
+    
+    def clean(self):
+        """
+        Validate profile data is valid JSON structure
+        """
+        super().clean()
+        
+        if self.profile_data:
+            # Ensure it's a dict
+            if not isinstance(self.profile_data, dict):
+                raise ValidationError({
+                    'profile_data': 'Profile data must be a JSON object (dictionary)'
+                })
+            
+            # Basic validation - could be expanded based on required profile structure
+            # For now, just ensure it's valid JSON
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
+    def get_profile_json(self):
+        """
+        Get the profile data as a JSON string
+        """
+        return json.dumps(self.profile_data, indent=2)
+    
+    def set_profile_from_json(self, json_string):
+        """
+        Set profile data from a JSON string
+        """
+        try:
+            self.profile_data = json.loads(json_string)
+        except json.JSONDecodeError as e:
+            raise ValidationError(f'Invalid JSON: {str(e)}')
