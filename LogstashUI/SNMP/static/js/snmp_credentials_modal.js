@@ -1,9 +1,12 @@
 // SNMP Credentials Modal JavaScript
 
 // Open modal for adding new credential
-document.getElementById('addCredentialBtn').addEventListener('click', function() {
-  openCredentialModal();
-});
+const addCredentialBtn = document.getElementById('addCredentialBtn');
+if (addCredentialBtn) {
+  addCredentialBtn.addEventListener('click', function() {
+    openCredentialModal();
+  });
+}
 
 // Open credential modal (for add or edit)
 function openCredentialModal(credentialData = null) {
@@ -143,16 +146,32 @@ document.getElementById('credentialForm').addEventListener('submit', function(e)
         throw new Error(text || 'Failed to save credential');
       });
     }
-    return response.text();
+    return response.json();
   })
   .then(data => {
-    showToast(credentialId ? 'Credential updated successfully!' : 'Credential created successfully!', 'success');
-    closeCredentialModal();
+    // Get the new credential ID from response
+    const newCredentialId = data.id || data.credential_id || null;
     
-    // Reload page to show updated credentials
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    showToast(credentialId ? 'Credential updated successfully!' : 'Credential created successfully!', 'success');
+    
+    // Check if device modal is open (called from device modal)
+    const deviceModal = document.getElementById('deviceFormModal');
+    const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
+    
+    if (isCalledFromDeviceModal) {
+      // Store the new credential ID for device modal to use (if we got one)
+      if (newCredentialId) {
+        window.lastCreatedCredentialId = newCredentialId;
+      }
+      closeCredentialModal();
+      // Don't reload - let device modal handle the refresh
+    } else {
+      closeCredentialModal();
+      // Reload page to show updated credentials
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    }
   })
   .catch(error => {
     const errorContainer = document.getElementById('credentialErrorContainer');

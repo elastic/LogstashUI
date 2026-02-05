@@ -36,13 +36,25 @@
             <p class="text-gray-400 text-xs mt-1">Network in CIDR notation (e.g., 192.168.1.0/24)</p>
           </div>
 
+          <!-- Connection -->
+          <div class="mb-4">
+            <label for="networkConnection" class="block text-sm font-medium text-gray-300 mb-2">
+              Connection <span class="text-red-500">*</span>
+            </label>
+            <select id="networkConnection" name="connection" class="select select-bordered w-full" required>
+              <option value="">Select a connection...</option>
+              <option value="add_new" class="font-bold text-primary">+ Add Connection</option>
+            </select>
+            <p class="text-gray-400 text-xs mt-1">Connection to centralized pipeline management cluster</p>
+          </div>
+
           <!-- Logstash Name -->
           <div class="mb-4">
             <label for="logstashName" class="block text-sm font-medium text-gray-300 mb-2">
               Logstash Node Name <span class="text-red-500">*</span>
             </label>
             <input type="text" id="logstashName" name="logstash_name" class="input input-bordered w-full" required placeholder="logstash-01">
-            <p class="text-gray-400 text-xs mt-1">Name of the Logstash node monitoring this network</p>
+            <p class="text-gray-400 text-xs mt-1">The name of the Logstash node on this network.</p>
           </div>
 
           <!-- Discovery Toggle -->

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from django.template.loader import get_template
 import traceback
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 import re
 
 
@@ -92,6 +93,15 @@ def TestConnectivity(request=None, connection_id=None):
     
     return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
 
+@require_http_methods(["GET"])
+def GetConnections(request):
+    """Get all connections for dropdown population"""
+    try:
+        connections = ConnectionTable.objects.all().values('id', 'name', 'connection_type')
+        return JsonResponse(list(connections), safe=False, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 def AddConnection(request):
     print("=== AddConnection called ===")
     print(f"Method: {request.method}")
@@ -133,7 +143,13 @@ def AddConnection(request):
                 print(f"Returning error response")
                 return response
             
-            # Connection test succeeded, proceed with success response
+            # Connection test succeeded, return JSON response
+            print(f"Returning success response with connection ID: {new_connection.id}")
+            return JsonResponse({
+                'success': True,
+                'connection_id': new_connection.id,
+                'message': 'Connection created and tested successfully!'
+            }, status=200)
         else:
             print(f"Form validation errors: {form.errors}")
             response = HttpResponse(f"""
@@ -147,22 +163,7 @@ def AddConnection(request):
             print("Returning form validation error response")
             return response
 
-    return HttpResponse("""
-        <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-            Connection created and tested successfully!
-            <script>
-                // Close the flyout after a short delay
-                setTimeout(() => {
-                    const flyout = document.getElementById('connectionFormFlyout');
-                    if (flyout) {
-                        flyout.classList.add('hidden');
-                    }
-                    // Reload the page to show the new connection
-                    window.location.reload();
-                }, 500);
-            </script>
-        </div>
-    """)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def DeleteConnection(request, connection_id=None):
 
