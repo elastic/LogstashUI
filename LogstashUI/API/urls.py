@@ -26,9 +26,15 @@ urlpatterns = [
     path("GetLogs", views.GetLogs, name="GetLogs"),
     path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport"),
     
-    # SNMP endpoints
+    # SNMP Credential endpoints
     path("SNMP/AddCredential/", snmp_views.AddCredential, name="AddSNMPCredential"),
     path("SNMP/UpdateCredential/<int:credential_id>/", snmp_views.UpdateCredential, name="UpdateSNMPCredential"),
     path("SNMP/GetCredential/<int:credential_id>/", snmp_views.GetCredential, name="GetSNMPCredential"),
     path("SNMP/DeleteCredential/<int:credential_id>/", snmp_views.DeleteCredential, name="DeleteSNMPCredential"),
+    
+    # SNMP Network endpoints
+    path("SNMP/AddNetwork/", snmp_views.AddNetwork, name="AddSNMPNetwork"),
+    path("SNMP/UpdateNetwork/<int:network_id>/", snmp_views.UpdateNetwork, name="UpdateSNMPNetwork"),
+    path("SNMP/GetNetwork/<int:network_id>/", snmp_views.GetNetwork, name="GetSNMPNetwork"),
+    path("SNMP/DeleteNetwork/<int:network_id>/", snmp_views.DeleteNetwork, name="DeleteSNMPNetwork"),
 ]
