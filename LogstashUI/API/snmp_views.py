@@ -2,9 +2,11 @@ from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from SNMP.models import Credential, Network
+from SNMP.models import Credential, Network, Profile
 from django.core.exceptions import ValidationError
+from django.conf import settings
 import json
+import os
 
 
 @require_http_methods(["GET"])
@@ -326,7 +328,7 @@ def GetDevices(request):
         sort_by = request.GET.get('sort_by', '-created_at')
         
         # Start with all devices
-        queryset = Device.objects.select_related('credential', 'network')
+        queryset = Device.objects.select_related('credential', 'network').prefetch_related('profiles')
         
         # Apply search filter (name or IP address)
         if search:
@@ -353,6 +355,15 @@ def GetDevices(request):
         # Serialize devices
         devices = []
         for device in page_obj:
+            # Strip .json extension from profile names for display
+            profile_names = []
+            for profile in device.profiles.all():
+                name = profile.name
+                # Remove .json extension if present (official profiles)
+                if name.endswith('.json'):
+                    name = name[:-5]
+                profile_names.append(name)
+            
             devices.append({
                 'id': device.id,
                 'name': device.name,
@@ -361,6 +372,7 @@ def GetDevices(request):
                 'credential_name': device.credential.name if device.credential else None,
                 'network_id': device.network.id if device.network else None,
                 'network_name': device.network.name if device.network else None,
+                'profiles': profile_names,
                 'created_at': device.created_at.isoformat(),
             })
         
@@ -382,13 +394,14 @@ def GetDevices(request):
 def AddDevice(request):
     """Add a new SNMP device"""
     try:
-        from SNMP.models import Device
+        from SNMP.models import Device, Profile
         
         # Extract form data
         name = request.POST.get('name')
         ip_address = request.POST.get('ip_address')
         credential_id = request.POST.get('credential')
         network_id = request.POST.get('network')
+        profile_names = request.POST.getlist('profiles')  # Get list of profile names
         
         # Create device object
         device = Device(
@@ -405,6 +418,26 @@ def AddDevice(request):
         # Save (this will trigger validation)
         device.save()
         
+        # Add profiles (ManyToMany must be set after save)
+        if profile_names:
+            for profile_name in profile_names:
+                # Check if this is an official profile (exists as JSON file)
+                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+                is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
+                
+                # Determine the stored name: official profiles get .json extension, custom profiles don't
+                stored_name = f"{profile_name}.json" if is_official else profile_name
+                
+                # Get or create the profile entry
+                profile, created = Profile.objects.get_or_create(
+                    name=stored_name,
+                    defaults={
+                        'profile_data': {'is_official_placeholder': is_official},
+                        'description': f'{"Official" if is_official else "Custom"} profile'
+                    }
+                )
+                device.profiles.add(profile)
+        
         return JsonResponse({'id': device.id, 'message': 'Device created successfully!'}, status=200)
         
     except ValidationError as e:
@@ -420,7 +453,7 @@ def AddDevice(request):
 def UpdateDevice(request, device_id):
     """Update an existing SNMP device"""
     try:
-        from SNMP.models import Device
+        from SNMP.models import Device, Profile
         
         device = Device.objects.get(pk=device_id)
         
@@ -444,6 +477,28 @@ def UpdateDevice(request, device_id):
         # Save (this will trigger validation)
         device.save()
         
+        # Update profiles (ManyToMany)
+        profile_names = request.POST.getlist('profiles')
+        device.profiles.clear()  # Clear existing profiles
+        if profile_names:
+            for profile_name in profile_names:
+                # Check if this is an official profile (exists as JSON file)
+                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+                is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
+                
+                # Determine the stored name: official profiles get .json extension, custom profiles don't
+                stored_name = f"{profile_name}.json" if is_official else profile_name
+                
+                # Get or create the profile entry
+                profile, created = Profile.objects.get_or_create(
+                    name=stored_name,
+                    defaults={
+                        'profile_data': {'is_official_placeholder': is_official},
+                        'description': f'{"Official" if is_official else "Custom"} profile'
+                    }
+                )
+                device.profiles.add(profile)
+        
         return JsonResponse({'id': device.id, 'message': 'Device updated successfully!'}, status=200)
         
     except Device.DoesNotExist:
@@ -465,12 +520,22 @@ def GetDevice(request, device_id):
         
         device = Device.objects.get(pk=device_id)
         
+        # Strip .json extension from profile names for display
+        profile_names = []
+        for profile in device.profiles.all():
+            name = profile.name
+            # Remove .json extension if present (official profiles)
+            if name.endswith('.json'):
+                name = name[:-5]
+            profile_names.append(name)
+        
         data = {
             'id': device.id,
             'name': device.name,
             'ip_address': device.ip_address,
             'credential': device.credential_id if device.credential else None,
             'network': device.network_id if device.network else None,
+            'profiles': profile_names,
         }
         
         return JsonResponse(data)
@@ -505,3 +570,177 @@ def DeleteDevice(request, device_id):
         return HttpResponse("Device not found", status=404)
     except Exception as e:
         return HttpResponse(f"Error deleting device: {str(e)}", status=500)
+
+
+# ==================== Profile API Endpoints ====================
+
+@require_http_methods(["GET"])
+def GetOfficialProfile(request, profile_name):
+    """Get an official profile from JSON file"""
+    try:
+        official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+        profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
+        
+        if not os.path.exists(profile_path):
+            return JsonResponse({'success': False, 'message': 'Profile not found'}, status=404)
+        
+        with open(profile_path, 'r') as f:
+            profile_data = json.load(f)
+        
+        return JsonResponse({
+            'success': True,
+            'name': profile_name,
+            'profile_data': profile_data,
+            'description': ''
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def GetProfile(request, profile_name):
+    """Get a user profile from database"""
+    try:
+        profile = Profile.objects.get(name=profile_name)
+        return JsonResponse({
+            'success': True,
+            'name': profile.name,
+            'profile_data': profile.profile_data,
+            'description': profile.description
+        }, status=200)
+        
+    except Profile.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Profile not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def AddProfile(request):
+    """Add a new user profile"""
+    try:
+        data = json.loads(request.body)
+        
+        name = data.get('name')
+        description = data.get('description', '')
+        profile_data = data.get('profile_data', {})
+        
+        # Validate required fields
+        if not name:
+            return JsonResponse({'success': False, 'message': 'Profile name is required'}, status=400)
+        
+        # Check if profile already exists
+        if Profile.objects.filter(name=name).exists():
+            return JsonResponse({'success': False, 'message': 'A profile with this name already exists'}, status=400)
+        
+        # Create profile
+        profile = Profile(
+            name=name,
+            description=description,
+            profile_data=profile_data
+        )
+        profile.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Profile created successfully',
+            'profile_id': profile.id
+        }, status=200)
+        
+    except ValidationError as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def UpdateProfile(request, profile_name):
+    """Update an existing user profile"""
+    try:
+        data = json.loads(request.body)
+        
+        # Get existing profile
+        profile = Profile.objects.get(name=profile_name)
+        
+        # Update fields
+        new_name = data.get('name', profile.name)
+        profile.description = data.get('description', profile.description)
+        profile.profile_data = data.get('profile_data', profile.profile_data)
+        
+        # If name changed, check for conflicts
+        if new_name != profile.name:
+            if Profile.objects.filter(name=new_name).exists():
+                return JsonResponse({'success': False, 'message': 'A profile with this name already exists'}, status=400)
+            profile.name = new_name
+        
+        profile.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Profile updated successfully'
+        }, status=200)
+        
+    except Profile.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Profile not found'}, status=404)
+    except ValidationError as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def DeleteProfile(request, profile_name):
+    """Delete a user profile"""
+    try:
+        profile = Profile.objects.get(name=profile_name)
+        profile.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Profile deleted successfully'
+        }, status=200)
+        
+    except Profile.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Profile not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def GetAllProfiles(request):
+    """Get all profiles (official and user) for dropdown"""
+    try:
+        all_profiles = []
+        
+        # Load official profiles from JSON files
+        official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+        if os.path.exists(official_profiles_dir):
+            for filename in os.listdir(official_profiles_dir):
+                if filename.endswith('.json'):
+                    profile_name = filename[:-5]
+                    display_name = profile_name.replace('_', ' ').title()
+                    all_profiles.append({
+                        'name': profile_name,
+                        'display_name': display_name,
+                        'is_official': True
+                    })
+        
+        # Load user profiles from database (exclude placeholders)
+        for profile in Profile.objects.all():
+            # Skip placeholder profiles (those with is_official_placeholder flag)
+            if profile.profile_data.get('is_official_placeholder'):
+                continue
+            all_profiles.append({
+                'name': profile.name,
+                'display_name': profile.name.replace('_', ' ').title(),
+                'is_official': False
+            })
+        
+        # Sort by display name
+        all_profiles.sort(key=lambda x: x['display_name'])
+        
+        return JsonResponse({'profiles': all_profiles}, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)

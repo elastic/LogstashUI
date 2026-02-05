@@ -1,0 +1,14 @@
+{
+  "name": "cisco_ios",
+  "description": "",
+  "get": {
+    "VendorOSInfo": "1.3.6.1.2.1.1.1.0",
+    "host.hostname": "1.3.6.1.2.1.1.5.0",
+    "system.uptime": "1.3.6.1.2.1.1.3.0",
+    "system.cpu.1min.avg": "1.3.6.1.4.1.9.2.1.57.0",
+    "system.memory.used": "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
+    "system.memory.free": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
+  },
+  "walk": {},
+  "table": {}
+}

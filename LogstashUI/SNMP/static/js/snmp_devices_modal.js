@@ -24,21 +24,33 @@ function openDeviceModal(deviceData = null) {
   form.reset();
   document.getElementById('deviceErrorContainer').innerHTML = '';
   
-  // Load credentials and networks into dropdowns
-  loadCredentialsForDevice(deviceData ? deviceData.credential : null);
-  loadNetworksForDevice(deviceData ? deviceData.network : null);
-  
   if (deviceData) {
     // Edit mode
     modalTitle.textContent = 'Edit SNMP Device';
     document.getElementById('deviceId').value = deviceData.id;
     document.getElementById('deviceName').value = deviceData.name;
     document.getElementById('deviceIpAddress').value = deviceData.ip_address;
+    
+    // Set selected profiles BEFORE loading dropdowns
+    if (deviceData.profiles && Array.isArray(deviceData.profiles)) {
+      selectedProfiles = [...deviceData.profiles];
+    } else {
+      selectedProfiles = [];
+    }
   } else {
     // Add mode
     modalTitle.textContent = 'Add SNMP Device';
     document.getElementById('deviceId').value = '';
+    selectedProfiles = [];
   }
+  
+  // Render selected profiles
+  renderSelectedProfiles();
+  
+  // Load credentials, networks, and profiles into dropdowns
+  loadCredentialsForDevice(deviceData ? deviceData.credential : null);
+  loadNetworksForDevice(deviceData ? deviceData.network : null);
+  loadProfilesForDevice();
   
   modal.classList.remove('hidden');
 }
@@ -149,6 +161,96 @@ function openNetworkModalFromDevice() {
   }
 }
 
+// Refresh credentials dropdown
+function refreshCredentials() {
+  const credentialSelect = document.getElementById('deviceCredentialSelect');
+  const currentValue = credentialSelect ? credentialSelect.value : null;
+  loadCredentialsForDevice(currentValue);
+}
+
+// Refresh networks dropdown
+function refreshNetworks() {
+  const networkSelect = document.getElementById('deviceNetworkSelect');
+  const currentValue = networkSelect ? networkSelect.value : null;
+  loadNetworksForDevice(currentValue);
+}
+
+// Track selected profiles
+let selectedProfiles = [];
+
+// Load profiles into dropdown
+function loadProfilesForDevice() {
+  const profileSelect = document.getElementById('deviceProfilesSelect');
+  
+  fetch('/API/SNMP/GetAllProfiles/')
+    .then(response => response.json())
+    .then(data => {
+      // Clear existing options
+      profileSelect.innerHTML = '<option value="">Select a profile to add...</option>';
+      
+      // Add profiles to dropdown (exclude already selected ones)
+      data.profiles.forEach(profile => {
+        if (!selectedProfiles.includes(profile.name)) {
+          const option = document.createElement('option');
+          option.value = profile.name;
+          option.textContent = profile.display_name;
+          profileSelect.appendChild(option);
+        }
+      });
+    })
+    .catch(error => {
+      console.error('Error loading profiles:', error);
+    });
+}
+
+// Refresh profiles dropdown
+function refreshProfiles() {
+  loadProfilesForDevice();
+}
+
+// Add profile when selected from dropdown
+document.addEventListener('DOMContentLoaded', function() {
+  const profileSelect = document.getElementById('deviceProfilesSelect');
+  if (profileSelect) {
+    profileSelect.addEventListener('change', function() {
+      const selectedProfile = this.value;
+      if (selectedProfile && !selectedProfiles.includes(selectedProfile)) {
+        selectedProfiles.push(selectedProfile);
+        renderSelectedProfiles();
+        loadProfilesForDevice(); // Refresh dropdown to remove selected profile
+      }
+      this.value = ''; // Reset dropdown
+    });
+  }
+});
+
+// Render selected profiles as pills
+function renderSelectedProfiles() {
+  const container = document.getElementById('selectedProfilesContainer');
+  container.innerHTML = '';
+  
+  selectedProfiles.forEach(profileName => {
+    const pill = document.createElement('div');
+    pill.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white';
+    pill.innerHTML = `
+      <span>${profileName.replace('_', ' ')}</span>
+      <button type="button" onclick="removeProfile('${profileName}')" class="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-700 focus:outline-none">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    `;
+    container.appendChild(pill);
+  });
+}
+
+// Remove profile from selection
+function removeProfile(profileName) {
+  selectedProfiles = selectedProfiles.filter(p => p !== profileName);
+  renderSelectedProfiles();
+  loadProfilesForDevice(); // Refresh dropdown to add profile back
+}
+
 // Track if device modal is open to prevent it from closing
 let deviceModalIsOpen = false;
 window.lastCreatedCredentialId = null;
@@ -222,6 +324,11 @@ if (deviceForm) {
   const formData = new FormData(this);
   const deviceId = document.getElementById('deviceId').value;
   const url = deviceId ? `/API/SNMP/UpdateDevice/${deviceId}/` : '/API/SNMP/AddDevice/';
+  
+  // Add selected profiles to form data
+  selectedProfiles.forEach(profile => {
+    formData.append('profiles', profile);
+  });
   
   // Get CSRF token
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;

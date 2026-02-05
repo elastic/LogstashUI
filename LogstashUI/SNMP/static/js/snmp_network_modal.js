@@ -89,6 +89,13 @@ function openConnectionModalFromNetwork() {
   }
 }
 
+// Refresh connections dropdown
+function refreshConnections() {
+  const connectionSelect = document.getElementById('networkConnection');
+  const currentValue = connectionSelect ? connectionSelect.value : null;
+  loadConnections(currentValue);
+}
+
 // Track if network modal is open
 let networkModalIsOpen = false;
 

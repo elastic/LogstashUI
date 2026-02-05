@@ -47,4 +47,12 @@ urlpatterns = [
     path("SNMP/UpdateDevice/<int:device_id>/", snmp_views.UpdateDevice, name="UpdateSNMPDevice"),
     path("SNMP/GetDevice/<int:device_id>/", snmp_views.GetDevice, name="GetSNMPDevice"),
     path("SNMP/DeleteDevice/<int:device_id>/", snmp_views.DeleteDevice, name="DeleteSNMPDevice"),
+    
+    # SNMP Profile endpoints
+    path("SNMP/GetAllProfiles/", snmp_views.GetAllProfiles, name="GetAllProfiles"),
+    path("SNMP/GetOfficialProfile/<str:profile_name>/", snmp_views.GetOfficialProfile, name="GetOfficialProfile"),
+    path("SNMP/GetProfile/<str:profile_name>/", snmp_views.GetProfile, name="GetSNMPProfile"),
+    path("SNMP/AddProfile/", snmp_views.AddProfile, name="AddSNMPProfile"),
+    path("SNMP/UpdateProfile/<str:profile_name>/", snmp_views.UpdateProfile, name="UpdateSNMPProfile"),
+    path("SNMP/DeleteProfile/<str:profile_name>/", snmp_views.DeleteProfile, name="DeleteSNMPProfile"),
 ]
