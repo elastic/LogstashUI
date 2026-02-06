@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from SNMP.models import Credential, Network, Profile
+from SNMP.models import Credential, Network, Profile, Device
 from django.core.exceptions import ValidationError
 from django.conf import settings
 import json
@@ -306,6 +306,87 @@ def DeleteNetwork(request, network_id):
         return HttpResponse("Network not found", status=404)
     except Exception as e:
         return HttpResponse(f"Error deleting network: {str(e)}", status=500)
+
+
+@require_http_methods(["GET"])
+def GetNetworkPipelineName(request, network_id):
+    """Get the pipeline name for a network based on its logstash_name"""
+    try:
+        network = Network.objects.get(pk=network_id)
+        
+        # Generate pipeline name: snmp-{logstash_name}-*
+        pipeline_name = f"snmp-{network.logstash_name}-*"
+        
+        return JsonResponse({
+            'success': True,
+            'pipeline_name': pipeline_name,
+            'network_name': network.name,
+            'logstash_name': network.logstash_name
+        })
+        
+    except Network.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Network not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def CommitConfiguration(request):
+    """Commit SNMP configuration - builds and deploys Logstash pipelines"""
+    try:
+        # Query all networks
+        networks = Network.objects.all()
+        
+        # Iterate through each network and build pipeline configuration
+        for network in networks:
+            print(f"\nNetwork: {network.name}")
+            
+            # Initialize pipeline data structure for this network
+            pipeline_data = {
+                "network": network,
+                "devices": {
+                    "v1_v2c": {},
+                    "v3": {}
+                }
+            }
+            
+            # Get all devices for this network
+            devices = Device.objects.filter(network=network).select_related('credential')
+            
+            # Step 1 - determine how many snmp input plugins we need to support this network
+            # - SNMPv1/2c can be merged because the host array can have a version and community string
+            # - SNMPv3 must be separated because the host array can only have a version, and that config goes elsewhere
+            
+            for device in devices:
+                if not device.credential:
+                    print(f"  WARNING: Device '{device.name}' has no credential assigned, skipping")
+                    continue
+                
+                credential = device.credential
+                
+                # Group v1 and v2c together
+                if credential.version in ['1', '2c']:
+                    pipeline_data["devices"]["v1_v2c"][device.name] = device
+                
+                # Group v3 devices
+                elif credential.version == '3':
+                    pipeline_data["devices"]["v3"][device.name] = device
+            
+            # Print pipeline data structure
+            print(f"\nPipeline data structure for network '{network.name}':")
+            print(json.dumps(pipeline_data, indent=4, default=str))
+            
+            # Step 2 - assign each device to the appropriate snmp input
+            # (To be implemented next)
+
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Configuration commit initiated for {networks.count()} network(s).'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 # ============================================================================

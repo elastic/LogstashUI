@@ -11,12 +11,20 @@
         Click here for setup instructions
       </button>
     </div>
-    <button id="addDeviceBtn" class="btn btn-primary flex items-center gap-x-2">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-      </svg>
-      Add Device
-    </button>
+    <div class="flex gap-2">
+      <button id="commitBtn" class="btn btn-secondary flex items-center gap-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Commit Changes
+      </button>
+      <button id="addDeviceBtn" class="btn btn-primary flex items-center gap-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Device
+      </button>
+    </div>
   </div>
 
   <!-- Search, Filter, and Controls -->
@@ -157,7 +165,7 @@
           <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
             <h3 class="font-semibold text-white mb-2">Step 2: Get your pipeline name</h3>
             <p class="text-gray-300">
-              When you've added your device, close this window and click on the text in the Network column to copy your pipeline name.
+              When you've added your device, close this window and click on the text in the Network column to copy your pipeline name. <b>Every network has its own unique pipeline name.</b>
             </p>
           </div>
           
@@ -176,7 +184,7 @@
               <div>
                 <h4 class="font-semibold text-blue-300 mb-1">Tip</h4>
                 <p class="text-gray-300 text-sm">
-                  Every network has a unique pipeline name. You can add one or many to a single instance of Logstash. You must have this pipeline running for the devices to be monitored.
+                  Every network has a unique pipeline name. You can add one or many to a single instance of Logstash. You must have this pipeline added to your config for the devices to be monitored.
                 </p>
               </div>
             </div>
@@ -197,10 +205,14 @@
 <!-- Network Form Modal (for creating networks from device modal) -->
 {% include 'components/snmp_network_modal.html' %}
 
+<!-- Commit Configuration Modal -->
+{% include 'components/snmp_commit_modal.html' %}
+
 <script src="{% static 'js/devices_table.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
 <script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>
+<script src="{% static 'js/snmp_commit_modal.js' %}"></script>
 
 <script>
 // Setup Instructions Modal Functions

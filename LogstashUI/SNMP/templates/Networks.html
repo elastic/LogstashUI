@@ -53,7 +53,14 @@
         <tbody class="bg-gray-800 divide-y divide-gray-700">
         {% for network in networks %}
             <tr class="hover:bg-gray-700/50 transition-colors">
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ network.name }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                <div class="flex items-center gap-2 cursor-pointer hover:text-blue-400 group" onclick="copyPipelineName({{ network.id }}, '{{ network.name|escapejs }}')" title="Click to copy pipeline name">
+                  <span>{{ network.name }}</span>
+                  <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 <span class="font-mono">{{ network.network_range }}</span>
               </td>
@@ -171,6 +178,90 @@
       .catch(error => {
         showToast('Error loading network: ' + error, 'error');
       });
+  }
+
+  // Copy pipeline name to clipboard
+  function copyPipelineName(networkId, networkName) {
+    // Fetch pipeline name from API
+    fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          const pipelineName = data.pipeline_name;
+          
+          // Copy to clipboard
+          navigator.clipboard.writeText(pipelineName)
+            .then(() => {
+              showToast(`Pipeline name copied: ${pipelineName}`, 'success');
+            })
+            .catch(err => {
+              // Fallback for older browsers
+              const textArea = document.createElement('textarea');
+              textArea.value = pipelineName;
+              textArea.style.position = 'fixed';
+              textArea.style.left = '-999999px';
+              document.body.appendChild(textArea);
+              textArea.select();
+              try {
+                document.execCommand('copy');
+                showToast(`Pipeline name copied: ${pipelineName}`, 'success');
+              } catch (err) {
+                showToast('Failed to copy pipeline name', 'error');
+              }
+              document.body.removeChild(textArea);
+            });
+        } else {
+          showToast(data.error || 'Failed to fetch pipeline name', 'error');
+        }
+      })
+      .catch(error => {
+        showToast('Error fetching pipeline name: ' + error.message, 'error');
+      });
+  }
+
+  // Helper function to escape HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Toast notification function
+  function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container') || createToastContainer();
+    const toast = document.createElement('div');
+    const colors = {
+      success: 'bg-green-500',
+      error: 'bg-red-500',
+      info: 'bg-blue-500',
+      warning: 'bg-yellow-500'
+    };
+
+    toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
+    toast.innerHTML = `
+      <span>${escapeHtml(message)}</span>
+      <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  }
+
+  function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
+    document.body.appendChild(container);
+    return container;
   }
 </script>
 
