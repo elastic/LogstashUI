@@ -431,7 +431,12 @@ logstash-patterns-core"""
       "get",
       "walk",
       "interval",
-      "codec"
+      "codec",
+      "security_level",
+      "priv_protocol",
+      "priv_pass",
+      "auth_protocol",
+      "auth_pass"
     ],
     "snmptrap": [
       "host",

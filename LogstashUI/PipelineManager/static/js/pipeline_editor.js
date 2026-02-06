@@ -3,7 +3,7 @@ let newlyAddedPluginId = null;
 let pendingAnimationPluginId = null; // Plugin waiting for config modal to close
 
 // Move mode state
-let moveMode = {
+var moveMode = {
     active: false,
     componentId: null,
     componentType: null,
