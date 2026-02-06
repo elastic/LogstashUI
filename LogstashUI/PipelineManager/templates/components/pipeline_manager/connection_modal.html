@@ -17,53 +17,55 @@
           
           <form id="connectionForm"
               hx-post="/API/AddConnection"
-              hx-target="#connectionErrorContainer"
-              hx-swap="innerHTML swap:500ms"
-              hx-on:htmx:before-swap="
-                  // Always swap content, even on error responses
-                  if (event.detail.xhr.status === 400) {
-                      event.detail.shouldSwap = true;
-                      event.detail.isError = false;
-                  }
-              "
+              hx-swap="none"
               hx-indicator=".loading"
               hx-on::before-request="document.getElementById('connectionErrorContainer').innerHTML = '';"
               hx-on::after-request="
                   console.log('Response status:', event.detail.xhr.status);
                   console.log('Response text:', event.detail.xhr.responseText);
                   
-                  // Check if the response contains error content
                   const errorContainer = document.getElementById('connectionErrorContainer');
-                  const hasError = errorContainer && errorContainer.innerHTML.trim().length > 0;
                   
-                  if (hasError) {
-                      // Error occurred - don't show success toast
-                      showToast('Connection test failed - check the error message above', 'error');
-                      // Scroll error into view
-                      setTimeout(() => {
+                  try {
+                      const response = JSON.parse(event.detail.xhr.responseText);
+                      
+                      if (response.success) {
+                          // Store the new connection ID for later use
+                          window.lastCreatedConnectionId = response.connection_id;
+                          
+                          // Show success toast
+                          showToast(response.message || 'Connection created and tested successfully!', 'success');
+                          
+                          // Close the modal
+                          closeFlyout();
+                          
+                          // Clear the form
+                          document.getElementById('connectionForm').reset();
+                          errorContainer.innerHTML = '';
+                      } else {
+                          // Display error message
+                          errorContainer.innerHTML = `
+                              <div class='p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg'>
+                                  <h3 class='font-bold mb-2 text-lg'>❌ Connection Test Failed</h3>
+                                  <p class='mb-3'>The connection could not be established. Please check your credentials and try again.</p>
+                                  <div class='mt-3 p-3 bg-red-50 border border-red-200 rounded'>
+                                      <p class='font-semibold mb-1 text-sm'>Error Details:</p>
+                                      <pre class='text-xs overflow-auto whitespace-pre-wrap break-words max-h-64'>${response.error || 'Unknown error'}</pre>
+                                  </div>
+                              </div>
+                          `;
+                          showToast('Connection test failed - check the error message above', 'error');
                           errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                      }, 100);
-                  } else if (event.detail.successful) {
-                      // Success - parse JSON response
-                      try {
-                          const response = JSON.parse(event.detail.xhr.responseText);
-                          if (response.success) {
-                              // Store the new connection ID for later use
-                              window.lastCreatedConnectionId = response.connection_id;
-                              
-                              // Show success toast
-                              showToast(response.message || 'Connection created and tested successfully!', 'success');
-                              
-                              // Close the modal
-                              closeFlyout();
-                              
-                              // Clear the form
-                              document.getElementById('connectionForm').reset();
-                              errorContainer.innerHTML = '';
-                          }
-                      } catch (e) {
-                          console.error('Error parsing response:', e);
                       }
+                  } catch (e) {
+                      console.error('Error parsing response:', e);
+                      errorContainer.innerHTML = `
+                          <div class='p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg'>
+                              <h3 class='font-bold mb-2'>Error</h3>
+                              <p>Failed to process server response. Please try again.</p>
+                          </div>
+                      `;
+                      showToast('Failed to process server response', 'error');
                   }
               ">
               {% csrf_token %}

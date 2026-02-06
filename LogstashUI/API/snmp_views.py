@@ -3,6 +3,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from SNMP.models import Credential, Network, Profile, Device
+from .logstash_config_parse import ComponentToPipeline
 from django.core.exceptions import ValidationError
 from django.conf import settings
 import json
@@ -210,6 +211,7 @@ def AddNetwork(request):
         name = request.POST.get('name')
         network_range = request.POST.get('network_range')
         logstash_name = request.POST.get('logstash_name')
+        connection_id = request.POST.get('connection')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         
         # Create network object
@@ -219,6 +221,10 @@ def AddNetwork(request):
             logstash_name=logstash_name,
             discovery_enabled=discovery_enabled
         )
+        
+        # Set connection if provided
+        if connection_id:
+            network.connection_id = connection_id
         
         # Save (this will trigger validation)
         network.save()
@@ -246,10 +252,17 @@ def UpdateNetwork(request, network_id):
         network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         
+        # Update connection
+        connection_id = request.POST.get('connection')
+        if connection_id:
+            network.connection_id = connection_id
+        else:
+            network.connection = None
+        
         # Save (this will trigger validation)
         network.save()
         
-        return HttpResponse("Network updated successfully!", status=200)
+        return JsonResponse({'id': network.id, 'message': 'Network updated successfully!'}, status=200)
         
     except Network.DoesNotExist:
         return HttpResponse("Network not found", status=404)
@@ -273,6 +286,7 @@ def GetNetwork(request, network_id):
             'name': network.name,
             'network_range': network.network_range,
             'logstash_name': network.logstash_name,
+            'connection': network.connection_id if network.connection else None,
             'discovery_enabled': network.discovery_enabled,
         }
         
@@ -329,34 +343,147 @@ def GetNetworkPipelineName(request, network_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+def _generate_input(input_data):
+    input_components = []
+
+    hosts = []
+    for device_name, device in input_data['devices']['v1_v2c'].items():
+        credential = device.credential
+        hosts.append(
+            {
+                "host": f"udp:{device.ip_address}/{device.port}",
+                "community": credential.get_community(),
+                "version": credential.version
+            }
+        )
+
+    if hosts:
+        input_components.append(
+            {
+                "id": f"input_snmp_v1_v2c_{input_data['network'].id}",
+                "type": "input",
+                "plugin": "snmp",
+                "config": {
+                    "hosts": hosts
+                }
+            }
+        )
+
+    hosts = []
+    for device_name, device in input_data['devices']['v3'].items():
+        credential = device.credential
+        hosts.append(
+            {
+                "host": f"udp:{device.ip_address}/{device.port}",
+                "version": credential.version
+            }
+        )
+
+    if hosts:
+        # Get credential from first device for v3 auth settings (all v3 devices should share same credential)
+        first_device = list(input_data['devices']['v3'].values())[0]
+        credential = first_device.credential
+        
+        config = {
+            "hosts": hosts,
+            "security_name": credential.security_name
+        }
+        
+        # Add auth settings based on security level
+        if credential.security_level in ['authNoPriv', 'authPriv']:
+            config["auth_protocol"] = credential.auth_protocol
+            config["auth_pass"] = credential.get_auth_pass()
+        
+        if credential.security_level == 'authPriv':
+            config["priv_protocol"] = credential.priv_protocol
+            config["priv_pass"] = credential.get_priv_pass()
+        
+        config["security_level"] = credential.security_level
+        
+        input_components.append(
+            {
+                "id": f"input_snmp_v3_{input_data['network'].id}",
+                "type": "input",
+                "plugin": "snmp",
+                "config": config
+            }
+        )
+    
+    return input_components
+
+def _generate_output(input_data, network_db_object):
+    output_components = []
+    
+    # Get the connection from the network
+    connection = network_db_object.connection
+    
+    if not connection:
+        return output_components
+    
+    config = {
+        "index": f"snmp-{network_db_object.name.lower().replace(' ', '-')}-%{{+YYYY.MM.dd}}"
+    }
+    
+    # Add connection details based on what's available
+    if connection.cloud_id:
+        config["cloud_id"] = connection.cloud_id
+    elif connection.host:
+        config["hosts"] = [connection.host]
+    
+    # Add authentication
+    if connection.api_key:
+        config["api_key"] = connection.get_api_key()
+    elif connection.username and connection.password:
+        config["user"] = connection.username
+        config["password"] = connection.get_password()
+    
+    output_components.append(
+        {
+            "id": f"output_elasticsearch_{network_db_object.id}",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": config
+        }
+    )
+
+    return output_components
+
+def CommitConfiguration(request):
+    print("Next up")
+    return JsonResponse({
+        'success': True,
+        'message': f'Configuration updated!'
+    })
 
 @require_http_methods(["POST"])
-def CommitConfiguration(request):
+def GenerateCommitConfiguration(request):
     """Commit SNMP configuration - builds and deploys Logstash pipelines"""
     try:
         # Query all networks
         networks = Network.objects.all()
+        components = {
+            "input": [],
+            "filter": [],
+            "output": []
+        }
         
         # Iterate through each network and build pipeline configuration
         for network in networks:
             print(f"\nNetwork: {network.name}")
-            
+
             # Initialize pipeline data structure for this network
-            pipeline_data = {
+            input_data = {
                 "network": network,
                 "devices": {
                     "v1_v2c": {},
                     "v3": {}
-                }
+                },
+                "connection": network.connection
             }
             
             # Get all devices for this network
             devices = Device.objects.filter(network=network).select_related('credential')
-            
-            # Step 1 - determine how many snmp input plugins we need to support this network
-            # - SNMPv1/2c can be merged because the host array can have a version and community string
-            # - SNMPv3 must be separated because the host array can only have a version, and that config goes elsewhere
-            
+
             for device in devices:
                 if not device.credential:
                     print(f"  WARNING: Device '{device.name}' has no credential assigned, skipping")
@@ -366,20 +493,24 @@ def CommitConfiguration(request):
                 
                 # Group v1 and v2c together
                 if credential.version in ['1', '2c']:
-                    pipeline_data["devices"]["v1_v2c"][device.name] = device
+                    input_data["devices"]["v1_v2c"][device.name] = device
                 
                 # Group v3 devices
                 elif credential.version == '3':
-                    pipeline_data["devices"]["v3"][device.name] = device
-            
-            # Print pipeline data structure
-            print(f"\nPipeline data structure for network '{network.name}':")
-            print(json.dumps(pipeline_data, indent=4, default=str))
-            
-            # Step 2 - assign each device to the appropriate snmp input
-            # (To be implemented next)
+                    input_data["devices"]["v3"][device.name] = device
 
-        
+            # Generate inputs
+            components["input"] = _generate_input(input_data)
+            components["output"] = _generate_output(input_data, network)
+
+            print(components)
+            logstash_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
+            print(logstash_config)
+
+
+
+
+
         return JsonResponse({
             'success': True,
             'message': f'Configuration commit initiated for {networks.count()} network(s).'
@@ -449,6 +580,9 @@ def GetDevices(request):
                 'id': device.id,
                 'name': device.name,
                 'ip_address': device.ip_address,
+                'port': device.port,
+                'retries': device.retries,
+                'timeout': device.timeout,
                 'credential_id': device.credential.id if device.credential else None,
                 'credential_name': device.credential.name if device.credential else None,
                 'network_id': device.network.id if device.network else None,
@@ -480,6 +614,9 @@ def AddDevice(request):
         # Extract form data
         name = request.POST.get('name')
         ip_address = request.POST.get('ip_address')
+        port = request.POST.get('port', 161)
+        retries = request.POST.get('retries', 2)
+        timeout = request.POST.get('timeout', 1000)
         credential_id = request.POST.get('credential')
         network_id = request.POST.get('network')
         profile_names = request.POST.getlist('profiles')  # Get list of profile names
@@ -487,7 +624,10 @@ def AddDevice(request):
         # Create device object
         device = Device(
             name=name,
-            ip_address=ip_address
+            ip_address=ip_address,
+            port=int(port) if port else 161,
+            retries=int(retries) if retries else 2,
+            timeout=int(timeout) if timeout else 1000
         )
         
         # Set optional foreign keys
@@ -541,6 +681,15 @@ def UpdateDevice(request, device_id):
         # Update fields
         device.name = request.POST.get('name', device.name)
         device.ip_address = request.POST.get('ip_address', device.ip_address)
+        port = request.POST.get('port')
+        if port:
+            device.port = int(port)
+        retries = request.POST.get('retries')
+        if retries:
+            device.retries = int(retries)
+        timeout = request.POST.get('timeout')
+        if timeout:
+            device.timeout = int(timeout)
         
         # Update optional foreign keys
         credential_id = request.POST.get('credential')
@@ -614,6 +763,9 @@ def GetDevice(request, device_id):
             'id': device.id,
             'name': device.name,
             'ip_address': device.ip_address,
+            'port': device.port,
+            'retries': device.retries,
+            'timeout': device.timeout,
             'credential': device.credential_id if device.credential else None,
             'network': device.network_id if device.network else None,
             'profiles': profile_names,

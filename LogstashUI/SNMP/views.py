@@ -7,7 +7,7 @@ from django.conf import settings
 
 # Create your views here.
 def Networks(request):
-    networks = Network.objects.all()
+    networks = Network.objects.select_related('connection').all()
     form = ConnectionForm()
     return render(request, 'Networks.html', {'networks': networks, 'form': form})
 

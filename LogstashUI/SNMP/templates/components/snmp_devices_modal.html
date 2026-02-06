@@ -96,6 +96,36 @@
             <p class="text-gray-400 text-xs mt-1">Select one or more profiles to apply to this device</p>
           </div>
 
+          <!-- SNMP Configuration (Port, Retries, Timeout) - Side by Side -->
+          <div class="mb-4 grid grid-cols-3 gap-3">
+            <!-- Port -->
+            <div>
+              <label for="devicePort" class="block text-sm font-medium text-gray-300 mb-2">
+                SNMP Port<br>&nbsp;
+              </label>
+              <input type="number" id="devicePort" name="port" class="input input-bordered w-full" value="161" min="1" max="65535" placeholder="161">
+              <p class="text-gray-400 text-xs mt-1">Default: 161</p>
+            </div>
+
+            <!-- Retries -->
+            <div>
+              <label for="deviceRetries" class="block text-sm font-medium text-gray-300 mb-2">
+                Retries<br><span class="text-gray-500">(Optional)</span>
+              </label>
+              <input type="number" id="deviceRetries" name="retries" class="input input-bordered w-full" value="2" min="0" max="10" placeholder="2">
+              <p class="text-gray-400 text-xs mt-1">Default: 2</p>
+            </div>
+
+            <!-- Timeout -->
+            <div>
+              <label for="deviceTimeout" class="block text-sm font-medium text-gray-300 mb-2">
+                Timeout (ms)<br><span class="text-gray-500">(Optional)</span>
+              </label>
+              <input type="number" id="deviceTimeout" name="timeout" class="input input-bordered w-full" value="1000" min="100" step="100" placeholder="1000">
+              <p class="text-gray-400 text-xs mt-1">Default: 1000</p>
+            </div>
+          </div>
+
           <div class="form-actions pt-6 mt-6 border-t border-gray-700">
             <button type="button" onclick="closeDeviceModal()" class="btn btn-secondary">
               Cancel
