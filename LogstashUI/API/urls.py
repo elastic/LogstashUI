@@ -40,6 +40,8 @@ urlpatterns = [
     path("SNMP/UpdateNetwork/<int:network_id>/", snmp_views.UpdateNetwork, name="UpdateSNMPNetwork"),
     path("SNMP/GetNetwork/<int:network_id>/", snmp_views.GetNetwork, name="GetSNMPNetwork"),
     path("SNMP/DeleteNetwork/<int:network_id>/", snmp_views.DeleteNetwork, name="DeleteSNMPNetwork"),
+    path("SNMP/GetNetworkPipelineName/<int:network_id>/", snmp_views.GetNetworkPipelineName, name="GetNetworkPipelineName"),
+    path("SNMP/CommitConfiguration/", snmp_views.CommitConfiguration, name="CommitConfiguration"),
     
     # SNMP Device endpoints
     path("SNMP/GetDevices/", snmp_views.GetDevices, name="GetSNMPDevices"),

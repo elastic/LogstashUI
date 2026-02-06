@@ -121,7 +121,16 @@ function renderDevices(devices) {
         ${device.credential_name ? escapeHtml(device.credential_name) : '<span class="text-gray-500 italic">None</span>'}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-        ${device.network_name ? escapeHtml(device.network_name) : '<span class="text-gray-500 italic">None</span>'}
+        ${device.network_name ? `
+          <div class="flex items-center gap-2 ${device.network_id ? 'cursor-pointer hover:text-blue-400 group' : ''}" ${device.network_id ? `onclick="copyPipelineName(${device.network_id}, '${escapeHtml(device.network_name)}')"` : ''} title="${device.network_id ? 'Click to copy pipeline name' : ''}">
+            <span>${escapeHtml(device.network_name)}</span>
+            ${device.network_id ? `
+              <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            ` : ''}
+          </div>
+        ` : '<span class="text-gray-500 italic">None</span>'}
       </td>
       <td class="px-6 py-4 text-sm text-gray-300">
         <div class="flex flex-wrap">${profilesHtml}</div>
@@ -342,3 +351,80 @@ document.addEventListener('DOMContentLoaded', function() {
 window.reloadDevicesTable = function() {
   loadDevices();
 };
+
+// Copy pipeline name to clipboard
+function copyPipelineName(networkId, networkName) {
+  // Fetch pipeline name from API
+  fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const pipelineName = data.pipeline_name;
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(pipelineName)
+          .then(() => {
+            showToast(`Pipeline name copied: ${pipelineName}`, 'success');
+          })
+          .catch(err => {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = pipelineName;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+              document.execCommand('copy');
+              showToast(`Pipeline name copied: ${pipelineName}`, 'success');
+            } catch (err) {
+              showToast('Failed to copy pipeline name', 'error');
+            }
+            document.body.removeChild(textArea);
+          });
+      } else {
+        showToast(data.error || 'Failed to fetch pipeline name', 'error');
+      }
+    })
+    .catch(error => {
+      showToast('Error fetching pipeline name: ' + error.message, 'error');
+    });
+}
+
+// Toast notification function (if not already defined)
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container') || createToastContainer();
+  const toast = document.createElement('div');
+  const colors = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    info: 'bg-blue-500',
+    warning: 'bg-yellow-500'
+  };
+
+  toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
+  toast.innerHTML = `
+    <span>${escapeHtml(message)}</span>
+    <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  `;
+
+  container.appendChild(toast);
+
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+}
+
+function createToastContainer() {
+  const container = document.createElement('div');
+  container.id = 'toast-container';
+  container.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
+  document.body.appendChild(container);
+  return container;
+}
