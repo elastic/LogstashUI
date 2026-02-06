@@ -252,6 +252,28 @@
     document.getElementById('sshFields').classList.remove('hidden');
   });
 
+  // Set flag to indicate we're on the pipeline manager page
+  window.isPipelineManagerPage = true;
+
+  // Override closeFlyout to reload page after connection creation on this page only
+  const originalCloseFlyout = window.closeFlyout;
+  window.closeFlyout = function() {
+    // Check if a connection was just created
+    const wasConnectionCreated = window.lastCreatedConnectionId !== undefined && window.lastCreatedConnectionId !== null;
+    
+    // Call original close function
+    if (originalCloseFlyout) {
+      originalCloseFlyout();
+    }
+    
+    // Reload page if connection was created and we're on pipeline manager page
+    if (wasConnectionCreated && window.isPipelineManagerPage) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    }
+  };
+
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
     // Check if clicked on action menu button

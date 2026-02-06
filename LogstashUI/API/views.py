@@ -122,26 +122,13 @@ def AddConnection(request):
             print(f"Test result - Success: {success}, Message: {message}")
             
             if not success:
-                # If test fails, delete the connection and show error
+                # If test fails, delete the connection and return JSON error
                 new_connection.delete()
                 print("Connection deleted due to test failure")
-                # Escape HTML in error message to prevent injection but preserve formatting
-                import html
-                escaped_message = html.escape(str(message))
-                response = HttpResponse(f"""
-                    <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
-                        <h3 class="font-bold mb-2 text-lg">❌ Connection Test Failed</h3>
-                        <p class="mb-3">The connection could not be established. Please check your credentials and try again.</p>
-                        <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded">
-                            <p class="font-semibold mb-1 text-sm">Error Details:</p>
-                            <pre class="text-xs overflow-auto whitespace-pre-wrap break-words max-h-64">{escaped_message}</pre>
-                        </div>
-                    </div>
-                """)
-                response['HX-Retarget'] = '#connectionErrorContainer'
-                response['HX-Reswap'] = 'innerHTML'
-                print(f"Returning error response")
-                return response
+                return JsonResponse({
+                    'success': False,
+                    'error': str(message)
+                }, status=400)
             
             # Connection test succeeded, return JSON response
             print(f"Returning success response with connection ID: {new_connection.id}")
@@ -152,16 +139,11 @@ def AddConnection(request):
             }, status=200)
         else:
             print(f"Form validation errors: {form.errors}")
-            response = HttpResponse(f"""
-                <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg">
-                    <h3 class="font-bold mb-2">Form Validation Error</h3>
-                    <div class="text-sm">{form.errors}</div>
-                </div>
-            """)
-            response['HX-Retarget'] = '#connectionErrorContainer'
-            response['HX-Reswap'] = 'innerHTML'
-            print("Returning form validation error response")
-            return response
+            # Return JSON error for form validation
+            return JsonResponse({
+                'success': False,
+                'error': str(form.errors)
+            }, status=400)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 

@@ -105,6 +105,21 @@ class Device(models.Model):
         help_text="IP address or hostname of the device"
     )
     
+    port = models.IntegerField(
+        default=161,
+        help_text="SNMP port (default: 161)"
+    )
+    
+    retries = models.IntegerField(
+        default=2,
+        help_text="Number of retries for SNMP requests (default: 2)"
+    )
+    
+    timeout = models.IntegerField(
+        default=1000,
+        help_text="Timeout in milliseconds for SNMP requests (default: 1000)"
+    )
+    
     credential = models.ForeignKey(
         'Credential',
         on_delete=models.SET_NULL,

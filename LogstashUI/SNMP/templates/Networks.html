@@ -46,7 +46,7 @@
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network Range</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Logstash Node</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Discovery</th>
-            <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
+            <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Connection</th>
             <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
@@ -76,7 +76,13 @@
                   </span>
                 {% endif %}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ network.created_at|date:"M d, Y" }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                {% if network.connection %}
+                  {{ network.connection.name }}
+                {% else %}
+                  <span class="text-gray-500 italic">None</span>
+                {% endif %}
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="action-menu relative">
                   <button class="action-menu-button p-1 hover:bg-gray-700 rounded">

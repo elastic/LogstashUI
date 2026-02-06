@@ -30,6 +30,9 @@ function openDeviceModal(deviceData = null) {
     document.getElementById('deviceId').value = deviceData.id;
     document.getElementById('deviceName').value = deviceData.name;
     document.getElementById('deviceIpAddress').value = deviceData.ip_address;
+    document.getElementById('devicePort').value = deviceData.port || 161;
+    document.getElementById('deviceRetries').value = deviceData.retries !== undefined ? deviceData.retries : 2;
+    document.getElementById('deviceTimeout').value = deviceData.timeout || 1000;
     
     // Set selected profiles BEFORE loading dropdowns
     if (deviceData.profiles && Array.isArray(deviceData.profiles)) {
@@ -41,6 +44,9 @@ function openDeviceModal(deviceData = null) {
     // Add mode
     modalTitle.textContent = 'Add SNMP Device';
     document.getElementById('deviceId').value = '';
+    document.getElementById('devicePort').value = 161;
+    document.getElementById('deviceRetries').value = 2;
+    document.getElementById('deviceTimeout').value = 1000;
     selectedProfiles = [];
   }
   
