@@ -1,0 +1,139 @@
+/* Move mode styles */
+.draggable-item {
+    padding-left: 20px;
+}
+
+.move-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 16px;
+    background: #4b5563;
+    border: 1px solid #6b7280;
+    border-radius: 4px 0 0 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.2s ease;
+    z-index: 5;
+}
+
+.draggable-item:hover .move-handle {
+    opacity: 1;
+}
+
+.move-handle:hover {
+    background: #6366f1;
+    border-color: #818cf8;
+    width: 20px;
+}
+
+.move-handle svg {
+    width: 12px;
+    height: 12px;
+    color: white;
+}
+
+/* Component in move mode (selected for moving) */
+.component-moving {
+    opacity: 0.6;
+    border: 2px dashed #6366f1 !important;
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(99, 102, 241, 0.1),
+        rgba(99, 102, 241, 0.1) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+}
+
+/* Global move mode indicator */
+.move-mode-active {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.7);
+    }
+}
+
+.move-mode-active svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Insertion points in move mode */
+.move-mode .insertion-point {
+    opacity: 1 !important;
+    height: 32px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 2px dashed #6366f1;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.move-mode .insertion-point:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: #818cf8;
+    transform: scaleY(1.2);
+}
+
+.move-mode .insertion-point .insertion-buttons {
+    display: none !important;
+}
+
+.move-mode .insertion-point::after {
+    content: 'Drop here';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: #6366f1;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.move-mode .insertion-point:hover::after {
+    opacity: 1;
+}
+
+/* Disable insertion points in different sections during move mode */
+.move-mode .insertion-point.disabled {
+    opacity: 0.3 !important;
+    cursor: not-allowed;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+}
+
+.move-mode .insertion-point.disabled:hover {
+    transform: none;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.move-mode .insertion-point.disabled::after {
+    content: 'Wrong section';
+    color: #ef4444;
+}
