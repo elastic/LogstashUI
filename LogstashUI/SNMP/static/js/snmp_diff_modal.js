@@ -1,0 +1,412 @@
+// ===== INLINE DIFF ALGORITHMS =====
+
+/**
+ * Compute Longest Common Subsequence using dynamic programming
+ */
+function computeLCS(arr1, arr2) {
+    const m = arr1.length;
+    const n = arr2.length;
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (arr1[i - 1] === arr2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    // Backtrack to find LCS
+    const lcs = [];
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+        if (arr1[i - 1] === arr2[j - 1]) {
+            lcs.unshift(arr1[i - 1]);
+            i--;
+            j--;
+        } else if (dp[i - 1][j] > dp[i][j - 1]) {
+            i--;
+        } else {
+            j--;
+        }
+    }
+
+    return lcs;
+}
+
+/**
+ * Compute line-level diff using LCS algorithm
+ */
+function computeLineDiff(oldLines, newLines) {
+    const changes = [];
+    const lcs = computeLCS(oldLines, newLines);
+
+    let i = 0, j = 0, k = 0;
+
+    while (i < oldLines.length || j < newLines.length) {
+        // Check if we're at a common line
+        if (k < lcs.length && i < oldLines.length && j < newLines.length &&
+            oldLines[i] === lcs[k] && newLines[j] === lcs[k]) {
+            // Equal line
+            const equalLines = [];
+            while (k < lcs.length && i < oldLines.length && j < newLines.length &&
+                oldLines[i] === lcs[k] && newLines[j] === lcs[k]) {
+                equalLines.push(oldLines[i]);
+                i++;
+                j++;
+                k++;
+            }
+            if (equalLines.length > 0) {
+                changes.push({type: 'equal', lines: equalLines});
+            }
+        } else {
+            // Collect deletions and insertions
+            const deletedLines = [];
+            const insertedLines = [];
+
+            while (i < oldLines.length && (k >= lcs.length || oldLines[i] !== lcs[k])) {
+                deletedLines.push(oldLines[i]);
+                i++;
+            }
+
+            while (j < newLines.length && (k >= lcs.length || newLines[j] !== lcs[k])) {
+                insertedLines.push(newLines[j]);
+                j++;
+            }
+
+            // If we have both deletions and insertions, treat as replacement
+            if (deletedLines.length > 0 && insertedLines.length > 0) {
+                changes.push({type: 'replace', oldLines: deletedLines, newLines: insertedLines});
+            } else if (deletedLines.length > 0) {
+                changes.push({type: 'delete', lines: deletedLines});
+            } else if (insertedLines.length > 0) {
+                changes.push({type: 'insert', lines: insertedLines});
+            }
+        }
+    }
+
+    return changes;
+}
+
+// ===== END DIFF ALGORITHMS =====
+
+function hideSnmpDiffModal() {
+    document.getElementById('snmpDiffModal').classList.add('hidden');
+}
+
+function showSnmpDiffModal() {
+    document.getElementById('snmpDiffModal').classList.remove('hidden');
+}
+
+/**
+ * Prepare and show the SNMP diff modal
+ * This fetches diffs for all networks and displays them
+ */
+async function prepareSnmpDiffModal() {
+    // Show the modal first
+    showSnmpDiffModal();
+
+    // Show loading state
+    document.getElementById('snmpDiffLoading').classList.remove('hidden');
+    document.getElementById('snmpDiffContainer').classList.add('hidden');
+    document.getElementById('confirmCommitButton').classList.remove('hidden');
+
+    try {
+        // Fetch diff data from the server
+        const response = await fetch('/API/SNMP/GetCommitDiff/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch diffs: ${response.status} - ${errorText}`);
+        }
+
+        const diffData = await response.json();
+        console.log('SNMP Diff data received:', diffData);
+
+        // Hide loading, show container
+        document.getElementById('snmpDiffLoading').classList.add('hidden');
+        document.getElementById('snmpDiffContainer').classList.remove('hidden');
+
+        // Display the diffs for each network
+        displayNetworkDiffs(diffData.networks);
+
+        // Display overall stats
+        const totalNetworks = diffData.networks.length;
+        const newNetworks = diffData.networks.filter(n => !n.current || n.current.trim() === '').length;
+        document.getElementById('snmpDiffStats').textContent = 
+            `${totalNetworks} network(s) • ${newNetworks} new pipeline(s)`;
+
+    } catch (error) {
+        console.error('Error preparing SNMP diff:', error);
+        document.getElementById('snmpDiffLoading').innerHTML = `
+            <div class="text-center">
+                <p class="text-red-400 mb-4">Failed to load pipeline comparison</p>
+                <p class="text-gray-400 text-sm">${error.message}</p>
+                <button onclick="hideSnmpDiffModal()" class="mt-4 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+                    Close
+                </button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Display diffs for all networks
+ */
+function displayNetworkDiffs(networks) {
+    const container = document.getElementById('snmpDiffContainer');
+    const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+
+    let html = '';
+
+    for (const network of networks) {
+        const currentLines = network.current ? network.current.split('\n') : [];
+        const newLines = network.new.split('\n');
+        
+        // Check if this is a new pipeline (no current content)
+        const isNewPipeline = !network.current || network.current.trim() === '';
+
+        // Compute diff
+        const lineDiff = computeLineDiff(currentLines, newLines);
+
+        let currentHtml = '';
+        let newHtml = '';
+        let currentLineNum = 1;
+        let newLineNum = 1;
+
+        if (isNewPipeline) {
+            // For new pipelines, just show the new content on the right
+            for (let i = 0; i < newLines.length; i++) {
+                const line = escapeHtml(newLines[i]);
+                
+                currentHtml += `<div class="flex bg-gray-800/50">
+                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                    <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                </div>`;
+
+                newHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                </div>`;
+            }
+        } else {
+            // For existing pipelines, show the diff
+            for (const change of lineDiff) {
+                if (change.type === 'equal') {
+                    // Unchanged lines - show on both sides without highlighting
+                    for (let i = 0; i < change.lines.length; i++) {
+                        const line = escapeHtml(change.lines[i]);
+
+                        currentHtml += `<div class="flex hover:bg-gray-700/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${currentLineNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+
+                        newHtml += `<div class="flex hover:bg-gray-700/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                    }
+                } else if (change.type === 'delete') {
+                    // Deleted lines - show only on left with red background
+                    for (let i = 0; i < change.lines.length; i++) {
+                        const line = escapeHtml(change.lines[i]);
+
+                        currentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${currentLineNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+
+                        // Empty placeholder on right side
+                        newHtml += `<div class="flex bg-gray-800/50">
+                            <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                            <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                        </div>`;
+                    }
+                } else if (change.type === 'insert') {
+                    // Inserted lines - show only on right with green background
+                    for (let i = 0; i < change.lines.length; i++) {
+                        const line = escapeHtml(change.lines[i]);
+
+                        // Empty placeholder on left side
+                        currentHtml += `<div class="flex bg-gray-800/50">
+                            <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                            <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                        </div>`;
+
+                        newHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                    }
+                } else if (change.type === 'replace') {
+                    // Modified lines - show with simple light background highlighting
+                    const oldLines = change.oldLines;
+                    const newLines = change.newLines;
+                    const maxLen = Math.max(oldLines.length, newLines.length);
+
+                    for (let i = 0; i < maxLen; i++) {
+                        if (i < oldLines.length) {
+                            const oldLine = escapeHtml(oldLines[i]);
+
+                            currentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${currentLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${oldLine || ' '}</span>
+                            </div>`;
+                        } else {
+                            currentHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                            </div>`;
+                        }
+
+                        if (i < newLines.length) {
+                            const newLine = escapeHtml(newLines[i]);
+
+                            newHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${newLine || ' '}</span>
+                            </div>`;
+                        } else {
+                            newHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                            </div>`;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build the network section
+        const networkBadge = isNewPipeline 
+            ? '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>'
+            : '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>';
+
+        html += `
+            <div class="border border-gray-600 rounded-lg overflow-hidden">
+                <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
+                    <h4 class="text-white font-semibold">
+                        ${escapeHtml(network.network_name)}${networkBadge}
+                    </h4>
+                    <p class="text-sm text-gray-400">Pipeline: ${escapeHtml(network.pipeline_name)}</p>
+                </div>
+                <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
+                    <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                        <div class="mb-2" style="flex-shrink: 0;">
+                            <h5 class="text-sm font-semibold text-white">${isNewPipeline ? 'No Existing Pipeline' : 'Current Pipeline'}</h5>
+                        </div>
+                        <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                            <div class="p-2 text-sm text-gray-300 font-mono">${currentHtml}</div>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                        <div class="mb-2" style="flex-shrink: 0;">
+                            <h5 class="text-sm font-semibold text-white">New Pipeline (After Commit)</h5>
+                        </div>
+                        <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                            <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+
+    // Synchronize scrolling for each network's diff panels
+    const allSections = container.querySelectorAll('.border.border-gray-600');
+    allSections.forEach(section => {
+        const panels = section.querySelectorAll('.network-diff-scroll-panel');
+        const leftPanel = panels[0];
+        const rightPanel = panels[1];
+
+        if (leftPanel && rightPanel) {
+            let isScrolling = false;
+
+            leftPanel.addEventListener('scroll', () => {
+                if (!isScrolling) {
+                    isScrolling = true;
+                    rightPanel.scrollTop = leftPanel.scrollTop;
+                    rightPanel.scrollLeft = leftPanel.scrollLeft;
+                    setTimeout(() => {
+                        isScrolling = false;
+                    }, 10);
+                }
+            });
+
+            rightPanel.addEventListener('scroll', () => {
+                if (!isScrolling) {
+                    isScrolling = true;
+                    leftPanel.scrollTop = rightPanel.scrollTop;
+                    leftPanel.scrollLeft = rightPanel.scrollLeft;
+                    setTimeout(() => {
+                        isScrolling = false;
+                    }, 10);
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Confirm and commit the SNMP configuration
+ */
+async function confirmCommitConfiguration() {
+    const confirmButton = document.getElementById('confirmCommitButton');
+    const originalText = confirmButton.textContent;
+
+    // Disable button and show loading state
+    confirmButton.disabled = true;
+    confirmButton.textContent = 'Committing...';
+    confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+    try {
+        const response = await fetch('/API/SNMP/CommitConfiguration/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to commit configuration: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        console.log('Commit response:', result);
+
+        // Show success message
+        alert('Configuration committed successfully!');
+
+        // Close the modal
+        hideSnmpDiffModal();
+
+        // Optionally reload the page to reflect changes
+        // window.location.reload();
+
+    } catch (error) {
+        console.error('Error committing configuration:', error);
+        alert('Failed to commit configuration: ' + error.message);
+    } finally {
+        // Re-enable button
+        confirmButton.disabled = false;
+        confirmButton.textContent = originalText;
+        confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}

@@ -1,0 +1,76 @@
+
+{% load static %}
+<script src="{% static 'js/snmp_diff_modal.js' %}"></script>
+
+<!-- SNMP Diff Modal -->
+<div id="snmpDiffModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="hideSnmpDiffModal()"></div>
+    <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+            <h3 id="snmpDiffModalTitle" class="text-lg font-semibold text-white">Review SNMP Pipeline Changes</h3>
+            <div class="flex space-x-2">
+                <button onclick="hideSnmpDiffModal()" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="p-4 flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
+            <div id="snmpDiffDescription" class="mb-4 flex-shrink-0">
+                <div class="flex items-center gap-2">
+                    <p class="text-gray-300 text-sm">Review the changes below before committing your SNMP configuration. Each network will have its own pipeline generated.</p>
+                    <div class="relative group inline-block">
+                        <div class="p-1 rounded-full hover:bg-gray-700 transition-colors">
+                            <svg class="w-4 h-4 text-gray-400 hover:text-blue-400 cursor-help transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="hidden group-hover:block absolute z-50 w-80 p-4 mt-2 left-0 bg-gray-900 border border-gray-600 rounded-lg shadow-xl text-sm text-gray-300">
+                            <p class="font-semibold text-white mb-2">How this works:</p>
+                            <ul class="list-disc pl-5 space-y-1.5">
+                                <li>Each network generates a separate Logstash pipeline configuration.</li>
+                                <li>If a pipeline doesn't exist yet, the left side will be empty.</li>
+                                <li>Spaces are converted to tabs in the generated configuration.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading state -->
+            <div id="snmpDiffLoading" class="flex-1 flex items-center justify-center" style="min-height: 0;">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p class="text-gray-400">Loading diffs...</p>
+                </div>
+            </div>
+
+            <!-- Network diffs container -->
+            <div id="snmpDiffContainer" class="flex-1 overflow-y-auto hidden space-y-6" style="min-height: 0;">
+                <!-- Network diff sections will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Footer with actions -->
+        <div class="p-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="text-sm text-gray-400">
+                    <span id="snmpDiffStats"></span>
+                </div>
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="hideSnmpDiffModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+                    Close
+                </button>
+                <button id="confirmCommitButton" onclick="confirmCommitConfiguration()"
+                        class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Confirm & Commit Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

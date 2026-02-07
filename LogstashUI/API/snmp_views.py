@@ -448,6 +448,121 @@ def _generate_output(input_data, network_db_object):
 
     return output_components
 
+@require_http_methods(["POST"])
+def GetCommitDiff(request):
+    """Get diff for all network pipeline configurations"""
+    try:
+        # Query all networks
+        networks = Network.objects.all()
+        network_diffs = []
+        
+        # Iterate through each network and build pipeline configuration
+        for network in networks:
+            # Initialize pipeline data structure for this network
+            input_data = {
+                "network": network,
+                "devices": {
+                    "v1_v2c": {},
+                    "v3": {}
+                },
+                "connection": network.connection
+            }
+            
+            # Get all devices for this network
+            devices = Device.objects.filter(network=network).select_related('credential')
+
+            for device in devices:
+                if not device.credential:
+                    continue
+                
+                credential = device.credential
+                
+                # Group v1 and v2c together
+                if credential.version in ['1', '2c']:
+                    input_data["devices"]["v1_v2c"][device.name] = device
+                
+                # Group v3 devices
+                elif credential.version == '3':
+                    input_data["devices"]["v3"][device.name] = device
+
+            # Generate components for this network
+            components = {
+                "input": _generate_input(input_data),
+                "filter": [],
+                "output": _generate_output(input_data, network)
+            }
+            
+            # Generate new pipeline configuration
+            new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
+            
+            # Get current pipeline configuration from Elasticsearch (if exists)
+            current_config = ""
+            pipeline_name = f"snmp-{network.logstash_name}-*"
+            
+            # Try to fetch current pipeline from Elasticsearch
+            if network.connection:
+                try:
+                    from elasticsearch import Elasticsearch
+                    
+                    # Create ES client
+                    es_client = None
+                    if network.connection.cloud_id:
+                        if network.connection.api_key:
+                            es_client = Elasticsearch(
+                                cloud_id=network.connection.cloud_id,
+                                api_key=network.connection.get_api_key()
+                            )
+                        elif network.connection.username and network.connection.password:
+                            es_client = Elasticsearch(
+                                cloud_id=network.connection.cloud_id,
+                                basic_auth=(network.connection.username, network.connection.get_password())
+                            )
+                    elif network.connection.host:
+                        if network.connection.api_key:
+                            es_client = Elasticsearch(
+                                [network.connection.host],
+                                api_key=network.connection.get_api_key()
+                            )
+                        elif network.connection.username and network.connection.password:
+                            es_client = Elasticsearch(
+                                [network.connection.host],
+                                basic_auth=(network.connection.username, network.connection.get_password())
+                            )
+                    
+                    if es_client:
+                        # Try to get the pipeline
+                        try:
+                            response = es_client.logstash.get_pipeline(id=pipeline_name)
+                            if pipeline_name in response:
+                                pipeline_data = response[pipeline_name]
+                                if 'pipeline' in pipeline_data:
+                                    current_config = pipeline_data['pipeline']
+                        except Exception as e:
+                            # Pipeline doesn't exist yet, that's okay
+                            pass
+                except Exception as e:
+                    # Connection failed, that's okay - we'll just show empty current
+                    pass
+            
+            # Add to network diffs
+            network_diffs.append({
+                'network_name': network.name,
+                'pipeline_name': pipeline_name,
+                'current': current_config,
+                'new': new_config
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'networks': network_diffs
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
 def CommitConfiguration(request):
     print("Next up")
     return JsonResponse({

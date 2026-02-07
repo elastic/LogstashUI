@@ -178,6 +178,6 @@ function getCsrfToken() {
 document.addEventListener('DOMContentLoaded', function() {
   const commitBtn = document.getElementById('commitBtn');
   if (commitBtn) {
-    commitBtn.addEventListener('click', openCommitModal);
+    commitBtn.addEventListener('click', prepareSnmpDiffModal);
   }
 });
