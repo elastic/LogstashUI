@@ -2,6 +2,14 @@
 // MOVE MODE FUNCTIONALITY
 // ============================================
 
+// Move mode state - defined here to ensure it's available when this script loads
+window.moveMode = window.moveMode || {
+    active: false,
+    componentId: null,
+    componentType: null,
+    sourceLocation: null // {type, index, parentId, blockType, elseIfIndex}
+};
+
 // Function to activate move mode for a component
 function activateMoveMode(componentId) {
     const component = findComponentById(componentId);
@@ -12,10 +20,10 @@ function activateMoveMode(componentId) {
     if (!location) return;
 
     // Set move mode state
-    moveMode.active = true;
-    moveMode.componentId = componentId;
-    moveMode.componentType = component.type;
-    moveMode.sourceLocation = location;
+    window.moveMode.active = true;
+    window.moveMode.componentId = componentId;
+    window.moveMode.componentType = component.type;
+    window.moveMode.sourceLocation = location;
 
     // Add visual indicators
     document.body.classList.add('move-mode');
@@ -47,10 +55,10 @@ function deactivateMoveMode() {
     hideMoveModeIndicator();
 
     // Reset move mode state
-    moveMode.active = false;
-    moveMode.componentId = null;
-    moveMode.componentType = null;
-    moveMode.sourceLocation = null;
+    window.moveMode.active = false;
+    window.moveMode.componentId = null;
+    window.moveMode.componentType = null;
+    window.moveMode.sourceLocation = null;
 
     // Refresh UI to restore normal insertion points
     loadExistingComponents();
@@ -192,7 +200,7 @@ function findInConditional(component, targetId) {
 // Function to update insertion points for move mode
 function updateInsertionPointsForMoveMode() {
     const insertionPoints = document.querySelectorAll('.insertion-point');
-    const movingComponent = findComponentById(moveMode.componentId);
+    const movingComponent = findComponentById(window.moveMode.componentId);
     const isMovingCondition = movingComponent && movingComponent.plugin === 'if';
     
     insertionPoints.forEach(point => {
@@ -201,7 +209,7 @@ function updateInsertionPointsForMoveMode() {
         const sectionType = container ? container.dataset.type : null;
 
         // Disable insertion points in different sections
-        if (sectionType && sectionType !== moveMode.componentType) {
+        if (sectionType && sectionType !== window.moveMode.componentType) {
             point.classList.add('disabled');
             return;
         }
@@ -216,7 +224,7 @@ function updateInsertionPointsForMoveMode() {
                 // This includes direct children and deeply nested descendants
                 if (conditionalId) {
                     // Check if the conditionalId is the component being moved OR is a descendant of it
-                    if (conditionalId === moveMode.componentId || isDescendantOf(conditionalId, moveMode.componentId)) {
+                    if (conditionalId === window.moveMode.componentId || isDescendantOf(conditionalId, window.moveMode.componentId)) {
                         point.classList.add('disabled');
                         return;
                     }
@@ -231,7 +239,7 @@ function updateInsertionPointsForMoveMode() {
 
 // Function to handle dropping a component at an insertion point
 function dropComponentAtInsertionPoint(insertionPoint) {
-    if (!moveMode.active) return;
+    if (!window.moveMode.active) return;
 
     // Check if this insertion point is disabled
     if (insertionPoint.classList.contains('disabled')) {
@@ -246,13 +254,13 @@ function dropComponentAtInsertionPoint(insertionPoint) {
     }
 
     // Validate that we're not dropping in the same location
-    if (isSameLocation(moveMode.sourceLocation, targetLocation)) {
+    if (isSameLocation(window.moveMode.sourceLocation, targetLocation)) {
         deactivateMoveMode();
         return;
     }
 
     // Perform the move
-    moveComponent(moveMode.sourceLocation, targetLocation);
+    moveComponent(window.moveMode.sourceLocation, targetLocation);
 
     // Deactivate move mode
     deactivateMoveMode();
@@ -331,7 +339,7 @@ function getInsertionPointLocation(insertionPoint) {
     if (conditionalId) {
         // This is inside a conditional block
         return {
-            type: moveMode.componentType,
+            type: window.moveMode.componentType,
             isNested: true,
             parentId: conditionalId,
             blockType: blockType,
@@ -369,7 +377,7 @@ function isSameLocation(loc1, loc2) {
 // Function to move a component from source to target location
 function moveComponent(source, target) {
     // Get the component to move
-    const component = findComponentById(moveMode.componentId);
+    const component = findComponentById(window.moveMode.componentId);
     if (!component) {
         console.error('Component not found');
         return;
@@ -483,7 +491,7 @@ document.addEventListener('click', function(e) {
         e.stopPropagation();
         const componentId = moveHandle.getAttribute('data-component-id');
         if (componentId) {
-            if (moveMode.active) {
+            if (window.moveMode.active) {
                 // If already in move mode, cancel it
                 deactivateMoveMode();
             } else {
@@ -496,7 +504,7 @@ document.addEventListener('click', function(e) {
 
 // Event listener for insertion point clicks during move mode
 document.addEventListener('click', function(e) {
-    if (!moveMode.active) return;
+    if (!window.moveMode.active) return;
     
     const insertionPoint = e.target.closest('.insertion-point');
     if (insertionPoint) {

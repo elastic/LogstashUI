@@ -2,13 +2,7 @@
 let newlyAddedPluginId = null;
 let pendingAnimationPluginId = null; // Plugin waiting for config modal to close
 
-// Move mode state
-var moveMode = {
-    active: false,
-    componentId: null,
-    componentType: null,
-    sourceLocation: null // {type, index, parentId, blockType, elseIfIndex}
-};
+// Note: moveMode is now defined in move_mode.js as window.moveMode
 
 function createInsertionPoint(type, index = 0, isConditional = false, parentId = null) {
     const insertionPoint = document.createElement('div');
