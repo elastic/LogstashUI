@@ -134,7 +134,7 @@ def simulate_grok(request):
                 try:
                     match = grok.match(sample_line)
                     
-                    if match:
+                    if match is not None:
                         # Remove null values from the match result
                         filtered_match = {k: v for k, v in match.items() if v is not None}
                         # Convert to nested dictionaries for dot notation (Logstash-style)
