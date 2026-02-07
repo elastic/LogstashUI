@@ -7248,14 +7248,14 @@
                     "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-auth_pass",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "auth_protocol": {
                     "setting": "auth_protocol",
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-auth_protocol",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "md5",
                         "sha",
@@ -7271,14 +7271,14 @@
                     "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-priv_pass",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "priv_protocol": {
                     "setting": "priv_protocol",
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-priv_protocol",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "des",
                         "3des",
@@ -7293,7 +7293,7 @@
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-security_level",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "noAuthNoPriv",
                         "authNoPriv",
