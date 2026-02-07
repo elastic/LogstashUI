@@ -80,8 +80,8 @@ window.PluginConfigModal = (function () {
                 }
             });
 
-            // Sort each group alphabetically
-            importantOptions.sort((a, b) => a[0].localeCompare(b[0]));
+            // Keep important fields in their original order (as defined in the JSON)
+            // Sort advanced fields alphabetically
             advancedOptions.sort((a, b) => a[0].localeCompare(b[0]));
 
             // Render important fields first
