@@ -170,6 +170,8 @@ function displayNetworkDiffs(networks) {
     };
 
     let html = '';
+    let networksWithChanges = 0;
+    let newPipelinesCount = 0;
 
     for (const network of networks) {
         const currentLines = network.current ? network.current.split('\n') : [];
@@ -180,6 +182,21 @@ function displayNetworkDiffs(networks) {
 
         // Compute diff
         const lineDiff = computeLineDiff(currentLines, newLines);
+        
+        // Check if there are any actual changes (additions or deletions)
+        const hasChanges = lineDiff.some(change => change.type !== 'equal');
+        
+        // Skip this network if it has no changes and is not new
+        if (!isNewPipeline && !hasChanges) {
+            continue;
+        }
+        
+        // Track counts
+        if (isNewPipeline) {
+            newPipelinesCount++;
+        } else if (hasChanges) {
+            networksWithChanges++;
+        }
 
         let currentHtml = '';
         let newHtml = '';
@@ -290,10 +307,13 @@ function displayNetworkDiffs(networks) {
             }
         }
 
-        // Build the network section
-        const networkBadge = isNewPipeline 
-            ? '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>'
-            : '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>';
+        // Build the network section with badge only if there are changes
+        let networkBadge = '';
+        if (isNewPipeline) {
+            networkBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>';
+        } else if (hasChanges) {
+            networkBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>';
+        }
 
         html += `
             <div class="border border-gray-600 rounded-lg overflow-hidden">
@@ -325,7 +345,51 @@ function displayNetworkDiffs(networks) {
         `;
     }
 
-    container.innerHTML = html;
+    // If no networks have changes, show a message
+    if (networksWithChanges === 0 && newPipelinesCount === 0) {
+        container.innerHTML = `
+            <div class="text-center p-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-green-600/20 rounded-full mb-4">
+                    <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-white mb-2">No Changes Detected</h3>
+                <p class="text-gray-400">All network pipelines are up to date. No changes need to be committed.</p>
+            </div>
+        `;
+        
+        // Disable the commit button since there's nothing to commit
+        const commitButton = document.getElementById('confirmCommitButton');
+        if (commitButton) {
+            commitButton.disabled = true;
+            commitButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        return;
+    }
+
+    // Add stats at the top
+    let statsHtml = '<div class="mb-4 p-4 bg-gray-700 rounded-lg border border-gray-600">';
+    statsHtml += '<h3 class="text-white font-semibold mb-2">Changes Summary</h3>';
+    statsHtml += '<div class="flex gap-4 text-sm">';
+    
+    if (newPipelinesCount > 0) {
+        statsHtml += `<div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>
+            <span class="text-gray-300">${newPipelinesCount} new pipeline${newPipelinesCount !== 1 ? 's' : ''}</span>
+        </div>`;
+    }
+    
+    if (networksWithChanges > 0) {
+        statsHtml += `<div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>
+            <span class="text-gray-300">${networksWithChanges} modified pipeline${networksWithChanges !== 1 ? 's' : ''}</span>
+        </div>`;
+    }
+    
+    statsHtml += '</div></div>';
+
+    container.innerHTML = statsHtml + html;
 
     // Synchronize scrolling for each network's diff panels
     const allSections = container.querySelectorAll('.border.border-gray-600');
@@ -391,22 +455,80 @@ async function confirmCommitConfiguration() {
         const result = await response.json();
         console.log('Commit response:', result);
 
-        // Show success message
-        alert('Configuration committed successfully!');
+        if (result.success) {
+            // Show success toast
+            let message = result.message || 'Configuration committed successfully!';
+            showToast(message, 'success');
+            
+            // Show warnings as separate toasts if any
+            if (result.errors && result.errors.length > 0) {
+                result.errors.forEach(error => {
+                    showToast(error, 'warning');
+                });
+            }
 
-        // Close the modal
-        hideSnmpDiffModal();
+            // Close the modal
+            hideSnmpDiffModal();
 
-        // Optionally reload the page to reflect changes
-        // window.location.reload();
+            // Optionally reload the page to reflect changes
+            // window.location.reload();
+        } else {
+            throw new Error(result.error || 'Unknown error occurred');
+        }
 
     } catch (error) {
         console.error('Error committing configuration:', error);
-        alert('Failed to commit configuration: ' + error.message);
+        showToast('Failed to commit configuration: ' + error.message, 'error');
     } finally {
         // Re-enable button
         confirmButton.disabled = false;
         confirmButton.textContent = originalText;
         confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
     }
+}
+
+/**
+ * Toast notification function
+ */
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container') || createToastContainer();
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500',
+        warning: 'bg-yellow-500'
+    };
+
+    toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
+    toast.innerHTML = `
+        <span>${escapeHtml(message)}</span>
+        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
+    document.body.appendChild(container);
+    return container;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }

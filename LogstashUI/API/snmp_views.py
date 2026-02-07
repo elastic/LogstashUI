@@ -8,6 +8,101 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 import json
 import os
+import re
+
+
+def _sanitize_pipeline_name_component(name):
+    """
+    Sanitize a name component for use in pipeline names.
+    Only allows letters, numbers, underscores, and hyphens.
+    Replaces any other characters with underscores.
+    """
+    # Replace any character that isn't a letter, number, underscore, or hyphen with underscore
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    # Remove consecutive underscores
+    sanitized = re.sub(r'_+', '_', sanitized)
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    return sanitized.lower()
+
+
+def _get_pipeline_name(network):
+    """
+    Generate a sanitized pipeline name for a network.
+    Format: snmp-{logstash_name}-{network_name}
+    """
+    sanitized_logstash_name = _sanitize_pipeline_name_component(network.logstash_name)
+    sanitized_network_name = _sanitize_pipeline_name_component(network.name)
+    return f"snmp-{sanitized_logstash_name}-{sanitized_network_name}"
+
+
+def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, description=""):
+    """
+    Helper function to create or update a Logstash pipeline in Elasticsearch.
+    Uses the same logic as CreatePipeline in views.py.
+    
+    Args:
+        es_connection: Elasticsearch connection object
+        pipeline_name: Name of the pipeline
+        pipeline_content: Pipeline configuration string
+        description: Optional description for the pipeline
+    
+    Returns:
+        tuple: (success: bool, is_new: bool, error: str or None)
+    """
+    from datetime import datetime, timezone
+    
+    try:
+        # Check if pipeline already exists
+        pipeline_exists = False
+        existing_settings = None
+        existing_metadata = None
+        
+        try:
+            existing = es_connection.logstash.get_pipeline(id=pipeline_name)
+            if pipeline_name in existing:
+                pipeline_exists = True
+                existing_settings = existing[pipeline_name].get('pipeline_settings', {})
+                existing_metadata = existing[pipeline_name].get('pipeline_metadata', {})
+        except:
+            pipeline_exists = False
+        
+        # Prepare pipeline body
+        pipeline_body = {
+            "pipeline": pipeline_content,
+            "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            "username": "LogstashUI",
+            "description": description
+        }
+        
+        # Use existing settings/metadata if updating, otherwise use defaults
+        if pipeline_exists and existing_settings:
+            pipeline_body["pipeline_settings"] = existing_settings
+        else:
+            pipeline_body["pipeline_settings"] = {
+                "pipeline.batch.delay": 50,
+                "pipeline.batch.size": 125,
+                "pipeline.workers": 1,
+                "queue.checkpoint.writes": 1024,
+                "queue.max_bytes": "1gb",
+                "queue.type": "memory"
+            }
+        
+        if pipeline_exists and existing_metadata:
+            pipeline_body["pipeline_metadata"] = existing_metadata
+        else:
+            pipeline_body["pipeline_metadata"] = {
+                "version": 1,
+                "type": "logstash_pipeline"
+            }
+        
+        # Create or update the pipeline
+        es_connection.logstash.put_pipeline(id=pipeline_name, body=pipeline_body)
+        
+        return (True, not pipeline_exists, None)
+        
+    except Exception as e:
+        return (False, False, str(e))
 
 
 @require_http_methods(["GET"])
@@ -324,12 +419,12 @@ def DeleteNetwork(request, network_id):
 
 @require_http_methods(["GET"])
 def GetNetworkPipelineName(request, network_id):
-    """Get the pipeline name for a network based on its logstash_name"""
+    """Get the pipeline name for a network based on its logstash_name and network name"""
     try:
         network = Network.objects.get(pk=network_id)
         
-        # Generate pipeline name: snmp-{logstash_name}-*
-        pipeline_name = f"snmp-{network.logstash_name}-*"
+        # Generate sanitized pipeline name: snmp-{logstash_name}-{network_name}-*
+        pipeline_name = _get_pipeline_name(network)
         
         return JsonResponse({
             'success': True,
@@ -497,49 +592,25 @@ def GetCommitDiff(request):
             
             # Get current pipeline configuration from Elasticsearch (if exists)
             current_config = ""
-            pipeline_name = f"snmp-{network.logstash_name}-*"
+            pipeline_name = _get_pipeline_name(network)
             
             # Try to fetch current pipeline from Elasticsearch
             if network.connection:
                 try:
-                    from elasticsearch import Elasticsearch
+                    from Core.views import get_elastic_connection
                     
-                    # Create ES client
-                    es_client = None
-                    if network.connection.cloud_id:
-                        if network.connection.api_key:
-                            es_client = Elasticsearch(
-                                cloud_id=network.connection.cloud_id,
-                                api_key=network.connection.get_api_key()
-                            )
-                        elif network.connection.username and network.connection.password:
-                            es_client = Elasticsearch(
-                                cloud_id=network.connection.cloud_id,
-                                basic_auth=(network.connection.username, network.connection.get_password())
-                            )
-                    elif network.connection.host:
-                        if network.connection.api_key:
-                            es_client = Elasticsearch(
-                                [network.connection.host],
-                                api_key=network.connection.get_api_key()
-                            )
-                        elif network.connection.username and network.connection.password:
-                            es_client = Elasticsearch(
-                                [network.connection.host],
-                                basic_auth=(network.connection.username, network.connection.get_password())
-                            )
+                    es_client = get_elastic_connection(network.connection.id)
                     
-                    if es_client:
-                        # Try to get the pipeline
-                        try:
-                            response = es_client.logstash.get_pipeline(id=pipeline_name)
-                            if pipeline_name in response:
-                                pipeline_data = response[pipeline_name]
-                                if 'pipeline' in pipeline_data:
-                                    current_config = pipeline_data['pipeline']
-                        except Exception as e:
-                            # Pipeline doesn't exist yet, that's okay
-                            pass
+                    # Try to get the pipeline
+                    try:
+                        response = es_client.logstash.get_pipeline(id=pipeline_name)
+                        if pipeline_name in response:
+                            pipeline_data = response[pipeline_name]
+                            if 'pipeline' in pipeline_data:
+                                current_config = pipeline_data['pipeline']
+                    except Exception as e:
+                        # Pipeline doesn't exist yet, that's okay
+                        pass
                 except Exception as e:
                     # Connection failed, that's okay - we'll just show empty current
                     pass
@@ -563,12 +634,139 @@ def GetCommitDiff(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+@require_http_methods(["POST"])
 def CommitConfiguration(request):
-    print("Next up")
-    return JsonResponse({
-        'success': True,
-        'message': f'Configuration updated!'
-    })
+    """Commit SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
+    try:
+        from Core.views import get_elastic_connection
+        from datetime import datetime, timezone
+        
+        # Query all networks
+        networks = Network.objects.all()
+        
+        if not networks.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'No networks configured'
+            }, status=400)
+        
+        pipelines_created = 0
+        pipelines_updated = 0
+        errors = []
+        
+        # Iterate through each network and create/update pipeline
+        for network in networks:
+            try:
+                # Initialize pipeline data structure for this network
+                input_data = {
+                    "network": network,
+                    "devices": {
+                        "v1_v2c": {},
+                        "v3": {}
+                    },
+                    "connection": network.connection
+                }
+                
+                # Get all devices for this network
+                devices = Device.objects.filter(network=network).select_related('credential')
+                
+                # Skip networks with no devices
+                if not devices.exists():
+                    continue
+
+                for device in devices:
+                    if not device.credential:
+                        continue
+                    
+                    credential = device.credential
+                    
+                    # Group v1 and v2c together
+                    if credential.version in ['1', '2c']:
+                        input_data["devices"]["v1_v2c"][device.name] = device
+                    
+                    # Group v3 devices
+                    elif credential.version == '3':
+                        input_data["devices"]["v3"][device.name] = device
+
+                # Generate components for this network
+                components = {
+                    "input": _generate_input(input_data),
+                    "filter": [],
+                    "output": _generate_output(input_data, network)
+                }
+                
+                # Generate pipeline configuration
+                pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
+                pipeline_name = _get_pipeline_name(network)
+                
+                # Check if network has a connection
+                if not network.connection:
+                    errors.append(f"Network '{network.name}' has no Elasticsearch connection configured")
+                    continue
+                
+                # Get Elasticsearch connection
+                es = get_elastic_connection(network.connection.id)
+                
+                # Use helper function to create or update the pipeline
+                success, is_new, error = _create_or_update_pipeline(
+                    es,
+                    pipeline_name,
+                    pipeline_content,
+                    description=f"SNMP pipeline for network: {network.name}"
+                )
+                
+                if success:
+                    if is_new:
+                        pipelines_created += 1
+                    else:
+                        pipelines_updated += 1
+                else:
+                    errors.append(f"Network '{network.name}': {error}")
+                    continue
+                    
+            except Exception as e:
+                errors.append(f"Network '{network.name}': {str(e)}")
+                continue
+        
+        # Build response message
+        if pipelines_created == 0 and pipelines_updated == 0:
+            if errors:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Failed to commit any pipelines. Errors: ' + '; '.join(errors)
+                }, status=500)
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No pipelines to commit (no networks with devices found)'
+                }, status=400)
+        
+        message_parts = []
+        if pipelines_created > 0:
+            message_parts.append(f"{pipelines_created} pipeline(s) created")
+        if pipelines_updated > 0:
+            message_parts.append(f"{pipelines_updated} pipeline(s) updated")
+        
+        message = "Successfully committed: " + ", ".join(message_parts)
+        
+        if errors:
+            message += f". Warnings: {'; '.join(errors)}"
+        
+        return JsonResponse({
+            'success': True,
+            'message': message,
+            'pipelines_created': pipelines_created,
+            'pipelines_updated': pipelines_updated,
+            'errors': errors if errors else None
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        }, status=500)
 
 @require_http_methods(["POST"])
 def GenerateCommitConfiguration(request):
