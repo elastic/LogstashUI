@@ -218,10 +218,10 @@ def UpdateCredential(request, credential_id):
         # Save (this will trigger validation and encryption)
         credential.save()
         
-        return HttpResponse("Credential updated successfully!", status=200)
+        return JsonResponse({'id': credential.id, 'message': 'Credential updated successfully!'}, status=200)
         
     except Credential.DoesNotExist:
-        return HttpResponse("Credential not found", status=404)
+        return JsonResponse({'error': 'Credential not found'}, status=404)
     except ValidationError as e:
         error_msg = str(e)
         if hasattr(e, 'message_dict'):
@@ -438,73 +438,443 @@ def GetNetworkPipelineName(request, network_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+def _get_device_profiles(device):
+    """
+    Get all profiles for a device and return merged OID data.
+    Returns a tuple: (profile_ids_tuple, merged_oids_dict)
+    """
+    from SNMP.models import Profile
+    from django.conf import settings
+    import os
+    import json
+    
+    # Get all profiles for this device (prefetch to avoid N+1 queries)
+    profiles = device.profiles.all().order_by('id')
+    
+    if not profiles:
+        return (tuple(), {'get': {}, 'walk': {}, 'table': {}})
+    
+    # Create a tuple of profile IDs for grouping (sorted for consistency)
+    profile_ids = tuple(sorted([p.id for p in profiles]))
+    
+    # Merge OIDs from all profiles
+    merged_oids = {
+        'get': {},
+        'walk': {},
+        'table': {}
+    }
+    
+    for profile in profiles:
+        profile_data = profile.profile_data or {}
+        
+        # Check if this is an official profile placeholder
+        if profile_data.get('is_official_placeholder'):
+            # Load the actual profile data from JSON file
+            profile_name = profile.name.replace('.json', '')  # Remove .json extension
+            official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+            profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
+            
+            if os.path.exists(profile_path):
+                try:
+                    with open(profile_path, 'r') as f:
+                        profile_data = json.load(f)
+                except Exception as e:
+                    # If we can't load the file, skip this profile
+                    continue
+            else:
+                # Profile file doesn't exist, skip
+                continue
+        
+        # Merge get OIDs
+        if 'get' in profile_data and isinstance(profile_data['get'], dict):
+            merged_oids['get'].update(profile_data['get'])
+        
+        # Merge walk OIDs
+        if 'walk' in profile_data and isinstance(profile_data['walk'], dict):
+            merged_oids['walk'].update(profile_data['walk'])
+        
+        # Merge table OIDs
+        if 'table' in profile_data and isinstance(profile_data['table'], dict):
+            merged_oids['table'].update(profile_data['table'])
+    
+    return (profile_ids, merged_oids)
+
+
 def _generate_input(input_data):
+    """
+    Generate SNMP input components grouped by:
+    1. Credential version (v1/v2c vs v3)
+    2. Profile combination (devices with same set of profiles)
+    
+    Returns: (input_components, oid_mappings)
+    """
     input_components = []
+    network_id = input_data['network'].id
 
-    hosts = []
-    for device_name, device in input_data['devices']['v1_v2c'].items():
-        credential = device.credential
-        hosts.append(
-            {
-                "host": f"udp:{device.ip_address}/{device.port}",
-                "community": credential.get_community(),
-                "version": credential.version
-            }
-        )
+    # Collect all OID mappings (key-value pairs) for filter generation
+    oid_mappings = {
+        'get': {},
+        'walk': {},
+        'table': {}
+    }
 
-    if hosts:
-        input_components.append(
-            {
-                "id": f"input_snmp_v1_v2c_{input_data['network'].id}",
-                "type": "input",
-                "plugin": "snmp",
-                "config": {
+    global_input_config = {
+        "ecs_compatibility": "disabled",
+        "oid_mapping_format": "dotted_string"
+    }
+    
+    # Process v1/v2c devices
+    if input_data['devices']['v1_v2c']:
+        # Group v1/v2c devices by their profile combinations
+        v1_v2c_groups = {}
+        
+        for device_name, device in input_data['devices']['v1_v2c'].items():
+            profile_ids, merged_oids = _get_device_profiles(device)
+            
+            # Use profile_ids tuple as grouping key
+            if profile_ids not in v1_v2c_groups:
+                v1_v2c_groups[profile_ids] = {
+                    'devices': [],
+                    'oids': merged_oids
+                }
+            
+            v1_v2c_groups[profile_ids]['devices'].append(device)
+        
+        # Create an input for each profile group
+        for group_idx, (profile_ids, group_data) in enumerate(v1_v2c_groups.items()):
+            hosts = []
+            
+            for device in group_data['devices']:
+                credential = device.credential
+                hosts.append({
+                    "host": f"udp:{device.ip_address}/{device.port}",
+                    "community": credential.get_community(),
+                    "version": credential.version
+                })
+            
+            if hosts:
+                config = {
                     "hosts": hosts
+
+                } | global_input_config
+                
+                # Add OIDs from merged profiles
+                oids = group_data['oids']
+                if oids['get']:
+                    config['get'] = list(oids['get'].values())
+                    # Collect OID mappings for filter generation
+                    oid_mappings['get'].update(oids['get'])
+                if oids['walk']:
+                    config['walk'] = list(oids['walk'].values())
+                    # Collect OID mappings for filter generation
+                    oid_mappings['walk'].update(oids['walk'])
+                if oids['table']:
+                    # Tables have structure: {"ifTable": {"columns": {"ifIndex": "oid", "ifDescr": "oid", ...}}}
+                    config['tables'] = [
+                        {
+                            'name': table_name,
+                            'columns': list(table_data.get('columns', {}).values()) if isinstance(table_data, dict) and isinstance(table_data.get('columns'), dict) else []
+                        }
+                        for table_name, table_data in oids['table'].items()
+                    ]
+                    # Collect OID mappings for filter generation
+                    oid_mappings['table'].update(oids['table'])
+                
+                input_components.append({
+                    "id": f"input_snmp_v1_v2c_{network_id}_group_{group_idx}",
+                    "type": "input",
+                    "plugin": "snmp",
+                    "config": config
+                })
+    
+    # Process v3 devices
+    if input_data['devices']['v3']:
+        # Group v3 devices by their profile combinations AND credential
+        # (v3 devices with different credentials need separate inputs even with same profiles)
+        v3_groups = {}
+        
+        for device_name, device in input_data['devices']['v3'].items():
+            profile_ids, merged_oids = _get_device_profiles(device)
+            credential = device.credential
+            
+            # Use both profile_ids and credential_id as grouping key
+            group_key = (profile_ids, credential.id)
+            
+            if group_key not in v3_groups:
+                v3_groups[group_key] = {
+                    'devices': [],
+                    'oids': merged_oids,
+                    'credential': credential
+                }
+            
+            v3_groups[group_key]['devices'].append(device)
+        
+        # Create an input for each profile+credential group
+        for group_idx, (group_key, group_data) in enumerate(v3_groups.items()):
+            hosts = []
+            
+            for device in group_data['devices']:
+                hosts.append({
+                    "host": f"udp:{device.ip_address}/{device.port}",
+                    "version": device.credential.version
+                })
+            
+            if hosts:
+                credential = group_data['credential']
+                
+                config = {
+                    "hosts": hosts,
+                    "security_name": credential.security_name,
+                    "security_level": credential.security_level
+                } | global_input_config
+                
+                # Add auth settings based on security level
+                if credential.security_level in ['authNoPriv', 'authPriv']:
+                    config["auth_protocol"] = credential.auth_protocol
+                    config["auth_pass"] = credential.get_auth_pass()
+                
+                if credential.security_level == 'authPriv':
+                    config["priv_protocol"] = credential.priv_protocol
+                    config["priv_pass"] = credential.get_priv_pass()
+                
+                # Add OIDs from merged profiles
+                oids = group_data['oids']
+                if oids['get']:
+                    config['get'] = list(oids['get'].values())
+                    # Collect OID mappings for filter generation
+                    oid_mappings['get'].update(oids['get'])
+                if oids['walk']:
+                    config['walk'] = list(oids['walk'].values())
+                    # Collect OID mappings for filter generation
+                    oid_mappings['walk'].update(oids['walk'])
+                if oids['table']:
+                    # Tables have structure: {"ifTable": {"columns": {"ifIndex": "oid", "ifDescr": "oid", ...}}}
+                    config['tables'] = [
+                        {
+                            'name': table_name,
+                            'columns': list(table_data.get('columns', {}).values()) if isinstance(table_data, dict) and isinstance(table_data.get('columns'), dict) else []
+                        }
+                        for table_name, table_data in oids['table'].items()
+                    ]
+                    # Collect OID mappings for filter generation
+                    oid_mappings['table'].update(oids['table'])
+                
+                input_components.append({
+                    "id": f"input_snmp_v3_{network_id}_group_{group_idx}",
+                    "type": "input",
+                    "plugin": "snmp",
+                    "config": config
+                })
+    
+    return input_components, oid_mappings
+
+
+def _format_field_name(field_name):
+    """
+    Format field name for Logstash filter usage.
+    
+    Rules:
+    - If starts with [ and ends with ], leave it alone
+    - If doesn't start with [ and has a dot, convert to bracket notation: system.cpu -> [system][cpu]
+    - Otherwise, leave it alone
+    
+    Args:
+        field_name: The field name to format
+        
+    Returns:
+        Formatted field name
+    """
+    # Already in bracket notation
+    if field_name.startswith('[') and field_name.endswith(']'):
+        return field_name
+    
+    # Has dots, convert to bracket notation
+    if '.' in field_name:
+        parts = field_name.split('.')
+        return ''.join(f'[{part}]' for part in parts)
+    
+    # No dots and not in bracket notation, leave alone
+    return field_name
+
+
+def _get_special_case_filters(oid_mappings):
+    special_case_filters = {
+        'get': {
+            "system.cpu.total.norm.pct": [
+                {
+                    "id": "comp_1770526174120",
+                    "type": "filter",
+                    "plugin": "ruby",
+                    "config": {
+                        "code": "    v = event.get(\"[system][cpu][total][norm][pct]\")\n    if v\n      event.set(\"[system][cpu][total][norm][pct]\", v.to_f / 100.0)\n    end"
+                    }
+                }
+            ],
+            "system.memory.actual.used.bytes": [
+                {
+                    "id": "comp_1770526174120",
+                    "type": "filter",
+                    "plugin": "ruby",
+                    "config": {
+                        "code": '''
+      used = event.get("[system][memory][actual][used][bytes]")
+      free = event.get("[system][memory][actual][free][bytes]")
+
+      if used && free
+        used_f  = used.to_f
+        free_f  = free.to_f
+        total_f = used_f + free_f
+
+        if total_f > 0
+          event.set("[system][memory][total]", total_f)
+          event.set("[system][memory][actual][used][pct]", (used_f / total_f))
+          event.set("[system][memory][actual][free][pct]", (free_f / total_f))
+        end
+      end
+    '''
+                    }
+                }
+            ]
+        },
+        'table': {
+            "ifTable": [
+                # {
+                #     "id": "comp_1770530240200",
+                #     "type": "filter",
+                #     "plugin": "split",
+                #     "config": {
+                #         "field": "ifTable"
+                #     }
+                # }
+                {
+                    "id": "comp_1770526174120",
+                    "type": "filter",
+                    "plugin": "ruby",
+                    "config": {
+                        "code": (
+                            "rows = event.get('[ifTable]')\n"
+                            "if rows.is_a?(Array)\n"
+                            "  host_name = event.get('[host][name]')\n"
+                            "  network_name = event.get('[network][name]')\n"
+                            "  timestamp = event.get('@timestamp')\n"
+                            "  rows.each do |row|\n"
+                            "    next unless row.is_a?(Hash)\n"
+                            "    row['ifIndex'] = row.delete('1.3.6.1.2.1.2.2.1.1')\n"
+                            "    row['ifDescr'] = row.delete('1.3.6.1.2.1.2.2.1.2')\n"
+                            "    row['ifType'] = row.delete('1.3.6.1.2.1.2.2.1.3')\n"
+                            "    row['ifAdminStatus'] = row.delete('1.3.6.1.2.1.2.2.1.7')\n"
+                            "    row['ifOperStatus'] = row.delete('1.3.6.1.2.1.2.2.1.8')\n"
+                            "    row['ifName'] = row.delete('1.3.6.1.2.1.31.1.1.1.1')\n"
+                            "    row['ifAlias'] = row.delete('1.3.6.1.2.1.31.1.1.1.18')\n"
+                            "    row['ifHighSpeed'] = row.delete('1.3.6.1.2.1.31.1.1.1.15')\n"
+                            "    row['ifPhysAddress'] = row.delete('1.3.6.1.2.1.2.2.1.6')\n"
+                            "    row['ifMtu'] = row.delete('1.3.6.1.2.1.2.2.1.4')\n"
+                            "    row['ifHCInOctets'] = row.delete('1.3.6.1.2.1.31.1.1.1.6')\n"
+                            "    row['ifHCOutOctets'] = row.delete('1.3.6.1.2.1.31.1.1.1.10')\n"
+                            "    row['ifHCInUcastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.7')\n"
+                            "    row['ifLastChange'] = row.delete('1.3.6.1.2.1.2.2.1.9')\n"
+                            "    row['dot1qPvid'] = row.delete('1.3.6.1.2.1.17.7.1.4.5.1.1')\n"
+                            "    row['ifInErrors'] = row.delete('1.3.6.1.2.1.2.2.1.14')\n"
+                            "    row['ifOutErrors'] = row.delete('1.3.6.1.2.1.2.2.1.20')\n"
+                            "    row['ifInDiscards'] = row.delete('1.3.6.1.2.1.2.2.1.13')\n"
+                            "    row['ifOutDiscards'] = row.delete('1.3.6.1.2.1.2.2.1.19')\n"
+                            "    new_event = LogStash::Event.new({\n"
+                            "      '@timestamp' => timestamp,\n"
+                            "      'host' => { 'name' => host_name },\n"
+                            "      'network' => { 'name' => network_name },\n"
+                            "      'interface' => row,\n"
+                            "      'metricset' => { 'module' => 'snmp' }\n"
+                            "    })\n"
+                            "    new_event_block.call(new_event)\n"
+                            "  end\n"
+                            "  event.remove('[ifTable]')\n"
+                            "end"
+                        )
+                    }
+                }
+            ]
+        },
+        'walk':{}
+    }
+
+    special_filters = []
+
+    types = ['get', 'walk', 'table']
+    for snmp_type in types:
+        for name_of_oid in oid_mappings[snmp_type]:
+            if name_of_oid in special_case_filters[snmp_type]:
+                for entry in special_case_filters[snmp_type][name_of_oid]:
+                    special_filters.append(entry)
+
+    return special_filters
+
+def _generate_filters(oid_mappings, network):
+    """
+    Generate filter components based on OID mappings from profiles.
+    
+    Args:
+        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
+        network: Network object for accessing network name and other properties
+        
+    Returns:
+        List of filter components
+    """
+    # Build rename mappings for get OIDs
+    get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
+    
+    # Build rename mappings for table columns: [table_name][oid] -> [table_name][column_name]
+    table_renames = {}
+    for table_name, table_data in oid_mappings['table'].items():
+        if isinstance(table_data, dict) and 'columns' in table_data:
+            columns = table_data['columns']
+            if isinstance(columns, dict):
+                for column_name, oid in columns.items():
+                    # Create rename from [table_name][oid] to [table_name][column_name]
+                    from_field = f"[{table_name}][{oid}]"
+                    to_field = f"[{table_name}][{column_name}]"
+                    table_renames[from_field] = to_field
+    
+    filter_components = [
+        {
+            "id": "filter_mutate_1",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "rename": {
+                    "host": "[host][name]"
+                } | get_renames #| table_renames
+            }
+        },
+        {
+            "id": "filter_mutate_2",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "[network][name]": f"{network}",
+                    "[metricset][module]": "system"
                 }
             }
-        )
-
-    hosts = []
-    for device_name, device in input_data['devices']['v3'].items():
-        credential = device.credential
-        hosts.append(
-            {
-                "host": f"udp:{device.ip_address}/{device.port}",
-                "version": credential.version
-            }
-        )
-
-    if hosts:
-        # Get credential from first device for v3 auth settings (all v3 devices should share same credential)
-        first_device = list(input_data['devices']['v3'].values())[0]
-        credential = first_device.credential
-        
-        config = {
-            "hosts": hosts,
-            "security_name": credential.security_name
         }
-        
-        # Add auth settings based on security level
-        if credential.security_level in ['authNoPriv', 'authPriv']:
-            config["auth_protocol"] = credential.auth_protocol
-            config["auth_pass"] = credential.get_auth_pass()
-        
-        if credential.security_level == 'authPriv':
-            config["priv_protocol"] = credential.priv_protocol
-            config["priv_pass"] = credential.get_priv_pass()
-        
-        config["security_level"] = credential.security_level
-        
-        input_components.append(
-            {
-                "id": f"input_snmp_v3_{input_data['network'].id}",
-                "type": "input",
-                "plugin": "snmp",
-                "config": config
-            }
-        )
+    ]
+
+
+
     
-    return input_components
+    # TODO: Implement filter generation logic based on OID mappings
+    # oid_mappings['get'] contains key-value pairs like {"host.hostname": "1.3.6.1.2.1.1.5.0", ...}
+    # oid_mappings['walk'] contains walk OID mappings
+    # oid_mappings['table'] contains table OID mappings
+
+    for mapping in oid_mappings['get']:
+        pass
+
+
+    filter_components.extend(_get_special_case_filters(oid_mappings))
+
+    print(filter_components)
+    return filter_components
+
 
 def _generate_output(input_data, network_db_object):
     output_components = []
@@ -516,7 +886,10 @@ def _generate_output(input_data, network_db_object):
         return output_components
     
     config = {
-        "index": f"snmp-{network_db_object.name.lower().replace(' ', '-')}-%{{+YYYY.MM.dd}}"
+        "data_stream": True,
+        "data_stream_type": "metrics",
+        "data_stream_namespace": network_db_object.name.lower().replace(' ', '-'),
+        "data_stream_dataset": "snmp"
     }
     
     # Add connection details based on what's available
@@ -581,9 +954,12 @@ def GetCommitDiff(request):
                     input_data["devices"]["v3"][device.name] = device
 
             # Generate components for this network
+            input_components, oid_mappings = _generate_input(input_data)
+            filter_components = _generate_filters(oid_mappings, network)
+            
             components = {
-                "input": _generate_input(input_data),
-                "filter": [],
+                "input": input_components,
+                "filter": filter_components,
                 "output": _generate_output(input_data, network)
             }
             
@@ -689,9 +1065,12 @@ def CommitConfiguration(request):
                         input_data["devices"]["v3"][device.name] = device
 
                 # Generate components for this network
+                input_components, oid_mappings = _generate_input(input_data)
+                filter_components = _generate_filters(oid_mappings, network)
+                
                 components = {
-                    "input": _generate_input(input_data),
-                    "filter": [],
+                    "input": input_components,
+                    "filter": filter_components,
                     "output": _generate_output(input_data, network)
                 }
                 
