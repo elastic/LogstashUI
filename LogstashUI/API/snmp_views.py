@@ -308,13 +308,15 @@ def AddNetwork(request):
         logstash_name = request.POST.get('logstash_name')
         connection_id = request.POST.get('connection')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
+        traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         
         # Create network object
         network = Network(
             name=name,
             network_range=network_range,
             logstash_name=logstash_name,
-            discovery_enabled=discovery_enabled
+            discovery_enabled=discovery_enabled,
+            traps_enabled=traps_enabled
         )
         
         # Set connection if provided
@@ -346,6 +348,7 @@ def UpdateNetwork(request, network_id):
         network.network_range = request.POST.get('network_range', network.network_range)
         network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
+        network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         
         # Update connection
         connection_id = request.POST.get('connection')
@@ -383,6 +386,7 @@ def GetNetwork(request, network_id):
             'logstash_name': network.logstash_name,
             'connection': network.connection_id if network.connection else None,
             'discovery_enabled': network.discovery_enabled,
+            'traps_enabled': network.traps_enabled,
         }
         
         return JsonResponse(data)
@@ -1051,6 +1055,13 @@ def CommitConfiguration(request):
                 # Skip networks with no devices
                 if not devices.exists():
                     continue
+                
+                # Check if SNMP traps are enabled for this network
+                if network.traps_enabled:
+                    print(f"SNMP Traps are ENABLED for network: {network.name}")
+                    # TODO: Add trap-specific configuration here in future implementation
+                else:
+                    print(f"SNMP Traps are DISABLED for network: {network.name}")
 
                 for device in devices:
                     if not device.credential:

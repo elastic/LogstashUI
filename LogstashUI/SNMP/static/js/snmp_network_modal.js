@@ -34,11 +34,16 @@ function openNetworkModal(networkData = null) {
     // Set discovery enabled radio
     const discoveryValue = networkData.discovery_enabled ? 'true' : 'false';
     document.querySelector(`input[name="discovery_enabled"][value="${discoveryValue}"]`).checked = true;
+    
+    // Set traps enabled radio
+    const trapsValue = networkData.traps_enabled ? 'true' : 'false';
+    document.querySelector(`input[name="traps_enabled"][value="${trapsValue}"]`).checked = true;
   } else {
     // Add mode
     modalTitle.textContent = 'Add SNMP Network';
     document.getElementById('networkId').value = '';
     document.querySelector('input[name="discovery_enabled"][value="true"]').checked = true;
+    document.querySelector('input[name="traps_enabled"][value="false"]').checked = true;
   }
   
   modal.classList.remove('hidden');

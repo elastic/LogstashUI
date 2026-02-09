@@ -42,6 +42,11 @@ class Network(models.Model):
         help_text="Enable automatic device discovery on this network"
     )
     
+    traps_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable SNMP traps for this network"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
