@@ -736,75 +736,63 @@ def _get_special_case_filters(oid_mappings):
                 }
             ]
         },
-        'table': {
-            "ifTable": [
-                # {
-                #     "id": "comp_1770530240200",
-                #     "type": "filter",
-                #     "plugin": "split",
-                #     "config": {
-                #         "field": "ifTable"
-                #     }
-                # }
-                {
-                    "id": "comp_1770526174120",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": (
-                            "rows = event.get('[ifTable]')\n"
-                            "if rows.is_a?(Array)\n"
-                            "  host_name = event.get('[host][name]')\n"
-                            "  network_name = event.get('[network][name]')\n"
-                            "  timestamp = event.get('@timestamp')\n"
-                            "  rows.each do |row|\n"
-                            "    next unless row.is_a?(Hash)\n"
-                            "    row['ifIndex'] = row.delete('1.3.6.1.2.1.2.2.1.1')\n"
-                            "    row['ifDescr'] = row.delete('1.3.6.1.2.1.2.2.1.2')\n"
-                            "    row['ifType'] = row.delete('1.3.6.1.2.1.2.2.1.3')\n"
-                            "    row['ifAdminStatus'] = row.delete('1.3.6.1.2.1.2.2.1.7')\n"
-                            "    row['ifOperStatus'] = row.delete('1.3.6.1.2.1.2.2.1.8')\n"
-                            "    row['ifName'] = row.delete('1.3.6.1.2.1.31.1.1.1.1')\n"
-                            "    row['ifAlias'] = row.delete('1.3.6.1.2.1.31.1.1.1.18')\n"
-                            "    row['ifHighSpeed'] = row.delete('1.3.6.1.2.1.31.1.1.1.15')\n"
-                            "    row['ifPhysAddress'] = row.delete('1.3.6.1.2.1.2.2.1.6')\n"
-                            "    row['ifMtu'] = row.delete('1.3.6.1.2.1.2.2.1.4')\n"
-                            "    row['ifHCInOctets'] = row.delete('1.3.6.1.2.1.31.1.1.1.6')\n"
-                            "    row['ifHCOutOctets'] = row.delete('1.3.6.1.2.1.31.1.1.1.10')\n"
-                            "    row['ifHCInUcastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.7')\n"
-                            "    row['ifLastChange'] = row.delete('1.3.6.1.2.1.2.2.1.9')\n"
-                            "    row['dot1qPvid'] = row.delete('1.3.6.1.2.1.17.7.1.4.5.1.1')\n"
-                            "    row['ifInErrors'] = row.delete('1.3.6.1.2.1.2.2.1.14')\n"
-                            "    row['ifOutErrors'] = row.delete('1.3.6.1.2.1.2.2.1.20')\n"
-                            "    row['ifInDiscards'] = row.delete('1.3.6.1.2.1.2.2.1.13')\n"
-                            "    row['ifOutDiscards'] = row.delete('1.3.6.1.2.1.2.2.1.19')\n"
-                            "    new_event = LogStash::Event.new({\n"
-                            "      '@timestamp' => timestamp,\n"
-                            "      'host' => { 'name' => host_name },\n"
-                            "      'network' => { 'name' => network_name },\n"
-                            "      'interface' => row,\n"
-                            "      'metricset' => { 'module' => 'snmp' }\n"
-                            "    })\n"
-                            "    new_event_block.call(new_event)\n"
-                            "  end\n"
-                            "  event.remove('[ifTable]')\n"
-                            "end"
-                        )
-                    }
-                }
-            ]
-        },
         'walk':{}
     }
 
     special_filters = []
 
-    types = ['get', 'walk', 'table']
+    # Add special case filters for get and walk
+    types = ['get', 'walk']
     for snmp_type in types:
         for name_of_oid in oid_mappings[snmp_type]:
             if name_of_oid in special_case_filters[snmp_type]:
                 for entry in special_case_filters[snmp_type][name_of_oid]:
                     special_filters.append(entry)
+    
+    # Generate dynamic table splitters for all tables in oid_mappings
+    for table_name, table_data in oid_mappings.get('table', {}).items():
+        if isinstance(table_data, dict) and 'columns' in table_data:
+            columns = table_data.get('columns', {})
+            if isinstance(columns, dict) and columns:
+                # Generate the row rename statements using list comprehension
+                rename_statements = '\n'.join([
+                    f"    row['{field_name}'] = row.delete('{oid}')"
+                    for field_name, oid in columns.items()
+                ])
+                
+                # Build the Ruby code for this table
+                ruby_code = (
+                    f"rows = event.get('[{table_name}]')\n"
+                    f"if rows.is_a?(Array)\n"
+                    f"  host_name = event.get('[host][name]')\n"
+                    f"  network_name = event.get('[network][name]')\n"
+                    f"  timestamp = event.get('@timestamp')\n"
+                    f"  rows.each do |row|\n"
+                    f"    next unless row.is_a?(Hash)\n"
+                    f"{rename_statements}\n"
+                    f"    new_event = LogStash::Event.new({{\n"
+                    f"      '@timestamp' => timestamp,\n"
+                    f"      'host' => {{ 'name' => host_name }},\n"
+                    f"      'network' => {{ 'name' => network_name }},\n"
+                    f"      '{table_name.lower()}' => row,\n"
+                    f"      'metricset' => {{ 'module' => 'snmp' }},\n"
+                    f"      'event' => {{ 'kind' => '{table_name.lower()}' }}\n"
+                    f"    }})\n"
+                    f"    new_event_block.call(new_event)\n"
+                    f"  end\n"
+                    f"  event.remove('[{table_name}]')\n"
+                    f"  event.set('[event][kind]', 'metric')\n"
+                    f"end"
+                )
+                
+                special_filters.append({
+                    "id": f"comp_table_split_{table_name}",
+                    "type": "filter",
+                    "plugin": "ruby",
+                    "config": {
+                        "code": ruby_code
+                    }
+                })
 
     return special_filters
 
