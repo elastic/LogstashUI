@@ -378,12 +378,29 @@ def GetPipelines(request, connection_id):
             es = get_elastic_connection(connection.id)
             pipelines = es.logstash.get_pipeline()
 
-            for pipeline in pipelines:
+            for pipeline_name, pipeline_data in pipelines.items():
+                # Format last_modified timestamp
+                last_modified_str = pipeline_data.get("last_modified", "")
+                formatted_date = ""
+                if last_modified_str:
+                    try:
+                        from datetime import datetime
+                        # Parse ISO 8601 format: 2025-11-23T05:30:52.421Z
+                        dt = datetime.fromisoformat(last_modified_str.replace('Z', '+00:00'))
+                        # Format as "Tuesday, January 14th 2025"
+                        day = dt.day
+                        suffix = 'th' if 11 <= day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+                        formatted_date = dt.strftime(f'%A, %B {day}{suffix} %Y')
+                    except Exception:
+                        formatted_date = last_modified_str  # Fallback to original if parsing fails
+                
                 logstash_pipelines.append(
                     {
                         "es_id": connection.id,
                         "es_name": connection.name,
-                        "name": pipeline
+                        "name": pipeline_name,
+                        "description": pipeline_data.get("description", ""),
+                        "last_modified": formatted_date
                     }
                 )
 
