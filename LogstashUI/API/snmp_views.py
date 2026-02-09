@@ -843,7 +843,7 @@ def _generate_filters(oid_mappings, network):
             "plugin": "mutate",
             "config": {
                 "rename": {
-                    "host": "[host][name]"
+                    "host": "[host][hostname]"
                 } | get_renames #| table_renames
             }
         },
