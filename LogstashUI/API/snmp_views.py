@@ -485,13 +485,27 @@ def _get_device_profiles(device):
                 # Profile file doesn't exist, skip
                 continue
         
-        # Merge get OIDs
+        # Merge get OIDs (handle conflicts by appending profile name)
         if 'get' in profile_data and isinstance(profile_data['get'], dict):
-            merged_oids['get'].update(profile_data['get'])
+            for key, value in profile_data['get'].items():
+                if key in merged_oids['get'] and merged_oids['get'][key] != value:
+                    # Key exists with different value - append profile name to make it unique
+                    profile_suffix = profile.name.replace('.json', '').replace('_', '-')
+                    unique_key = f"{key}.{profile_suffix}"
+                    merged_oids['get'][unique_key] = value
+                else:
+                    merged_oids['get'][key] = value
         
-        # Merge walk OIDs
+        # Merge walk OIDs (handle conflicts by appending profile name)
         if 'walk' in profile_data and isinstance(profile_data['walk'], dict):
-            merged_oids['walk'].update(profile_data['walk'])
+            for key, value in profile_data['walk'].items():
+                if key in merged_oids['walk'] and merged_oids['walk'][key] != value:
+                    # Key exists with different value - append profile name to make it unique
+                    profile_suffix = profile.name.replace('.json', '').replace('_', '-')
+                    unique_key = f"{key}.{profile_suffix}"
+                    merged_oids['walk'][unique_key] = value
+                else:
+                    merged_oids['walk'][key] = value
         
         # Merge table OIDs
         if 'table' in profile_data and isinstance(profile_data['table'], dict):
@@ -1079,7 +1093,7 @@ def CommitConfiguration(request):
                     es,
                     pipeline_name,
                     pipeline_content,
-                    description=f"SNMP pipeline for network: {network.name}"
+                    description=f"[MANAGED] SNMP pipeline for network: {network.name}"
                 )
                 
                 if success:
