@@ -47,6 +47,15 @@ class Network(models.Model):
         help_text="Enable SNMP traps for this network"
     )
     
+    credential = models.ForeignKey(
+        'Credential',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='networks',
+        help_text="SNMP credential to use for trap reception on this network"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

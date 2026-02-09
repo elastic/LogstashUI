@@ -6,6 +6,7 @@ from SNMP.models import Credential, Network, Profile, Device
 from .logstash_config_parse import ComponentToPipeline
 from django.core.exceptions import ValidationError
 from django.conf import settings
+from Core.encryption import decrypt_credential
 import json
 import os
 import re
@@ -307,6 +308,7 @@ def AddNetwork(request):
         network_range = request.POST.get('network_range')
         logstash_name = request.POST.get('logstash_name')
         connection_id = request.POST.get('connection')
+        credential_id = request.POST.get('credential')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         
@@ -322,6 +324,10 @@ def AddNetwork(request):
         # Set connection if provided
         if connection_id:
             network.connection_id = connection_id
+        
+        # Set credential if provided
+        if credential_id:
+            network.credential_id = credential_id
         
         # Save (this will trigger validation)
         network.save()
@@ -357,6 +363,13 @@ def UpdateNetwork(request, network_id):
         else:
             network.connection = None
         
+        # Update credential
+        credential_id = request.POST.get('credential')
+        if credential_id:
+            network.credential_id = credential_id
+        else:
+            network.credential = None
+        
         # Save (this will trigger validation)
         network.save()
         
@@ -385,6 +398,7 @@ def GetNetwork(request, network_id):
             'network_range': network.network_range,
             'logstash_name': network.logstash_name,
             'connection': network.connection_id if network.connection else None,
+            'credential': network.credential_id if network.credential else None,
             'discovery_enabled': network.discovery_enabled,
             'traps_enabled': network.traps_enabled,
         }
@@ -399,26 +413,79 @@ def GetNetwork(request, network_id):
 
 @require_http_methods(["POST"])
 def DeleteNetwork(request, network_id):
-    """Delete a network"""
+    """Delete a network and its underlying Logstash pipeline"""
     try:
+        from Core.views import get_elastic_connection
+        
         network = Network.objects.get(pk=network_id)
+        pipeline_name = _get_pipeline_name(network)
+        trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+        pipeline_deleted = False
+        trap_pipeline_deleted = False
+        pipeline_error = None
+        
+        # Try to delete the underlying pipelines if connection exists
+        if network.connection:
+            try:
+                es = get_elastic_connection(network.connection.id)
+                
+                # Check if main pipeline exists before trying to delete
+                try:
+                    existing = es.logstash.get_pipeline(id=pipeline_name)
+                    if pipeline_name in existing:
+                        # Pipeline exists, delete it
+                        es.logstash.delete_pipeline(id=pipeline_name)
+                        pipeline_deleted = True
+                except Exception as e:
+                    # Pipeline doesn't exist or error checking, that's okay
+                    pass
+                
+                # Check if trap pipeline exists before trying to delete
+                try:
+                    existing = es.logstash.get_pipeline(id=trap_pipeline_name)
+                    if trap_pipeline_name in existing:
+                        # Trap pipeline exists, delete it
+                        es.logstash.delete_pipeline(id=trap_pipeline_name)
+                        trap_pipeline_deleted = True
+                except Exception as e:
+                    # Trap pipeline doesn't exist or error checking, that's okay
+                    pass
+                    
+            except Exception as e:
+                # Connection failed or pipeline deletion failed
+                pipeline_error = str(e)
+        
+        # Delete the network from database
         network.delete()
         
-        return HttpResponse("""
-            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-                Network deleted successfully!
-                <script>
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
-                </script>
-            </div>
-        """)
+        # Build response message
+        deleted_items = []
+        if pipeline_deleted:
+            deleted_items.append(f'pipeline "{pipeline_name}"')
+        if trap_pipeline_deleted:
+            deleted_items.append(f'trap pipeline "{trap_pipeline_name}"')
+        
+        # Return success response
+        if deleted_items:
+            return JsonResponse({
+                'success': True,
+                'message': f'Network and {", ".join(deleted_items)} deleted successfully!'
+            })
+        elif pipeline_error:
+            return JsonResponse({
+                'success': True,
+                'message': f'Network deleted successfully, but pipeline deletion failed: {pipeline_error}'
+            })
+        else:
+            return JsonResponse({
+                'success': True,
+                'message': 'Network deleted successfully!'
+            })
         
     except Network.DoesNotExist:
-        return HttpResponse("Network not found", status=404)
+        return JsonResponse({'success': False, 'error': 'Network not found'}, status=404)
     except Exception as e:
-        return HttpResponse(f"Error deleting network: {str(e)}", status=500)
+        return JsonResponse({'success': False, 'error': f'Error deleting network: {str(e)}'}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -959,9 +1026,18 @@ def GetCommitDiff(request):
                 elif credential.version == '3':
                     input_data["devices"]["v3"][device.name] = device
 
-            # Generate components for this network
-            input_components, oid_mappings = _generate_input(input_data)
-            filter_components = _generate_filters(oid_mappings, network)
+            # Skip networks with no devices (unless they have traps enabled)
+            has_devices = bool(input_data["devices"]["v1_v2c"] or input_data["devices"]["v3"])
+            if not has_devices and not network.traps_enabled:
+                continue
+
+            # Generate components for this network (only if has devices)
+            if has_devices:
+                input_components, oid_mappings = _generate_input(input_data)
+                filter_components = _generate_filters(oid_mappings, network)
+            else:
+                input_components = []
+                filter_components = []
             
             components = {
                 "input": input_components,
@@ -997,13 +1073,118 @@ def GetCommitDiff(request):
                     # Connection failed, that's okay - we'll just show empty current
                     pass
             
-            # Add to network diffs
-            network_diffs.append({
+            # Build network diff object (only include main pipeline if has devices)
+            network_diff = {
                 'network_name': network.name,
-                'pipeline_name': pipeline_name,
-                'current': current_config,
-                'new': new_config
-            })
+                'pipeline_name': pipeline_name if has_devices else None,
+                'current': current_config if has_devices else "",
+                'new': new_config if has_devices else "",
+                'trap_pipeline': None,
+                'has_devices': has_devices
+            }
+            
+            # Handle trap pipeline if traps are enabled
+            if network.traps_enabled and network.credential:
+                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                
+                # Build trap input configuration
+                credential = network.credential
+                trap_input_config = {
+                    "host": "0.0.0.0",
+                    "port": 1662,
+                    "oid_map_field_values": False,
+                    "supported_versions": []
+                }
+                
+                # Add version-specific configuration
+                if credential.version in ['1', '2c']:
+                    trap_input_config["supported_versions"].append(credential.version)
+                    if credential.community:
+                        trap_input_config["community"] = [decrypt_credential(credential.community)]
+                elif credential.version == '3':
+                    trap_input_config["supported_versions"].append("3")
+                    if credential.security_name:
+                        trap_input_config["security_name"] = credential.security_name
+                    if credential.auth_protocol:
+                        trap_input_config["auth_protocol"] = credential.auth_protocol
+                    if credential.auth_pass:
+                        trap_input_config["auth_pass"] = decrypt_credential(credential.auth_pass)
+                    if credential.priv_protocol:
+                        trap_input_config["priv_protocol"] = credential.priv_protocol
+                    if credential.priv_pass:
+                        trap_input_config["priv_pass"] = decrypt_credential(credential.priv_pass)
+                    if credential.security_level:
+                        trap_input_config["security_level"] = credential.security_level
+                
+                # Build trap pipeline components
+                trap_components = {
+                    "input": [{
+                        "id": "input_snmptrap_1",
+                        "type": "input",
+                        "plugin": "snmptrap",
+                        "config": trap_input_config
+                    }],
+                    "filter": [],
+                    "output": _generate_output(input_data, network)
+                }
+                
+                # Generate new trap pipeline configuration
+                new_trap_config = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
+                
+                # Get current trap pipeline configuration from Elasticsearch (if exists)
+                current_trap_config = ""
+                if network.connection:
+                    try:
+                        from Core.views import get_elastic_connection
+                        es_client = get_elastic_connection(network.connection.id)
+                        
+                        try:
+                            response = es_client.logstash.get_pipeline(id=trap_pipeline_name)
+                            if trap_pipeline_name in response:
+                                pipeline_data = response[trap_pipeline_name]
+                                if 'pipeline' in pipeline_data:
+                                    current_trap_config = pipeline_data['pipeline']
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                
+                network_diff['trap_pipeline'] = {
+                    'pipeline_name': trap_pipeline_name,
+                    'current': current_trap_config,
+                    'new': new_trap_config,
+                    'action': 'create' if not current_trap_config else 'update'
+                }
+            elif not network.traps_enabled:
+                # Check if trap pipeline exists and needs to be deleted
+                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                current_trap_config = ""
+                
+                if network.connection:
+                    try:
+                        from Core.views import get_elastic_connection
+                        es_client = get_elastic_connection(network.connection.id)
+                        
+                        try:
+                            response = es_client.logstash.get_pipeline(id=trap_pipeline_name)
+                            if trap_pipeline_name in response:
+                                pipeline_data = response[trap_pipeline_name]
+                                if 'pipeline' in pipeline_data:
+                                    current_trap_config = pipeline_data['pipeline']
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                
+                if current_trap_config:
+                    network_diff['trap_pipeline'] = {
+                        'pipeline_name': trap_pipeline_name,
+                        'current': current_trap_config,
+                        'new': '',
+                        'action': 'delete'
+                    }
+            
+            network_diffs.append(network_diff)
         
         return JsonResponse({
             'success': True,
@@ -1023,8 +1204,8 @@ def CommitConfiguration(request):
         from Core.views import get_elastic_connection
         from datetime import datetime, timezone
         
-        # Query all networks
-        networks = Network.objects.all()
+        # Query all networks with their credentials
+        networks = Network.objects.select_related('credential', 'connection').all()
         
         if not networks.exists():
             return JsonResponse({
@@ -1034,6 +1215,7 @@ def CommitConfiguration(request):
         
         pipelines_created = 0
         pipelines_updated = 0
+        pipelines_deleted = 0
         errors = []
         
         # Iterate through each network and create/update pipeline
@@ -1052,17 +1234,6 @@ def CommitConfiguration(request):
                 # Get all devices for this network
                 devices = Device.objects.filter(network=network).select_related('credential')
                 
-                # Skip networks with no devices
-                if not devices.exists():
-                    continue
-                
-                # Check if SNMP traps are enabled for this network
-                if network.traps_enabled:
-                    print(f"SNMP Traps are ENABLED for network: {network.name}")
-                    # TODO: Add trap-specific configuration here in future implementation
-                else:
-                    print(f"SNMP Traps are DISABLED for network: {network.name}")
-
                 for device in devices:
                     if not device.credential:
                         continue
@@ -1077,20 +1248,6 @@ def CommitConfiguration(request):
                     elif credential.version == '3':
                         input_data["devices"]["v3"][device.name] = device
 
-                # Generate components for this network
-                input_components, oid_mappings = _generate_input(input_data)
-                filter_components = _generate_filters(oid_mappings, network)
-                
-                components = {
-                    "input": input_components,
-                    "filter": filter_components,
-                    "output": _generate_output(input_data, network)
-                }
-                
-                # Generate pipeline configuration
-                pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
-                pipeline_name = _get_pipeline_name(network)
-                
                 # Check if network has a connection
                 if not network.connection:
                     errors.append(f"Network '{network.name}' has no Elasticsearch connection configured")
@@ -1099,26 +1256,209 @@ def CommitConfiguration(request):
                 # Get Elasticsearch connection
                 es = get_elastic_connection(network.connection.id)
                 
-                # Use helper function to create or update the pipeline
-                success, is_new, error = _create_or_update_pipeline(
-                    es,
-                    pipeline_name,
-                    pipeline_content,
-                    description=f"[MANAGED] SNMP pipeline for network: {network.name}"
-                )
+                # Check if network has devices with credentials
+                has_devices = devices.exists() and (input_data["devices"]["v1_v2c"] or input_data["devices"]["v3"])
                 
-                if success:
-                    if is_new:
-                        pipelines_created += 1
+                # Only create main discovery pipeline if there are devices
+                if has_devices:
+                    # Generate components for this network
+                    input_components, oid_mappings = _generate_input(input_data)
+                    filter_components = _generate_filters(oid_mappings, network)
+                    
+                    components = {
+                        "input": input_components,
+                        "filter": filter_components,
+                        "output": _generate_output(input_data, network)
+                    }
+                    
+                    # Generate pipeline configuration
+                    pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
+                    pipeline_name = _get_pipeline_name(network)
+                    
+                    # Use helper function to create or update the pipeline
+                    success, is_new, error = _create_or_update_pipeline(
+                        es,
+                        pipeline_name,
+                        pipeline_content,
+                        description=f"[MANAGED] SNMP pipeline for network: {network.name}"
+                    )
+                    
+                    print(f"[DEBUG] Network '{network.name}' main pipeline: {pipeline_name}")
+                    print(f"[DEBUG] Result - Success: {success}, IsNew: {is_new}, Error: {error}")
+                    
+                    if success:
+                        if is_new:
+                            pipelines_created += 1
+                            print(f"[DEBUG] Main pipeline created")
+                        else:
+                            pipelines_updated += 1
+                            print(f"[DEBUG] Main pipeline updated")
                     else:
-                        pipelines_updated += 1
+                        errors.append(f"Network '{network.name}': {error}")
+                        continue
                 else:
-                    errors.append(f"Network '{network.name}': {error}")
-                    continue
+                    # Network has no devices - delete main pipeline if it exists
+                    try:
+                        pipeline_name = _get_pipeline_name(network)
+                        try:
+                            existing = es.logstash.get_pipeline(id=pipeline_name)
+                            if pipeline_name in existing:
+                                # Pipeline exists, delete it
+                                es.logstash.delete_pipeline(id=pipeline_name)
+                                pipelines_deleted += 1
+                                print(f"[DEBUG] Deleted main pipeline for network with no devices: {pipeline_name}")
+                        except Exception:
+                            # Pipeline doesn't exist, that's okay
+                            pass
+                    except Exception as delete_e:
+                        errors.append(f"Network '{network.name}' main pipeline deletion: {str(delete_e)}")
+                
+                # Handle SNMP Trap pipeline if traps are enabled
+                if network.traps_enabled:
+                    print(f"[DEBUG] Network '{network.name}' has traps enabled")
+                    print(f"[DEBUG] Network credential: {network.credential}")
+                    if not network.credential:
+                        errors.append(f"Network '{network.name}': Traps enabled but no credential configured")
+                    else:
+                        try:
+                            # Generate trap pipeline name
+                            trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                            print(f"[DEBUG] Creating trap pipeline: {trap_pipeline_name}")
+                            
+                            # Build trap input configuration
+                            credential = network.credential
+                            trap_input_config = {
+                                "host": "0.0.0.0",
+                                "port": 1662,
+                                "oid_map_field_values": False,
+                                "supported_versions": []
+                            }
+                            
+                            # Add version-specific configuration
+                            if credential.version in ['1', '2c']:
+                                trap_input_config["supported_versions"].append(credential.version)
+                                if credential.community:
+                                    trap_input_config["community"] = [decrypt_credential(credential.community)]
+                            elif credential.version == '3':
+                                trap_input_config["supported_versions"].append("3")
+                                if credential.security_name:
+                                    trap_input_config["security_name"] = credential.security_name
+                                if credential.auth_protocol:
+                                    trap_input_config["auth_protocol"] = credential.auth_protocol
+                                if credential.auth_pass:
+                                    trap_input_config["auth_pass"] = decrypt_credential(credential.auth_pass)
+                                if credential.priv_protocol:
+                                    trap_input_config["priv_protocol"] = credential.priv_protocol
+                                if credential.priv_pass:
+                                    trap_input_config["priv_pass"] = decrypt_credential(credential.priv_pass)
+                                if credential.security_level:
+                                    trap_input_config["security_level"] = credential.security_level
+                            
+                            # Build trap pipeline components
+                            trap_components = {
+                                "input": [{
+                                    "id": "input_snmptrap_1",
+                                    "type": "input",
+                                    "plugin": "snmptrap",
+                                    "config": trap_input_config
+                                }],
+                                "filter": [],
+                                "output": _generate_output(input_data, network)
+                            }
+                            
+                            # Generate trap pipeline configuration
+                            trap_pipeline_content = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
+                            
+                            # Create or update trap pipeline
+                            trap_success, trap_is_new, trap_error = _create_or_update_pipeline(
+                                es,
+                                trap_pipeline_name,
+                                trap_pipeline_content,
+                                description=f"[MANAGED] SNMP Trap pipeline for network: {network.name}"
+                            )
+                            
+                            print(f"[DEBUG] Trap pipeline result - Success: {trap_success}, IsNew: {trap_is_new}, Error: {trap_error}")
+                            
+                            if trap_success:
+                                if trap_is_new:
+                                    pipelines_created += 1
+                                    print(f"[DEBUG] Trap pipeline created successfully")
+                                else:
+                                    pipelines_updated += 1
+                                    print(f"[DEBUG] Trap pipeline updated successfully")
+                            else:
+                                errors.append(f"Network '{network.name}' trap pipeline: {trap_error}")
+                                print(f"[DEBUG] Trap pipeline failed: {trap_error}")
+                        except Exception as trap_e:
+                            import traceback
+                            traceback.print_exc()
+                            errors.append(f"Network '{network.name}' trap pipeline: {str(trap_e)}")
+                            print(f"[DEBUG] Trap pipeline exception: {str(trap_e)}")
+                else:
+                    # Traps are disabled, check if trap pipeline exists and delete it
+                    try:
+                        trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                        
+                        # Check if pipeline exists
+                        try:
+                            existing = es.logstash.get_pipeline(id=trap_pipeline_name)
+                            if trap_pipeline_name in existing:
+                                # Pipeline exists, delete it
+                                es.logstash.delete_pipeline(id=trap_pipeline_name)
+                                pipelines_deleted += 1
+                        except Exception:
+                            # Pipeline doesn't exist, that's okay
+                            pass
+                    except Exception as delete_e:
+                        errors.append(f"Network '{network.name}' trap pipeline deletion: {str(delete_e)}")
                     
             except Exception as e:
                 errors.append(f"Network '{network.name}': {str(e)}")
                 continue
+        
+        # Cleanup orphaned pipelines
+        # Get all managed SNMP pipelines from Elasticsearch and delete ones that don't match current networks
+        try:
+            # Build a set of expected pipeline names
+            expected_pipelines = set()
+            for network in networks:
+                if network.connection:
+                    # Add main pipeline
+                    expected_pipelines.add(_get_pipeline_name(network))
+                    # Add trap pipeline if traps are enabled
+                    if network.traps_enabled:
+                        expected_pipelines.add(f"snmp-{network.logstash_name}-traps")
+            
+            # Get all pipelines from Elasticsearch for each connection
+            connections_checked = set()
+            for network in networks:
+                if network.connection and network.connection.id not in connections_checked:
+                    connections_checked.add(network.connection.id)
+                    try:
+                        es = get_elastic_connection(network.connection.id)
+                        all_pipelines = es.logstash.get_pipeline()
+                        
+                        # Find orphaned SNMP pipelines
+                        for pipeline_name in all_pipelines.keys():
+                            # Check if it's a managed SNMP pipeline (starts with "snmp-")
+                            if pipeline_name.startswith("snmp-"):
+                                # Check if it has the [MANAGED] tag in description
+                                pipeline_data = all_pipelines[pipeline_name]
+                                description = pipeline_data.get('description', '')
+                                
+                                if '[MANAGED]' in description and pipeline_name not in expected_pipelines:
+                                    # This is an orphaned pipeline, delete it
+                                    try:
+                                        es.logstash.delete_pipeline(id=pipeline_name)
+                                        pipelines_deleted += 1
+                                        print(f"[DEBUG] Deleted orphaned pipeline: {pipeline_name}")
+                                    except Exception as delete_err:
+                                        errors.append(f"Failed to delete orphaned pipeline '{pipeline_name}': {str(delete_err)}")
+                    except Exception as conn_err:
+                        # Connection error, skip this connection
+                        pass
+        except Exception as cleanup_err:
+            errors.append(f"Pipeline cleanup error: {str(cleanup_err)}")
         
         # Build response message
         if pipelines_created == 0 and pipelines_updated == 0:
@@ -1138,6 +1478,8 @@ def CommitConfiguration(request):
             message_parts.append(f"{pipelines_created} pipeline(s) created")
         if pipelines_updated > 0:
             message_parts.append(f"{pipelines_updated} pipeline(s) updated")
+        if pipelines_deleted > 0:
+            message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
         
         message = "Successfully committed: " + ", ".join(message_parts)
         
@@ -1149,6 +1491,7 @@ def CommitConfiguration(request):
             'message': message,
             'pipelines_created': pipelines_created,
             'pipelines_updated': pipelines_updated,
+            'pipelines_deleted': pipelines_deleted,
             'errors': errors if errors else None
         })
         

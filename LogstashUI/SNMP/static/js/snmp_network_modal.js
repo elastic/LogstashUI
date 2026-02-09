@@ -23,6 +23,9 @@ function openNetworkModal(networkData = null) {
   // Load connections into dropdown
   loadConnections(networkData ? networkData.connection : null);
   
+  // Load credentials into dropdown
+  loadNetworkCredentials(networkData ? networkData.credential : null);
+  
   if (networkData) {
     // Edit mode
     modalTitle.textContent = 'Edit SNMP Network';
@@ -38,12 +41,18 @@ function openNetworkModal(networkData = null) {
     // Set traps enabled radio
     const trapsValue = networkData.traps_enabled ? 'true' : 'false';
     document.querySelector(`input[name="traps_enabled"][value="${trapsValue}"]`).checked = true;
+    
+    // Show/hide credential section based on traps enabled
+    toggleTrapsCredential();
   } else {
     // Add mode
     modalTitle.textContent = 'Add SNMP Network';
     document.getElementById('networkId').value = '';
     document.querySelector('input[name="discovery_enabled"][value="true"]').checked = true;
     document.querySelector('input[name="traps_enabled"][value="false"]').checked = true;
+    
+    // Hide credential section by default
+    toggleTrapsCredential();
   }
   
   modal.classList.remove('hidden');
@@ -101,6 +110,74 @@ function refreshConnections() {
   loadConnections(currentValue);
 }
 
+// Toggle traps credential section visibility
+function toggleTrapsCredential() {
+  const trapsEnabled = document.querySelector('input[name="traps_enabled"]:checked')?.value === 'true';
+  const credentialSection = document.getElementById('trapsCredentialSection');
+  
+  if (credentialSection) {
+    if (trapsEnabled) {
+      credentialSection.classList.remove('hidden');
+    } else {
+      credentialSection.classList.add('hidden');
+    }
+  }
+}
+
+// Load credentials into dropdown
+function loadNetworkCredentials(selectedCredentialId = null) {
+  const credentialSelect = document.getElementById('networkCredentialSelect');
+  
+  if (!credentialSelect) return;
+  
+  fetch('/API/SNMP/GetCredentials/')
+    .then(response => response.json())
+    .then(credentials => {
+      credentialSelect.innerHTML = '<option value="">Select a credential...</option>';
+      credentialSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Credential</option>';
+      
+      credentials.forEach(credential => {
+        const option = document.createElement('option');
+        option.value = credential.id;
+        option.textContent = `${credential.name} (${credential.version})`;
+        if (selectedCredentialId && credential.id == selectedCredentialId) {
+          option.selected = true;
+        }
+        credentialSelect.appendChild(option);
+      });
+    })
+    .catch(error => {
+      console.error('Error loading credentials:', error);
+    });
+}
+
+// Refresh credentials dropdown
+function refreshNetworkCredentials() {
+  const credentialSelect = document.getElementById('networkCredentialSelect');
+  const currentValue = credentialSelect ? credentialSelect.value : null;
+  loadNetworkCredentials(currentValue);
+}
+
+// Handle credential selection change
+function handleNetworkCredentialSelection(event) {
+  if (event.target.value === 'add_new') {
+    // Open credential modal
+    openCredentialModalFromNetwork();
+    // Reset selection to empty
+    event.target.value = '';
+  }
+}
+
+// Open credential modal from network modal
+function openCredentialModalFromNetwork() {
+  // Check if openCredentialModal function exists
+  if (typeof openCredentialModal === 'function') {
+    openCredentialModal();
+  } else {
+    console.error('openCredentialModal function not found');
+  }
+}
+
 // Track if network modal is open
 let networkModalIsOpen = false;
 
@@ -143,7 +220,7 @@ function closeNetworkModal() {
   document.getElementById('networkErrorContainer').innerHTML = '';
 }
 
-// Add event listeners for connection selection
+// Add event listeners for connection and credential selection
 document.addEventListener('DOMContentLoaded', function() {
   const connectionSelect = document.getElementById('networkConnection');
   if (connectionSelect) {
@@ -152,6 +229,16 @@ document.addEventListener('DOMContentLoaded', function() {
     connectionSelect.addEventListener('focus', function() {
       const currentValue = this.value;
       loadConnections(currentValue);
+    });
+  }
+  
+  const credentialSelect = document.getElementById('networkCredentialSelect');
+  if (credentialSelect) {
+    credentialSelect.addEventListener('change', handleNetworkCredentialSelection);
+    // Refresh dropdown when clicked/focused, preserving current selection
+    credentialSelect.addEventListener('focus', function() {
+      const currentValue = this.value;
+      loadNetworkCredentials(currentValue);
     });
   }
 });
@@ -204,6 +291,22 @@ document.addEventListener('DOMContentLoaded', function() {
 // Handle form submission
 document.getElementById('networkForm').addEventListener('submit', function(e) {
   e.preventDefault();
+  
+  // Validate that credential is selected if traps are enabled
+  const trapsEnabled = document.querySelector('input[name="traps_enabled"]:checked')?.value === 'true';
+  const credentialSelect = document.getElementById('networkCredentialSelect');
+  const errorContainer = document.getElementById('networkErrorContainer');
+  
+  if (trapsEnabled && (!credentialSelect.value || credentialSelect.value === 'add_new')) {
+    errorContainer.innerHTML = `
+      <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
+        <h3 class="font-bold mb-2">Validation Error</h3>
+        <p class="text-sm">Please select a credential for SNMP trap reception when traps are enabled.</p>
+      </div>
+    `;
+    errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
   
   const formData = new FormData(this);
   const networkId = document.getElementById('networkId').value;

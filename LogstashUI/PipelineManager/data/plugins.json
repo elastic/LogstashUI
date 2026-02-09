@@ -7360,7 +7360,7 @@
                     "input_type": "array",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-community",
-                    "important": "Yes"
+                    "important": "No"
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
@@ -7436,10 +7436,10 @@
                 },
                 "supported_versions": {
                     "setting": "supported_versions",
-                    "input_type": "string",
+                    "input_type": "list",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-supported_versions",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "target": {
                     "setting": "target",
@@ -7478,14 +7478,14 @@
                     "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-auth_pass",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "auth_protocol": {
                     "setting": "auth_protocol",
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-auth_protocol",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "md5",
                         "sha",
@@ -7501,14 +7501,14 @@
                     "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-priv_pass",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "priv_protocol": {
                     "setting": "priv_protocol",
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-priv_protocol",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "des",
                         "3des",
@@ -7523,7 +7523,7 @@
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-security_level",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "noAuthNoPriv",
                         "authNoPriv",
@@ -7549,7 +7549,7 @@
                     "input_type": "codec",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-codec",
-                    "important": "Yes"
+                    "important": "No"
                 },
                 "enable_metric": {
                     "setting": "enable_metric",

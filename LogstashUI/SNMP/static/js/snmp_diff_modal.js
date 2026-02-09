@@ -174,29 +174,43 @@ function displayNetworkDiffs(networks) {
     let newPipelinesCount = 0;
 
     for (const network of networks) {
-        const currentLines = network.current ? network.current.split('\n') : [];
-        const newLines = network.new.split('\n');
+        // Skip main pipeline rendering if network has no devices (pipeline_name will be null)
+        const hasMainPipeline = network.pipeline_name !== null;
         
-        // Check if this is a new pipeline (no current content)
-        const isNewPipeline = !network.current || network.current.trim() === '';
+        let currentLines = [];
+        let newLines = [];
+        let isNewPipeline = false;
+        let hasChanges = false;
+        let lineDiff = [];
+        
+        if (hasMainPipeline) {
+            currentLines = network.current ? network.current.split('\n') : [];
+            newLines = network.new.split('\n');
+            
+            // Check if this is a new pipeline (no current content)
+            isNewPipeline = !network.current || network.current.trim() === '';
 
-        // Compute diff
-        const lineDiff = computeLineDiff(currentLines, newLines);
+            // Compute diff
+            lineDiff = computeLineDiff(currentLines, newLines);
+            
+            // Check if there are any actual changes (additions or deletions)
+            hasChanges = lineDiff.some(change => change.type !== 'equal');
+            
+            // Track counts
+            if (isNewPipeline) {
+                newPipelinesCount++;
+            } else if (hasChanges) {
+                networksWithChanges++;
+            }
+        }
         
-        // Check if there are any actual changes (additions or deletions)
-        const hasChanges = lineDiff.some(change => change.type !== 'equal');
-        
-        // Skip this network if it has no changes and is not new
-        if (!isNewPipeline && !hasChanges) {
+        // Skip this network entirely if it has no main pipeline and no trap pipeline
+        if (!hasMainPipeline && !network.trap_pipeline) {
             continue;
         }
         
-        // Track counts
-        if (isNewPipeline) {
-            newPipelinesCount++;
-        } else if (hasChanges) {
-            networksWithChanges++;
-        }
+        // Skip main pipeline section if no changes and not new (but still show trap pipeline if exists)
+        const shouldShowMainPipeline = hasMainPipeline && (isNewPipeline || hasChanges);
 
         let currentHtml = '';
         let newHtml = '';
@@ -315,34 +329,209 @@ function displayNetworkDiffs(networks) {
             networkBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>';
         }
 
-        html += `
-            <div class="border border-gray-600 rounded-lg overflow-hidden">
-                <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
-                    <h4 class="text-white font-semibold">
-                        ${escapeHtml(network.network_name)}${networkBadge}
-                    </h4>
-                    <p class="text-sm text-gray-400">Pipeline: ${escapeHtml(network.pipeline_name)}</p>
-                </div>
-                <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
-                    <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
-                        <div class="mb-2" style="flex-shrink: 0;">
-                            <h5 class="text-sm font-semibold text-white">${isNewPipeline ? 'No Existing Pipeline' : 'Current Pipeline'}</h5>
+        // Only show main pipeline section if network has devices
+        if (shouldShowMainPipeline) {
+            html += `
+                <div class="border border-gray-600 rounded-lg overflow-hidden">
+                    <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
+                        <h4 class="text-white font-semibold">
+                            ${escapeHtml(network.network_name)}${networkBadge}
+                        </h4>
+                        <p class="text-sm text-gray-400">Pipeline: ${escapeHtml(network.pipeline_name)}</p>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
+                        <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                            <div class="mb-2" style="flex-shrink: 0;">
+                                <h5 class="text-sm font-semibold text-white">${isNewPipeline ? 'No Existing Pipeline' : 'Current Pipeline'}</h5>
+                            </div>
+                            <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                                <div class="p-2 text-sm text-gray-300 font-mono">${currentHtml}</div>
+                            </div>
                         </div>
-                        <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
-                            <div class="p-2 text-sm text-gray-300 font-mono">${currentHtml}</div>
+                        <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                            <div class="mb-2" style="flex-shrink: 0;">
+                                <h5 class="text-sm font-semibold text-white">New Pipeline (After Commit)</h5>
+                            </div>
+                            <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                                <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
-                        <div class="mb-2" style="flex-shrink: 0;">
-                            <h5 class="text-sm font-semibold text-white">New Pipeline (After Commit)</h5>
+                </div>
+            `;
+        }
+        
+        // Handle trap pipeline if it exists
+        if (network.trap_pipeline) {
+            const trapPipeline = network.trap_pipeline;
+            const trapCurrentLines = trapPipeline.current ? trapPipeline.current.split('\n') : [];
+            const trapNewLines = trapPipeline.new ? trapPipeline.new.split('\n') : [];
+            
+            // Check if there are actual changes in the trap pipeline
+            let trapHasChanges = false;
+            if (trapPipeline.action === 'create' || trapPipeline.action === 'delete') {
+                trapHasChanges = true;
+            } else if (trapPipeline.action === 'update') {
+                // Compare current and new to see if there are actual differences
+                const trapLineDiff = computeLineDiff(trapCurrentLines, trapNewLines);
+                trapHasChanges = trapLineDiff.some(change => change.type !== 'equal');
+            }
+            
+            // Only render trap pipeline if there are actual changes
+            if (trapHasChanges) {
+                // Count trap pipeline in summary only if there are changes
+                if (trapPipeline.action === 'create') {
+                    newPipelinesCount++;
+                } else if (trapPipeline.action === 'update') {
+                    networksWithChanges++;
+                }
+                
+                let trapBadge = '';
+                let trapCurrentHtml = '';
+                let trapNewHtml = '';
+                let trapCurrentLineNum = 1;
+                let trapNewLineNum = 1;
+                
+                if (trapPipeline.action === 'create') {
+                trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW TRAP PIPELINE</span>';
+                
+                // Show new trap pipeline
+                for (let i = 0; i < trapNewLines.length; i++) {
+                    const line = escapeHtml(trapNewLines[i]);
+                    
+                    trapCurrentHtml += `<div class="flex bg-gray-800/50">
+                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                        <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                    </div>`;
+
+                    trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                    </div>`;
+                }
+            } else if (trapPipeline.action === 'delete') {
+                trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETING TRAP PIPELINE</span>';
+                
+                // Show trap pipeline being deleted
+                for (let i = 0; i < trapCurrentLines.length; i++) {
+                    const line = escapeHtml(trapCurrentLines[i]);
+                    
+                    trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                    </div>`;
+
+                    trapNewHtml += `<div class="flex bg-gray-800/50">
+                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                        <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                    </div>`;
+                }
+            } else if (trapPipeline.action === 'update') {
+                trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">UPDATING TRAP PIPELINE</span>';
+                
+                // Compute diff for trap pipeline
+                const trapLineDiff = computeLineDiff(trapCurrentLines, trapNewLines);
+                
+                for (const change of trapLineDiff) {
+                    if (change.type === 'equal') {
+                        for (let i = 0; i < change.lines.length; i++) {
+                            const line = escapeHtml(change.lines[i]);
+                            trapCurrentHtml += `<div class="flex hover:bg-gray-700/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                            trapNewHtml += `<div class="flex hover:bg-gray-700/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                        }
+                    } else if (change.type === 'delete') {
+                        for (let i = 0; i < change.lines.length; i++) {
+                            const line = escapeHtml(change.lines[i]);
+                            trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                            trapNewHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                            </div>`;
+                        }
+                    } else if (change.type === 'insert') {
+                        for (let i = 0; i < change.lines.length; i++) {
+                            const line = escapeHtml(change.lines[i]);
+                            trapCurrentHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                            </div>`;
+                            trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                        }
+                    } else if (change.type === 'replace') {
+                        const maxLen = Math.max(change.oldLines.length, change.newLines.length);
+                        for (let i = 0; i < maxLen; i++) {
+                            if (i < change.oldLines.length) {
+                                const oldLine = escapeHtml(change.oldLines[i]);
+                                trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;">${oldLine || ' '}</span>
+                                </div>`;
+                            } else {
+                                trapCurrentHtml += `<div class="flex bg-gray-800/50">
+                                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                                </div>`;
+                            }
+                            if (i < change.newLines.length) {
+                                const newLine = escapeHtml(change.newLines[i]);
+                                trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;">${newLine || ' '}</span>
+                                </div>`;
+                            } else {
+                                trapNewHtml += `<div class="flex bg-gray-800/50">
+                                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                                </div>`;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Add trap pipeline section
+            html += `
+                <div class="border border-gray-600 rounded-lg overflow-hidden mt-4">
+                    <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
+                        <h4 class="text-white font-semibold">
+                            ${escapeHtml(network.network_name)} - Trap Pipeline${trapBadge}
+                        </h4>
+                        <p class="text-sm text-gray-400">Pipeline: ${escapeHtml(trapPipeline.pipeline_name)}</p>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
+                        <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                            <div class="mb-2" style="flex-shrink: 0;">
+                                <h5 class="text-sm font-semibold text-white">${trapPipeline.action === 'create' ? 'No Existing Trap Pipeline' : 'Current Trap Pipeline'}</h5>
+                            </div>
+                            <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                                <div class="p-2 text-sm text-gray-300 font-mono">${trapCurrentHtml}</div>
+                            </div>
                         </div>
-                        <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
-                            <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
+                        <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                            <div class="mb-2" style="flex-shrink: 0;">
+                                <h5 class="text-sm font-semibold text-white">${trapPipeline.action === 'delete' ? 'Pipeline Will Be Deleted' : 'New Trap Pipeline (After Commit)'}</h5>
+                            </div>
+                            <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                                <div class="p-2 text-sm text-gray-300 font-mono">${trapNewHtml}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+            }
+        }
     }
 
     // If no networks have changes, show a message

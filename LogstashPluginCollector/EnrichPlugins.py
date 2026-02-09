@@ -441,8 +441,13 @@ logstash-patterns-core"""
     "snmptrap": [
       "host",
       "port",
+      "supported_versions"
       "community",
-      "codec"
+      "security_level",
+      "priv_protocol",
+      "priv_pass",
+      "auth_protocol",
+      "auth_pass"
     ],
     "sqlite": [
       "path",
@@ -1197,6 +1202,30 @@ logstash-patterns-core"""
               print("Unaccounted for types", input_type)
 
 
+      overwrite_sections = {
+        "input": {
+          "snmptrap": {
+            "supported_versions": {
+              "setting": "supported_versions",
+              "input_type": "list",
+              "required": "No",
+              "setting_link": "#plugins-inputs-snmptrap-supported_versions",
+              "important": "Yes"
+            }
+          }
+        }
+      }
+      # This section corrects incorrect data from the documentation
+      for section in overwrite_sections:
+        for plugin in overwrite_sections[section]:
+          if plugin in self.plugins.get(section, {}):
+            for field in overwrite_sections[section][plugin]:
+              if field in self.plugins[section][plugin]['options']:
+                # Apply the overwrite
+                for key, value in overwrite_sections[section][plugin][field].items():
+                  self.plugins[section][plugin]['options'][field][key] = value
+
+
     def _add_missing(self):
         missing_plugins = {
             "input": {
@@ -1620,6 +1649,13 @@ logstash-patterns-core"""
             if section == "integrations":
                 continue
             for plugin in self.plugins[section]:
+                # Check if this plugin has important fields defined
+                if plugin not in self.important_fields.get(section, {}):
+                    # Plugin not in important_fields, mark all options as not important
+                    for option in self.plugins[section][plugin]['options']:
+                        self.plugins[section][plugin]['options'][option]['important'] = "No"
+                    continue
+                
                 for option in self.plugins[section][plugin]['options']:
                     if option in self.important_fields[section][plugin]:
                         self.plugins[section][plugin]['options'][option]['important'] = "Yes"

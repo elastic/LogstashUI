@@ -46,6 +46,7 @@
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network Range</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Logstash Node</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Discovery</th>
+            <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Traps</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Connection</th>
             <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
           </tr>
@@ -77,6 +78,17 @@
                 {% endif %}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                {% if network.traps_enabled %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Enabled
+                  </span>
+                {% else %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    Disabled
+                  </span>
+                {% endif %}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 {% if network.connection %}
                   {{ network.connection.name }}
                 {% else %}
@@ -99,21 +111,12 @@
                           </svg>
                           Edit
                         </button>
-                        <form method="POST">
-                          {% csrf_token %}
-                          <a hx-post="/API/SNMP/DeleteNetwork/{{ network.id }}/"
-                           hx-trigger="click" 
-                           hx-confirm="Are you sure you want to delete this network?" 
-                           hx-swap="beforeend" 
-                           hx-target="body" 
-                           class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" 
-                           role="menuitem">
+                        <button onclick="deleteNetwork({{ network.id }}, '{{ network.name|escapejs }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
                           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                           Delete
-                        </a>
-                        </form>
+                        </button>
                       </div>
                   </div>
                 </div>
@@ -183,6 +186,86 @@
       })
       .catch(error => {
         showToast('Error loading network: ' + error, 'error');
+      });
+  }
+
+  // Delete network function with pipeline warning
+  function deleteNetwork(networkId, networkName) {
+    // First, fetch the pipeline name
+    fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          const pipelineName = data.pipeline_name;
+          
+          // Show confirmation dialog with pipeline name
+          const confirmed = confirm(
+            `Are you sure you want to delete the network "${networkName}"?\n\n` +
+            `The underlying pipeline "${pipelineName}" will also be deleted.\n\n` +
+            `This action cannot be undone.`
+          );
+          
+          if (confirmed) {
+            // Get CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            // Proceed with deletion
+            fetch(`/API/SNMP/DeleteNetwork/${networkId}/`, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': csrfToken
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              } else {
+                throw new Error(data.error || 'Failed to delete network');
+              }
+            })
+            .catch(error => {
+              showToast('Error deleting network: ' + error.message, 'error');
+            });
+          }
+        } else {
+          // If we can't get pipeline name, still allow deletion but with simpler message
+          const confirmed = confirm(
+            `Are you sure you want to delete the network "${networkName}"?\n\n` +
+            `This action cannot be undone.`
+          );
+          
+          if (confirmed) {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            fetch(`/API/SNMP/DeleteNetwork/${networkId}/`, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': csrfToken
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              } else {
+                throw new Error(data.error || 'Failed to delete network');
+              }
+            })
+            .catch(error => {
+              showToast('Error deleting network: ' + error.message, 'error');
+            });
+          }
+        }
+      })
+      .catch(error => {
+        showToast('Error fetching pipeline name: ' + error.message, 'error');
       });
   }
 
