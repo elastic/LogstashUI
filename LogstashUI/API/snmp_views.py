@@ -774,7 +774,7 @@ def _get_special_case_filters(oid_mappings):
                     f"      '@timestamp' => timestamp,\n"
                     f"      'host' => {{ 'name' => host_name }},\n"
                     f"      'network' => {{ 'name' => network_name }},\n"
-                    f"      '{table_name.lower()}' => row,\n"
+                    f"      'table' => row,\n"
                     f"      'metricset' => {{ 'module' => 'snmp' }},\n"
                     f"      'event' => {{ 'kind' => '{table_name.lower()}' }}\n"
                     f"    }})\n"
