@@ -1,19 +1,13 @@
 {
-  "name": "cisco_ios",
-  "description": "",
-  "get": {
-    "host.os.full": "1.3.6.1.2.1.1.1.0",
-    "host.hostname": "1.3.6.1.2.1.1.5.0",
-    "host.uptime": "1.3.6.1.2.1.1.3.0",
-    "host.model": "1.3.6.1.2.1.1.2.0",
-    "system.cpu.total.norm.pct": "1.3.6.1.4.1.9.2.1.58.0",
-
-    "system.memory.actual.used.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
-    "system.memory.actual.free.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
-  },
+  "name": "network_interfaces",
+  "description": "[Official] Generic profile for collecting network interfaces",
+  "type": "Network",
+  "vendor": "Generic",
+  "pinned": true,
+  "get": {},
   "walk": {},
   "table": {
-    "ifTable": {
+    "interfaces": {
       "columns": {
         "ifIndex": "1.3.6.1.2.1.2.2.1.1",
         "ifDescr": "1.3.6.1.2.1.2.2.1.2",
@@ -22,18 +16,28 @@
         "ifOperStatus":"1.3.6.1.2.1.2.2.1.8",
         "ifName": "1.3.6.1.2.1.31.1.1.1.1",
         "ifAlias": "1.3.6.1.2.1.31.1.1.1.18",
+
         "ifHighSpeed": "1.3.6.1.2.1.31.1.1.1.15",
+        "ifSpeed": "1.3.6.1.2.1.2.2.1.5",
+
         "ifPhysAddress": "1.3.6.1.2.1.2.2.1.6",
         "ifMtu": "1.3.6.1.2.1.2.2.1.4",
+
         "ifHCInOctets": "1.3.6.1.2.1.31.1.1.1.6",
         "ifHCOutOctets": "1.3.6.1.2.1.31.1.1.1.10",
+
+        "ifHCInBroadcastPkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "ifHCOutBroadcastPkts": "1.3.6.1.2.1.31.1.1.1.13",
+
         "ifHCInUcastPkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "ifHCOutUcastPkts": "1.3.6.1.2.1.31.1.1.1.11",
+
+        "ifHCInMulticastPkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "ifHCOutMulticastPkts": "1.3.6.1.2.1.31.1.1.1.12",
+
         "ifLastChange": "1.3.6.1.2.1.2.2.1.9",
-        "ifAdminStatus": "1.3.6.1.2.1.2.2.1.7",
-        "ifOperStatus": "1.3.6.1.2.1.2.2.1.8",
         "dot1qPvid": "1.3.6.1.2.1.17.7.1.4.5.1.1",
         "ifInErrors": "1.3.6.1.2.1.2.2.1.14",
-
         "ifOutErrors": "1.3.6.1.2.1.2.2.1.20",
         "ifInDiscards": "1.3.6.1.2.1.2.2.1.13",
         "ifOutDiscards": "1.3.6.1.2.1.2.2.1.19"

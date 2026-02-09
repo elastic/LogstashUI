@@ -36,6 +36,32 @@
             <textarea id="profileDescription" name="description" class="textarea textarea-bordered w-full" rows="2" placeholder="Optional description of what this profile monitors"></textarea>
           </div>
 
+          <!-- Type -->
+          <div class="mb-6">
+            <label for="profileType" class="block text-sm font-medium text-gray-300 mb-2">
+              Type
+            </label>
+            <select id="profileType" name="type" class="select select-bordered w-full">
+              <option value="">Select type...</option>
+              <option value="Any">Any</option>
+              <option value="Network">Network</option>
+              <option value="Server">Server</option>
+              <option value="Storage">Storage</option>
+              <option value="Security">Security</option>
+              <option value="Other">Other</option>
+            </select>
+            <p class="text-gray-400 text-xs mt-1">Category of devices this profile is designed for</p>
+          </div>
+
+          <!-- Vendor -->
+          <div class="mb-6">
+            <label for="profileVendor" class="block text-sm font-medium text-gray-300 mb-2">
+              Vendor
+            </label>
+            <input type="text" id="profileVendor" name="vendor" class="input input-bordered w-full" placeholder="e.g., Cisco, Generic, Any">
+            <p class="text-gray-400 text-xs mt-1">Vendor or manufacturer this profile is designed for</p>
+          </div>
+
           <!-- Get Section -->
           <div class="mb-6">
             <div class="flex justify-between items-center mb-3">
@@ -76,9 +102,9 @@
           <div class="mb-6">
             <div class="flex justify-between items-center mb-3">
               <label class="block text-sm font-medium text-gray-300">
-                Table <span class="text-gray-500 text-xs">(Table queries)</span>
+                Table <span class="text-gray-500 text-xs">(Table queries with columns)</span>
               </label>
-              <button type="button" onclick="addKVPair('table')" class="btn btn-sm btn-ghost text-primary">
+              <button type="button" onclick="addTable()" class="btn btn-sm btn-ghost text-primary">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
@@ -86,7 +112,7 @@
               </button>
             </div>
             <div id="tableContainer" class="space-y-2 bg-gray-700/30 rounded-lg p-4 min-h-[60px]">
-              <p class="text-gray-500 text-sm text-center" id="tableEmptyMessage">No Table queries defined</p>
+              <p class="text-gray-500 text-sm text-center" id="tableEmptyMessage">No tables defined</p>
             </div>
           </div>
 

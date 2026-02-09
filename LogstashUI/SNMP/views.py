@@ -26,10 +26,31 @@ def Profiles(request):
                 profile_name = filename[:-5]  # Remove .json extension
                 # Convert filename to display name (e.g., cisco_ios -> Cisco Ios)
                 display_name = profile_name.replace('_', ' ').title()
+                
+                # Load the JSON file to get description, type, vendor, and pinned
+                profile_path = os.path.join(official_profiles_dir, filename)
+                description = ''
+                profile_type = ''
+                vendor = ''
+                pinned = False
+                try:
+                    with open(profile_path, 'r') as f:
+                        profile_data = json.load(f)
+                        description = profile_data.get('description', '')
+                        profile_type = profile_data.get('type', '')
+                        vendor = profile_data.get('vendor', '')
+                        pinned = profile_data.get('pinned', False)
+                except Exception:
+                    pass  # If we can't load the file, just use empty values
+                
                 official_profiles.append({
                     'name': profile_name,
                     'display_name': display_name,
-                    'is_official': True
+                    'is_official': True,
+                    'description': description,
+                    'type': profile_type,
+                    'vendor': vendor,
+                    'pinned': pinned
                 })
     
     # Load user profiles from database (exclude placeholders)
@@ -41,12 +62,19 @@ def Profiles(request):
         user_profiles.append({
             'name': profile.name,
             'display_name': profile.name.replace('_', ' ').title(),
-            'is_official': False
+            'is_official': False,
+            'description': profile.description,
+            'type': profile.type,
+            'vendor': profile.vendor
         })
     
-    # Combine and sort profiles
+    # Add pinned=False to user profiles
+    for profile in user_profiles:
+        profile['pinned'] = False
+    
+    # Combine and sort profiles (pinned first, then alphabetically)
     all_profiles = official_profiles + user_profiles
-    all_profiles.sort(key=lambda x: x['display_name'])
+    all_profiles.sort(key=lambda x: (not x.get('pinned', False), x['display_name']))
     
     return render(request, 'Profiles.html', {'profiles': all_profiles})
 

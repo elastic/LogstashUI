@@ -36,6 +36,8 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     const isReadOnly = isOfficial || viewMode;
     document.getElementById('profileName').disabled = isReadOnly;
     document.getElementById('profileDescription').disabled = isReadOnly;
+    document.getElementById('profileType').disabled = isReadOnly;
+    document.getElementById('profileVendor').disabled = isReadOnly;
     
     // Hide/disable save button for official profiles or view mode
     if (isReadOnly) {
@@ -58,6 +60,8 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     modalTitle.textContent = 'Add SNMP Profile';
     document.getElementById('profileName').disabled = false;
     document.getElementById('profileDescription').disabled = false;
+    document.getElementById('profileType').disabled = false;
+    document.getElementById('profileVendor').disabled = false;
     saveBtn.style.display = '';
     
     // Enable add buttons
@@ -90,6 +94,8 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       // Set basic fields
       document.getElementById('profileName').value = data.name || profileName;
       document.getElementById('profileDescription').value = data.description || '';
+      document.getElementById('profileType').value = data.type || '';
+      document.getElementById('profileVendor').value = data.vendor || '';
       
       // Load Get section
       if (data.profile_data && data.profile_data.get) {
@@ -107,8 +113,10 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       
       // Load Table section
       if (data.profile_data && data.profile_data.table) {
-        Object.entries(data.profile_data.table).forEach(([key, value]) => {
-          addKVPair('table', key, value, isReadOnly);
+        Object.entries(data.profile_data.table).forEach(([tableName, tableData]) => {
+          if (tableData && tableData.columns) {
+            addTable(tableName, tableData.columns, isReadOnly);
+          }
         });
       }
     })
@@ -118,7 +126,7 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
     });
 }
 
-// Add a KV pair to a section
+// Add a KV pair to a section (for get and walk)
 function addKVPair(section, key = '', value = '', isReadOnly = false) {
   const container = document.getElementById(`${section}Container`);
   const emptyMessage = document.getElementById(`${section}EmptyMessage`);
@@ -126,6 +134,11 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
   // Hide empty message
   if (emptyMessage) {
     emptyMessage.style.display = 'none';
+  }
+  
+  // Show walk warning if adding to walk section
+  if (section === 'walk') {
+    showWalkWarning();
   }
   
   // Create KV pair element
@@ -159,6 +172,35 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
   container.appendChild(kvPair);
 }
 
+// Show walk warning
+function showWalkWarning() {
+  const walkContainer = document.getElementById('walkContainer');
+  let warning = document.getElementById('walkWarning');
+  
+  if (!warning) {
+    warning = document.createElement('div');
+    warning.id = 'walkWarning';
+    warning.className = 'mb-3 p-3 bg-yellow-900/30 border border-yellow-600/50 rounded-lg flex items-start gap-2';
+    warning.innerHTML = `
+      <svg class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+      </svg>
+      <div class="text-sm text-yellow-200">
+        <strong>CAUTION:</strong> You may get better results by using a table instead of walk queries.
+      </div>
+    `;
+    walkContainer.parentElement.insertBefore(warning, walkContainer);
+  }
+}
+
+// Hide walk warning
+function hideWalkWarning() {
+  const warning = document.getElementById('walkWarning');
+  if (warning) {
+    warning.remove();
+  }
+}
+
 // Remove a KV pair
 function removeKVPair(button, section) {
   const kvPair = button.closest('.kv-pair');
@@ -171,6 +213,11 @@ function removeKVPair(button, section) {
   const remainingPairs = container.querySelectorAll('.kv-pair');
   if (remainingPairs.length === 0 && emptyMessage) {
     emptyMessage.style.display = '';
+    
+    // Hide walk warning if no more walk items
+    if (section === 'walk') {
+      hideWalkWarning();
+    }
   }
 }
 
@@ -189,7 +236,134 @@ function clearKVContainer(section) {
   }
 }
 
-// Serialize KV pairs from a section
+// Add a table with columns
+function addTable(tableName = '', columns = {}, isReadOnly = false) {
+  const container = document.getElementById('tableContainer');
+  const emptyMessage = document.getElementById('tableEmptyMessage');
+  
+  // Hide empty message
+  if (emptyMessage) {
+    emptyMessage.style.display = 'none';
+  }
+  
+  // Create unique ID for this table
+  const tableId = 'table_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  
+  // Create table element
+  const tableElement = document.createElement('div');
+  tableElement.className = 'table-group border border-gray-600 rounded-lg p-4 mb-3';
+  tableElement.dataset.tableId = tableId;
+  tableElement.innerHTML = `
+    <div class="flex justify-between items-center mb-3">
+      <input type="text" 
+             class="input input-bordered input-sm w-64 table-name" 
+             placeholder="Table name (e.g., ifTable)" 
+             value="${tableName}"
+             ${isReadOnly ? 'disabled' : ''}>
+      <button type="button" 
+              onclick="removeTable(this)" 
+              class="btn btn-ghost btn-sm text-red-400 hover:bg-red-900/20"
+              ${isReadOnly ? 'disabled style="display:none;"' : ''}>
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+        Remove Table
+      </button>
+    </div>
+    <div class="ml-4">
+      <div class="flex justify-between items-center mb-2">
+        <label class="text-xs text-gray-400">Columns (Field Name → OID)</label>
+        <button type="button" 
+                onclick="addTableColumn(this)" 
+                class="btn btn-xs btn-ghost text-primary"
+                ${isReadOnly ? 'disabled style="display:none;"' : ''}>
+          <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Column
+        </button>
+      </div>
+      <div class="table-columns space-y-2">
+        <!-- Columns will be added here -->
+      </div>
+    </div>
+  `;
+  
+  container.appendChild(tableElement);
+  
+  // Add existing columns if provided
+  if (columns && Object.keys(columns).length > 0) {
+    const columnsContainer = tableElement.querySelector('.table-columns');
+    Object.entries(columns).forEach(([columnName, oid]) => {
+      addTableColumnToContainer(columnsContainer, columnName, oid, isReadOnly);
+    });
+  } else if (!isReadOnly) {
+    // Add one empty column for new tables
+    const columnsContainer = tableElement.querySelector('.table-columns');
+    addTableColumnToContainer(columnsContainer, '', '', false);
+  }
+}
+
+// Add a column to a table
+function addTableColumn(button) {
+  const tableElement = button.closest('.table-group');
+  const columnsContainer = tableElement.querySelector('.table-columns');
+  addTableColumnToContainer(columnsContainer, '', '', false);
+}
+
+// Add a column to a specific container
+function addTableColumnToContainer(container, columnName = '', oid = '', isReadOnly = false) {
+  const column = document.createElement('div');
+  column.className = 'flex gap-2 items-start table-column';
+  column.innerHTML = `
+    <div class="flex-1">
+      <input type="text" 
+             class="input input-bordered input-sm w-full column-name" 
+             placeholder="Column name (e.g., ifIndex)" 
+             value="${columnName}"
+             ${isReadOnly ? 'disabled' : ''}>
+    </div>
+    <div class="flex-1">
+      <input type="text" 
+             class="input input-bordered input-sm w-full font-mono column-oid" 
+             placeholder="OID (e.g., 1.3.6.1.2.1.2.2.1.1)" 
+             value="${oid}"
+             ${isReadOnly ? 'disabled' : ''}>
+    </div>
+    <button type="button" 
+            onclick="removeTableColumn(this)" 
+            class="btn btn-ghost btn-sm btn-circle text-red-400 hover:bg-red-900/20"
+            ${isReadOnly ? 'disabled style="display:none;"' : ''}>
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  `;
+  container.appendChild(column);
+}
+
+// Remove a table column
+function removeTableColumn(button) {
+  const column = button.closest('.table-column');
+  column.remove();
+}
+
+// Remove an entire table
+function removeTable(button) {
+  const tableElement = button.closest('.table-group');
+  const container = document.getElementById('tableContainer');
+  const emptyMessage = document.getElementById('tableEmptyMessage');
+  
+  tableElement.remove();
+  
+  // Show empty message if no more tables
+  const remainingTables = container.querySelectorAll('.table-group');
+  if (remainingTables.length === 0 && emptyMessage) {
+    emptyMessage.style.display = '';
+  }
+}
+
+// Serialize KV pairs from a section (for get and walk)
 function serializeKVSection(section) {
   const container = document.getElementById(`${section}Container`);
   const kvPairs = container.querySelectorAll('.kv-pair');
@@ -201,6 +375,36 @@ function serializeKVSection(section) {
     
     if (key && value) {
       result[key] = value;
+    }
+  });
+  
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+// Serialize tables
+function serializeTableSection() {
+  const container = document.getElementById('tableContainer');
+  const tables = container.querySelectorAll('.table-group');
+  const result = {};
+  
+  tables.forEach(table => {
+    const tableName = table.querySelector('.table-name').value.trim();
+    if (!tableName) return;
+    
+    const columns = {};
+    const columnElements = table.querySelectorAll('.table-column');
+    
+    columnElements.forEach(col => {
+      const columnName = col.querySelector('.column-name').value.trim();
+      const oid = col.querySelector('.column-oid').value.trim();
+      
+      if (columnName && oid) {
+        columns[columnName] = oid;
+      }
+    });
+    
+    if (Object.keys(columns).length > 0) {
+      result[tableName] = { columns: columns };
     }
   });
   
@@ -229,6 +433,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const profileData = {
         name: profileName,
         description: formData.get('description'),
+        type: formData.get('type'),
+        vendor: formData.get('vendor'),
         profile_data: {}
       };
       
@@ -245,14 +451,14 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       
       // Add Table section
-      const tableSection = serializeKVSection('table');
+      const tableSection = serializeTableSection();
       if (tableSection) {
         profileData.profile_data.table = tableSection;
       }
       
       // Validate that at least one section has data
       if (!getSection && !walkSection && !tableSection) {
-        showToast('Please add at least one OID mapping (Get, Walk, or Table)', 'error');
+        showErrorInModal('Please add at least one OID mapping (Get, Walk, or Table)');
         return;
       }
       
@@ -274,27 +480,17 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          showToast(isEdit ? 'Profile updated successfully!' : 'Profile created successfully!', 'success');
+          if (typeof showToast === 'function') {
+            showToast(isEdit ? 'Profile updated successfully!' : 'Profile created successfully!', 'success');
+          }
           closeProfileModal();
           setTimeout(() => window.location.reload(), 500);
         } else {
-          const errorContainer = document.getElementById('profileErrorContainer');
-          errorContainer.innerHTML = `
-            <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
-              <h3 class="font-bold mb-2">Error</h3>
-              <p class="text-sm">${data.message || 'Failed to save profile'}</p>
-            </div>
-          `;
+          showErrorInModal(data.message || 'Failed to save profile');
         }
       })
       .catch(error => {
-        const errorContainer = document.getElementById('profileErrorContainer');
-        errorContainer.innerHTML = `
-          <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
-            <h3 class="font-bold mb-2">Error</h3>
-            <p class="text-sm">${error.message || 'An error occurred while saving the profile'}</p>
-          </div>
-        `;
+        showErrorInModal(error.message || 'An error occurred while saving the profile');
       });
     });
   }

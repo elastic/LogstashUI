@@ -457,6 +457,18 @@ class Profile(models.Model):
         help_text="Optional description of what this profile is for"
     )
     
+    type = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Type/category of devices this profile is for (e.g., Network, Server, Any)"
+    )
+    
+    vendor = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Vendor or manufacturer this profile is designed for (e.g., Cisco, Generic, Any)"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

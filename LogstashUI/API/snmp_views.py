@@ -1502,9 +1502,12 @@ def GetOfficialProfile(request, profile_name):
         
         return JsonResponse({
             'success': True,
-            'name': profile_name,
-            'profile_data': profile_data,
-            'description': ''
+            'name': profile_data.get('name', profile_name),
+            'description': profile_data.get('description', ''),
+            'type': profile_data.get('type', ''),
+            'vendor': profile_data.get('vendor', ''),
+            'pinned': profile_data.get('pinned', False),
+            'profile_data': profile_data
         }, status=200)
         
     except Exception as e:
@@ -1519,8 +1522,10 @@ def GetProfile(request, profile_name):
         return JsonResponse({
             'success': True,
             'name': profile.name,
-            'profile_data': profile.profile_data,
-            'description': profile.description
+            'description': profile.description,
+            'type': profile.type,
+            'vendor': profile.vendor,
+            'profile_data': profile.profile_data
         }, status=200)
         
     except Profile.DoesNotExist:
@@ -1537,6 +1542,8 @@ def AddProfile(request):
         
         name = data.get('name')
         description = data.get('description', '')
+        profile_type = data.get('type', '')
+        vendor = data.get('vendor', '')
         profile_data = data.get('profile_data', {})
         
         # Validate required fields
@@ -1551,6 +1558,8 @@ def AddProfile(request):
         profile = Profile(
             name=name,
             description=description,
+            type=profile_type,
+            vendor=vendor,
             profile_data=profile_data
         )
         profile.save()
@@ -1579,6 +1588,8 @@ def UpdateProfile(request, profile_name):
         # Update fields
         new_name = data.get('name', profile.name)
         profile.description = data.get('description', profile.description)
+        profile.type = data.get('type', profile.type)
+        profile.vendor = data.get('vendor', profile.vendor)
         profile.profile_data = data.get('profile_data', profile.profile_data)
         
         # If name changed, check for conflicts
