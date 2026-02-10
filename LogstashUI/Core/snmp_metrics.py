@@ -236,10 +236,17 @@ def generate_visualizations(visualizations, device, es_connection):
     return visualization_data
 
 def get_device_online(device):
+    """
+    Check if a single device is online (has sent data in last 15 minutes).
+    Note: For checking multiple devices, use get_devices_online_batch() for better performance.
+    """
+    if not device.network or not device.network.connection:
+        return False
+    
     connection_id = device.network.connection.id
     es = get_elastic_connection(connection_id)
 
-    results =es.search(
+    results = es.search(
         query={
             "bool": {
                 "filter": [
@@ -264,6 +271,88 @@ def get_device_online(device):
         return True
     else:
         return False
+
+def get_devices_online_batch(devices):
+    """
+    Check online status for multiple devices in batch.
+    Groups devices by their Elasticsearch connection and makes one query per connection.
+    
+    Args:
+        devices: List of Device objects (should have network and connection prefetched)
+    
+    Returns:
+        dict: {device_id: is_online_bool, ...}
+    """
+    results = {}
+    
+    # Group devices by connection_id
+    devices_by_connection = {}
+    for device in devices:
+        # Skip devices without network or connection
+        if not device.network or not device.network.connection:
+            results[device.id] = False
+            continue
+        
+        connection_id = device.network.connection.id
+        if connection_id not in devices_by_connection:
+            devices_by_connection[connection_id] = []
+        devices_by_connection[connection_id].append(device)
+    
+    # Query each connection once with all its devices
+    for connection_id, device_list in devices_by_connection.items():
+        try:
+            es = get_elastic_connection(connection_id)
+            
+            # Build list of IP addresses to check
+            ip_addresses = [device.ip_address for device in device_list]
+            
+            # Single query checking all IPs at once
+            search_results = es.search(
+                size=0,  # We only need aggregations, not actual documents
+                query={
+                    "bool": {
+                        "filter": [
+                            {
+                                "range": {
+                                    "@timestamp": {
+                                        "gte": "now-15m"
+                                    }
+                                }
+                            },
+                            {
+                                "terms": {
+                                    "host.hostname": ip_addresses
+                                }
+                            }
+                        ]
+                    }
+                },
+                aggregations={
+                    "online_devices": {
+                        "terms": {
+                            "field": "host.hostname",
+                            "size": len(ip_addresses)
+                        }
+                    }
+                }
+            )
+            
+            # Extract which IPs have data (are online)
+            online_ips = set()
+            if 'aggregations' in search_results and 'online_devices' in search_results['aggregations']:
+                for bucket in search_results['aggregations']['online_devices']['buckets']:
+                    online_ips.add(bucket['key'])
+            
+            # Map back to device IDs
+            for device in device_list:
+                results[device.id] = device.ip_address in online_ips
+                
+        except Exception as e:
+            # If query fails, mark all devices on this connection as offline
+            for device in device_list:
+                results[device.id] = False
+    
+    return results
 
 def get_visualizations(device):
     """

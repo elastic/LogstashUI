@@ -2118,23 +2118,66 @@ def GetAllProfiles(request):
 
 
 @require_http_methods(["GET"])
-def GetDeviceStatus(request, device_id):
-    """Check if a device is online (has sent data in last 15 minutes)"""
+def GetDevicesStatus(request):
+    """
+    Check online status for multiple devices in batch.
+    Accepts comma-separated device IDs as query parameter.
+    Returns status for all devices in a single response.
+    
+    Query params:
+        device_ids: Comma-separated list of device IDs (e.g., "123,124,125")
+    
+    Returns:
+        {
+            "success": true,
+            "statuses": {
+                "123": {"is_online": true},
+                "124": {"is_online": false},
+                ...
+            }
+        }
+    """
     try:
-        device = Device.objects.get(id=device_id)
-        is_online = snmp_metrics.get_device_online(device)
+        # Get device IDs from query parameter
+        device_ids_str = request.GET.get('device_ids', '')
+        if not device_ids_str:
+            return JsonResponse({
+                'success': False,
+                'error': 'device_ids parameter is required'
+            }, status=400)
+        
+        # Parse device IDs
+        try:
+            device_ids = [int(id.strip()) for id in device_ids_str.split(',') if id.strip()]
+        except ValueError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid device_ids format. Expected comma-separated integers.'
+            }, status=400)
+        
+        if not device_ids:
+            return JsonResponse({
+                'success': False,
+                'error': 'No valid device IDs provided'
+            }, status=400)
+        
+        # Fetch devices with prefetched relationships for efficiency
+        devices = Device.objects.filter(id__in=device_ids).select_related('network__connection')
+        
+        # Get batch status results
+        status_results = snmp_metrics.get_devices_online_batch(list(devices))
+        
+        # Format response
+        statuses = {
+            str(device_id): {'is_online': is_online}
+            for device_id, is_online in status_results.items()
+        }
         
         return JsonResponse({
             'success': True,
-            'device_id': device_id,
-            'is_online': is_online
+            'statuses': statuses
         }, status=200)
         
-    except Device.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Device not found'
-        }, status=404)
     except Exception as e:
         return JsonResponse({
             'success': False,

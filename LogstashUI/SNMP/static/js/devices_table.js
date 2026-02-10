@@ -94,28 +94,36 @@ function loadDevices() {
 
 // Asynchronously check device statuses without blocking page rendering
 function checkDeviceStatuses(devices) {
-  devices.forEach(device => {
-    // Use setTimeout to make each request truly async and non-blocking
-    setTimeout(() => {
-      fetch(`/API/SNMP/GetDeviceStatus/${device.id}/`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.success && data.is_online) {
-            const statusCircle = document.getElementById(`status-circle-${device.id}`);
+  if (!devices || devices.length === 0) {
+    return;
+  }
+  
+  // Build comma-separated list of device IDs
+  const deviceIds = devices.map(d => d.id).join(',');
+  
+  // Single batch request for all devices
+  fetch(`/API/SNMP/GetDevicesStatus/?device_ids=${deviceIds}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.statuses) {
+        // Update status circles for all devices
+        Object.entries(data.statuses).forEach(([deviceId, status]) => {
+          if (status.is_online) {
+            const statusCircle = document.getElementById(`status-circle-${deviceId}`);
             if (statusCircle) {
               statusCircle.classList.remove('bg-gray-500');
               statusCircle.classList.add('bg-green-500');
               statusCircle.title = 'Device online (data received in last 15 minutes)';
             }
           }
-          // If not online or error, leave the circle gray (default state)
-        })
-        .catch(error => {
-          // Silently fail - leave status circle gray
-          console.debug(`Could not check status for device ${device.id}:`, error);
+          // If not online, leave the circle gray (default state)
         });
-    }, 0);
-  });
+      }
+    })
+    .catch(error => {
+      // Silently fail - leave status circles gray
+      console.debug('Could not check device statuses:', error);
+    });
 }
 
 // Render devices in table
