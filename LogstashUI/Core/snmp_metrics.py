@@ -26,7 +26,7 @@ def _get_device_metrics(device, es_connection):
                     },
                     {
                         "term": {
-                            "event.kind": "metric"
+                            "event.kind": "metrics"
                         }
                     }
                 ]
@@ -47,10 +47,124 @@ def _get_device_metrics(device, es_connection):
         visualization_data['Time'].append(result['_source']['@timestamp'])
 
 
-    visualization_data['Uptime'] = results['hits']['hits'][0]['_source']['host']['uptime']
+    try:
+        visualization_data['Uptime'] = results['hits']['hits'][0]['_source']['host']['uptime']
+    except:
+        visualization_data['Uptime'] = 0
 
     return visualization_data
 
+def _get_device_fans(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query = {
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.kind": "fans"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations = {
+            "fans": {
+                "terms": {
+                    "field": "table.description",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "top_fan_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "_source": ["table.state", "table.description"]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "fans": []
+    }
+
+    for fan in results['aggregations']['fans']['buckets']:
+        for doc in fan['top_fan_doc']['hits']['hits']:
+            visualization_data['fans'].append(doc['_source']['table'])
+
+    return visualization_data
+
+def _get_device_sensors(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query = {
+
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.kind": "sensors"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations = {
+            "sensors": {
+                "terms": {
+                    "field": "table.description",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "top_sensor_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "_source": ["table.state", "table.description", "table.temp_celsius", "table.temp_threshold"]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "sensors": []
+    }
+
+
+    for sensor in results['aggregations']['sensors']['buckets']:
+        for doc in sensor['top_sensor_doc']['hits']['hits']:
+            visualization_data['sensors'].append(doc['_source']['table'])
+
+    return visualization_data
 
 def generate_visualizations(visualizations, device, es_connection):
     """
@@ -60,6 +174,10 @@ def generate_visualizations(visualizations, device, es_connection):
 
     if "metric" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
+    if "sensors" in visualizations:
+        visualization_data['sensors'] = _get_device_sensors(device, es_connection)
+    if "fans" in visualizations:
+        visualization_data['fans'] = _get_device_fans(device, es_connection)
 
     return visualization_data
 

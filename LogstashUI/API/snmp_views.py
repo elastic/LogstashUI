@@ -868,7 +868,7 @@ def _get_special_case_filters(oid_mappings):
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
                     f"  event.remove('[{table_name}]')\n"
-                    f"  event.set('[event][kind]', 'metric')\n"
+                    f"  event.set('[event][kind]', 'metrics')\n"
                     f"end"
                 )
                 
@@ -1689,25 +1689,30 @@ def AddDevice(request):
         # Save (this will trigger validation)
         device.save()
         
+        # Ensure 'system' profile is always included
+        if not profile_names:
+            profile_names = []
+        if 'system' not in profile_names:
+            profile_names.insert(0, 'system')  # Add system as first profile
+        
         # Add profiles (ManyToMany must be set after save)
-        if profile_names:
-            for profile_name in profile_names:
-                # Check if this is an official profile (exists as JSON file)
-                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-                is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
-                
-                # Determine the stored name: official profiles get .json extension, custom profiles don't
-                stored_name = f"{profile_name}.json" if is_official else profile_name
-                
-                # Get or create the profile entry
-                profile, created = Profile.objects.get_or_create(
-                    name=stored_name,
-                    defaults={
-                        'profile_data': {'is_official_placeholder': is_official},
-                        'description': f'{"Official" if is_official else "Custom"} profile'
-                    }
-                )
-                device.profiles.add(profile)
+        for profile_name in profile_names:
+            # Check if this is an official profile (exists as JSON file)
+            official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+            is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
+            
+            # Determine the stored name: official profiles get .json extension, custom profiles don't
+            stored_name = f"{profile_name}.json" if is_official else profile_name
+            
+            # Get or create the profile entry
+            profile, created = Profile.objects.get_or_create(
+                name=stored_name,
+                defaults={
+                    'profile_data': {'is_official_placeholder': is_official},
+                    'description': f'{"Official" if is_official else "Custom"} profile'
+                }
+            )
+            device.profiles.add(profile)
         
         return JsonResponse({'id': device.id, 'message': 'Device created successfully!'}, status=200)
         
@@ -1759,25 +1764,31 @@ def UpdateDevice(request, device_id):
         
         # Update profiles (ManyToMany)
         profile_names = request.POST.getlist('profiles')
+        
+        # Ensure 'system' profile is always included
+        if not profile_names:
+            profile_names = []
+        if 'system' not in profile_names:
+            profile_names.insert(0, 'system')  # Add system as first profile
+        
         device.profiles.clear()  # Clear existing profiles
-        if profile_names:
-            for profile_name in profile_names:
-                # Check if this is an official profile (exists as JSON file)
-                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-                is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
-                
-                # Determine the stored name: official profiles get .json extension, custom profiles don't
-                stored_name = f"{profile_name}.json" if is_official else profile_name
-                
-                # Get or create the profile entry
-                profile, created = Profile.objects.get_or_create(
-                    name=stored_name,
-                    defaults={
-                        'profile_data': {'is_official_placeholder': is_official},
-                        'description': f'{"Official" if is_official else "Custom"} profile'
-                    }
-                )
-                device.profiles.add(profile)
+        for profile_name in profile_names:
+            # Check if this is an official profile (exists as JSON file)
+            official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+            is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
+            
+            # Determine the stored name: official profiles get .json extension, custom profiles don't
+            stored_name = f"{profile_name}.json" if is_official else profile_name
+            
+            # Get or create the profile entry
+            profile, created = Profile.objects.get_or_create(
+                name=stored_name,
+                defaults={
+                    'profile_data': {'is_official_placeholder': is_official},
+                    'description': f'{"Official" if is_official else "Custom"} profile'
+                }
+            )
+            device.profiles.add(profile)
         
         return JsonResponse({'id': device.id, 'message': 'Device updated successfully!'}, status=200)
         
@@ -1987,6 +1998,13 @@ def UpdateProfile(request, profile_name):
 def DeleteProfile(request, profile_name):
     """Delete a user profile"""
     try:
+        # Prevent deletion of the system profile
+        if profile_name in ['system', 'system.json']:
+            return JsonResponse({
+                'success': False,
+                'message': 'The system profile cannot be deleted as it is required for all devices'
+            }, status=403)
+        
         profile = Profile.objects.get(name=profile_name)
         profile.delete()
         

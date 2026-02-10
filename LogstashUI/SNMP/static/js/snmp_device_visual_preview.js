@@ -145,6 +145,57 @@ function renderDevicePreview(deviceId, device, visualizations) {
       );
     }
   }
+  
+  // Render sensors if available
+  if (visualizations && visualizations.sensors) {
+    console.log('Sensors data found:', visualizations.sensors);
+    console.log('Sensors array:', visualizations.sensors.sensors);
+    const sensorsSection = contentDiv.querySelector('.device-sensors-section');
+    const sensorsContainer = contentDiv.querySelector('.sensors-container');
+    
+    console.log('Sensors section element:', sensorsSection);
+    console.log('Sensors container element:', sensorsContainer);
+    
+    // The sensors data is nested in visualizations.sensors.sensors
+    const sensorsArray = visualizations.sensors.sensors || [];
+    console.log('Actual sensors array:', sensorsArray);
+    
+    if (sensorsArray.length > 0 && sensorsSection && sensorsContainer) {
+      console.log('Rendering', sensorsArray.length, 'sensors');
+      sensorsSection.style.display = 'grid';
+      sensorsContainer.innerHTML = '';
+      
+      sensorsArray.forEach(sensor => {
+        console.log('Creating card for sensor:', sensor);
+        const sensorCard = createSensorCard(sensor);
+        sensorsContainer.appendChild(sensorCard);
+      });
+    } else {
+      console.log('Not rendering sensors. Array length:', sensorsArray.length, 'Section:', !!sensorsSection, 'Container:', !!sensorsContainer);
+    }
+  }
+  
+  // Render fans if available
+  if (visualizations && visualizations.fans) {
+    console.log('Fans data found:', visualizations.fans);
+    const sensorsSection = contentDiv.querySelector('.device-sensors-section');
+    const fansContainer = contentDiv.querySelector('.fans-container');
+    
+    const fansArray = visualizations.fans.fans || [];
+    console.log('Actual fans array:', fansArray);
+    
+    if (fansArray.length > 0 && sensorsSection && fansContainer) {
+      console.log('Rendering', fansArray.length, 'fans');
+      sensorsSection.style.display = 'grid';
+      fansContainer.innerHTML = '';
+      
+      fansArray.forEach(fan => {
+        console.log('Creating card for fan:', fan);
+        const fanCard = createFanCard(fan);
+        fansContainer.appendChild(fanCard);
+      });
+    }
+  }
 }
 
 // Render a metric line chart
@@ -251,6 +302,140 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
       }
     }
   });
+}
+
+// Create a sensor card with temperature gauge
+function createSensorCard(sensor) {
+  const card = document.createElement('div');
+  
+  // Convert Celsius to Fahrenheit
+  const tempF = (sensor.temp_celsius * 9/5) + 32;
+  
+  // Determine state color and label
+  const stateInfo = getSensorStateInfo(sensor.state);
+  
+  // Calculate percentage for gauge (0 to threshold)
+  const percentage = Math.min((sensor.temp_celsius / sensor.temp_threshold) * 100, 100);
+  
+  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
+  card.innerHTML = `
+    <div class="flex items-center justify-between mb-2">
+      <h4 class="text-sm font-medium text-white truncate">${escapeHtml(sensor.description)}</h4>
+      <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
+    </div>
+    
+    <!-- Temperature Display -->
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-2xl font-bold ${stateInfo.textClass}">${sensor.temp_celsius}°C</div>
+      <div class="text-sm text-gray-400">${tempF.toFixed(1)}°F</div>
+    </div>
+    
+    <!-- Temperature Gauge -->
+    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
+      <div class="absolute h-full ${stateInfo.gaugeClass} transition-all duration-300" 
+           style="width: ${percentage}%"></div>
+    </div>
+    
+    <!-- Threshold Label -->
+    <div class="text-xs text-gray-400 text-right">
+      Threshold: ${sensor.temp_threshold}°C
+    </div>
+  `;
+  
+  return card;
+}
+
+// Create a fan card with state display
+function createFanCard(fan) {
+  const card = document.createElement('div');
+  
+  // Determine state color and label
+  const stateInfo = getSensorStateInfo(fan.state);
+  
+  // Determine if fan should be spinning (normal or warning states)
+  const isOperational = parseInt(fan.state) === 1 || parseInt(fan.state) === 2;
+  
+  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-h-[160px] flex flex-col ' + stateInfo.borderClass;
+  card.innerHTML = `
+    <div class="flex items-center justify-between mb-3">
+      <h4 class="text-sm font-medium text-white truncate">${escapeHtml(fan.description)}</h4>
+      <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
+    </div>
+    
+    <!-- Fan Icon with State-based Animation -->
+    <div class="flex flex-col items-center justify-center flex-1">
+      <svg class="w-16 h-16 ${stateInfo.textClass} ${isOperational ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="animation-duration: ${isOperational ? '2s' : '0s'}">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      <div class="text-xs text-gray-400 mt-2 text-center">
+        ${isOperational ? 'Operational' : 'Not Running'}
+      </div>
+    </div>
+  `;
+  
+  return card;
+}
+
+// Get sensor/fan state information (color, label, etc.)
+function getSensorStateInfo(state) {
+  switch(parseInt(state)) {
+    case 1: // Normal
+      return {
+        label: 'Normal',
+        borderClass: 'border-green-500',
+        badgeClass: 'bg-green-600/20 text-green-300',
+        textClass: 'text-green-400',
+        gaugeClass: 'bg-green-500'
+      };
+    case 2: // Warning
+      return {
+        label: 'Warning',
+        borderClass: 'border-yellow-500',
+        badgeClass: 'bg-yellow-600/20 text-yellow-300',
+        textClass: 'text-yellow-400',
+        gaugeClass: 'bg-yellow-500'
+      };
+    case 3: // Critical
+      return {
+        label: 'Critical',
+        borderClass: 'border-red-500',
+        badgeClass: 'bg-red-600/20 text-red-300',
+        textClass: 'text-red-400',
+        gaugeClass: 'bg-red-500'
+      };
+    case 4: // Shutdown
+      return {
+        label: 'Shutdown',
+        borderClass: 'border-red-700',
+        badgeClass: 'bg-red-700/20 text-red-400',
+        textClass: 'text-red-500',
+        gaugeClass: 'bg-red-700'
+      };
+    case 5: // Not Present
+      return {
+        label: 'Not Present',
+        borderClass: 'border-gray-500',
+        badgeClass: 'bg-gray-600/20 text-gray-300',
+        textClass: 'text-gray-400',
+        gaugeClass: 'bg-gray-500'
+      };
+    case 6: // Not Functioning
+      return {
+        label: 'Not Functioning',
+        borderClass: 'border-orange-500',
+        badgeClass: 'bg-orange-600/20 text-orange-300',
+        textClass: 'text-orange-400',
+        gaugeClass: 'bg-orange-500'
+      };
+    default:
+      return {
+        label: 'Unknown',
+        borderClass: 'border-gray-500',
+        badgeClass: 'bg-gray-600/20 text-gray-300',
+        textClass: 'text-gray-400',
+        gaugeClass: 'bg-gray-500'
+      };
+  }
 }
 
 // Format uptime from hundredths of seconds to human-readable format

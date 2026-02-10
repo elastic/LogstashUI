@@ -62,20 +62,10 @@ function renderDevicePreview(deviceId, device, visualizations) {
   // Clone the template
   const clone = template.content.cloneNode(true);
   
-  // Populate device info
-  clone.querySelector('.device-ip').textContent = device.ip_address;
+  // Populate device configuration
   clone.querySelector('.device-port').textContent = device.port;
   clone.querySelector('.device-timeout').textContent = `${device.timeout}ms`;
   clone.querySelector('.device-retries').textContent = device.retries;
-  
-  // Populate network info
-  if (device.network) {
-    clone.querySelector('.network-name').textContent = device.network.name;
-    clone.querySelector('.network-range').textContent = device.network.network_range;
-  } else {
-    clone.querySelector('.network-name').textContent = 'None';
-    clone.querySelector('.network-range').textContent = '-';
-  }
   
   // Populate credential info
   if (device.credential) {
@@ -238,18 +228,21 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
           }
         },
         x: {
-          type: 'time',
+          type: 'timeseries',
           time: {
             unit: 'hour',
+            tooltipFormat: 'MMM dd yyyy, HH:mm',
             displayFormats: {
-              hour: 'HH:mm'
+              hour: 'MMM dd HH:mm',
+              minute: 'HH:mm'
             }
           },
           ticks: {
             color: '#9CA3AF',
             maxRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 8
+            maxTicksLimit: 8,
+            source: 'auto'
           },
           grid: {
             color: 'rgba(75, 85, 99, 0.3)'
