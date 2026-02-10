@@ -1634,8 +1634,12 @@ def GetDevices(request):
         network_filter = request.GET.get('network', '').strip()
         sort_by = request.GET.get('sort_by', '-created_at')
         
-        # Start with all devices
-        queryset = Device.objects.select_related('credential', 'network').prefetch_related('profiles')
+        # Start with all devices - only fetch needed fields for performance
+        queryset = Device.objects.select_related('credential', 'network').prefetch_related('profiles').only(
+            'id', 'name', 'ip_address', 'port', 'retries', 'timeout', 'created_at',
+            'credential__id', 'credential__name',
+            'network__id', 'network__name'
+        )
         
         # Apply search filter (name or IP address)
         if search:
@@ -1652,24 +1656,34 @@ def GetDevices(request):
         if sort_by in valid_sort_fields:
             queryset = queryset.order_by(sort_by)
         
-        # Get total count before pagination
-        total_count = queryset.count()
+        # Manual pagination using limit/offset to avoid expensive COUNT queries
+        # We fetch page_size + 1 to determine if there's a next page
+        offset = (page - 1) * page_size
+        limit = page_size + 1
         
-        # Apply pagination
-        paginator = Paginator(queryset, page_size)
-        page_obj = paginator.get_page(page)
+        # Fetch one extra to check if there's a next page
+        devices_page = list(queryset[offset:offset + limit])
+        has_next = len(devices_page) > page_size
+        
+        # Remove the extra item if present
+        if has_next:
+            devices_page = devices_page[:page_size]
+        
+        has_previous = page > 1
+        
+        # Always get total count so users know how many devices they have
+        # This is acceptable since it's cached by SQLite and indexes help
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
         
         # Serialize devices
         devices = []
-        for device in page_obj:
-            # Strip .json extension from profile names for display
-            profile_names = []
-            for profile in device.profiles.all():
-                name = profile.name
-                # Remove .json extension if present (official profiles)
-                if name.endswith('.json'):
-                    name = name[:-5]
-                profile_names.append(name)
+        for device in devices_page:
+            # Strip .json extension from profile names for display (using list comprehension for speed)
+            profile_names = [
+                p.name[:-5] if p.name.endswith('.json') else p.name 
+                for p in device.profiles.all()
+            ]
             
             devices.append({
                 'id': device.id,
@@ -1691,9 +1705,9 @@ def GetDevices(request):
             'total': total_count,
             'page': page,
             'page_size': page_size,
-            'total_pages': paginator.num_pages,
-            'has_next': page_obj.has_next(),
-            'has_previous': page_obj.has_previous(),
+            'total_pages': total_pages,
+            'has_next': has_next,
+            'has_previous': has_previous,
         })
         
     except Exception as e:

@@ -231,9 +231,9 @@ function renderDevices(devices) {
 // Update pagination controls
 function updatePaginationControls(data) {
   const showingStart = (data.page - 1) * data.page_size + 1;
-  const showingEnd = Math.min(data.page * data.page_size, data.total);
+  const showingEnd = showingStart + data.devices.length - 1;
   
-  document.getElementById('showingStart').textContent = data.total > 0 ? showingStart : 0;
+  document.getElementById('showingStart').textContent = data.devices.length > 0 ? showingStart : 0;
   document.getElementById('showingEnd').textContent = showingEnd;
   document.getElementById('totalDevices').textContent = data.total;
   document.getElementById('pageInfo').textContent = `Page ${data.page} of ${data.total_pages}`;
