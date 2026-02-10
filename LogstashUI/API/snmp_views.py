@@ -945,7 +945,7 @@ def _generate_filters(oid_mappings, network):
 
     filter_components.extend(_get_special_case_filters(oid_mappings))
 
-    print(filter_components)
+    #print(filter_components)
     return filter_components
 
 

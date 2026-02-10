@@ -6,12 +6,20 @@
   <!-- Header with Add Button -->
   <div class="page-header flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-white">SNMP Profiles</h1>
-    <button id="addProfileBtn" class="btn btn-primary flex items-center gap-x-2">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-      </svg>
-      Add Profile
-    </button>
+    <div class="flex gap-2">
+      <button id="commitBtn" class="btn btn-secondary flex items-center gap-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Commit Changes
+      </button>
+      <button id="addProfileBtn" class="btn btn-primary flex items-center gap-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Profile
+      </button>
+    </div>
   </div>
 
   <!-- Profiles Table -->
@@ -119,10 +127,18 @@
   <!-- Profile Form Modal -->
   {% include 'components/snmp_profile_modal.html' %}
 
+  <!-- Commit Configuration Modal -->
+  {% include 'components/snmp_commit_modal.html' %}
+
+  <!-- SNMP Diff Modal -->
+  {% include 'components/snmp_diff_modal.html' %}
+
 </div>
 
 <script src="{% static 'js/snmp_profile_modal_helpers.js' %}"></script>
 <script src="{% static 'js/snmp_profile_modal.js' %}"></script>
+<script src="{% static 'js/snmp_commit_modal.js' %}"></script>
+<script src="{% static 'js/snmp_diff_modal.js' %}"></script>
 <script>
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
