@@ -121,8 +121,20 @@ def GetCredentials(request):
 def GetNetworks(request):
     """Get all SNMP networks"""
     try:
-        networks = Network.objects.all().values('id', 'name', 'network_range', 'logstash_name')
-        return JsonResponse(list(networks), safe=False, status=200)
+        networks = Network.objects.select_related('connection').all()
+        networks_data = []
+        for network in networks:
+            networks_data.append({
+                'id': network.id,
+                'name': network.name,
+                'network_range': network.network_range,
+                'logstash_name': network.logstash_name,
+                'discovery_enabled': network.discovery_enabled,
+                'traps_enabled': network.traps_enabled,
+                'connection': network.connection_id,
+                'connection_name': network.connection.name if network.connection else None
+            })
+        return JsonResponse(networks_data, safe=False, status=200)
     except Exception as e:
         return HttpResponse(f"Error fetching networks: {str(e)}", status=500)
 
@@ -511,18 +523,28 @@ def GetNetworkPipelineName(request, network_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
-def _get_device_profiles(device):
+# Cache for official profile data to avoid repeated file I/O
+_OFFICIAL_PROFILE_CACHE = {}
+
+def _get_device_profiles(device, profile_cache=None):
     """
     Get all profiles for a device and return merged OID data.
     Returns a tuple: (profile_ids_tuple, merged_oids_dict)
+    
+    Args:
+        device: Device object with prefetched profiles
+        profile_cache: Optional dict to cache loaded profile data
     """
     from SNMP.models import Profile
     from django.conf import settings
     import os
     import json
     
-    # Get all profiles for this device (prefetch to avoid N+1 queries)
-    profiles = device.profiles.all().order_by('id')
+    if profile_cache is None:
+        profile_cache = _OFFICIAL_PROFILE_CACHE
+    
+    # Get all profiles for this device (should already be prefetched)
+    profiles = list(device.profiles.all())
     
     if not profiles:
         return (tuple(), {'get': {}, 'walk': {}, 'table': {}})
@@ -542,21 +564,28 @@ def _get_device_profiles(device):
         
         # Check if this is an official profile placeholder
         if profile_data.get('is_official_placeholder'):
-            # Load the actual profile data from JSON file
-            profile_name = profile.name.replace('.json', '')  # Remove .json extension
-            official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-            profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
+            profile_name = profile.name.replace('.json', '')
             
-            if os.path.exists(profile_path):
-                try:
-                    with open(profile_path, 'r') as f:
-                        profile_data = json.load(f)
-                except Exception as e:
-                    # If we can't load the file, skip this profile
-                    continue
+            # Check cache first
+            if profile_name in profile_cache:
+                profile_data = profile_cache[profile_name]
             else:
-                # Profile file doesn't exist, skip
-                continue
+                # Load the actual profile data from JSON file
+                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+                profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
+                
+                if os.path.exists(profile_path):
+                    try:
+                        with open(profile_path, 'r') as f:
+                            profile_data = json.load(f)
+                            # Cache it for future use
+                            profile_cache[profile_name] = profile_data
+                    except Exception as e:
+                        # If we can't load the file, skip this profile
+                        continue
+                else:
+                    # Profile file doesn't exist, skip
+                    continue
         
         # Merge get OIDs (handle conflicts by appending profile name)
         if 'get' in profile_data and isinstance(profile_data['get'], dict):
@@ -587,11 +616,15 @@ def _get_device_profiles(device):
     return (profile_ids, merged_oids)
 
 
-def _generate_input(input_data):
+def _generate_input(input_data, profile_cache=None):
     """
     Generate SNMP input components grouped by:
     1. Credential version (v1/v2c vs v3)
     2. Profile combination (devices with same set of profiles)
+    
+    Args:
+        input_data: Dict containing network and device information
+        profile_cache: Optional dict to cache loaded profile data
     
     Returns: (input_components, oid_mappings)
     """
@@ -616,7 +649,7 @@ def _generate_input(input_data):
         v1_v2c_groups = {}
         
         for device_name, device in input_data['devices']['v1_v2c'].items():
-            profile_ids, merged_oids = _get_device_profiles(device)
+            profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
             
             # Use profile_ids tuple as grouping key
             if profile_ids not in v1_v2c_groups:
@@ -681,7 +714,7 @@ def _generate_input(input_data):
         v3_groups = {}
         
         for device_name, device in input_data['devices']['v3'].items():
-            profile_ids, merged_oids = _get_device_profiles(device)
+            profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
             credential = device.credential
             
             # Use both profile_ids and credential_id as grouping key
@@ -997,8 +1030,56 @@ def _generate_output(input_data, network_db_object):
 def GetCommitDiff(request):
     """Get diff for all network pipeline configurations"""
     try:
-        # Query all networks
-        networks = Network.objects.all()
+        from django.db.models import Prefetch
+        
+        # Prefetch all related data in one go to avoid N+1 queries
+        networks = Network.objects.select_related('connection', 'credential').prefetch_related(
+            Prefetch(
+                'devices',
+                queryset=Device.objects.select_related('credential').prefetch_related('profiles')
+            )
+        ).all()
+        
+        # Cache for profile data
+        profile_cache = {}
+        
+        # Collect all pipeline names we need to fetch from ES
+        pipeline_names_by_connection = {}
+        network_pipeline_map = {}
+        
+        for network in networks:
+            if network.connection:
+                conn_id = network.connection.id
+                if conn_id not in pipeline_names_by_connection:
+                    pipeline_names_by_connection[conn_id] = []
+                
+                pipeline_name = _get_pipeline_name(network)
+                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                
+                pipeline_names_by_connection[conn_id].extend([pipeline_name, trap_pipeline_name])
+                network_pipeline_map[network.id] = {
+                    'main': pipeline_name,
+                    'trap': trap_pipeline_name
+                }
+        
+        # Batch fetch all pipelines from Elasticsearch
+        existing_pipelines = {}
+        for conn_id, pipeline_names in pipeline_names_by_connection.items():
+            try:
+                from Core.views import get_elastic_connection
+                es_client = get_elastic_connection(conn_id)
+                
+                # Fetch all pipelines for this connection in one call
+                try:
+                    response = es_client.logstash.get_pipeline(id=','.join(pipeline_names))
+                    existing_pipelines.update(response)
+                except Exception:
+                    # Pipelines don't exist or error, continue
+                    pass
+            except Exception:
+                # Connection failed, continue
+                pass
+        
         network_diffs = []
         
         # Iterate through each network and build pipeline configuration
@@ -1013,8 +1094,8 @@ def GetCommitDiff(request):
                 "connection": network.connection
             }
             
-            # Get all devices for this network
-            devices = Device.objects.filter(network=network).select_related('credential')
+            # Get all devices for this network (already prefetched)
+            devices = network.devices.all()
 
             for device in devices:
                 if not device.credential:
@@ -1037,7 +1118,7 @@ def GetCommitDiff(request):
 
             # Generate components for this network (only if has devices)
             if has_devices:
-                input_components, oid_mappings = _generate_input(input_data)
+                input_components, oid_mappings = _generate_input(input_data, profile_cache)
                 filter_components = _generate_filters(oid_mappings, network)
             else:
                 input_components = []
@@ -1052,30 +1133,14 @@ def GetCommitDiff(request):
             # Generate new pipeline configuration
             new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
             
-            # Get current pipeline configuration from Elasticsearch (if exists)
+            # Get current pipeline configuration from pre-fetched data
             current_config = ""
-            pipeline_name = _get_pipeline_name(network)
+            pipeline_name = network_pipeline_map.get(network.id, {}).get('main', _get_pipeline_name(network))
             
-            # Try to fetch current pipeline from Elasticsearch
-            if network.connection:
-                try:
-                    from Core.views import get_elastic_connection
-                    
-                    es_client = get_elastic_connection(network.connection.id)
-                    
-                    # Try to get the pipeline
-                    try:
-                        response = es_client.logstash.get_pipeline(id=pipeline_name)
-                        if pipeline_name in response:
-                            pipeline_data = response[pipeline_name]
-                            if 'pipeline' in pipeline_data:
-                                current_config = pipeline_data['pipeline']
-                    except Exception as e:
-                        # Pipeline doesn't exist yet, that's okay
-                        pass
-                except Exception as e:
-                    # Connection failed, that's okay - we'll just show empty current
-                    pass
+            if pipeline_name in existing_pipelines:
+                pipeline_data = existing_pipelines[pipeline_name]
+                if 'pipeline' in pipeline_data:
+                    current_config = pipeline_data['pipeline']
             
             # Build network diff object (only include main pipeline if has devices)
             network_diff = {
@@ -1089,7 +1154,7 @@ def GetCommitDiff(request):
             
             # Handle trap pipeline if traps are enabled
             if network.traps_enabled and network.credential:
-                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap', f"snmp-{network.logstash_name}-traps")
                 
                 # Build trap input configuration
                 credential = network.credential
@@ -1135,23 +1200,12 @@ def GetCommitDiff(request):
                 # Generate new trap pipeline configuration
                 new_trap_config = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
                 
-                # Get current trap pipeline configuration from Elasticsearch (if exists)
+                # Get current trap pipeline configuration from pre-fetched data
                 current_trap_config = ""
-                if network.connection:
-                    try:
-                        from Core.views import get_elastic_connection
-                        es_client = get_elastic_connection(network.connection.id)
-                        
-                        try:
-                            response = es_client.logstash.get_pipeline(id=trap_pipeline_name)
-                            if trap_pipeline_name in response:
-                                pipeline_data = response[trap_pipeline_name]
-                                if 'pipeline' in pipeline_data:
-                                    current_trap_config = pipeline_data['pipeline']
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
+                if trap_pipeline_name in existing_pipelines:
+                    pipeline_data = existing_pipelines[trap_pipeline_name]
+                    if 'pipeline' in pipeline_data:
+                        current_trap_config = pipeline_data['pipeline']
                 
                 network_diff['trap_pipeline'] = {
                     'pipeline_name': trap_pipeline_name,
@@ -1161,24 +1215,13 @@ def GetCommitDiff(request):
                 }
             elif not network.traps_enabled:
                 # Check if trap pipeline exists and needs to be deleted
-                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap', f"snmp-{network.logstash_name}-traps")
                 current_trap_config = ""
                 
-                if network.connection:
-                    try:
-                        from Core.views import get_elastic_connection
-                        es_client = get_elastic_connection(network.connection.id)
-                        
-                        try:
-                            response = es_client.logstash.get_pipeline(id=trap_pipeline_name)
-                            if trap_pipeline_name in response:
-                                pipeline_data = response[trap_pipeline_name]
-                                if 'pipeline' in pipeline_data:
-                                    current_trap_config = pipeline_data['pipeline']
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
+                if trap_pipeline_name in existing_pipelines:
+                    pipeline_data = existing_pipelines[trap_pipeline_name]
+                    if 'pipeline' in pipeline_data:
+                        current_trap_config = pipeline_data['pipeline']
                 
                 if current_trap_config:
                     network_diff['trap_pipeline'] = {
