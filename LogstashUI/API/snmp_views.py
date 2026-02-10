@@ -7,6 +7,7 @@ from .logstash_config_parse import ComponentToPipeline
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from Core.encryption import decrypt_credential
+from Core import snmp_metrics
 import json
 import os
 import re
@@ -850,6 +851,7 @@ def _get_special_case_filters(oid_mappings):
                     f"rows = event.get('[{table_name}]')\n"
                     f"if rows.is_a?(Array)\n"
                     f"  host_name = event.get('[host][name]')\n"
+                    f"  host_hostname = event.get('[host][hostname]')\n"
                     f"  network_name = event.get('[network][name]')\n"
                     f"  timestamp = event.get('@timestamp')\n"
                     f"  rows.each do |row|\n"
@@ -857,7 +859,7 @@ def _get_special_case_filters(oid_mappings):
                     f"{rename_statements}\n"
                     f"    new_event = LogStash::Event.new({{\n"
                     f"      '@timestamp' => timestamp,\n"
-                    f"      'host' => {{ 'name' => host_name }},\n"
+                    f"      'host' => {{ 'name' => host_name, 'hostname' => host_hostname }},\n"
                     f"      'network' => {{ 'name' => network_name }},\n"
                     f"      'table' => row,\n"
                     f"      'metricset' => {{ 'module' => 'snmp' }},\n"
@@ -2036,3 +2038,60 @@ def GetAllProfiles(request):
         
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def GetDeviceVisualization(request, device_id):
+    """Get visualization data for a specific device"""
+    try:
+        device = Device.objects.get(id=device_id)
+        
+        # Prepare device data for visualization
+        device_data = {
+            'id': device.id,
+            'name': device.name,
+            'ip_address': device.ip_address,
+            'port': device.port,
+            'timeout': device.timeout,
+            'retries': device.retries,
+            'credential': {
+                'id': device.credential.id,
+                'name': device.credential.name,
+                'version': device.credential.version,
+            } if device.credential else None,
+            'network': {
+                'id': device.network.id,
+                'name': device.network.name,
+                'network_range': device.network.network_range,
+            } if device.network else None,
+            'profiles': [
+                {
+                    'name': profile.name,
+                    'type': profile.type,
+                    'vendor': profile.vendor,
+                }
+                for profile in device.profiles.all()
+            ],
+            'created_at': device.created_at.isoformat(),
+            'updated_at': device.updated_at.isoformat(),
+        }
+        
+        # Get visualization data from Elasticsearch
+        visualization_data = snmp_metrics.get_visualizations(device)
+        
+        return JsonResponse({
+            'success': True,
+            'device': device_data,
+            'visualizations': visualization_data
+        }, status=200)
+        
+    except Device.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Device not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

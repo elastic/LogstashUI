@@ -91,6 +91,7 @@
     <table class="table w-full">
       <thead>
         <tr class="bg-gray-700 border-b border-gray-600">
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-20"></th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('name')">
             Name <span id="sort-name" class="ml-1"></span>
           </th>
@@ -211,7 +212,11 @@
 <!-- SNMP Diff Modal -->
 {% include 'components/snmp_diff_modal.html' %}
 
+<!-- Device Visual Preview Component -->
+{% include 'components/snmp_device_visual_preview.html' %}
+
 <script src="{% static 'js/devices_table.js' %}"></script>
+<script src="{% static 'js/snmp_device_visual_preview.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
 <script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>
