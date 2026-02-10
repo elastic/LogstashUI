@@ -196,6 +196,143 @@ function renderDevicePreview(deviceId, device, visualizations) {
       });
     }
   }
+  
+  // Render interfaces if available
+  if (visualizations && visualizations.interfaces) {
+    console.log('Interfaces data found:', visualizations.interfaces);
+    const interfacesSection = contentDiv.querySelector('.device-interfaces-section');
+    const interfacesContainer = contentDiv.querySelector('.interfaces-container');
+    
+    const interfacesArray = visualizations.interfaces.interfaces || [];
+    console.log('Actual interfaces array:', interfacesArray);
+    
+    if (interfacesArray.length > 0 && interfacesSection && interfacesContainer) {
+      console.log('Rendering', interfacesArray.length, 'interfaces');
+      interfacesSection.style.display = 'block';
+      interfacesContainer.innerHTML = '';
+      
+      // Sort interfaces by index
+      const sortedInterfaces = interfacesArray.sort((a, b) => {
+        const indexA = parseInt(a.index) || parseInt(a.ifIndex) || 0;
+        const indexB = parseInt(b.index) || parseInt(b.ifIndex) || 0;
+        return indexA - indexB;
+      });
+      
+      sortedInterfaces.forEach(iface => {
+        console.log('Creating card for interface:', iface);
+        const interfaceCard = createInterfaceCard(iface);
+        interfacesContainer.appendChild(interfaceCard);
+      });
+    }
+  }
+}
+
+// Create an interface card with status indicators and hover details
+function createInterfaceCard(iface) {
+  const card = document.createElement('div');
+  
+  // Determine status colors based on admin and oper status
+  const adminStatus = parseInt(iface.ifAdminStatus);
+  const operStatus = parseInt(iface.ifOperStatus);
+  
+  // Admin status: 1=Up, 2=Down, 3=Testing
+  // Oper status: 1=Up, 2=Down, 3=Testing, 4=Unknown, 5=Dormant, 6=NotPresent, 7=LowerLayerDown
+  
+  let borderClass = 'border-gray-600';
+  let statusText = 'Unknown';
+  let statusColor = 'bg-gray-500';
+  
+  if (adminStatus === 2) {
+    // Admin down - gray
+    borderClass = 'border-gray-500';
+    statusText = 'Admin Down';
+    statusColor = 'bg-gray-500';
+  } else if (adminStatus === 1 && operStatus === 1) {
+    // Up/Up - green
+    borderClass = 'border-green-500';
+    statusText = 'Up';
+    statusColor = 'bg-green-500';
+  } else if (adminStatus === 1 && operStatus === 2) {
+    // Up/Down - red
+    borderClass = 'border-red-500';
+    statusText = 'Down';
+    statusColor = 'bg-red-500';
+  } else if (adminStatus === 1 && operStatus === 5) {
+    // Dormant - yellow
+    borderClass = 'border-yellow-500';
+    statusText = 'Dormant';
+    statusColor = 'bg-yellow-500';
+  } else if (adminStatus === 3 || operStatus === 3) {
+    // Testing - blue
+    borderClass = 'border-blue-500';
+    statusText = 'Testing';
+    statusColor = 'bg-blue-500';
+  }
+  
+  // Format speed
+  const speedMbps = iface.ifHighSpeed || (iface.ifSpeed ? iface.ifSpeed / 1000000 : 0);
+  const speedText = speedMbps >= 1000 ? `${speedMbps / 1000}G` : `${speedMbps}M`;
+  
+  // Format MAC address
+  const macAddress = iface.ifPhysAddress || 'N/A';
+  
+  // Build detailed tooltip content with better formatting
+  const adminStatusText = adminStatus === 1 ? '<span class="text-green-400">Up</span>' : adminStatus === 2 ? '<span class="text-gray-400">Down</span>' : '<span class="text-blue-400">Testing</span>';
+  const operStatusHtml = operStatus === 1 ? '<span class="text-green-400">Up</span>' : operStatus === 2 ? '<span class="text-red-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
+  
+  const tooltipContent = `
+    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(iface.ifDescr || iface.ifName)}</div>
+    ${iface.ifAlias ? `<div class="text-xs text-gray-400 mb-2 italic">${escapeHtml(iface.ifAlias)}</div>` : ''}
+    
+    <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mb-2">
+      <div><span class="text-gray-400">Admin:</span> ${adminStatusText}</div>
+      <div><span class="text-gray-400">Oper:</span> ${operStatusHtml}</div>
+      <div><span class="text-gray-400">Speed:</span> <span class="text-white">${speedText}</span></div>
+      <div><span class="text-gray-400">MTU:</span> <span class="text-white">${iface.ifMtu || 'N/A'}</span></div>
+      <div class="col-span-2"><span class="text-gray-400">MAC:</span> <span class="text-white font-mono text-xs">${escapeHtml(macAddress)}</span></div>
+    </div>
+    
+    <div class="border-t border-gray-700 pt-2 mt-2">
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+        <div><span class="text-gray-400">Type:</span> <span class="text-white">${iface.ifType || 'N/A'}</span></div>
+        <div><span class="text-gray-400">Index:</span> <span class="text-white">${iface.ifIndex || 'N/A'}</span></div>
+        <div><span class="text-gray-400">In:</span> <span class="text-green-400">${formatBytes(iface.ifHCInOctets || 0)}</span></div>
+        <div><span class="text-gray-400">Out:</span> <span class="text-blue-400">${formatBytes(iface.ifHCOutOctets || 0)}</span></div>
+        <div><span class="text-gray-400">In Err:</span> <span class="${iface.ifInErrors > 0 ? 'text-red-400' : 'text-white'}">${iface.ifInErrors || 0}</span></div>
+        <div><span class="text-gray-400">Out Err:</span> <span class="${iface.ifOutErrors > 0 ? 'text-red-400' : 'text-white'}">${iface.ifOutErrors || 0}</span></div>
+      </div>
+    </div>
+  `;
+  
+  card.className = `relative bg-gray-800 rounded-lg p-1.5 border-2 ${borderClass} hover:shadow-lg transition-all cursor-pointer group`;
+  card.innerHTML = `
+    <div class="flex flex-col items-center justify-center h-12">
+      <div class="w-2.5 h-2.5 rounded-full ${statusColor} mb-1"></div>
+      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(iface.ifName || iface.ifDescr)}</div>
+      <div class="text-xs text-gray-400 text-xs">${speedText}</div>
+    </div>
+    
+    <!-- Tooltip -->
+    <div class="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-80 pointer-events-none">
+      <div class="bg-gray-900 text-white rounded-lg p-3 shadow-2xl border-2 border-gray-600">
+        ${tooltipContent}
+        <div class="absolute top-full left-6 -mt-0.5">
+          <div class="border-8 border-transparent border-t-gray-600"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  return card;
+}
+
+// Format bytes to human-readable format
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 // Render a metric line chart
@@ -280,20 +417,31 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
         },
         x: {
           type: 'timeseries',
+          bounds: 'ticks',
           time: {
-            unit: 'hour',
+            unit: 'minute',
             tooltipFormat: 'MMM dd yyyy, HH:mm',
             displayFormats: {
-              hour: 'MMM dd HH:mm',
+              hour: 'HH:mm',
               minute: 'HH:mm'
             }
           },
           ticks: {
             color: '#9CA3AF',
-            maxRotation: 0,
-            autoSkip: true,
-            maxTicksLimit: 8,
-            source: 'auto'
+            maxRotation: 45,
+            minRotation: 45,
+            autoSkip: false,
+            callback: function(value, index, ticks) {
+              const date = new Date(value);
+              const minutes = date.getMinutes();
+              // Only show labels at :00 and :30
+              if (minutes === 0 || minutes === 30) {
+                const hours = date.getHours().toString().padStart(2, '0');
+                const mins = minutes.toString().padStart(2, '0');
+                return `${hours}:${mins}`;
+              }
+              return null;
+            }
           },
           grid: {
             color: 'rgba(75, 85, 99, 0.3)'
@@ -317,6 +465,9 @@ function createSensorCard(sensor) {
   // Calculate percentage for gauge (0 to threshold)
   const percentage = Math.min((sensor.temp_celsius / sensor.temp_threshold) * 100, 100);
   
+  // Calculate Fahrenheit threshold
+  const thresholdF = (sensor.temp_threshold * 9/5) + 32;
+  
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
   card.innerHTML = `
     <div class="flex items-center justify-between mb-2">
@@ -324,10 +475,10 @@ function createSensorCard(sensor) {
       <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
     </div>
     
-    <!-- Temperature Display -->
-    <div class="flex items-center justify-between mb-2">
-      <div class="text-2xl font-bold ${stateInfo.textClass}">${sensor.temp_celsius}°C</div>
-      <div class="text-sm text-gray-400">${tempF.toFixed(1)}°F</div>
+    <!-- Temperature values above gauge -->
+    <div class="flex items-center justify-between mb-1">
+      <div class="text-2xl font-bold ${stateInfo.textClass}">${tempF.toFixed(1)}°F</div>
+      <div class="text-xs text-gray-400">Threshold: ${thresholdF.toFixed(1)}°F</div>
     </div>
     
     <!-- Temperature Gauge -->
@@ -336,9 +487,10 @@ function createSensorCard(sensor) {
            style="width: ${percentage}%"></div>
     </div>
     
-    <!-- Threshold Label -->
-    <div class="text-xs text-gray-400 text-right">
-      Threshold: ${sensor.temp_threshold}°C
+    <!-- Temperature values below gauge -->
+    <div class="flex items-center justify-between">
+      <div class="text-sm text-gray-400">${sensor.temp_celsius}°C</div>
+      <div class="text-xs text-gray-400">Threshold: ${sensor.temp_threshold}°C</div>
     </div>
   `;
   
@@ -362,9 +514,9 @@ function createFanCard(fan) {
       <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
     </div>
     
-    <!-- Fan Icon with State-based Animation -->
+    <!-- Fan Icon -->
     <div class="flex flex-col items-center justify-center flex-1">
-      <svg class="w-16 h-16 ${stateInfo.textClass} ${isOperational ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="animation-duration: ${isOperational ? '2s' : '0s'}">
+      <svg class="w-12 h-12 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       </svg>
       <div class="text-xs text-gray-400 mt-2 text-center">

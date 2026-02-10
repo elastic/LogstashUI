@@ -21,10 +21,10 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
   form.reset();
   document.getElementById('profileErrorContainer').innerHTML = '';
   
-  // Clear all KV containers
+  // Clear all containers including tables
   clearKVContainer('get');
   clearKVContainer('walk');
-  clearKVContainer('table');
+  clearTableContainer();
   
   if (profileName) {
     // Load existing profile
@@ -105,7 +105,7 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       }
       
       // Load Walk section
-      if (data.profile_data && data.profile_data.walk) {
+      if (data.profile_data && data.profile_data.walk && Object.keys(data.profile_data.walk).length > 0) {
         Object.entries(data.profile_data.walk).forEach(([key, value]) => {
           addKVPair('walk', key, value, isReadOnly);
         });
@@ -114,7 +114,8 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       // Load Table section
       if (data.profile_data && data.profile_data.table) {
         Object.entries(data.profile_data.table).forEach(([tableName, tableData]) => {
-          if (tableData && tableData.columns) {
+          // Only add table if it has actual columns with data
+          if (tableData && tableData.columns && Object.keys(tableData.columns).length > 0) {
             addTable(tableName, tableData.columns, isReadOnly);
           }
         });
@@ -136,8 +137,8 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
     emptyMessage.style.display = 'none';
   }
   
-  // Show walk warning if adding to walk section
-  if (section === 'walk') {
+  // Show walk warning if adding to walk section AND we have actual content
+  if (section === 'walk' && (key || value)) {
     showWalkWarning();
   }
   
@@ -236,6 +237,21 @@ function clearKVContainer(section) {
   }
 }
 
+// Clear table container
+function clearTableContainer() {
+  const container = document.getElementById('tableContainer');
+  const emptyMessage = document.getElementById('tableEmptyMessage');
+  
+  // Remove all tables
+  const tables = container.querySelectorAll('.table-group');
+  tables.forEach(table => table.remove());
+  
+  // Show empty message
+  if (emptyMessage) {
+    emptyMessage.style.display = '';
+  }
+}
+
 // Add a table with columns
 function addTable(tableName = '', columns = {}, isReadOnly = false) {
   const container = document.getElementById('tableContainer');
@@ -270,7 +286,7 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
         Remove Table
       </button>
     </div>
-    <div class="ml-4">
+    <div class="ml-4" style="display: block; min-height: 50px;">
       <div class="flex justify-between items-center mb-2">
         <label class="text-xs text-gray-400">Columns (Field Name → OID)</label>
         <button type="button" 
@@ -283,7 +299,7 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
           Add Column
         </button>
       </div>
-      <div class="table-columns space-y-2">
+      <div class="table-columns space-y-2 min-h-[40px]" style="display: block; min-height: 50px;">
         <!-- Columns will be added here -->
       </div>
     </div>
@@ -291,55 +307,97 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
   
   container.appendChild(tableElement);
   
+  console.log('Table element appended to container');
+  
   // Add existing columns if provided
   if (columns && Object.keys(columns).length > 0) {
+    console.log('Adding existing columns:', columns);
     const columnsContainer = tableElement.querySelector('.table-columns');
+    console.log('Columns container found:', columnsContainer);
     Object.entries(columns).forEach(([columnName, oid]) => {
       addTableColumnToContainer(columnsContainer, columnName, oid, isReadOnly);
     });
-  } else if (!isReadOnly) {
-    // Add one empty column for new tables
+  } else {
+    console.log('No existing columns, adding empty column or message');
+    // Show empty message for read-only tables with no columns
     const columnsContainer = tableElement.querySelector('.table-columns');
-    addTableColumnToContainer(columnsContainer, '', '', false);
+    console.log('Columns container for new table:', columnsContainer);
+    if (isReadOnly) {
+      columnsContainer.innerHTML = '<p class="text-gray-500 text-sm text-center py-2">No columns defined</p>';
+    } else {
+      // Add one empty column for new tables
+      console.log('Adding one empty column to new table');
+      addTableColumnToContainer(columnsContainer, '', '', false);
+    }
   }
 }
 
 // Add a column to a table
 function addTableColumn(button) {
+  console.log('addTableColumn called with button:', button);
   const tableElement = button.closest('.table-group');
+  console.log('Found table element:', tableElement);
   const columnsContainer = tableElement.querySelector('.table-columns');
+  console.log('Found columns container:', columnsContainer);
+  
+  // Remove empty message if it exists
+  const emptyMessage = columnsContainer.querySelector('p');
+  if (emptyMessage) {
+    emptyMessage.remove();
+  }
+  
   addTableColumnToContainer(columnsContainer, '', '', false);
 }
 
+
 // Add a column to a specific container
 function addTableColumnToContainer(container, columnName = '', oid = '', isReadOnly = false) {
+  console.log('addTableColumnToContainer called - container:', container, 'columnName:', columnName, 'oid:', oid);
+  
+  // Create wrapper div
   const column = document.createElement('div');
   column.className = 'flex gap-2 items-start table-column';
-  column.innerHTML = `
-    <div class="flex-1">
-      <input type="text" 
-             class="input input-bordered input-sm w-full column-name" 
-             placeholder="Column name (e.g., ifIndex)" 
-             value="${columnName}"
-             ${isReadOnly ? 'disabled' : ''}>
-    </div>
-    <div class="flex-1">
-      <input type="text" 
-             class="input input-bordered input-sm w-full font-mono column-oid" 
-             placeholder="OID (e.g., 1.3.6.1.2.1.2.2.1.1)" 
-             value="${oid}"
-             ${isReadOnly ? 'disabled' : ''}>
-    </div>
-    <button type="button" 
-            onclick="removeTableColumn(this)" 
-            class="btn btn-ghost btn-sm btn-circle text-red-400 hover:bg-red-900/20"
-            ${isReadOnly ? 'disabled style="display:none;"' : ''}>
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
-  `;
+  
+  // Create first input wrapper
+  const wrapper1 = document.createElement('div');
+  wrapper1.className = 'flex-1';
+  const input1 = document.createElement('input');
+  input1.type = 'text';
+  input1.className = 'input input-bordered input-sm w-full column-name';
+  input1.placeholder = 'Field name';
+  input1.value = columnName;
+  if (isReadOnly) input1.disabled = true;
+  wrapper1.appendChild(input1);
+  
+  // Create second input wrapper
+  const wrapper2 = document.createElement('div');
+  wrapper2.className = 'flex-1';
+  const input2 = document.createElement('input');
+  input2.type = 'text';
+  input2.className = 'input input-bordered input-sm w-full font-mono column-oid';
+  input2.placeholder = 'OID';
+  input2.value = oid;
+  if (isReadOnly) input2.disabled = true;
+  wrapper2.appendChild(input2);
+  
+  // Create remove button
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-ghost btn-sm btn-circle text-red-400 hover:bg-red-900/20';
+  button.onclick = function() { removeTableColumn(this); };
+  if (isReadOnly) {
+    button.disabled = true;
+    button.style.display = 'none';
+  }
+  button.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+  
+  // Append all elements
+  column.appendChild(wrapper1);
+  column.appendChild(wrapper2);
+  column.appendChild(button);
+  
   container.appendChild(column);
+  console.log('Column appended. Container children count:', container.children.length);
 }
 
 // Remove a table column

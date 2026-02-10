@@ -495,8 +495,9 @@ def GetNetworkPipelineName(request, network_id):
     try:
         network = Network.objects.get(pk=network_id)
         
-        # Generate sanitized pipeline name: snmp-{logstash_name}-{network_name}-*
-        pipeline_name = _get_pipeline_name(network)
+        # Generate sanitized pipeline name pattern: snmp-{logstash_name}-*
+        sanitized_logstash_name = _sanitize_pipeline_name_component(network.logstash_name)
+        pipeline_name = f"snmp-{sanitized_logstash_name}-*"
         
         return JsonResponse({
             'success': True,
@@ -990,6 +991,7 @@ def _generate_output(input_data, network_db_object):
     )
 
     return output_components
+
 
 @require_http_methods(["POST"])
 def GetCommitDiff(request):
@@ -2056,6 +2058,31 @@ def GetAllProfiles(request):
         
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def GetDeviceStatus(request, device_id):
+    """Check if a device is online (has sent data in last 15 minutes)"""
+    try:
+        device = Device.objects.get(id=device_id)
+        is_online = snmp_metrics.get_device_online(device)
+        
+        return JsonResponse({
+            'success': True,
+            'device_id': device_id,
+            'is_online': is_online
+        }, status=200)
+        
+    except Device.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Device not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 
 @require_http_methods(["GET"])

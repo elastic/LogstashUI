@@ -21,10 +21,10 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
   form.reset();
   document.getElementById('profileErrorContainer').innerHTML = '';
   
-  // Clear all KV containers
+  // Clear all containers including tables
   clearKVContainer('get');
   clearKVContainer('walk');
-  clearKVContainer('table');
+  clearTableContainer();
   
   if (profileName) {
     // Load existing profile
@@ -34,10 +34,10 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     
     // Disable fields for official profiles or view mode
     const isReadOnly = isOfficial || viewMode;
-    document.getElementById('profileName').disabled = isReadOnly;
-    document.getElementById('profileDescription').disabled = isReadOnly;
+    document.getElementById('profileName').readOnly = isReadOnly;
+    document.getElementById('profileDescription').readOnly = isReadOnly;
     document.getElementById('profileType').disabled = isReadOnly;
-    document.getElementById('profileVendor').disabled = isReadOnly;
+    document.getElementById('profileVendor').readOnly = isReadOnly;
     
     // Hide/disable save button for official profiles or view mode
     if (isReadOnly) {
@@ -53,15 +53,22 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
       btn.style.display = isReadOnly ? 'none' : '';
     });
     
+    // Hide Add Table button for official profiles or view mode
+    const addTableBtn = modal.querySelector('button[onclick="addTable()"]');
+    if (addTableBtn) {
+      addTableBtn.disabled = isReadOnly;
+      addTableBtn.style.display = isReadOnly ? 'none' : '';
+    }
+    
     // Load profile data
     loadProfileData(profileName, isOfficial, isReadOnly);
   } else {
     // New profile
     modalTitle.textContent = 'Add SNMP Profile';
-    document.getElementById('profileName').disabled = false;
-    document.getElementById('profileDescription').disabled = false;
+    document.getElementById('profileName').readOnly = false;
+    document.getElementById('profileDescription').readOnly = false;
     document.getElementById('profileType').disabled = false;
-    document.getElementById('profileVendor').disabled = false;
+    document.getElementById('profileVendor').readOnly = false;
     saveBtn.style.display = '';
     
     // Enable add buttons
@@ -70,6 +77,13 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
       btn.disabled = false;
       btn.style.display = '';
     });
+    
+    // Show Add Table button
+    const addTableBtn = modal.querySelector('button[onclick="addTable()"]');
+    if (addTableBtn) {
+      addTableBtn.disabled = false;
+      addTableBtn.style.display = '';
+    }
   }
   
   modal.classList.remove('hidden');
@@ -105,7 +119,7 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       }
       
       // Load Walk section
-      if (data.profile_data && data.profile_data.walk) {
+      if (data.profile_data && data.profile_data.walk && Object.keys(data.profile_data.walk).length > 0) {
         Object.entries(data.profile_data.walk).forEach(([key, value]) => {
           addKVPair('walk', key, value, isReadOnly);
         });
@@ -114,7 +128,8 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       // Load Table section
       if (data.profile_data && data.profile_data.table) {
         Object.entries(data.profile_data.table).forEach(([tableName, tableData]) => {
-          if (tableData && tableData.columns) {
+          // Only add table if it has actual columns with data
+          if (tableData && tableData.columns && Object.keys(tableData.columns).length > 0) {
             addTable(tableName, tableData.columns, isReadOnly);
           }
         });
@@ -136,8 +151,8 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
     emptyMessage.style.display = 'none';
   }
   
-  // Show walk warning if adding to walk section
-  if (section === 'walk') {
+  // Show walk warning if adding to walk section AND we have actual content
+  if (section === 'walk' && (key || value)) {
     showWalkWarning();
   }
   
@@ -150,14 +165,14 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
              class="input input-bordered input-sm w-full kv-key" 
              placeholder="Field name (e.g., sysName)" 
              value="${key}"
-             ${isReadOnly ? 'disabled' : ''}>
+             ${isReadOnly ? 'readonly' : ''}>
     </div>
     <div class="flex-1">
       <input type="text" 
              class="input input-bordered input-sm w-full font-mono kv-value" 
              placeholder="OID (e.g., 1.3.6.1.2.1.1.5.0)" 
              value="${value}"
-             ${isReadOnly ? 'disabled' : ''}>
+             ${isReadOnly ? 'readonly' : ''}>
     </div>
     <button type="button" 
             onclick="removeKVPair(this, '${section}')" 
@@ -236,6 +251,21 @@ function clearKVContainer(section) {
   }
 }
 
+// Clear table container
+function clearTableContainer() {
+  const container = document.getElementById('tableContainer');
+  const emptyMessage = document.getElementById('tableEmptyMessage');
+  
+  // Remove all tables
+  const tables = container.querySelectorAll('.table-group');
+  tables.forEach(table => table.remove());
+  
+  // Show empty message
+  if (emptyMessage) {
+    emptyMessage.style.display = '';
+  }
+}
+
 // Add a table with columns
 function addTable(tableName = '', columns = {}, isReadOnly = false) {
   const container = document.getElementById('tableContainer');
@@ -259,7 +289,7 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
              class="input input-bordered input-sm w-64 table-name" 
              placeholder="Table name (e.g., ifTable)" 
              value="${tableName}"
-             ${isReadOnly ? 'disabled' : ''}>
+             ${isReadOnly ? 'readonly' : ''}>
       <button type="button" 
               onclick="removeTable(this)" 
               class="btn btn-ghost btn-sm text-red-400 hover:bg-red-900/20"
@@ -297,10 +327,15 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
     Object.entries(columns).forEach(([columnName, oid]) => {
       addTableColumnToContainer(columnsContainer, columnName, oid, isReadOnly);
     });
-  } else if (!isReadOnly) {
-    // Add one empty column for new tables
+  } else {
+    // Show empty message for read-only tables with no columns
     const columnsContainer = tableElement.querySelector('.table-columns');
-    addTableColumnToContainer(columnsContainer, '', '', false);
+    if (isReadOnly) {
+      columnsContainer.innerHTML = '<p class="text-gray-500 text-sm text-center py-2">No columns defined</p>';
+    } else {
+      // Add one empty column for new tables
+      addTableColumnToContainer(columnsContainer, '', '', false);
+    }
   }
 }
 
@@ -308,37 +343,62 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
 function addTableColumn(button) {
   const tableElement = button.closest('.table-group');
   const columnsContainer = tableElement.querySelector('.table-columns');
+  
+  // Remove empty message if it exists
+  const emptyMessage = columnsContainer.querySelector('p');
+  if (emptyMessage) {
+    emptyMessage.remove();
+  }
+  
   addTableColumnToContainer(columnsContainer, '', '', false);
 }
 
 // Add a column to a specific container
 function addTableColumnToContainer(container, columnName = '', oid = '', isReadOnly = false) {
+  // Create wrapper div
   const column = document.createElement('div');
   column.className = 'flex gap-2 items-start table-column';
-  column.innerHTML = `
-    <div class="flex-1">
-      <input type="text" 
-             class="input input-bordered input-sm w-full column-name" 
-             placeholder="Column name (e.g., ifIndex)" 
-             value="${columnName}"
-             ${isReadOnly ? 'disabled' : ''}>
-    </div>
-    <div class="flex-1">
-      <input type="text" 
-             class="input input-bordered input-sm w-full font-mono column-oid" 
-             placeholder="OID (e.g., 1.3.6.1.2.1.2.2.1.1)" 
-             value="${oid}"
-             ${isReadOnly ? 'disabled' : ''}>
-    </div>
-    <button type="button" 
-            onclick="removeTableColumn(this)" 
-            class="btn btn-ghost btn-sm btn-circle text-red-400 hover:bg-red-900/20"
-            ${isReadOnly ? 'disabled style="display:none;"' : ''}>
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
-  `;
+  column.style.display = 'flex';
+  column.style.visibility = 'visible';
+  
+  // Create first input wrapper
+  const wrapper1 = document.createElement('div');
+  wrapper1.className = 'flex-1';
+  const input1 = document.createElement('input');
+  input1.type = 'text';
+  input1.className = 'input input-bordered input-sm w-full column-name';
+  input1.placeholder = 'Column name (e.g., ifIndex)';
+  input1.value = columnName;
+  if (isReadOnly) input1.readOnly = true;
+  wrapper1.appendChild(input1);
+  
+  // Create second input wrapper
+  const wrapper2 = document.createElement('div');
+  wrapper2.className = 'flex-1';
+  const input2 = document.createElement('input');
+  input2.type = 'text';
+  input2.className = 'input input-bordered input-sm w-full font-mono column-oid';
+  input2.placeholder = 'OID (e.g., 1.3.6.1.2.1.2.2.1.1)';
+  input2.value = oid;
+  if (isReadOnly) input2.readOnly = true;
+  wrapper2.appendChild(input2);
+  
+  // Create remove button
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-ghost btn-sm btn-circle text-red-400 hover:bg-red-900/20';
+  button.onclick = function() { removeTableColumn(this); };
+  if (isReadOnly) {
+    button.disabled = true;
+    button.style.display = 'none';
+  }
+  button.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+  
+  // Append all elements
+  column.appendChild(wrapper1);
+  column.appendChild(wrapper2);
+  column.appendChild(button);
+  
   container.appendChild(column);
 }
 

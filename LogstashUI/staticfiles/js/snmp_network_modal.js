@@ -180,6 +180,7 @@ function openCredentialModalFromNetwork() {
 
 // Track if network modal is open
 let networkModalIsOpen = false;
+window.lastCreatedCredentialIdForNetwork = null;
 
 // Store original closeFlyout function
 let originalCloseFlyoutForNetwork = null;
@@ -209,6 +210,24 @@ window.closeFlyout = function() {
     networkModal.classList.remove('hidden');
     loadConnections(window.lastCreatedConnectionId);
     window.lastCreatedConnectionId = null;
+  }
+};
+
+// Override closeCredentialModal to refresh credentials dropdown in network modal
+const originalCloseCredentialModalForNetwork = window.closeCredentialModal;
+window.closeCredentialModal = function() {
+  const networkModal = document.getElementById('networkFormModal');
+  const wasNetworkModalOpen = networkModal && !networkModal.classList.contains('hidden');
+  
+  if (originalCloseCredentialModalForNetwork) {
+    originalCloseCredentialModalForNetwork();
+  }
+  
+  // If network modal was open, reopen it and refresh credentials
+  if (wasNetworkModalOpen) {
+    networkModal.classList.remove('hidden');
+    loadNetworkCredentials(window.lastCreatedCredentialIdForNetwork);
+    window.lastCreatedCredentialIdForNetwork = null;
   }
 };
 

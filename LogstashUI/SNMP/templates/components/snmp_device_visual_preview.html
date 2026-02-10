@@ -5,6 +5,19 @@
     <title>Title</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        @keyframes fan-spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .fan-spin {
+            animation: fan-spin 2s linear infinite;
+        }
+    </style>
 </head>
 <body>
   <!-- Device Visual Preview Component -->
@@ -119,6 +132,21 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Interfaces Row (Full Width) -->
+      <div class="mt-6 device-interfaces-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Network Interfaces
+          </h3>
+          <div class="interfaces-container grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-3">
+            <!-- Interface cards will be dynamically inserted here -->
+          </div>
+        </div>
       </div>
     </div>
   </template>

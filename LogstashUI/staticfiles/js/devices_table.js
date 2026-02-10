@@ -37,7 +37,8 @@ function loadDevices() {
     .then(data => {
       loadingState.classList.add('hidden');
       const noResultsState = document.getElementById('noResultsState');
-      const searchFilterBar = document.getElementById('searchFilterBar');
+      const initialEmptyState = document.getElementById('initialEmptyState');
+      const mainContent = document.getElementById('mainContent');
       
       // Check if empty
       if (data.total === 0) {
@@ -45,26 +46,27 @@ function loadDevices() {
         const hasActiveFilters = currentSearch || currentNetworkFilter;
         
         if (hasActiveFilters) {
-          // Show "no results" state
+          // Show "no results" state within main content
+          mainContent.classList.remove('hidden');
+          initialEmptyState.classList.add('hidden');
           noResultsState.classList.remove('hidden');
           emptyState.classList.add('hidden');
-          searchFilterBar.classList.remove('hidden');
+          tableContainer.classList.add('hidden');
+          document.getElementById('paginationControls').classList.add('hidden');
         } else {
-          // Show "get started" empty state and hide search bar
-          emptyState.classList.remove('hidden');
-          noResultsState.classList.add('hidden');
-          searchFilterBar.classList.add('hidden');
+          // Show centered "get started" empty state and hide main content
+          initialEmptyState.classList.remove('hidden');
+          mainContent.classList.add('hidden');
         }
         
-        tableContainer.classList.add('hidden');
-        document.getElementById('paginationControls').classList.add('hidden');
         return;
       }
       
-      // Hide all empty states and show table
+      // Hide initial empty state and show main content with table
+      initialEmptyState.classList.add('hidden');
+      mainContent.classList.remove('hidden');
       emptyState.classList.add('hidden');
       noResultsState.classList.add('hidden');
-      searchFilterBar.classList.remove('hidden');
       tableContainer.classList.remove('hidden');
       document.getElementById('paginationControls').classList.remove('hidden');
       
@@ -73,6 +75,9 @@ function loadDevices() {
       
       // Update pagination info
       updatePaginationControls(data);
+      
+      // Check device status asynchronously (non-blocking)
+      checkDeviceStatuses(data.devices);
     })
     .catch(error => {
       console.error('Error loading devices:', error);
@@ -85,6 +90,32 @@ function loadDevices() {
         </tr>
       `;
     });
+}
+
+// Asynchronously check device statuses without blocking page rendering
+function checkDeviceStatuses(devices) {
+  devices.forEach(device => {
+    // Use setTimeout to make each request truly async and non-blocking
+    setTimeout(() => {
+      fetch(`/API/SNMP/GetDeviceStatus/${device.id}/`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.is_online) {
+            const statusCircle = document.getElementById(`status-circle-${device.id}`);
+            if (statusCircle) {
+              statusCircle.classList.remove('bg-gray-500');
+              statusCircle.classList.add('bg-green-500');
+              statusCircle.title = 'Device online (data received in last 15 minutes)';
+            }
+          }
+          // If not online or error, leave the circle gray (default state)
+        })
+        .catch(error => {
+          // Silently fail - leave status circle gray
+          console.debug(`Could not check status for device ${device.id}:`, error);
+        });
+    }, 0);
+  });
 }
 
 // Render devices in table
@@ -458,3 +489,13 @@ function createToastContainer() {
   document.body.appendChild(container);
   return container;
 }
+
+// Add event listener for empty state Add Device button
+document.addEventListener('DOMContentLoaded', function() {
+  const addDeviceBtnEmpty = document.getElementById('addDeviceBtnEmpty');
+  if (addDeviceBtnEmpty) {
+    addDeviceBtnEmpty.addEventListener('click', function() {
+      openDeviceModal();
+    });
+  }
+});

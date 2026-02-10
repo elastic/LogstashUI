@@ -158,6 +158,10 @@ document.getElementById('credentialForm').addEventListener('submit', function(e)
     const deviceModal = document.getElementById('deviceFormModal');
     const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
     
+    // Check if network modal is open (called from network modal)
+    const networkModal = document.getElementById('networkFormModal');
+    const isCalledFromNetworkModal = networkModal && !networkModal.classList.contains('hidden');
+    
     if (isCalledFromDeviceModal) {
       // Store the new credential ID for device modal to use (if we got one)
       if (newCredentialId) {
@@ -170,6 +174,18 @@ document.getElementById('credentialForm').addEventListener('submit', function(e)
         closeCredentialModal();
       }
       // Don't reload - let device modal handle the refresh
+    } else if (isCalledFromNetworkModal) {
+      // Store the new credential ID for network modal to use (if we got one)
+      if (newCredentialId) {
+        window.lastCreatedCredentialIdForNetwork = newCredentialId;
+      }
+      // Use window.closeCredentialModal to ensure network modal override is called
+      if (typeof window.closeCredentialModal === 'function') {
+        window.closeCredentialModal();
+      } else {
+        closeCredentialModal();
+      }
+      // Don't reload - let network modal handle the refresh
     } else {
       closeCredentialModal();
       // Reload page to show updated credentials

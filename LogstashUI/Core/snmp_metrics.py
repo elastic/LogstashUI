@@ -1,7 +1,59 @@
 from Core.views import get_elastic_connection
 
 
+def _get_device_interfaces(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query = {
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.kind": "interfaces"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations = {
+            "fans": {
+                "terms": {
+                    "field": "table.ifDescr",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "top_if_doc": {
+                        "top_hits": {
+                            "size": 1
+                        }
+                    }
+                }
+            }
+        }
+    )
 
+    visualization_data = {
+        "interfaces": []
+    }
+
+    for fan in results['aggregations']['fans']['buckets']:
+        for doc in fan['top_if_doc']['hits']['hits']:
+            visualization_data['interfaces'].append(doc['_source']['table'])
+
+    return visualization_data
 
 def _get_device_metrics(device, es_connection):
 
@@ -178,9 +230,40 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)
     if "fans" in visualizations:
         visualization_data['fans'] = _get_device_fans(device, es_connection)
+    if "interfaces" in visualizations:
+        visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)
 
     return visualization_data
 
+def get_device_online(device):
+    connection_id = device.network.connection.id
+    es = get_elastic_connection(connection_id)
+
+    results =es.search(
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-15m"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    }
+                ]
+            }
+        }
+    )
+
+    if results['hits']['total']['value'] > 0:
+        return True
+    else:
+        return False
 
 def get_visualizations(device):
     """
