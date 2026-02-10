@@ -172,7 +172,7 @@ def generate_visualizations(visualizations, device, es_connection):
     """
     visualization_data = {}
 
-    if "metric" in visualizations:
+    if "metrics" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
     if "sensors" in visualizations:
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)

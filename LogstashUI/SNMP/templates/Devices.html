@@ -3,63 +3,10 @@
 
 {% block content %}
 <div class="p-6">
-  <!-- Header with Add Button -->
-  <div class="page-header flex justify-between items-center mb-2">
-    <div>
-      <h1 class="text-2xl font-bold text-white">SNMP Devices</h1>
-      <button id="setupInstructionsBtn" class="text-sm text-blue-400 hover:text-blue-300 underline mt-1">
-        Click here for setup instructions
-      </button>
-    </div>
-    <div class="flex gap-2">
-      <button id="commitBtn" class="btn btn-secondary flex items-center gap-x-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        Commit Changes
-      </button>
-      <button id="addDeviceBtn" class="btn btn-primary flex items-center gap-x-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-        Add Device
-      </button>
-    </div>
-  </div>
-
-  <!-- Search, Filter, and Controls -->
-  <div id="searchFilterBar" class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
-    <div class="flex gap-4 items-end">
-      <!-- Search (50%) -->
-      <div style="flex: 0 0 50%;">
-        <label for="searchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
-        <input type="text" id="searchInput" placeholder="Search by name or IP address..." class="input input-bordered w-full">
-      </div>
-      
-      <!-- Network Filter (35%) -->
-      <div style="flex: 0 0 35%;">
-        <label for="networkFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Network</label>
-        <select id="networkFilter" class="select select-bordered w-full">
-          <option value="">All Networks</option>
-        </select>
-      </div>
-      
-      <!-- Page Size (15%) -->
-      <div style="flex: 0 0 13%;">
-        <label for="pageSizeSelect" class="block text-sm font-medium text-gray-300 mb-2 text-xs">Rows</label>
-        <select id="pageSizeSelect" class="select select-bordered w-full select-sm">
-          <option value="10">10</option>
-          <option value="25" selected>25</option>
-          <option value="100">100</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <!-- Empty State (No devices at all) -->
-  <div id="emptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-24rem)]">
+  <!-- Empty State (No devices at all) - Shown by JavaScript when totalDevicesCount === 0 -->
+  <div id="initialEmptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-12rem)]">
     <div class="max-w-2xl w-full">
-      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center">
+      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center mb-6">
         <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -67,24 +14,102 @@
         </div>
         <h2 class="text-2xl font-bold text-white mb-2">Get Started with SNMP Devices</h2>
         <p class="text-gray-300 mb-4">Devices are the individual network devices you want to monitor via SNMP. <b>Add your first device to start collecting data!</b></p>
+        <div class="flex justify-center mb-8">
+          <button id="addDeviceBtnEmpty" class="btn btn-primary flex items-center gap-x-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Device
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- No Results State (Search/filter returned nothing) -->
-  <div id="noResultsState" class="hidden flex items-center justify-center min-h-[calc(100vh-24rem)]">
-    <div class="max-w-2xl w-full">
-      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center">
-        <div class="inline-flex items-center justify-center w-16 h-16 bg-yellow-600/20 rounded-full mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  <!-- Main Content (Shown when devices exist) -->
+  <div id="mainContent">
+    <!-- Header with Add Button -->
+    <div class="page-header flex justify-between items-center mb-2">
+      <div>
+        <h1 class="text-2xl font-bold text-white">SNMP Devices</h1>
+        <button id="setupInstructionsBtn" class="text-sm text-blue-400 hover:text-blue-300 underline mt-1">
+          Click here for setup instructions
+        </button>
+      </div>
+      <div class="flex gap-2">
+        <button id="commitBtn" class="btn btn-secondary flex items-center gap-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
-        </div>
-        <h2 class="text-2xl font-bold text-white mb-2">Sorry, no results!</h2>
-        <p class="text-gray-300 mb-4">We couldn't find any devices matching your search or filter criteria. Try adjusting your filters or search terms.</p>
+          Commit Changes
+        </button>
+        <button id="addDeviceBtn" class="btn btn-primary flex items-center gap-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Device
+        </button>
       </div>
     </div>
-  </div>
+
+    <!-- Search, Filter, and Controls -->
+    <div id="searchFilterBar" class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
+      <div class="flex gap-4 items-end">
+        <!-- Search (50%) -->
+        <div style="flex: 0 0 50%;">
+          <label for="searchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input type="text" id="searchInput" placeholder="Search by name or IP address..." class="input input-bordered w-full">
+        </div>
+        
+        <!-- Network Filter (35%) -->
+        <div style="flex: 0 0 35%;">
+          <label for="networkFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Network</label>
+          <select id="networkFilter" class="select select-bordered w-full">
+            <option value="">All Networks</option>
+          </select>
+        </div>
+        
+        <!-- Page Size (15%) -->
+        <div style="flex: 0 0 13%;">
+          <label for="pageSizeSelect" class="block text-sm font-medium text-gray-300 mb-2 text-xs">Rows</label>
+          <select id="pageSizeSelect" class="select select-bordered w-full select-sm">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State (No devices at all) -->
+    <div id="emptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-24rem)]">
+      <div class="max-w-2xl w-full">
+        <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 class="text-2xl font-bold text-white mb-2">Get Started with SNMP Devices</h2>
+          <p class="text-gray-300 mb-4">Devices are the individual network devices you want to monitor via SNMP. <b>Add your first device to start collecting data!</b></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- No Results State (Search/filter returned nothing) -->
+    <div id="noResultsState" class="hidden flex items-center justify-center min-h-[calc(100vh-24rem)]">
+      <div class="max-w-2xl w-full">
+        <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-yellow-600/20 rounded-full mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <h2 class="text-2xl font-bold text-white mb-2">Sorry, no results!</h2>
+          <p class="text-gray-300 mb-4">We couldn't find any devices matching your search or filter criteria. Try adjusting your filters or search terms.</p>
+        </div>
+      </div>
+    </div>
 
   <!-- Devices Table -->
   <div id="devicesTableContainer" class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
@@ -129,6 +154,7 @@
       <span id="pageInfo" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
       <button id="nextPageBtn" class="btn btn-sm btn-secondary" onclick="nextPage()">Next</button>
     </div>
+  </div>
   </div>
 
   <!-- Setup Instructions Modal -->
@@ -205,6 +231,9 @@
 
 <!-- Network Form Modal (for creating networks from device modal) -->
 {% include 'components/snmp_network_modal.html' %}
+
+<!-- Connection Form Modal (for creating connections from network modal) -->
+{% include 'components/pipeline_manager/connection_modal.html' %}
 
 <!-- Commit Configuration Modal -->
 {% include 'components/snmp_commit_modal.html' %}

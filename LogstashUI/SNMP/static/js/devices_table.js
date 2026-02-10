@@ -37,7 +37,8 @@ function loadDevices() {
     .then(data => {
       loadingState.classList.add('hidden');
       const noResultsState = document.getElementById('noResultsState');
-      const searchFilterBar = document.getElementById('searchFilterBar');
+      const initialEmptyState = document.getElementById('initialEmptyState');
+      const mainContent = document.getElementById('mainContent');
       
       // Check if empty
       if (data.total === 0) {
@@ -45,26 +46,27 @@ function loadDevices() {
         const hasActiveFilters = currentSearch || currentNetworkFilter;
         
         if (hasActiveFilters) {
-          // Show "no results" state
+          // Show "no results" state within main content
+          mainContent.classList.remove('hidden');
+          initialEmptyState.classList.add('hidden');
           noResultsState.classList.remove('hidden');
           emptyState.classList.add('hidden');
-          searchFilterBar.classList.remove('hidden');
+          tableContainer.classList.add('hidden');
+          document.getElementById('paginationControls').classList.add('hidden');
         } else {
-          // Show "get started" empty state and hide search bar
-          emptyState.classList.remove('hidden');
-          noResultsState.classList.add('hidden');
-          searchFilterBar.classList.add('hidden');
+          // Show centered "get started" empty state and hide main content
+          initialEmptyState.classList.remove('hidden');
+          mainContent.classList.add('hidden');
         }
         
-        tableContainer.classList.add('hidden');
-        document.getElementById('paginationControls').classList.add('hidden');
         return;
       }
       
-      // Hide all empty states and show table
+      // Hide initial empty state and show main content with table
+      initialEmptyState.classList.add('hidden');
+      mainContent.classList.remove('hidden');
       emptyState.classList.add('hidden');
       noResultsState.classList.add('hidden');
-      searchFilterBar.classList.remove('hidden');
       tableContainer.classList.remove('hidden');
       document.getElementById('paginationControls').classList.remove('hidden');
       
@@ -458,3 +460,13 @@ function createToastContainer() {
   document.body.appendChild(container);
   return container;
 }
+
+// Add event listener for empty state Add Device button
+document.addEventListener('DOMContentLoaded', function() {
+  const addDeviceBtnEmpty = document.getElementById('addDeviceBtnEmpty');
+  if (addDeviceBtnEmpty) {
+    addDeviceBtnEmpty.addEventListener('click', function() {
+      openDeviceModal();
+    });
+  }
+});

@@ -42,7 +42,7 @@ function openDeviceModal(deviceData = null) {
     }
   } else {
     // Add mode
-    document.getElementById('deviceModalTitle').textContent = 'Add SNMP Device';
+    modalTitle.textContent = 'Add SNMP Device';
     document.getElementById('deviceForm').reset();
     document.getElementById('devicePort').value = 161;
     document.getElementById('deviceRetries').value = 2;

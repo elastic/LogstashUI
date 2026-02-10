@@ -140,6 +140,9 @@
   <!-- Network Form Modal -->
   {% include 'components/snmp_network_modal.html' %}
 
+  <!-- Credential Form Modal -->
+  {% include 'components/snmp_credentials_modal.html' %}
+
   <!-- Connection Form Modal -->
   {% include 'components/pipeline_manager/connection_modal.html' %}
 
@@ -151,6 +154,7 @@
 
 </div>
 
+<script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>
 <script src="{% static 'js/snmp_commit_modal.js' %}"></script>
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
