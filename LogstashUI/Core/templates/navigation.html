@@ -31,7 +31,7 @@
 
       <!-- ConnectionManager -->
       <li>
-        <a href="/ConnectionManager/" class="nav-item {% if '/ConnectionManager' in request.path %}active bg-base-300{% endif %}">
+        <a href="/ConnectionManager/" class="nav-item {% if highlight_connection_manager %}nav-highlight{% endif %} {% if '/ConnectionManager' in request.path %}active bg-base-300{% endif %}">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
@@ -60,7 +60,7 @@
           </summary>
           <ul>
             <li>
-              <a href="/SNMP/Devices/" class="nav-item snmp-devices-highlight {% if '/SNMP/Devices' in request.path %}active bg-base-300{% endif %}">
+              <a href="/SNMP/Devices/" class="nav-item {% if highlight_snmp_devices %}nav-highlight{% endif %} {% if '/SNMP/Devices' in request.path %}active bg-base-300{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
@@ -221,8 +221,8 @@
   vertical-align: middle;
 }
 
-/* Highlight Devices button - glow once then settle */
-.snmp-devices-highlight {
+/* Highlight navigation items - throbbing purple border */
+.nav-highlight {
   animation: pulse-glow-once 2s ease-in-out forwards;
   border-radius: 0.5rem;
   box-shadow: 0 0 6px 1px rgba(168, 85, 247, 0.3);
