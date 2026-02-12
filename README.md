@@ -74,15 +74,11 @@ Your data (database, configurations) persists in Docker volumes, so it won't be 
 
 ## Coming soon!
 - Re-implementation of the 'simulate' feature, which will allow the user to input a JSON and see how it gets transformed by each filter plugin
-- Direct implementation of routing input/output between Logstash nodes
-- More detailed logging for reporting issues
 - Reusable grok and regex patterns
 - Git backups for configuration
 - Loggy AI Assistant
 - Text editor for pipelines
-- Grok debugger
-- Git backups for configuration
-- Inidividual Logstash Nodes
+- Management of Logstash Nodes via SSH
 - Keychain management - JKS Management
 
 ## Reporting Issues
