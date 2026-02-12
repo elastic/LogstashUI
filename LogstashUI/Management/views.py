@@ -8,7 +8,9 @@ from django.contrib import messages
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+import logging
 
+logger = logging.getLogger(__name__)
 
 class BootstrapLoginView(auth_views.LoginView):
     template_name = "registration/login.html"
@@ -43,6 +45,7 @@ class BootstrapLoginView(auth_views.LoginView):
             user.is_superuser = True
             user.is_staff = True
             user.save()
+            logger.info(f"First user '{user.username}' created during initial setup")
             login(self.request, user)
             return redirect("/")  # redirect wherever your dashboard/home is
         else:
@@ -50,7 +53,6 @@ class BootstrapLoginView(auth_views.LoginView):
 
 def Management(request):
     return render(request, 'management.html')
-
 
 def _generate_user_table_rows(users):
     """Helper function to generate user table rows HTML"""
@@ -84,7 +86,6 @@ def _generate_user_table_rows(users):
         '''
     return html
 
-
 def Users(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -115,6 +116,7 @@ def Users(request):
                 user.is_staff = True
                 user.save()
                 
+                logger.info(f"User '{request.user.username}' created new user '{username}'")
                 # Return success and trigger page reload
                 return HttpResponse('<script>window.location.reload();</script>')
             except ValidationError as e:
@@ -139,6 +141,7 @@ def Users(request):
                         validate_password(new_password, user=user)
                         user.set_password(new_password)
                         user.save()
+                        logger.info(f"User '{request.user.username}' updated password for user '{user.username}'")
                         return HttpResponse('<script>window.location.reload();</script>')
                     except ValidationError as e:
                         # Return password validation errors
@@ -177,7 +180,9 @@ def Users(request):
                     '''
                     return HttpResponse(html)
                 else:
+                    deleted_username = user.username
                     user.delete()
+                    logger.warning(f"User '{request.user.username}' deleted user '{deleted_username}'")
                     # Return updated user list
                     users = User.objects.all().order_by('username')
                     html = _generate_user_table_rows(users)

@@ -167,8 +167,10 @@ def AddConnection(request):
     """)
 
 def DeleteConnection(request, connection_id=None):
-
     if connection_id:
+        connection = ConnectionTable.objects.filter(id=connection_id).first()
+        if connection:
+            logger.warning(f"User '{request.user.username}' deleted connection '{connection.name}' (ID: {connection_id})")
         ConnectionTable.objects.filter(id=connection_id).delete()
 
     return HttpResponse("""
@@ -184,7 +186,6 @@ def DeleteConnection(request, connection_id=None):
     """)
 
 def GetCurrentPipelineCode(request, components={}):
-
     if not components:
         data = json.loads(request.POST.get("components"))
     else:
@@ -244,9 +245,9 @@ def SavePipeline(request):
                 "description": current_pipeline_config[pipeline_name]['description']
             }
         )
-
+        
+        logger.info(f"User '{request.user.username}' saved pipeline '{pipeline_name}' (Connection ID: {request.POST.get('es_id')})")
         return HttpResponse("Pipeline saved successfully!")
-
 
 def GetDiff(request):
     """Generate a unified diff between current and new pipeline configurations"""
@@ -324,8 +325,6 @@ def GetPipelines(request, connection_id):
 
         except Exception as e:
             logger.exception("Couldn't connect to Elastic")
-
-
 
 
     context['pipelines'] = logstash_pipelines
@@ -410,6 +409,7 @@ def UpdatePipelineSettings(request):
                 body=settings_body
             )
             
+            logger.info(f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' (Connection ID: {es_id})")
             # Return empty response - toast notification handled by JavaScript
             return HttpResponse('', status=200)
             
@@ -460,6 +460,8 @@ def CreatePipeline(request):
                 "description": ""
             }
         )
+        
+        logger.info(f"User '{request.user.username}' created new pipeline '{pipeline_name}' (Connection ID: {es_id})")
         response = HttpResponse("Pipeline created successfully!")
         response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
         return response
@@ -477,7 +479,8 @@ def DeletePipeline(request):
 
         es = get_elastic_connection(es_id)
         es.logstash.delete_pipeline(id=pipeline_name)
-
+        
+        logger.warning(f"User '{request.user.username}' deleted pipeline '{pipeline_name}' (Connection ID: {es_id})")
         return HttpResponse("Pipeline deleted successfully!")
 
 

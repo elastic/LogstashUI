@@ -110,7 +110,6 @@ def PipelineManager(request):
                 else:
                     raise Exception(form.errors)
 
-                # TODO: Move this into an HTML file
                 return HttpResponse("""
                     <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
                         Connection created successfully!
