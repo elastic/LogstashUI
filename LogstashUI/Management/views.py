@@ -3,12 +3,13 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth import login
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.contrib import messages
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -196,3 +197,70 @@ def Users(request):
     
     users = User.objects.all().order_by('username')
     return render(request, 'users.html', {'users': users})
+
+def _read_log_file(log_path, user_filter=None):
+    """Helper function to read and optionally filter log file"""
+    log_lines = []
+    
+    if not os.path.exists(log_path):
+        return log_lines
+    
+    try:
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            
+        for line in lines:
+            line = line.rstrip()
+            if user_filter:
+                if user_filter.lower() in line.lower():
+                    log_lines.append(line)
+            else:
+                log_lines.append(line)
+        
+        return log_lines[-1000:]
+    except Exception as e:
+        logger.error(f"Error reading log file: {e}")
+        return []
+
+def Logs(request):
+    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_lines = _read_log_file(log_path)
+    return render(request, 'logs.html', {'log_lines': log_lines})
+
+def LogsFilter(request):
+    user_filter = request.GET.get('user_filter', '').strip()
+    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_lines = _read_log_file(log_path, user_filter if user_filter else None)
+    
+    html = '<div class="font-mono text-sm space-y-1">'
+    if log_lines:
+        for line in log_lines:
+            css_class = 'text-gray-300 hover:bg-gray-700/50 px-2 py-1 rounded'
+            if 'ERROR' in line or 'CRITICAL' in line:
+                css_class += ' text-red-400'
+            elif 'WARNING' in line:
+                css_class += ' text-yellow-400'
+            elif 'INFO' in line:
+                css_class += ' text-blue-400'
+            
+            html += f'<div class="{css_class}">{line}</div>'
+    else:
+        html += '<div class="text-gray-500 text-center py-8">No log entries found.</div>'
+    
+    html += '</div>'
+    return HttpResponse(html)
+
+def LogsDownload(request):
+    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    
+    if not os.path.exists(log_path):
+        return HttpResponse('Log file not found', status=404)
+    
+    try:
+        response = FileResponse(open(log_path, 'rb'), content_type='text/plain')
+        response['Content-Disposition'] = 'attachment; filename="logstashui.log"'
+        logger.info(f"User '{request.user.username}' downloaded log file")
+        return response
+    except Exception as e:
+        logger.error(f"Error downloading log file: {e}")
+        return HttpResponse('Error downloading log file', status=500)

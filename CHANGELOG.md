@@ -4,10 +4,12 @@
 - User tracking for all CRUD operations
 - Logging for all APIs
 - CHANGELOG.md!
+- Log viewer / exporter
 
 ### Changed
 - Removed commented out function for simulating pipelines, will implement later
-- License dates
+- Updated license dates
 
 ### Fixed
-- N/A
+- Missing grok-patterns file, preventing autocomplete in grok debugger from working
+- 
