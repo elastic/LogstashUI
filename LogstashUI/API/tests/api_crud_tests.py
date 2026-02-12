@@ -348,7 +348,7 @@ class TestUserManagementCRUD:
         )
         
         response = authenticated_client.post('/Management/Users/', {
-            'action': 'update',
+            'action': 'update_password',
             'user_id': other_user.id,
             'new_password': 'NewSecurePass123!',
             'new_password2': 'NewSecurePass123!'
@@ -370,7 +370,7 @@ class TestUserManagementCRUD:
         )
         
         response = authenticated_client.post('/Management/Users/', {
-            'action': 'update',
+            'action': 'update_password',
             'user_id': other_user.id,
             'new_password': 'NewPass123!',
             'new_password2': 'DifferentPass123!'
