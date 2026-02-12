@@ -8,6 +8,8 @@ from django.contrib import messages
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from .models import UserProfile
+from API.views import require_admin_role
 import logging
 import os
 
@@ -46,7 +48,11 @@ class BootstrapLoginView(auth_views.LoginView):
             user.is_superuser = True
             user.is_staff = True
             user.save()
-            logger.info(f"First user '{user.username}' created during initial setup")
+            # Ensure the first user is always Admin
+            if hasattr(user, 'profile'):
+                user.profile.role = 'admin'
+                user.profile.save()
+            logger.info(f"First user '{user.username}' created during initial setup as Admin")
             login(self.request, user)
             return redirect("/")  # redirect wherever your dashboard/home is
         else:
@@ -59,14 +65,26 @@ def _generate_user_table_rows(users):
     """Helper function to generate user table rows HTML"""
     html = ''
     for u in users:
+        role_badge = ''
+        if hasattr(u, 'profile'):
+            if u.profile.role == 'admin':
+                role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">Admin</span>'
+            else:
+                role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">Readonly</span>'
+        else:
+            role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">Unknown</span>'
+        
         html += f'''
         <tr class="hover:bg-gray-700/50 transition-colors">
           <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
             {u.username}
           </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">
+            {role_badge}
+          </td>
           <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
             <div class="flex justify-end space-x-2">
-              <button onclick="openEditModal('{u.id}', '{u.username}')" 
+              <button onclick="openEditModal('{u.id}', '{u.username}', '{u.profile.role if hasattr(u, 'profile') else 'admin'}')" 
                       class="text-blue-400 hover:text-blue-300 mr-3">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -89,6 +107,12 @@ def _generate_user_table_rows(users):
 
 def Users(request):
     if request.method == 'POST':
+        # Check if user has admin role for any POST operations
+        if hasattr(request.user, 'profile') and request.user.profile.role != 'admin':
+            response = HttpResponse('Access denied: Admin role required', status=403)
+            response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
+            return response
+        
         action = request.POST.get('action')
         
         if action == 'add':
@@ -96,6 +120,7 @@ def Users(request):
             password = request.POST.get('password')
             password2 = request.POST.get('password2')
             email = request.POST.get('email', '')
+            role = request.POST.get('role', 'admin')
             
             # Validate username
             if User.objects.filter(username=username).exists():
@@ -117,7 +142,14 @@ def Users(request):
                 user.is_staff = True
                 user.save()
                 
-                logger.info(f"User '{request.user.username}' created new user '{username}'")
+                # Set the role
+                if hasattr(user, 'profile'):
+                    user.profile.role = role
+                    user.profile.save()
+                else:
+                    UserProfile.objects.create(user=user, role=role)
+                
+                logger.info(f"User '{request.user.username}' created new user '{username}' with role '{role}'")
                 # Return success and trigger page reload
                 return HttpResponse('<script>window.location.reload();</script>')
             except ValidationError as e:
@@ -125,31 +157,52 @@ def Users(request):
                 error_messages = '<br>'.join(e.messages)
                 return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
         
-        elif action == 'update':
+        elif action == 'update_password':
             user_id = request.POST.get('user_id')
-            new_password = request.POST.get('new_password')
-            new_password2 = request.POST.get('new_password2')
-            
+            new_password = request.POST.get('new_password', '').strip()
+            new_password2 = request.POST.get('new_password2', '').strip()
+
             try:
                 user = User.objects.get(id=user_id)
-                if new_password:
-                    # Check if passwords match
-                    if new_password != new_password2:
-                        return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">The two password fields didn\'t match.</div>')
-                    
-                    # Validate password using Django's validators
-                    try:
-                        validate_password(new_password, user=user)
-                        user.set_password(new_password)
-                        user.save()
-                        logger.info(f"User '{request.user.username}' updated password for user '{user.username}'")
+
+                # Check if passwords match
+                if new_password != new_password2:
+                    return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">The two password fields didn\'t match.</div>')
+
+                # Validate password using Django's validators
+                try:
+                    validate_password(new_password, user=user)
+                    user.set_password(new_password)
+                    user.save()
+                    logger.info(f"User '{request.user.username}' updated password for user '{user.username}'")
+                    return HttpResponse('<script>window.location.reload();</script>')
+                except ValidationError as e:
+                    # Return password validation errors
+                    error_messages = '<br>'.join(e.messages)
+                    return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
+            except User.DoesNotExist:
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">User not found</div>')
+
+        elif action == 'update_role':
+            user_id = request.POST.get('user_id')
+            role = request.POST.get('role', 'admin')
+
+            try:
+                user = User.objects.get(id=user_id)
+
+                # Update role
+                if hasattr(user, 'profile'):
+                    if user.profile.role != role:
+                        user.profile.role = role
+                        user.profile.save()
+                        logger.info(f"User '{request.user.username}' updated role for user '{user.username}' to '{role}'")
                         return HttpResponse('<script>window.location.reload();</script>')
-                    except ValidationError as e:
-                        # Return password validation errors
-                        error_messages = '<br>'.join(e.messages)
-                        return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
+                    else:
+                        return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">No changes made</div>')
                 else:
-                    return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Password cannot be empty</div>')
+                    UserProfile.objects.create(user=user, role=role)
+                    logger.info(f"User '{request.user.username}' created profile and set role for user '{user.username}' to '{role}'")
+                    return HttpResponse('<script>window.location.reload();</script>')
             except User.DoesNotExist:
                 return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">User not found</div>')
         

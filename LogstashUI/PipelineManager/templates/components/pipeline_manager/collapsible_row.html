@@ -41,7 +41,11 @@
                                     <button hx-post="/API/DeletePipeline/"
                                        hx-confirm="Are you sure you want to delete this pipeline?"
                                        hx-vals='{"es_id": "{{ pipeline.es_id }}", "pipeline": "{{ pipeline.name }}"}'
-                                       hx-on::after-request="htmx.ajax('GET', '/API/GetPipelines/{{ es_id }}/', {target: '#pipelines-{{ es_id }}', swap: 'innerHTML'})"
+                                       hx-on::after-request="
+                                         if (event.detail.xhr.status !== 403) {
+                                           htmx.ajax('GET', '/API/GetPipelines/{{ es_id }}/', {target: '#pipelines-{{ es_id }}', swap: 'innerHTML'});
+                                         }
+                                       "
                                        class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
                                        role="menuitem"
                                        type="button">
@@ -73,13 +77,21 @@
                   hx-target="#pipelineList" 
                   hx-swap="innerHTML"
                   hx-on::before-request="document.getElementById('createPipelineError').innerHTML = ''"
+                  hx-on::after-request="
+                    if (event.detail.xhr.status === 403) {
+                      // Permission denied - close modal (toast will be shown automatically)
+                      document.getElementById('createPipelineModal').close();
+                    }
+                  "
                   hx-on::response-error="
-                    const errorDiv = document.getElementById('createPipelineError');
-                    errorDiv.innerHTML = `
-                      <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
-                        <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while creating the pipeline'}</p>
-                      </div>
-                    `;
+                    if (event.detail.xhr.status !== 403) {
+                      const errorDiv = document.getElementById('createPipelineError');
+                      errorDiv.innerHTML = `
+                        <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
+                          <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while creating the pipeline'}</p>
+                        </div>
+                      `;
+                    }
                   ">
                 {% csrf_token %}
                 <div class="form-control w-full mb-4">
@@ -127,13 +139,21 @@
                   hx-target="#pipelineList" 
                   hx-swap="innerHTML"
                   hx-on::before-request="document.getElementById('clonePipelineError').innerHTML = ''"
+                  hx-on::after-request="
+                    if (event.detail.xhr.status === 403) {
+                      // Permission denied - close modal (toast will be shown automatically)
+                      document.getElementById('clonePipelineModal').close();
+                    }
+                  "
                   hx-on::response-error="
-                    const errorDiv = document.getElementById('clonePipelineError');
-                    errorDiv.innerHTML = `
-                      <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
-                        <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while cloning the pipeline'}</p>
-                      </div>
-                    `;
+                    if (event.detail.xhr.status !== 403) {
+                      const errorDiv = document.getElementById('clonePipelineError');
+                      errorDiv.innerHTML = `
+                        <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
+                          <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while cloning the pipeline'}</p>
+                        </div>
+                      `;
+                    }
                   ">
                 {% csrf_token %}
                 <div class="form-control w-full mb-4">

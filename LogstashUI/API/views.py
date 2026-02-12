@@ -2,6 +2,7 @@
 # Django
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse, HttpResponseRedirect
+from functools import wraps
 
 ## Tables
 from Core.models import Connection as ConnectionTable
@@ -29,6 +30,33 @@ import html
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def require_admin_role(view_func):
+    """
+    Decorator to check if user has admin role before allowing access to view.
+    Returns error toast message if user is readonly.
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            response = HttpResponse('You must be logged in to perform this action', status=403)
+            response['HX-Trigger'] = '{"showToastEvent": {"message": "You must be logged in to perform this action", "type": "error"}}'
+            return response
+        
+        # Check if user has admin role
+        if hasattr(request.user, 'profile'):
+            if request.user.profile.role != 'admin':
+                logger.warning(f"User '{request.user.username}' with role '{request.user.profile.role}' attempted to access admin-only function: {view_func.__name__}")
+                response = HttpResponse('Access denied: Admin role required', status=403)
+                response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
+                return response
+        
+        # User is admin, proceed with the view
+        return view_func(request, *args, **kwargs)
+    
+    return wrapper
 
 
 def validate_pipeline_name(pipeline_name):
@@ -99,6 +127,7 @@ def TestConnectivity(request=None, connection_id=None):
     
     return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
 
+@require_admin_role
 def AddConnection(request):
 
     
@@ -166,6 +195,7 @@ def AddConnection(request):
         </div>
     """)
 
+@require_admin_role
 def DeleteConnection(request, connection_id=None):
     if connection_id:
         connection = ConnectionTable.objects.filter(id=connection_id).first()
@@ -199,6 +229,7 @@ def GetCurrentPipelineCode(request, components={}):
         content_type="text/html"
     )
 
+@require_admin_role
 def SavePipeline(request):
     data = json.loads(request.POST.get("components"))
     if "save_pipeline" in request.POST:
@@ -335,6 +366,7 @@ def GetPipelines(request, connection_id):
     return HttpResponse(html)
 
 
+@require_admin_role
 def UpdatePipelineSettings(request):
     if request.method == "POST":
         try:
@@ -421,6 +453,7 @@ def UpdatePipelineSettings(request):
     return HttpResponse('Invalid request method', status=405)
 
 
+@require_admin_role
 def CreatePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
@@ -467,6 +500,7 @@ def CreatePipeline(request):
         return response
 
 
+@require_admin_role
 def DeletePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
@@ -484,6 +518,7 @@ def DeletePipeline(request):
         return HttpResponse("Pipeline deleted successfully!")
 
 
+@require_admin_role
 def ClonePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
