@@ -34,7 +34,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-__VERSION__ = "0.1.9"
+__VERSION__ = "0.1.10"
 # Application definition
 
 INSTALLED_APPS = [
@@ -181,6 +181,12 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/static/"
 ]
 
+# Session Configuration
+# Sessions expire after 24 hours of inactivity
+SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
+SESSION_SAVE_EVERY_REQUEST = True  # Reset timeout on every request (sliding window)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Allow persistent sessions
+
 # Proxy/HTTPS settings for nginx reverse proxy
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
@@ -233,3 +239,53 @@ else:
     CSRF_COOKIE_SECURE = False
     SECURE_SSL_REDIRECT = False
     X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+# Logging Configuration
+# https://docs.djangoproject.com/en/5.2/topics/logging/
+
+# Ensure logs directory exists
+LOGS_DIR = BASE_DIR / 'data' / 'logs'
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name} {module}.{funcName}: {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'logstashui.log',
+            'maxBytes': 1024 * 1024 * 10,  # 10 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+        }
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'DEBUG' if DEBUG else 'INFO',
+    },
+}

@@ -1,5 +1,7 @@
 from Core.models import Connection as ConnectionTable
 
+import logging
+logger = logging.getLogger(__name__)
 
 def _safe_get_numeric(data, default=0):
     """
@@ -135,7 +137,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
     - host: Filter by host name (optional)
     - pipeline: Filter by pipeline name (optional)
     """
-    print(f"get_node_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
+    logger.info(f"get_node_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     meta_agg_stats = {
         "nodes": [],
         "node_buckets": [],
@@ -228,8 +230,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                     try:
                         last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
                     except KeyError as e:
-                        print(node)
-                        print(f"Unable to fetch last_hit for {node['key']}", e)
+                        logger.error(f"Unable to fetch last_hit for {node['key']}", e)
                         continue
 
                     # Use safe numeric extraction to handle lists and missing values
@@ -250,7 +251,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
 
 
 def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", pipeline=""):
-    print(f"get_pipeline_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
+    logger.info(f"Getting pipeline metrics for connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     aggs = {
         "hosts": {
             "terms": {
@@ -304,12 +305,8 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
 
     for connection in es_connections:
 
-
-        print(f"Processing connection: {connection.get('name', 'UNKNOWN')}, Type: {connection.get('connection_type', 'UNKNOWN')}")
         if connection_name:
-            print(f"  Filtering for: {connection_name}")
             if connection['name'] != connection_name:
-                print(f"  Skipping {connection['name']}")
                 continue
         if connection_name:
             if connection['name'] != connection_name:
@@ -345,22 +342,21 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
 
 
             if 'aggregations' not in pipeline_stats:
-                print(f"  No aggregations found for {connection['name']}")
+                logger.warning(f"No aggregations found for {connection['name']}")
                 continue
             else:
                 host_buckets = pipeline_stats['aggregations']['hosts']['buckets']
-                print(f"  Found {len(host_buckets)} host buckets for {connection['name']}")
                 if len(host_buckets) == 0:
                     # Only add to warnings if we're not filtering (which would naturally exclude data)
                     if not logstash_host and not connection_name:
-                        print(f"  WARNING: No pipeline data found in aggregations for {connection['name']}")
-                        print(f"  Total hits: {pipeline_stats.get('hits', {}).get('total', {})}")
+                        logger.warning(f"No pipeline data found in aggregations for {connection['name']}")
                         meta_agg_stats['connections_with_no_data'].append({
                             'name': connection['name'],
                             'reason': 'No pipeline metrics found in the last 30 minutes'
                         })
                     else:
-                        print(f"  No data for {connection['name']} (filtered by connection_name='{connection_name}' or host='{logstash_host}')")
+                        logger.warning(f"No data for {connection['name']} (filtered by connection_name='{connection_name}' or host='{logstash_host}')")
+
                 for bucket in host_buckets:
 
                     meta_agg_stats['hosts'].append(bucket['key'])
@@ -372,13 +368,13 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                         pipeline_bucket['connection_id'] = conn_id
                         pipeline_bucket['connection_name'] = connection.get('name')
                         if not conn_id:
-                            print(f"  WARNING: No connection ID found for {connection.get('name')}. Available keys: {connection.keys()}")
+                            logger.warning(f"No connection ID found for {connection.get('name')}. Available keys: {connection.keys()}")
                         meta_agg_stats['pipeline_buckets'].append(pipeline_bucket)
 
                         try:
                             last_hit_doc = pipeline_bucket['last_hit']['hits']['hits'][0]['_source']['logstash']
                         except KeyError as e:
-                            print(f"Unable to fetch last_hit for {pipeline_bucket['key']}", e)
+                            logger.warning(f"Unable to fetch last_hit for {pipeline_bucket['key']}", e)
                             continue
 
                         # Use safe numeric extraction to handle lists and missing values

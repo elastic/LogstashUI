@@ -226,7 +226,6 @@ def generate_results_html(results):
                 ''')
             else:
                 error = match['error']
-                print(match)
                 html_parts.append(f'''
                 <div class="mb-3 p-3 bg-error/10 border border-error/30 rounded">
                     <div class="flex items-start gap-2">

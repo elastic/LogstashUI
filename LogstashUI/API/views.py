@@ -2,6 +2,7 @@
 # Django
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse, HttpResponseRedirect
+from functools import wraps
 
 ## Tables
 from Core.models import Connection as ConnectionTable
@@ -22,8 +23,39 @@ from datetime import datetime, timezone
 
 from django.template.loader import get_template
 import traceback
-from django.views.decorators.csrf import csrf_exempt
 import re
+import html
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def require_admin_role(view_func):
+    """
+    Decorator to check if user has admin role before allowing access to view.
+    Returns error toast message if user is readonly.
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            response = HttpResponse('You must be logged in to perform this action', status=403)
+            response['HX-Trigger'] = '{"showToastEvent": {"message": "You must be logged in to perform this action", "type": "error"}}'
+            return response
+        
+        # Check if user has admin role
+        if hasattr(request.user, 'profile'):
+            if request.user.profile.role != 'admin':
+                logger.warning(f"User '{request.user.username}' with role '{request.user.profile.role}' attempted to access admin-only function: {view_func.__name__}")
+                response = HttpResponse('Access denied: Admin role required', status=403)
+                response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
+                return response
+        
+        # User is admin, proceed with the view
+        return view_func(request, *args, **kwargs)
+    
+    return wrapper
 
 
 def validate_pipeline_name(pipeline_name):
@@ -56,6 +88,7 @@ def validate_pipeline_name(pipeline_name):
 
 def TestConnectivity(request=None, connection_id=None):
     # Allow calling from request (frontend) or directly with connection_id (backend)
+    logger.info("Testing connection...")
     if request:
         test_id = request.GET.get('test')
     else:
@@ -79,6 +112,7 @@ def TestConnectivity(request=None, connection_id=None):
                 return (True, result)
         except Exception as e:
             error_msg = str(e)
+            logger.error(f"Connection test against {test_id} failed: {error_msg}")
             # If called from request, return HTML error response
             if request:
                 return HttpResponse("""
@@ -92,31 +126,28 @@ def TestConnectivity(request=None, connection_id=None):
     
     return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
 
+@require_admin_role
 def AddConnection(request):
-    print("=== AddConnection called ===")
-    print(f"Method: {request.method}")
+
     
     if request.method == "POST":
-        print(f"POST data: {request.POST}")
+
         form = ConnectionForm(request.POST)
-        print(f"Form is valid: {form.is_valid()}")
         
         if form.is_valid():
             # Save the connection temporarily
             new_connection = form.save()
-            print(f"Connection saved with ID: {new_connection.id}")
             
             # Test the connection
-            print("Testing connectivity...")
             success, message = TestConnectivity(connection_id=new_connection.id)
-            print(f"Test result - Success: {success}, Message: {message}")
+            logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
             
             if not success:
                 # If test fails, delete the connection and show error
                 new_connection.delete()
-                print("Connection deleted due to test failure")
+                logger.error(f"User '{request.user.username}' failed to add connection, {new_connection.id}")
                 # Escape HTML in error message to prevent injection but preserve formatting
-                import html
+
                 escaped_message = html.escape(str(message))
                 response = HttpResponse(f"""
                     <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
@@ -130,12 +161,12 @@ def AddConnection(request):
                 """)
                 response['HX-Retarget'] = '#connectionErrorContainer'
                 response['HX-Reswap'] = 'innerHTML'
-                print(f"Returning error response")
+
                 return response
             
             # Connection test succeeded, proceed with success response
         else:
-            print(f"Form validation errors: {form.errors}")
+            logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
             response = HttpResponse(f"""
                 <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg">
                     <h3 class="font-bold mb-2">Form Validation Error</h3>
@@ -144,7 +175,6 @@ def AddConnection(request):
             """)
             response['HX-Retarget'] = '#connectionErrorContainer'
             response['HX-Reswap'] = 'innerHTML'
-            print("Returning form validation error response")
             return response
 
     return HttpResponse("""
@@ -164,9 +194,12 @@ def AddConnection(request):
         </div>
     """)
 
+@require_admin_role
 def DeleteConnection(request, connection_id=None):
-
     if connection_id:
+        connection = ConnectionTable.objects.filter(id=connection_id).first()
+        if connection:
+            logger.warning(f"User '{request.user.username}' deleted connection '{connection.name}' (ID: {connection_id})")
         ConnectionTable.objects.filter(id=connection_id).delete()
 
     return HttpResponse("""
@@ -182,21 +215,20 @@ def DeleteConnection(request, connection_id=None):
     """)
 
 def GetCurrentPipelineCode(request, components={}):
-
     if not components:
         data = json.loads(request.POST.get("components"))
     else:
         data = components
     parser = logstash_config_parse.ComponentToPipeline(data)
     config = parser.components_to_logstash_config()
-    #print(config)
-    
+
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(
         f'<pre class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code class="language-ruby">{config}</code></pre>',
         content_type="text/html"
     )
 
+@require_admin_role
 def SavePipeline(request):
     data = json.loads(request.POST.get("components"))
     if "save_pipeline" in request.POST:
@@ -243,93 +275,9 @@ def SavePipeline(request):
                 "description": current_pipeline_config[pipeline_name]['description']
             }
         )
-
+        
+        logger.info(f"User '{request.user.username}' saved pipeline '{pipeline_name}' (Connection ID: {request.POST.get('es_id')})")
         return HttpResponse("Pipeline saved successfully!")
-
-# def SimulatePipeline(request):
-#     components = request.POST.get("components")
-#     data = json.loads(components)
-#     input_json = json.loads(request.POST.get("log_text"))
-#
-#     # 1. Generate the Logstash config
-#     config_str = logstash_config_parse.components_to_logstash_config({"components": data}, test=True)
-#
-#
-#     #print(config_str)
-#     # 2. Write config to a temp file
-#     with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
-#         tmp.write(config_str)
-#         tmp_path = tmp.name
-#
-#     container_conf = "/usr/share/logstash/pipeline/simulate.conf"
-#
-#     # 3. Spin up logstash container with the config
-#     cmd = [
-#         "docker", "run", "--rm", "-i",
-#         "-v", f"{tmp_path}:{container_conf}:ro",
-#         "docker.elastic.co/logstash/logstash:9.1.4",
-#         "-f", container_conf,
-#         "--pipeline.ecs_compatibility=disabled"
-#     ]
-#
-#     proc = subprocess.Popen(
-#         cmd,
-#         stdin=subprocess.PIPE,
-#         stdout=subprocess.PIPE,
-#         stderr=subprocess.STDOUT,
-#         text=True
-#     )
-#
-#     while True:
-#         line = proc.stdout.readline()
-#         #print(line)
-#         if not line:
-#             break
-#         if "Pipelines running" in line:
-#             ready = True
-#             break
-#
-#     filter_counter = 0
-#     test_results = {}
-#     for test_filter in range(0, len(json.loads(components)['filter'])):
-#         input_json['plugin_num'] = filter_counter
-#         proc.stdin.write(json.dumps(input_json)+"\n")
-#         proc.stdin.flush()
-#
-#         out = proc.stdout.readline()
-#         #print(out)
-#
-#         test_results[filter_counter] = {
-#             "Result": json.loads(out),
-#             "Action": json.loads(components)['filter'][test_filter]['plugin'] + " / " + json.loads(components)['filter'][test_filter]['id']
-#         }
-#
-#
-#         filter_counter += 1
-#
-#     # 5. Cleanup temp file
-#     os.remove(tmp_path)
-#
-#     html_text = ""
-#     last_result = input_json
-#     for result in test_results:
-#         step = test_results[result]['Action']
-#         res = test_results[result]['Result']
-#
-#         html_text += f"<h1>{step}</h1>"
-#
-#         difference = DeepDiff(last_result, res).to_dict()
-#
-#
-#         html_text += f'''<textarea class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" rows="10">
-#
-# {json.dumps(res,indent=4)}
-#
-# {difference}</textarea>'''
-#         last_result = res
-#
-#     return HttpResponse(html_text)
-
 
 def GetDiff(request):
     """Generate a unified diff between current and new pipeline configurations"""
@@ -379,6 +327,7 @@ def GetDiff(request):
             })
             
         except Exception as e:
+            logger.error(f"Error generating diff: {str(e)}")
             return JsonResponse({"error": f"Error generating diff: {str(e)}"}, status=500)
     
     return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -404,28 +353,19 @@ def GetPipelines(request, connection_id):
                     }
                 )
 
-            # DISABLED: Instances table can cause issues
-            # context['instances'] = logstash_metrics.get_instances_centralized(es)
         except Exception as e:
-            print("Couldn't connect to elastic!!")
-
-
+            logger.exception("Couldn't connect to Elastic")
 
 
     context['pipelines'] = logstash_pipelines
     context['es_id'] = connection.id
-    # --- Gets monitoring data from the connection
-    # DISABLED: Instances table can cause issues
-    # try:
-    #     context['instances'] = logstash_metrics.get_instances_centralized(es)
-    # except Exception as e:
-    #     print("Couldn't get Logstash instances!")
 
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)
     return HttpResponse(html)
 
 
+@require_admin_role
 def UpdatePipelineSettings(request):
     if request.method == "POST":
         try:
@@ -459,7 +399,6 @@ def UpdatePipelineSettings(request):
             
             # Build settings body - only include non-empty values
             current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
-            #print(current_pipeline_config)
             settings_body = {
                 "pipeline": current_pipeline_config['pipeline'],
                 "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
@@ -501,17 +440,19 @@ def UpdatePipelineSettings(request):
                 body=settings_body
             )
             
+            logger.info(f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' (Connection ID: {es_id})")
             # Return empty response - toast notification handled by JavaScript
             return HttpResponse('', status=200)
             
         except Exception as e:
             # Return simple error message - toast notification handled by JavaScript
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             return HttpResponse(str(e), status=500)
     
     return HttpResponse('Invalid request method', status=405)
 
 
+@require_admin_role
 def CreatePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
@@ -551,11 +492,14 @@ def CreatePipeline(request):
                 "description": ""
             }
         )
+        
+        logger.info(f"User '{request.user.username}' created new pipeline '{pipeline_name}' (Connection ID: {es_id})")
         response = HttpResponse("Pipeline created successfully!")
         response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
         return response
 
 
+@require_admin_role
 def DeletePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
@@ -568,8 +512,74 @@ def DeletePipeline(request):
 
         es = get_elastic_connection(es_id)
         es.logstash.delete_pipeline(id=pipeline_name)
-
+        
+        logger.warning(f"User '{request.user.username}' deleted pipeline '{pipeline_name}' (Connection ID: {es_id})")
         return HttpResponse("Pipeline deleted successfully!")
+
+
+@require_admin_role
+def ClonePipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        source_pipeline = request.POST.get("source_pipeline")
+        new_pipeline = request.POST.get("new_pipeline")
+
+        # Validate source pipeline name
+        is_valid, error_msg = validate_pipeline_name(source_pipeline)
+        if not is_valid:
+            return HttpResponse(f"Invalid source pipeline name: {error_msg}", status=400)
+
+        # Validate new pipeline name
+        is_valid, error_msg = validate_pipeline_name(new_pipeline)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
+        try:
+            es = get_elastic_connection(es_id)
+            
+            # Get the source pipeline configuration
+            source_config = es.logstash.get_pipeline(id=source_pipeline)
+            
+            if source_pipeline not in source_config:
+                return HttpResponse(f"Source pipeline '{source_pipeline}' not found", status=404)
+            
+            source_data = source_config[source_pipeline]
+            
+            # Check if new pipeline name already exists
+            existing_pipelines = es.logstash.get_pipeline()
+            if new_pipeline in existing_pipelines:
+                return HttpResponse(f"Pipeline '{new_pipeline}' already exists. Please choose a different name.", status=400)
+            
+            # Create the new pipeline with the same configuration as the source
+            es.logstash.put_pipeline(
+                id=new_pipeline,
+                body={
+                    "pipeline": source_data['pipeline'],
+                    "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                    "pipeline_metadata": {
+                        "version": 1,
+                        "type": "logstash_pipeline"
+                    },
+                    "username": "LogstashUI",
+                    "pipeline_settings": source_data.get('pipeline_settings', {}),
+                    "description": source_data.get('description', f"Cloned from {source_pipeline}")
+                }
+            )
+            
+            logger.info(f"User '{request.user.username}' cloned pipeline '{source_pipeline}' to '{new_pipeline}' (Connection ID: {es_id})")
+            
+            # Close the modal and refresh the pipeline list
+            response = HttpResponse("""
+                <script>
+                    document.getElementById('clonePipelineModal').close();
+                    htmx.ajax('GET', '/API/GetPipelines/""" + str(es_id) + """/', {target: '#pipelines-""" + str(es_id) + """', swap: 'innerHTML'});
+                </script>
+            """)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error cloning pipeline: {str(e)}")
+            return HttpResponse(f"Error cloning pipeline: {str(e)}", status=500)
 
 
 def GetLogstashPipeline(request):
@@ -664,7 +674,7 @@ def GetNodeMetrics(request):
                 'reload_failures': reload_failures,
             })
         except (KeyError, IndexError) as e:
-            print(f"Error processing node bucket: {e}")
+            logger.error(f"Error processing node bucket: {e}")
             continue
     
     metrics_data['processed_node_buckets'] = processed_buckets
@@ -740,7 +750,8 @@ def GetPipelineMetrics(request):
             
             # Debug output
             if not conn_id:
-                print(f"WARNING: No connection_id for pipeline {pipeline_name}. Bucket keys: {bucket.keys()}")
+                logger.warning(f"WARNING: No connection_id for pipeline {pipeline_name}. Bucket keys: {bucket.keys()}")
+
             
             results = {
                 'pipeline_name': pipeline_name,
@@ -781,14 +792,10 @@ def GetPipelineMetrics(request):
             # Flag pipeline if it has issues
             results['has_issues'] = has_issues
             results['missing_fields'] = missing_fields
-            
-            # Only log missing fields once (suppress duplicate warnings)
-            # if has_issues:
-            #     print(f"Pipeline '{pipeline_name}' has missing/invalid fields: {', '.join(missing_fields)}")
 
             processed_buckets.append(results)
         except (KeyError, IndexError) as e:
-            print(f"Error processing pipeline bucket: {e}")
+            logger.error(f"Error processing pipeline bucket: {e}")
             continue
     
     metrics_data['processed_pipeline_buckets'] = processed_buckets
@@ -811,5 +818,5 @@ def GetLogs(request):
         all_logs = logstash_metrics.get_logs(es, logstash_node, pipeline_name)
         return JsonResponse(all_logs, safe=False)
     except Exception as e:
-        print(f"Error fetching logs for connection {connection_id}: {e}")
+        logger.error(f"Error fetching logs for connection {connection_id}: {e}")
         return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)

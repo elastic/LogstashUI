@@ -3,12 +3,17 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth import login
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.contrib import messages
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from .models import UserProfile
+from API.views import require_admin_role
+import logging
+import os
 
+logger = logging.getLogger(__name__)
 
 class BootstrapLoginView(auth_views.LoginView):
     template_name = "registration/login.html"
@@ -43,6 +48,11 @@ class BootstrapLoginView(auth_views.LoginView):
             user.is_superuser = True
             user.is_staff = True
             user.save()
+            # Ensure the first user is always Admin
+            if hasattr(user, 'profile'):
+                user.profile.role = 'admin'
+                user.profile.save()
+            logger.info(f"First user '{user.username}' created during initial setup as Admin")
             login(self.request, user)
             return redirect("/")  # redirect wherever your dashboard/home is
         else:
@@ -51,19 +61,30 @@ class BootstrapLoginView(auth_views.LoginView):
 def Management(request):
     return render(request, 'management.html')
 
-
 def _generate_user_table_rows(users):
     """Helper function to generate user table rows HTML"""
     html = ''
     for u in users:
+        role_badge = ''
+        if hasattr(u, 'profile'):
+            if u.profile.role == 'admin':
+                role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">Admin</span>'
+            else:
+                role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">Readonly</span>'
+        else:
+            role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">Unknown</span>'
+        
         html += f'''
         <tr class="hover:bg-gray-700/50 transition-colors">
           <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
             {u.username}
           </td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">
+            {role_badge}
+          </td>
           <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
             <div class="flex justify-end space-x-2">
-              <button onclick="openEditModal('{u.id}', '{u.username}')" 
+              <button onclick="openEditModal('{u.id}', '{u.username}', '{u.profile.role if hasattr(u, 'profile') else 'admin'}')" 
                       class="text-blue-400 hover:text-blue-300 mr-3">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -84,9 +105,14 @@ def _generate_user_table_rows(users):
         '''
     return html
 
-
 def Users(request):
     if request.method == 'POST':
+        # Check if user has admin role for any POST operations
+        if hasattr(request.user, 'profile') and request.user.profile.role != 'admin':
+            response = HttpResponse('Access denied: Admin role required', status=403)
+            response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
+            return response
+        
         action = request.POST.get('action')
         
         if action == 'add':
@@ -94,6 +120,7 @@ def Users(request):
             password = request.POST.get('password')
             password2 = request.POST.get('password2')
             email = request.POST.get('email', '')
+            role = request.POST.get('role', 'admin')
             
             # Validate username
             if User.objects.filter(username=username).exists():
@@ -115,6 +142,14 @@ def Users(request):
                 user.is_staff = True
                 user.save()
                 
+                # Set the role
+                if hasattr(user, 'profile'):
+                    user.profile.role = role
+                    user.profile.save()
+                else:
+                    UserProfile.objects.create(user=user, role=role)
+                
+                logger.info(f"User '{request.user.username}' created new user '{username}' with role '{role}'")
                 # Return success and trigger page reload
                 return HttpResponse('<script>window.location.reload();</script>')
             except ValidationError as e:
@@ -122,30 +157,52 @@ def Users(request):
                 error_messages = '<br>'.join(e.messages)
                 return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
         
-        elif action == 'update':
+        elif action == 'update_password':
             user_id = request.POST.get('user_id')
-            new_password = request.POST.get('new_password')
-            new_password2 = request.POST.get('new_password2')
-            
+            new_password = request.POST.get('new_password', '').strip()
+            new_password2 = request.POST.get('new_password2', '').strip()
+
             try:
                 user = User.objects.get(id=user_id)
-                if new_password:
-                    # Check if passwords match
-                    if new_password != new_password2:
-                        return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">The two password fields didn\'t match.</div>')
-                    
-                    # Validate password using Django's validators
-                    try:
-                        validate_password(new_password, user=user)
-                        user.set_password(new_password)
-                        user.save()
+
+                # Check if passwords match
+                if new_password != new_password2:
+                    return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">The two password fields didn\'t match.</div>')
+
+                # Validate password using Django's validators
+                try:
+                    validate_password(new_password, user=user)
+                    user.set_password(new_password)
+                    user.save()
+                    logger.info(f"User '{request.user.username}' updated password for user '{user.username}'")
+                    return HttpResponse('<script>window.location.reload();</script>')
+                except ValidationError as e:
+                    # Return password validation errors
+                    error_messages = '<br>'.join(e.messages)
+                    return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
+            except User.DoesNotExist:
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">User not found</div>')
+
+        elif action == 'update_role':
+            user_id = request.POST.get('user_id')
+            role = request.POST.get('role', 'admin')
+
+            try:
+                user = User.objects.get(id=user_id)
+
+                # Update role
+                if hasattr(user, 'profile'):
+                    if user.profile.role != role:
+                        user.profile.role = role
+                        user.profile.save()
+                        logger.info(f"User '{request.user.username}' updated role for user '{user.username}' to '{role}'")
                         return HttpResponse('<script>window.location.reload();</script>')
-                    except ValidationError as e:
-                        # Return password validation errors
-                        error_messages = '<br>'.join(e.messages)
-                        return HttpResponse(f'<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">{error_messages}</div>')
+                    else:
+                        return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">No changes made</div>')
                 else:
-                    return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Password cannot be empty</div>')
+                    UserProfile.objects.create(user=user, role=role)
+                    logger.info(f"User '{request.user.username}' created profile and set role for user '{user.username}' to '{role}'")
+                    return HttpResponse('<script>window.location.reload();</script>')
             except User.DoesNotExist:
                 return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">User not found</div>')
         
@@ -177,7 +234,9 @@ def Users(request):
                     '''
                     return HttpResponse(html)
                 else:
+                    deleted_username = user.username
                     user.delete()
+                    logger.warning(f"User '{request.user.username}' deleted user '{deleted_username}'")
                     # Return updated user list
                     users = User.objects.all().order_by('username')
                     html = _generate_user_table_rows(users)
@@ -191,3 +250,70 @@ def Users(request):
     
     users = User.objects.all().order_by('username')
     return render(request, 'users.html', {'users': users})
+
+def _read_log_file(log_path, user_filter=None):
+    """Helper function to read and optionally filter log file"""
+    log_lines = []
+    
+    if not os.path.exists(log_path):
+        return log_lines
+    
+    try:
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            
+        for line in lines:
+            line = line.rstrip()
+            if user_filter:
+                if user_filter.lower() in line.lower():
+                    log_lines.append(line)
+            else:
+                log_lines.append(line)
+        
+        return log_lines[-1000:]
+    except Exception as e:
+        logger.error(f"Error reading log file: {e}")
+        return []
+
+def Logs(request):
+    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_lines = _read_log_file(log_path)
+    return render(request, 'logs.html', {'log_lines': log_lines})
+
+def LogsFilter(request):
+    user_filter = request.GET.get('user_filter', '').strip()
+    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_lines = _read_log_file(log_path, user_filter if user_filter else None)
+    
+    html = '<div class="font-mono text-sm space-y-1">'
+    if log_lines:
+        for line in log_lines:
+            css_class = 'text-gray-300 hover:bg-gray-700/50 px-2 py-1 rounded'
+            if 'ERROR' in line or 'CRITICAL' in line:
+                css_class += ' text-red-400'
+            elif 'WARNING' in line:
+                css_class += ' text-yellow-400'
+            elif 'INFO' in line:
+                css_class += ' text-blue-400'
+            
+            html += f'<div class="{css_class}">{line}</div>'
+    else:
+        html += '<div class="text-gray-500 text-center py-8">No log entries found.</div>'
+    
+    html += '</div>'
+    return HttpResponse(html)
+
+def LogsDownload(request):
+    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    
+    if not os.path.exists(log_path):
+        return HttpResponse('Log file not found', status=404)
+    
+    try:
+        response = FileResponse(open(log_path, 'rb'), content_type='text/plain')
+        response['Content-Disposition'] = 'attachment; filename="logstashui.log"'
+        logger.info(f"User '{request.user.username}' downloaded log file")
+        return response
+    except Exception as e:
+        logger.error(f"Error downloading log file: {e}")
+        return HttpResponse('Error downloading log file', status=500)

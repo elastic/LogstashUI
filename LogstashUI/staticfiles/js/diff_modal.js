@@ -774,6 +774,19 @@ async function confirmSavePipeline() {
 
         const responseText = await saveResponse.text();
         
+        // Check if response contains permission denied (even with 200 status)
+        if (responseText.includes('showToast') && responseText.includes('Access denied')) {
+            console.log('Permission denied detected');
+            // Extract script content and execute it
+            const scriptMatch = responseText.match(/<script>([\s\S]*?)<\/script>/);
+            if (scriptMatch && scriptMatch[1]) {
+                eval(scriptMatch[1]);
+            }
+            // Close the modal
+            hideDiffModal();
+            return;
+        }
+        
         if (!saveResponse.ok) {
             console.error('Save error:', responseText);
             
