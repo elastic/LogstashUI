@@ -484,6 +484,70 @@ def DeletePipeline(request):
         return HttpResponse("Pipeline deleted successfully!")
 
 
+def ClonePipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        source_pipeline = request.POST.get("source_pipeline")
+        new_pipeline = request.POST.get("new_pipeline")
+
+        # Validate source pipeline name
+        is_valid, error_msg = validate_pipeline_name(source_pipeline)
+        if not is_valid:
+            return HttpResponse(f"Invalid source pipeline name: {error_msg}", status=400)
+
+        # Validate new pipeline name
+        is_valid, error_msg = validate_pipeline_name(new_pipeline)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
+        try:
+            es = get_elastic_connection(es_id)
+            
+            # Get the source pipeline configuration
+            source_config = es.logstash.get_pipeline(id=source_pipeline)
+            
+            if source_pipeline not in source_config:
+                return HttpResponse(f"Source pipeline '{source_pipeline}' not found", status=404)
+            
+            source_data = source_config[source_pipeline]
+            
+            # Check if new pipeline name already exists
+            existing_pipelines = es.logstash.get_pipeline()
+            if new_pipeline in existing_pipelines:
+                return HttpResponse(f"Pipeline '{new_pipeline}' already exists. Please choose a different name.", status=400)
+            
+            # Create the new pipeline with the same configuration as the source
+            es.logstash.put_pipeline(
+                id=new_pipeline,
+                body={
+                    "pipeline": source_data['pipeline'],
+                    "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                    "pipeline_metadata": {
+                        "version": 1,
+                        "type": "logstash_pipeline"
+                    },
+                    "username": "LogstashUI",
+                    "pipeline_settings": source_data.get('pipeline_settings', {}),
+                    "description": source_data.get('description', f"Cloned from {source_pipeline}")
+                }
+            )
+            
+            logger.info(f"User '{request.user.username}' cloned pipeline '{source_pipeline}' to '{new_pipeline}' (Connection ID: {es_id})")
+            
+            # Close the modal and refresh the pipeline list
+            response = HttpResponse("""
+                <script>
+                    document.getElementById('clonePipelineModal').close();
+                    htmx.ajax('GET', '/API/GetPipelines/""" + str(es_id) + """/', {target: '#pipelines-""" + str(es_id) + """', swap: 'innerHTML'});
+                </script>
+            """)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error cloning pipeline: {str(e)}")
+            return HttpResponse(f"Error cloning pipeline: {str(e)}", status=500)
+
+
 def GetLogstashPipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
