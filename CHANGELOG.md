@@ -1,4 +1,4 @@
-## [0.1.10] - TBD
+## [0.1.10] - 02/12/2026
 ### Added
 - Tests for all APIs
 - User tracking for all CRUD operations
