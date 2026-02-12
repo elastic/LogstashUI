@@ -2,6 +2,9 @@ from lark import Lark, Transformer, UnexpectedToken, UnexpectedCharacters
 from typing import Dict, List, Any
 import json
 
+import logging
+logger = logging.getLogger(__name__)
+
 ################################ Logstash config to component JSON ################################
 LOGSTASH_GRAMMAR = r"""
 ?start: section+
@@ -522,18 +525,18 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
         for section in parsed:
             # Defensive check: ensure section is a dict with 'type' key
             if not isinstance(section, dict):
-                print(f"Warning: Skipping non-dict section: {type(section)}")
+                logger.warning(f"Skipping non-dict section: {type(section)}")
                 continue
             
             if 'type' not in section:
-                print(f"Warning: Section missing 'type' key: {section}")
+                logger.warning(f"Section missing 'type' key: {section}")
                 continue
             
             section_type = section['type']
             
             # Validate section_type is one of the expected values
             if section_type not in ['input', 'filter', 'output']:
-                print(f"Warning: Unknown section type '{section_type}', skipping")
+                logger.warning(f"Warning: Unknown section type '{section_type}', skipping")
                 continue
             
             section_components = []
@@ -562,7 +565,7 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
     except Exception as e:
         # Re-raise the exception so the view can handle it and show to the user
         error_msg = str(e)
-        print(f"Error converting config to components: {error_msg}")
+        logger.error(f"Error converting config to components: {error_msg}")
         raise Exception(f"Error converting config to components: {error_msg}")
 
 
@@ -646,7 +649,7 @@ class ComponentToPipeline:
         for plugin_config_name in plugin['config']:
             plugin_config_value = plugin['config'][plugin_config_name]
 
-            # print(plugin_config_name, plugin_config_value, type(plugin_config_value))
+
             if type(plugin_config_value) in [str, int, float]:
                 if type(plugin_config_value) is str:
                     formatted_value = self._format_string_value(plugin_config_value)
@@ -874,7 +877,6 @@ class ComponentToPipeline:
 
             # ending section, this is static and indentation never changes
             config += "}\n"
-        # print(config)
         return config
 
 
@@ -896,7 +898,7 @@ output {
   stdout { codec => rubydebug }
 }
 ''')
-    print(condition_output_no_filter)
+    logger.debug(condition_output_no_filter)
 
 #     z = ComponentToPipeline({
 #     "input": [
@@ -953,7 +955,7 @@ output {
 #         }
 #     ]
 # },test=False)
-#     print(z.components_to_logstash_config())
+#     logger.debug(z.components_to_logstash_config())
 
 
 

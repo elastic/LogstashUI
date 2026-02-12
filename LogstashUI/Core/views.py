@@ -13,7 +13,8 @@ import json
 
 ## Project
 from Core import logstash_metrics
-
+import logging
+logger = logging.getLogger(__name__)
 
 
 def get_elastic_connections_from_list():
@@ -46,7 +47,7 @@ def Monitoring(request):
             get_elastic_connections_from_list()
         )
     except Exception as e:
-        print("Couldn't connect!", e)
+        logger.error(f"Couldn't connect!, {e}")
 
     return render(request, "monitoring.html", context=context)
 

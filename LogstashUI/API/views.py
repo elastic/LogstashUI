@@ -24,6 +24,11 @@ from django.template.loader import get_template
 import traceback
 from django.views.decorators.csrf import csrf_exempt
 import re
+import html
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def validate_pipeline_name(pipeline_name):
@@ -56,6 +61,7 @@ def validate_pipeline_name(pipeline_name):
 
 def TestConnectivity(request=None, connection_id=None):
     # Allow calling from request (frontend) or directly with connection_id (backend)
+    logger.info("Testing connection...")
     if request:
         test_id = request.GET.get('test')
     else:
@@ -79,6 +85,7 @@ def TestConnectivity(request=None, connection_id=None):
                 return (True, result)
         except Exception as e:
             error_msg = str(e)
+            logger.error(f"Connection test against {test_id} failed: {error_msg}")
             # If called from request, return HTML error response
             if request:
                 return HttpResponse("""
@@ -93,30 +100,26 @@ def TestConnectivity(request=None, connection_id=None):
     return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
 
 def AddConnection(request):
-    print("=== AddConnection called ===")
-    print(f"Method: {request.method}")
+
     
     if request.method == "POST":
-        print(f"POST data: {request.POST}")
+
         form = ConnectionForm(request.POST)
-        print(f"Form is valid: {form.is_valid()}")
         
         if form.is_valid():
             # Save the connection temporarily
             new_connection = form.save()
-            print(f"Connection saved with ID: {new_connection.id}")
             
             # Test the connection
-            print("Testing connectivity...")
             success, message = TestConnectivity(connection_id=new_connection.id)
-            print(f"Test result - Success: {success}, Message: {message}")
+            logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
             
             if not success:
                 # If test fails, delete the connection and show error
                 new_connection.delete()
-                print("Connection deleted due to test failure")
+                logger.error(f"User '{request.user.username}' failed to add connection, {new_connection.id}")
                 # Escape HTML in error message to prevent injection but preserve formatting
-                import html
+
                 escaped_message = html.escape(str(message))
                 response = HttpResponse(f"""
                     <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
@@ -130,12 +133,12 @@ def AddConnection(request):
                 """)
                 response['HX-Retarget'] = '#connectionErrorContainer'
                 response['HX-Reswap'] = 'innerHTML'
-                print(f"Returning error response")
+
                 return response
             
             # Connection test succeeded, proceed with success response
         else:
-            print(f"Form validation errors: {form.errors}")
+            logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
             response = HttpResponse(f"""
                 <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg">
                     <h3 class="font-bold mb-2">Form Validation Error</h3>
@@ -144,7 +147,6 @@ def AddConnection(request):
             """)
             response['HX-Retarget'] = '#connectionErrorContainer'
             response['HX-Reswap'] = 'innerHTML'
-            print("Returning form validation error response")
             return response
 
     return HttpResponse("""
@@ -189,8 +191,7 @@ def GetCurrentPipelineCode(request, components={}):
         data = components
     parser = logstash_config_parse.ComponentToPipeline(data)
     config = parser.components_to_logstash_config()
-    #print(config)
-    
+
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(
         f'<pre class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code class="language-ruby">{config}</code></pre>',
@@ -246,90 +247,6 @@ def SavePipeline(request):
 
         return HttpResponse("Pipeline saved successfully!")
 
-# def SimulatePipeline(request):
-#     components = request.POST.get("components")
-#     data = json.loads(components)
-#     input_json = json.loads(request.POST.get("log_text"))
-#
-#     # 1. Generate the Logstash config
-#     config_str = logstash_config_parse.components_to_logstash_config({"components": data}, test=True)
-#
-#
-#     #print(config_str)
-#     # 2. Write config to a temp file
-#     with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
-#         tmp.write(config_str)
-#         tmp_path = tmp.name
-#
-#     container_conf = "/usr/share/logstash/pipeline/simulate.conf"
-#
-#     # 3. Spin up logstash container with the config
-#     cmd = [
-#         "docker", "run", "--rm", "-i",
-#         "-v", f"{tmp_path}:{container_conf}:ro",
-#         "docker.elastic.co/logstash/logstash:9.1.4",
-#         "-f", container_conf,
-#         "--pipeline.ecs_compatibility=disabled"
-#     ]
-#
-#     proc = subprocess.Popen(
-#         cmd,
-#         stdin=subprocess.PIPE,
-#         stdout=subprocess.PIPE,
-#         stderr=subprocess.STDOUT,
-#         text=True
-#     )
-#
-#     while True:
-#         line = proc.stdout.readline()
-#         #print(line)
-#         if not line:
-#             break
-#         if "Pipelines running" in line:
-#             ready = True
-#             break
-#
-#     filter_counter = 0
-#     test_results = {}
-#     for test_filter in range(0, len(json.loads(components)['filter'])):
-#         input_json['plugin_num'] = filter_counter
-#         proc.stdin.write(json.dumps(input_json)+"\n")
-#         proc.stdin.flush()
-#
-#         out = proc.stdout.readline()
-#         #print(out)
-#
-#         test_results[filter_counter] = {
-#             "Result": json.loads(out),
-#             "Action": json.loads(components)['filter'][test_filter]['plugin'] + " / " + json.loads(components)['filter'][test_filter]['id']
-#         }
-#
-#
-#         filter_counter += 1
-#
-#     # 5. Cleanup temp file
-#     os.remove(tmp_path)
-#
-#     html_text = ""
-#     last_result = input_json
-#     for result in test_results:
-#         step = test_results[result]['Action']
-#         res = test_results[result]['Result']
-#
-#         html_text += f"<h1>{step}</h1>"
-#
-#         difference = DeepDiff(last_result, res).to_dict()
-#
-#
-#         html_text += f'''<textarea class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" rows="10">
-#
-# {json.dumps(res,indent=4)}
-#
-# {difference}</textarea>'''
-#         last_result = res
-#
-#     return HttpResponse(html_text)
-
 
 def GetDiff(request):
     """Generate a unified diff between current and new pipeline configurations"""
@@ -379,6 +296,7 @@ def GetDiff(request):
             })
             
         except Exception as e:
+            logger.error(f"Error generating diff: {str(e)}")
             return JsonResponse({"error": f"Error generating diff: {str(e)}"}, status=500)
     
     return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -404,22 +322,14 @@ def GetPipelines(request, connection_id):
                     }
                 )
 
-            # DISABLED: Instances table can cause issues
-            # context['instances'] = logstash_metrics.get_instances_centralized(es)
         except Exception as e:
-            print("Couldn't connect to elastic!!")
+            logger.exception("Couldn't connect to Elastic")
 
 
 
 
     context['pipelines'] = logstash_pipelines
     context['es_id'] = connection.id
-    # --- Gets monitoring data from the connection
-    # DISABLED: Instances table can cause issues
-    # try:
-    #     context['instances'] = logstash_metrics.get_instances_centralized(es)
-    # except Exception as e:
-    #     print("Couldn't get Logstash instances!")
 
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)
@@ -459,7 +369,6 @@ def UpdatePipelineSettings(request):
             
             # Build settings body - only include non-empty values
             current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
-            #print(current_pipeline_config)
             settings_body = {
                 "pipeline": current_pipeline_config['pipeline'],
                 "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
@@ -506,7 +415,7 @@ def UpdatePipelineSettings(request):
             
         except Exception as e:
             # Return simple error message - toast notification handled by JavaScript
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             return HttpResponse(str(e), status=500)
     
     return HttpResponse('Invalid request method', status=405)
@@ -664,7 +573,7 @@ def GetNodeMetrics(request):
                 'reload_failures': reload_failures,
             })
         except (KeyError, IndexError) as e:
-            print(f"Error processing node bucket: {e}")
+            logger.error(f"Error processing node bucket: {e}")
             continue
     
     metrics_data['processed_node_buckets'] = processed_buckets
@@ -740,7 +649,8 @@ def GetPipelineMetrics(request):
             
             # Debug output
             if not conn_id:
-                print(f"WARNING: No connection_id for pipeline {pipeline_name}. Bucket keys: {bucket.keys()}")
+                logger.warning(f"WARNING: No connection_id for pipeline {pipeline_name}. Bucket keys: {bucket.keys()}")
+
             
             results = {
                 'pipeline_name': pipeline_name,
@@ -781,14 +691,10 @@ def GetPipelineMetrics(request):
             # Flag pipeline if it has issues
             results['has_issues'] = has_issues
             results['missing_fields'] = missing_fields
-            
-            # Only log missing fields once (suppress duplicate warnings)
-            # if has_issues:
-            #     print(f"Pipeline '{pipeline_name}' has missing/invalid fields: {', '.join(missing_fields)}")
 
             processed_buckets.append(results)
         except (KeyError, IndexError) as e:
-            print(f"Error processing pipeline bucket: {e}")
+            logger.error(f"Error processing pipeline bucket: {e}")
             continue
     
     metrics_data['processed_pipeline_buckets'] = processed_buckets
@@ -811,5 +717,5 @@ def GetLogs(request):
         all_logs = logstash_metrics.get_logs(es, logstash_node, pipeline_name)
         return JsonResponse(all_logs, safe=False)
     except Exception as e:
-        print(f"Error fetching logs for connection {connection_id}: {e}")
+        logger.error(f"Error fetching logs for connection {connection_id}: {e}")
         return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)
