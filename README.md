@@ -27,7 +27,7 @@ A web-based UI for managing and monitoring Logstash pipelines.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Codyjackson0321/LogstashUI.git
+git clone https://github.com/elastic/LogstashUI.git
 ````
 
 ### 2. Start the docker compose
@@ -87,7 +87,7 @@ Your data (database, configurations) persists in Docker volumes, so it won't be 
 
 ## Reporting Issues
 
-Found a bug or have a feature request? [Open an issue](https://github.com/Codyjackson0321/LogstashUI/issues/new?template=issue.md).
+Found a bug or have a feature request? [Open an issue](https://github.com/elastic/LogstashUI/issues/new?template=issue.md).
 
 ## License
 

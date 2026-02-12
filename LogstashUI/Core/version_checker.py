@@ -110,7 +110,7 @@ def check_for_update():
                 'current_version': current_version_str,
                 'latest_version': latest_version_str,
                 'update_available': True,
-                'release_url': f'https://github.com/Codyjackson0321/LogstashUI/releases/tag/v{latest_version_str}'
+                'release_url': f'https://github.com/elastic/LogstashUI/releases/tag/v{latest_version_str}'
             }
     except Exception as e:
         logger.debug(f"Error comparing versions: {e}")
