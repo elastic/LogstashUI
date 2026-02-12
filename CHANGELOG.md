@@ -5,6 +5,7 @@
 - Logging for all APIs
 - CHANGELOG.md!
 - Log viewer / exporter
+- Clone pipeline functionality
 
 ### Changed
 - Removed commented out function for simulating pipelines, will implement later
