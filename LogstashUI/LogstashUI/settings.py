@@ -181,6 +181,12 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/static/"
 ]
 
+# Session Configuration
+# Sessions expire after 24 hours of inactivity
+SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
+SESSION_SAVE_EVERY_REQUEST = True  # Reset timeout on every request (sliding window)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Allow persistent sessions
+
 # Proxy/HTTPS settings for nginx reverse proxy
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True

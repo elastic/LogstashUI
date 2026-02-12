@@ -23,7 +23,6 @@ from datetime import datetime, timezone
 
 from django.template.loader import get_template
 import traceback
-from django.views.decorators.csrf import csrf_exempt
 import re
 import html
 
