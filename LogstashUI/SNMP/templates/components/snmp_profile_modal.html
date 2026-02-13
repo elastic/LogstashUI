@@ -1,0 +1,131 @@
+<!-- SNMP Profile Form Modal -->
+<div id="profileFormModal" class="hidden fixed inset-0 overflow-hidden z-50">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeProfileModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-3xl bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="profileModalTitle" class="text-xl font-bold">Add SNMP Profile</h2>
+        <button onclick="closeProfileModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Error message container -->
+        <div id="profileErrorContainer"></div>
+        
+        <form id="profileForm">
+          <input type="hidden" id="profileIsOfficial" name="is_official" value="false">
+          <input type="hidden" id="profileOriginalName" name="original_name">
+          
+          <!-- Profile Name -->
+          <div class="mb-6">
+            <label for="profileName" class="block text-sm font-medium text-gray-300 mb-2">
+              Profile Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="profileName" name="name" class="input input-bordered w-full" required placeholder="my_custom_profile">
+            <p class="text-gray-400 text-xs mt-1">Unique identifier for this profile (lowercase, underscores allowed)</p>
+          </div>
+
+          <!-- Description -->
+          <div class="mb-6">
+            <label for="profileDescription" class="block text-sm font-medium text-gray-300 mb-2">
+              Description
+            </label>
+            <textarea id="profileDescription" name="description" class="textarea textarea-bordered w-full" rows="2" placeholder="Optional description of what this profile monitors"></textarea>
+          </div>
+
+          <!-- Type -->
+          <div class="mb-6">
+            <label for="profileType" class="block text-sm font-medium text-gray-300 mb-2">
+              Type
+            </label>
+            <select id="profileType" name="type" class="select select-bordered w-full">
+              <option value="">Select type...</option>
+              <option value="Any">Any</option>
+              <option value="Network">Network</option>
+              <option value="Server">Server</option>
+              <option value="Storage">Storage</option>
+              <option value="Security">Security</option>
+              <option value="Other">Other</option>
+            </select>
+            <p class="text-gray-400 text-xs mt-1">Category of devices this profile is designed for</p>
+          </div>
+
+          <!-- Vendor -->
+          <div class="mb-6">
+            <label for="profileVendor" class="block text-sm font-medium text-gray-300 mb-2">
+              Vendor
+            </label>
+            <input type="text" id="profileVendor" name="vendor" class="input input-bordered w-full" placeholder="e.g., Cisco, Generic, Any">
+            <p class="text-gray-400 text-xs mt-1">Vendor or manufacturer this profile is designed for</p>
+          </div>
+
+          <!-- Get Section -->
+          <div class="mb-6">
+            <div class="flex justify-between items-center mb-3">
+              <label class="block text-sm font-medium text-gray-300">
+                Get <span class="text-gray-500 text-xs">(Single OID queries)</span>
+              </label>
+              <button type="button" onclick="addKVPair('get')" class="btn btn-sm btn-ghost text-primary">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Get
+              </button>
+            </div>
+            <div id="getContainer" class="space-y-2 bg-gray-800/50 rounded-lg p-4 min-h-[60px] border border-gray-600">
+              <p class="text-gray-500 text-sm text-center" id="getEmptyMessage">No Get queries defined</p>
+            </div>
+          </div>
+
+          <!-- Walk Section -->
+          <div class="mb-6">
+            <div class="flex justify-between items-center mb-3">
+              <label class="block text-sm font-medium text-gray-300">
+                Walk <span class="text-gray-500 text-xs">(OID tree walks)</span>
+              </label>
+              <button type="button" onclick="addKVPair('walk')" class="btn btn-sm btn-ghost text-primary">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Walk
+              </button>
+            </div>
+            <div id="walkContainer" class="space-y-2 bg-gray-800/50 rounded-lg p-4 min-h-[60px] border border-gray-600">
+              <p class="text-gray-500 text-sm text-center" id="walkEmptyMessage">No Walk queries defined</p>
+            </div>
+          </div>
+
+          <!-- Table Section -->
+          <div class="mb-6">
+            <div class="flex justify-between items-center mb-3">
+              <label class="block text-sm font-medium text-gray-300">
+                Table <span class="text-gray-500 text-xs">(Table queries with columns)</span>
+              </label>
+              <button type="button" onclick="addTable()" class="btn btn-sm btn-ghost text-primary">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Table
+              </button>
+            </div>
+            <div id="tableContainer" class="space-y-2 bg-gray-800/50 rounded-lg p-4 min-h-[60px] border border-gray-600">
+              <p class="text-gray-500 text-sm text-center" id="tableEmptyMessage">No tables defined</p>
+            </div>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeProfileModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" id="profileSaveBtn" class="btn btn-primary">
+              Save Profile
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

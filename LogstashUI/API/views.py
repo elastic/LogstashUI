@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 
 from django.template.loader import get_template
 import traceback
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 import re
 import html
 
@@ -128,6 +130,15 @@ def TestConnectivity(request=None, connection_id=None):
     
     return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
 
+@require_http_methods(["GET"])
+def GetConnections(request):
+    """Get all connections for dropdown population"""
+    try:
+        connections = ConnectionTable.objects.all().values('id', 'name', 'connection_type')
+        return JsonResponse(list(connections), safe=False, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 @require_admin_role
 def AddConnection(request):
 
@@ -145,7 +156,7 @@ def AddConnection(request):
             logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
             
             if not success:
-                # If test fails, delete the connection and show error
+                # If test fails, delete the connection and return JSON error
                 new_connection.delete()
                 logger.error(f"User '{request.user.username}' failed to add connection, {new_connection.id}")
                 # Escape HTML in error message to prevent injection but preserve formatting
@@ -166,7 +177,13 @@ def AddConnection(request):
 
                 return response
             
-            # Connection test succeeded, proceed with success response
+            # Connection test succeeded, return JSON response
+            print(f"Returning success response with connection ID: {new_connection.id}")
+            return JsonResponse({
+                'success': True,
+                'connection_id': new_connection.id,
+                'message': 'Connection created and tested successfully!'
+            }, status=200)
         else:
             logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
             response = HttpResponse(f"""
@@ -179,22 +196,7 @@ def AddConnection(request):
             response['HX-Reswap'] = 'innerHTML'
             return response
 
-    return HttpResponse("""
-        <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-            Connection created and tested successfully!
-            <script>
-                // Close the flyout after a short delay
-                setTimeout(() => {
-                    const flyout = document.getElementById('connectionFormFlyout');
-                    if (flyout) {
-                        flyout.classList.add('hidden');
-                    }
-                    // Reload the page to show the new connection
-                    window.location.reload();
-                }, 500);
-            </script>
-        </div>
-    """)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @require_admin_role
 def DeleteConnection(request, connection_id=None):
@@ -346,12 +348,29 @@ def GetPipelines(request, connection_id):
             es = get_elastic_connection(connection.id)
             pipelines = es.logstash.get_pipeline()
 
-            for pipeline in pipelines:
+            for pipeline_name, pipeline_data in pipelines.items():
+                # Format last_modified timestamp
+                last_modified_str = pipeline_data.get("last_modified", "")
+                formatted_date = ""
+                if last_modified_str:
+                    try:
+                        from datetime import datetime
+                        # Parse ISO 8601 format: 2025-11-23T05:30:52.421Z
+                        dt = datetime.fromisoformat(last_modified_str.replace('Z', '+00:00'))
+                        # Format as "Tuesday, January 14th 2025"
+                        day = dt.day
+                        suffix = 'th' if 11 <= day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+                        formatted_date = dt.strftime(f'%A, %B {day}{suffix} %Y')
+                    except Exception:
+                        formatted_date = last_modified_str  # Fallback to original if parsing fails
+                
                 logstash_pipelines.append(
                     {
                         "es_id": connection.id,
                         "es_name": connection.name,
-                        "name": pipeline
+                        "name": pipeline_name,
+                        "description": pipeline_data.get("description", ""),
+                        "last_modified": formatted_date
                     }
                 )
 

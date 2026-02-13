@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'Core',
     'Management',
     'Utilities',
+    'SNMP',
 
     # Frameworks
     'django_htmx',
@@ -92,6 +93,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'Core.context_processors.version_update_info',
+                'Core.context_processors.navigation_highlight',
             ],
         },
     },

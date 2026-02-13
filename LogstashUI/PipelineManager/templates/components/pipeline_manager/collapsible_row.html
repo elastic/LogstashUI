@@ -13,14 +13,31 @@
         <table class="w-full">
             <thead>
                 <th class="text-left">Pipeline Name</th>
+                <th class="text-left">Description</th>
+                <th class="text-left">Last Updated</th>
+                <th class="text-right">Actions</th>
             </thead>
             <tbody>
                 {% for pipeline in pipelines %}
                 <tr>
-                    <td>
+                    <td class="px-4 py-2">
                         <a href="/ConnectionManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
                     </td>
-                    <td class="text-right">
+                    <td class="px-4 py-2 text-gray-300">
+                        {% if pipeline.description %}
+                            {{ pipeline.description|truncatechars:80 }}
+                        {% else %}
+                            <span class="text-gray-500 italic">No description</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-gray-300">
+                        {% if pipeline.last_modified %}
+                            {{ pipeline.last_modified }}
+                        {% else %}
+                            <span class="text-gray-500 italic">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right px-4 py-2">
                         <div class="action-menu relative">
                             <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
                                 <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">

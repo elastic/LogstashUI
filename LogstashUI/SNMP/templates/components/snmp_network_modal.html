@@ -1,0 +1,134 @@
+<!-- SNMP Network Form Modal -->
+<div id="networkFormModal" class="hidden fixed inset-0 overflow-hidden" style="z-index: 60;">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeNetworkModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="modalTitle" class="text-xl font-bold">Add SNMP Network</h2>
+        <button onclick="closeNetworkModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Error message container -->
+        <div id="networkErrorContainer"></div>
+        
+        <form id="networkForm">
+          <input type="hidden" id="networkId" name="network_id">
+          
+          <!-- Network Name -->
+          <div class="mb-4">
+            <label for="networkName" class="block text-sm font-medium text-gray-300 mb-2">
+              Network Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="networkName" name="name" class="input input-bordered w-full" required placeholder="e.g., Production Network">
+            <p class="text-gray-400 text-xs mt-1">A descriptive name for this network</p>
+          </div>
+
+          <!-- Network Range (CIDR) -->
+          <div class="mb-4">
+            <label for="networkRange" class="block text-sm font-medium text-gray-300 mb-2">
+              Network Range (CIDR) <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="networkRange" name="network_range" class="input input-bordered w-full font-mono" required placeholder="192.168.1.0/24">
+            <p class="text-gray-400 text-xs mt-1">Network in CIDR notation (e.g., 192.168.1.0/24)</p>
+          </div>
+
+          <!-- Connection -->
+          <div class="mb-4">
+            <label for="networkConnection" class="block text-sm font-medium text-gray-300 mb-2">
+              Connection <span class="text-red-500">*</span>
+            </label>
+            <div class="flex gap-2">
+              <select id="networkConnection" name="connection" class="select select-bordered w-full" required>
+                <option value="">Select a connection...</option>
+                <option value="add_new" class="font-bold text-primary">+ Add Connection</option>
+              </select>
+              <button type="button" onclick="refreshConnections()" class="btn btn-square btn-ghost" title="Refresh connections">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Connection to centralized pipeline management cluster</p>
+          </div>
+
+          <!-- Logstash Name -->
+          <div class="mb-4">
+            <label for="logstashName" class="block text-sm font-medium text-gray-300 mb-2">
+              Logstash Node Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="logstashName" name="logstash_name" class="input input-bordered w-full" required placeholder="logstash-01">
+            <p class="text-gray-400 text-xs mt-1">The name of the Logstash node on this network.</p>
+          </div>
+
+          <!-- Discovery Toggle -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Device Discovery <span class="text-red-500">*</span>
+            </label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="discovery_enabled" value="true" class="radio radio-primary" checked>
+                <span class="text-gray-300">Enabled</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="discovery_enabled" value="false" class="radio radio-primary">
+                <span class="text-gray-300">Disabled</span>
+              </label>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Enable automatic device discovery on this network</p>
+          </div>
+
+          <!-- SNMP Traps Toggle -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              SNMP Traps
+            </label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="traps_enabled" value="true" class="radio radio-primary" onchange="toggleTrapsCredential()">
+                <span class="text-gray-300">Enabled</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="traps_enabled" value="false" class="radio radio-primary" checked onchange="toggleTrapsCredential()">
+                <span class="text-gray-300">Disabled</span>
+              </label>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Enable SNMP trap receiving for this network</p>
+          </div>
+
+          <!-- Trap Credential Selection (shown only when traps enabled) -->
+          <div id="trapsCredentialSection" class="mb-4 hidden">
+            <label for="networkCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              Trap SNMP Credential <span class="text-red-500">*</span>
+            </label>
+            <div class="flex gap-2">
+              <select id="networkCredentialSelect" name="credential" class="select select-bordered w-full">
+                <option value="">Select a credential...</option>
+                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
+              </select>
+              <button type="button" onclick="refreshNetworkCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for trap reception</p>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeNetworkModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Network
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
