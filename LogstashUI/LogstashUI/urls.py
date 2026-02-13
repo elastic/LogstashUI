@@ -33,6 +33,7 @@ urlpatterns = [
     path('API/', include('API.urls')),
     path('Management/', include('Management.urls')),
     path('Utilities/', include('Utilities.urls')),
+    path('SNMP/', include('SNMP.urls')),
 ]
 
 

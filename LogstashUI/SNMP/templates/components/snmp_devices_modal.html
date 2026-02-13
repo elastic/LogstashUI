@@ -1,0 +1,141 @@
+<!-- SNMP Device Form Modal -->
+<div id="deviceFormModal" class="hidden fixed inset-0 overflow-hidden z-50">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDeviceModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="modalTitle" class="text-xl font-bold">Add SNMP Device</h2>
+        <button onclick="closeDeviceModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Error message container -->
+        <div id="deviceErrorContainer"></div>
+        
+        <form id="deviceForm">
+          <input type="hidden" id="deviceId" name="device_id">
+          
+          <!-- Device Name -->
+          <div class="mb-4">
+            <label for="deviceName" class="block text-sm font-medium text-gray-300 mb-2">
+              Device Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="deviceName" name="name" class="input input-bordered w-full" required placeholder="e.g., Core Switch 1">
+            <p class="text-gray-400 text-xs mt-1">A descriptive name for this device</p>
+          </div>
+
+          <!-- IP Address / Hostname -->
+          <div class="mb-4">
+            <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
+              IP Address / Hostname <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" required placeholder="192.168.1.1 or switch.local">
+            <p class="text-gray-400 text-xs mt-1">IP address or hostname of the device</p>
+          </div>
+
+          <!-- Credential Selection -->
+          <div class="mb-4">
+            <label for="deviceCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              SNMP Credential
+            </label>
+            <div class="flex gap-2">
+              <select id="deviceCredentialSelect" name="credential" class="select select-bordered w-full">
+                <option value="">Select a credential...</option>
+                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
+              </select>
+              <button type="button" onclick="refreshCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for this device</p>
+          </div>
+
+          <!-- Network Selection -->
+          <div class="mb-4">
+            <label for="deviceNetworkSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              Network
+            </label>
+            <div class="flex gap-2">
+              <select id="deviceNetworkSelect" name="network" class="select select-bordered w-full">
+                <option value="">Select a network...</option>
+                <option value="add_new" class="font-bold text-primary">+ Add Network</option>
+              </select>
+              <button type="button" onclick="refreshNetworks()" class="btn btn-square btn-ghost" title="Refresh networks">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Select the network this device belongs to</p>
+          </div>
+
+          <!-- Profiles Selection -->
+          <div class="mb-4">
+            <label for="deviceProfilesSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              Profiles
+            </label>
+            <div class="flex gap-2">
+              <select id="deviceProfilesSelect" class="select select-bordered w-full">
+                <option value="">Select a profile to add...</option>
+              </select>
+              <button type="button" onclick="refreshProfiles()" class="btn btn-square btn-ghost" title="Refresh profiles">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <!-- Selected Profiles Pills Container -->
+            <div id="selectedProfilesContainer" class="mt-2 flex flex-wrap gap-2 min-h-[32px]">
+              <!-- Pills will be added here dynamically -->
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Select one or more profiles to apply to this device</p>
+          </div>
+
+          <!-- SNMP Configuration (Port, Retries, Timeout) - Side by Side -->
+          <div class="mb-4 grid grid-cols-3 gap-3">
+            <!-- Port -->
+            <div>
+              <label for="devicePort" class="block text-sm font-medium text-gray-300 mb-2">
+                SNMP Port<br>&nbsp;
+              </label>
+              <input type="number" id="devicePort" name="port" class="input input-bordered w-full" value="161" min="1" max="65535" placeholder="161">
+              <p class="text-gray-400 text-xs mt-1">Default: 161</p>
+            </div>
+
+            <!-- Retries -->
+            <div>
+              <label for="deviceRetries" class="block text-sm font-medium text-gray-300 mb-2">
+                Retries<br><span class="text-gray-500">(Optional)</span>
+              </label>
+              <input type="number" id="deviceRetries" name="retries" class="input input-bordered w-full" value="2" min="0" max="10" placeholder="2">
+              <p class="text-gray-400 text-xs mt-1">Default: 2</p>
+            </div>
+
+            <!-- Timeout -->
+            <div>
+              <label for="deviceTimeout" class="block text-sm font-medium text-gray-300 mb-2">
+                Timeout (ms)<br><span class="text-gray-500">(Optional)</span>
+              </label>
+              <input type="number" id="deviceTimeout" name="timeout" class="input input-bordered w-full" value="1000" min="100" step="100" placeholder="1000">
+              <p class="text-gray-400 text-xs mt-1">Default: 1000</p>
+            </div>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeDeviceModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Device
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

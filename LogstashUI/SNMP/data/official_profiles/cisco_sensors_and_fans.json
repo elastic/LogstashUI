@@ -1,0 +1,26 @@
+{
+  "name": "cisco_sensors_and_fans",
+  "description": "[Official] Sensors and Fans for Cisco devices",
+  "type": "Network",
+  "vendor": "Cisco",
+  "pinned": false,
+  "get": {},
+  "walk": {},
+  "table": {
+    "sensors": {
+      "columns": {
+        "description": "1.3.6.1.4.1.9.9.13.1.3.1.2",
+        "temp_celsius": "1.3.6.1.4.1.9.9.13.1.3.1.3",
+        "temp_threshold": "1.3.6.1.4.1.9.9.13.1.3.1.4",
+        "temp_last_shutdown": "1.3.6.1.4.1.9.9.13.1.3.1.5",
+        "state": "1.3.6.1.4.1.9.9.13.1.3.1.6"
+      }
+    },
+    "fans": {
+      "columns": {
+        "description": "1.3.6.1.4.1.9.9.13.1.4.1.2",
+        "state": "1.3.6.1.4.1.9.9.13.1.4.1.3"
+      }
+    }
+  }
+}
