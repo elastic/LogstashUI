@@ -539,6 +539,16 @@
 <!--- Diff modal -->
 {% include 'components/pipeline_editor/diff_modal.html' %}
 
+<!-- Hidden element to preallocate simulation slot on page load -->
+<div id="slotPreallocation"
+     hx-post="/API/SimulatePipeline/"
+     hx-trigger="load"
+     hx-vals='js:{"components": JSON.stringify(components)}'
+     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+     hx-swap="none"
+     style="display: none;">
+</div>
+
 <script>
     const components = {{component_data | safe}};
     const pluginData = {{plugin_data | safe}};

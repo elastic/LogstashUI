@@ -1,11 +1,17 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
-from threading import Lock
+from threading import Lock, Thread
+import time
+import yaml
+import os
 
 # Number of simulation slots available
 NUM_SLOTS = 10
+
+# Slot TTL in seconds (5 minutes)
+SLOT_TTL_SECONDS = 300
 
 # Global slot state - thread-safe
 _slots_lock = Lock()
@@ -130,3 +136,86 @@ def clear_all_slots():
     """Clear all slots - useful for testing or reset."""
     with _slots_lock:
         _slots.clear()
+
+
+def evict_expired_slots() -> List[int]:
+    """
+    Evict slots that haven't been accessed within the TTL period.
+    
+    Returns:
+        List of evicted slot IDs
+    """
+    evicted_slots = []
+    current_time = datetime.now(timezone.utc)
+    
+    with _slots_lock:
+        slots_to_evict = []
+        
+        for slot_id, slot_data in _slots.items():
+            last_accessed_str = slot_data.get('last_accessed')
+            if last_accessed_str:
+                try:
+                    last_accessed = datetime.fromisoformat(last_accessed_str.replace('Z', '+00:00'))
+                    time_since_access = (current_time - last_accessed).total_seconds()
+                    
+                    if time_since_access > SLOT_TTL_SECONDS:
+                        slots_to_evict.append(slot_id)
+                except (ValueError, AttributeError):
+                    # If we can't parse the timestamp, evict the slot to be safe
+                    slots_to_evict.append(slot_id)
+        
+        # Evict the expired slots
+        for slot_id in slots_to_evict:
+            del _slots[slot_id]
+            evicted_slots.append(slot_id)
+    
+    return evicted_slots
+
+
+def _background_cleanup_worker():
+    """
+    Background worker thread that periodically evicts expired slots.
+    Runs every 60 seconds.
+    """
+    while True:
+        try:
+            time.sleep(60)  # Check every minute
+            evicted_slots = evict_expired_slots()
+            if evicted_slots:
+                print(f"[Slots] Background cleanup evicted expired slots: {evicted_slots}")
+        except Exception as e:
+            print(f"[Slots] Error during background cleanup: {e}")
+
+
+def _load_config() -> Dict[str, Any]:
+    """
+    Load configuration from logstashagent.yml.
+    
+    Returns:
+        Dictionary with configuration settings
+    """
+    config_path = os.path.join(os.path.dirname(__file__), 'logstashagent.yml')
+    
+    if not os.path.exists(config_path):
+        print(f"[Slots] Config file not found at {config_path}, using defaults")
+        return {}
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            return config if config else {}
+    except Exception as e:
+        print(f"[Slots] Error loading config: {e}, using defaults")
+        return {}
+
+
+# Conditionally start the background cleanup thread based on config
+_config = _load_config()
+_mode = _config.get('mode', '').lower()
+
+if _mode == 'simulation':
+    _cleanup_thread = Thread(target=_background_cleanup_worker, daemon=True, name="SlotCleanupThread")
+    _cleanup_thread.start()
+    print("[Slots] Started background cleanup thread (mode: simulation)")
+else:
+    print(f"[Slots] Background cleanup thread NOT started (mode: {_mode or 'not set'})")

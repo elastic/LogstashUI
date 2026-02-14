@@ -16,6 +16,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy FastAPI application
 COPY main.py .
+COPY slots.py .
+COPY logstashagent.yml .
 
 # Create directories for Logstash configs and pipelines
 RUN mkdir -p /etc/logstash \

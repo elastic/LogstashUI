@@ -19,6 +19,7 @@
       hx-target="#simulationResults"
       hx-swap="innerHTML"
       hx-vals="js:{'components': components}"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
       hx-indicator="#simulationLoading"
       class="p-6 overflow-y-auto flex-grow">
       
