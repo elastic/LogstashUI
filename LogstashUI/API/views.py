@@ -3,6 +3,8 @@
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse, HttpResponseRedirect
 from functools import wraps
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
 
 ## Tables
 from Core.models import Connection as ConnectionTable
@@ -27,8 +29,15 @@ import re
 import html
 
 import logging
+from django.views.decorators.csrf import csrf_exempt
+from collections import deque
+from threading import Lock
 
 logger = logging.getLogger(__name__)
+
+# Global storage for simulation results (in-memory for now)
+simulation_results = deque(maxlen=1000)
+simulation_lock = Lock()
 
 
 def require_admin_role(view_func):
@@ -453,12 +462,26 @@ def UpdatePipelineSettings(request):
 
 
 @require_admin_role
-def CreatePipeline(request):
-    if request.method == "POST":
-        es_id = request.POST.get("es_id")
-        pipeline_name = request.POST.get("pipeline")
-        pipeline_config = request.POST.get("pipeline_config", "").strip()
-
+def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=None):
+    """
+    Create a pipeline in Elasticsearch or LogstashAgent.
+    
+    Args:
+        request: Django request object
+        simulate: If True, send to LogstashAgent instead of Elasticsearch
+        pipeline_name: Pipeline name (used when called directly for simulation)
+        pipeline_config: Pipeline config string (used when called directly for simulation)
+    """
+    import requests
+    from django.conf import settings
+    
+    if request.method == "POST" or simulate:
+        # Get parameters from POST or function arguments
+        if not simulate:
+            es_id = request.POST.get("es_id")
+            pipeline_name = request.POST.get("pipeline")
+            pipeline_config = request.POST.get("pipeline_config", "").strip()
+        
         # Validate pipeline name
         is_valid, error_msg = validate_pipeline_name(pipeline_name)
         if not is_valid:
@@ -469,34 +492,58 @@ def CreatePipeline(request):
             pipeline_content = pipeline_config
         else:
             pipeline_content = "input {}\nfilter {}\noutput {}"
-
-        es = get_elastic_connection(es_id)
-        pipeline_doc = es.logstash.put_pipeline(
-            id=pipeline_name,
-            body={
-                "pipeline": pipeline_content,
-                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                "pipeline_metadata": {
-                    "version": 1,
-                    "type": "logstash_pipeline"
-                },
-                "username": "LogstashUI",
-                "pipeline_settings": {
-                    "pipeline.batch.delay": 50,
-                    "pipeline.batch.size": 125,
-                    "pipeline.workers": 1,
-                    "queue.checkpoint.writes": 1024,
-                    "queue.max_bytes": "1gb",
-                    "queue.type": "memory"
-                },
-                "description": ""
-            }
-        )
         
-        logger.info(f"User '{request.user.username}' created new pipeline '{pipeline_name}' (Connection ID: {es_id})")
-        response = HttpResponse("Pipeline created successfully!")
-        response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
-        return response
+        # Build the pipeline body
+        pipeline_body = {
+            "pipeline": pipeline_content,
+            "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            "pipeline_metadata": {
+                "version": 1,
+                "type": "logstash_pipeline"
+            },
+            "username": "LogstashUI",
+            "pipeline_settings": {
+                "pipeline.batch.delay": 50,
+                "pipeline.batch.size": 125,
+                "pipeline.workers": 1,
+                "queue.checkpoint.writes": 1024,
+                "queue.max_bytes": "1gb",
+                "queue.type": "memory"
+            },
+            "description": ""
+        }
+        
+        if simulate:
+            # Send to LogstashAgent
+            # Determine protocol based on DEBUG mode
+            protocol = "http" if settings.DEBUG else "https"
+            logstash_agent_url = f"{protocol}://127.0.0.1:9500/_logstash/pipeline/{pipeline_name}"
+            
+            try:
+                response = requests.put(
+                    logstash_agent_url,
+                    json=pipeline_body,
+                    verify=False,  # --insecure equivalent
+                    timeout=10
+                )
+                response.raise_for_status()
+                logger.info(f"User '{request.user.username}' created simulation pipeline '{pipeline_name}' in LogstashAgent")
+                return HttpResponse("Simulation pipeline created successfully!", status=200)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to create simulation pipeline in LogstashAgent: {e}")
+                return HttpResponse(f"Failed to create simulation pipeline: {str(e)}", status=500)
+        else:
+            # Send to Elasticsearch
+            es = get_elastic_connection(es_id)
+            pipeline_doc = es.logstash.put_pipeline(
+                id=pipeline_name,
+                body=pipeline_body
+            )
+            
+            logger.info(f"User '{request.user.username}' created new pipeline '{pipeline_name}' (Connection ID: {es_id})")
+            response = HttpResponse("Pipeline created successfully!")
+            response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
+            return response
 
 
 @require_admin_role
@@ -820,3 +867,317 @@ def GetLogs(request):
     except Exception as e:
         logger.error(f"Error fetching logs for connection {connection_id}: {e}")
         return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)
+
+
+def _generate_filter_pipeline_config(filter_plugin, filter_num, next_filter_id):
+    """
+    Generate a mini-pipeline config for a single filter plugin with Ruby instrumentation.
+    
+    Args:
+        filter_plugin: The filter plugin component dict
+        filter_num: The filter number (1, 2, 3, etc.)
+        next_filter_id: The next pipeline address to send to (or 'filter-final' for last)
+    
+    Returns:
+        String containing the pipeline config
+    """
+    # Convert the single filter plugin to Logstash config format
+    converter = logstash_config_parse.ComponentToPipeline({'filter': [filter_plugin]}, test=False)
+    filter_config = converter.components_to_logstash_config()
+    
+    # Extract just the filter block content (remove 'filter {' and closing '}')
+    lines = filter_config.strip().split('\n')
+    filter_content = '\n'.join(lines[1:-1])  # Skip first and last lines
+    
+    # Build the mini-pipeline with Ruby instrumentation
+    pipeline_config = f'''input {{ pipeline {{ address => "filter{filter_num}" }} }}
+
+filter {{
+  ruby {{
+    code => "
+      event.set('[@metadata][PIPELINE-ID][f{filter_num:03d}-pre]', event.to_hash)
+    "
+  }}
+  
+{filter_content}
+  
+  ruby {{
+    code => "
+      event.set('[@metadata][PIPELINE-ID][f{filter_num:03d}-post]', event.to_hash)
+    "
+  }}
+}}
+
+output {{
+  pipeline {{ send_to => "{next_filter_id}" }}
+  pipeline {{ send_to => "output-block" }}
+}}
+'''
+    return pipeline_config
+
+
+@require_admin_role
+def SimulatePipeline(request):
+    """
+    Simulate a pipeline by generating dynamic filter pipelines with Ruby instrumentation.
+    Each filter plugin gets its own mini-pipeline that captures pre/post event state.
+    """
+    import requests
+    from django.conf import settings
+    
+    if request.method != 'POST':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        # Get the components from the request
+        components_json = request.POST.get('components')
+        log_text = request.POST.get('log_text', '').strip()
+
+        print(request.POST['components'])
+
+        if not components_json:
+            return HttpResponse('<div class="text-red-400">Error: No pipeline components provided</div>')
+        
+        if not log_text:
+            return HttpResponse('<div class="text-red-400">Error: No log input provided</div>')
+        
+        # Parse components
+        try:
+            components = json.loads(components_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse components JSON: {e}")
+            return HttpResponse(f'<div class="text-red-400">Error: Invalid components data</div>')
+        
+        # Extract filter plugins from components
+        filter_plugins = components.get('filter', [])
+        
+        if not filter_plugins:
+            return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
+        
+        # Determine protocol based on DEBUG mode
+        protocol = "http" if settings.DEBUG else "https"
+        logstash_agent_url = f"{protocol}://127.0.0.1:9500/_logstash/pipeline"
+        
+        created_pipelines = []
+        
+        # Generate and create a pipeline for each filter
+        for idx, filter_plugin in enumerate(filter_plugins, start=1):
+            # Determine next filter address
+            if idx < len(filter_plugins):
+                next_filter_id = f"filter{idx + 1}"
+            else:
+                next_filter_id = "filter-final"
+            
+            # Generate pipeline config for this filter
+            try:
+                pipeline_config = _generate_filter_pipeline_config(filter_plugin, idx, next_filter_id)
+            except Exception as e:
+                logger.error(f"Failed to generate config for filter {idx}: {e}")
+                logger.error(traceback.format_exc())
+                return HttpResponse(f'<div class="text-red-400">Error generating filter {idx} config: {str(e)}</div>')
+            
+            # Create the pipeline in LogstashAgent
+            pipeline_name = f"filter{idx}"
+            pipeline_body = {
+                "pipeline": pipeline_config,
+                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                "pipeline_metadata": {
+                    "version": 1,
+                    "type": "logstash_pipeline"
+                },
+                "username": "LogstashUI",
+                "pipeline_settings": {
+                    "pipeline.workers": 1
+                }
+            }
+            
+            try:
+                response = requests.put(
+                    f"{logstash_agent_url}/{pipeline_name}",
+                    json=pipeline_body,
+                    verify=False,
+                    timeout=10
+                )
+                response.raise_for_status()
+                created_pipelines.append(pipeline_name)
+                logger.info(f"Created simulation pipeline: {pipeline_name}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to create pipeline {pipeline_name}: {e}")
+                return HttpResponse(f'<div class="text-red-400">Error creating pipeline {pipeline_name}: {str(e)}</div>')
+        
+        # Wait a moment for Logstash to reload the pipelines
+        import time
+        time.sleep(4)
+        
+        # Send the user's log input to the simulation HTTP input
+        simulation_input_url = f"{protocol}://127.0.0.1:8082"
+        try:
+            # Parse log_text as JSON if it looks like JSON, otherwise send as message field
+            try:
+                log_data = json.loads(log_text)
+            except json.JSONDecodeError:
+                # Not JSON, wrap it in a message field
+                log_data = {"message": log_text}
+            
+            response = requests.post(
+                simulation_input_url,
+                json=log_data,
+                verify=False,
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info(f"Sent simulation input to {simulation_input_url}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send simulation input: {e}")
+            return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
+        
+        # Wait a moment for pipeline processing to complete
+        time.sleep(2)
+        
+        # Cleanup: Delete the dynamically created filter pipelines
+        for pipeline_name in created_pipelines:
+            try:
+                response = requests.delete(
+                    f"{logstash_agent_url}/{pipeline_name}",
+                    verify=False,
+                    timeout=10
+                )
+                response.raise_for_status()
+                logger.info(f"Deleted simulation pipeline: {pipeline_name}")
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Failed to delete pipeline {pipeline_name}: {e}")
+        
+        # Return success message - results will be streamed via StreamSimulate endpoint
+        result_html = f'''
+        <div class="space-y-4">
+            <div class="p-4 bg-green-900/30 border border-green-600 rounded-lg">
+                <h3 class="text-lg font-semibold text-green-400 mb-2">✓ Simulation Started</h3>
+                <p class="text-green-200">Processing {len(created_pipelines)} filter(s) - results streaming below</p>
+            </div>
+            
+            <div class="p-4 bg-gray-700 rounded-lg">
+                <h4 class="text-sm font-semibold text-gray-300 mb-2">Pipeline Chain:</h4>
+                <pre class="text-xs text-gray-300 overflow-auto bg-gray-800 p-3 rounded">simulate-start → {' → '.join(created_pipelines)} → simulate-end → output-block → StreamSimulate</pre>
+            </div>
+            
+            <div id="simulation-results" class="p-4 bg-gray-800 rounded-lg">
+                <h4 class="text-sm font-semibold text-gray-300 mb-2">📊 Results:</h4>
+                <div id="results-stream" class="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto bg-gray-900 p-3 rounded"></div>
+            </div>
+        </div>
+        
+        <script>
+        (function() {{
+            let pollCount = 0;
+            const maxPolls = 30; // Poll for 30 seconds max
+            const pollInterval = 1000; // Poll every 1 second
+            
+            function pollResults() {{
+                if (pollCount >= maxPolls) {{
+                    const stream = document.getElementById('results-stream');
+                    if (stream && stream.innerHTML.trim() === '') {{
+                        stream.innerHTML = '<span class="text-yellow-400">No results received. Check Logstash logs.</span>';
+                    }}
+                    return;
+                }}
+                
+                fetch('/API/GetSimulationResults/')
+                    .then(response => response.json())
+                    .then(data => {{
+                        console.log('Poll response:', data);
+                        console.log('Results count:', data.results ? data.results.length : 0);
+                        
+                        if (data.results && data.results.length > 0) {{
+                            console.log('Processing', data.results.length, 'events');
+                            const stream = document.getElementById('results-stream');
+                            console.log('Stream element:', stream);
+                            
+                            if (stream) {{
+                                data.results.forEach(event => {{
+                                    const eventStr = JSON.stringify(event, null, 2);
+                                    stream.innerHTML += eventStr + '\\n\\n---\\n\\n';
+                                }});
+                                stream.scrollTop = stream.scrollHeight;
+                                console.log('Updated stream innerHTML length:', stream.innerHTML.length);
+                            }} else {{
+                                console.error('results-stream element not found!');
+                            }}
+                        }}
+                        
+                        pollCount++;
+                        setTimeout(pollResults, pollInterval);
+                    }})
+                    .catch(error => {{
+                        console.error('Error polling results:', error);
+                        pollCount++;
+                        setTimeout(pollResults, pollInterval);
+                    }});
+            }}
+            
+            // Start polling after a short delay
+            setTimeout(pollResults, 2000);
+        }})();
+        </script>
+        '''
+        
+        return HttpResponse(result_html)
+        
+    except Exception as e:
+        logger.error(f"Error in SimulatePipeline: {e}")
+        logger.error(traceback.format_exc())
+        return HttpResponse(f'<div class="text-red-400">Error: {str(e)}</div>')
+
+
+@csrf_exempt
+def StreamSimulate(request):
+    """
+    Receive simulation results from Logstash HTTP output and store them.
+    This endpoint is called by the output-block pipeline for each event.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        # Parse the incoming event data
+        event_data = json.loads(request.body)
+        
+        # Store the event in the global results queue
+        with simulation_lock:
+            simulation_results.append(event_data)
+            queue_size = len(simulation_results)
+        
+        logger.info(f"StreamSimulate: Received event, queue size now: {queue_size}")
+        logger.debug(f"StreamSimulate: Event data keys: {list(event_data.keys())}")
+        
+        return JsonResponse({"status": "ok"}, status=200)
+        
+    except Exception as e:
+        logger.error(f"Error in StreamSimulate: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+def GetSimulationResults(request):
+    """
+    Poll endpoint for frontend to retrieve simulation results.
+    Returns all stored results and clears the queue.
+    """
+    if request.method != 'GET':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        # Get all results and clear the queue
+        with simulation_lock:
+            results = list(simulation_results)
+            simulation_results.clear()
+        
+        logger.info(f"GetSimulationResults: Returning {len(results)} events")
+        if results:
+            logger.debug(f"GetSimulationResults: First event keys: {list(results[0].keys())}")
+        
+        return JsonResponse({"results": results}, status=200)
+        
+    except Exception as e:
+        logger.error(f"Error in GetSimulationResults: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({"error": str(e)}, status=500)

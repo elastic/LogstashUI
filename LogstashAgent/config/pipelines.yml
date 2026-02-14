@@ -1,0 +1,17 @@
+# Pipelines Configuration
+# This file will be dynamically updated by the FastAPI sidecar
+
+# Static simulation pipelines
+- pipeline.id: simulate-start
+  pipeline.workers: 1
+  path.config: "/etc/logstash/config/simulate_start.conf"
+
+- pipeline.id: simulate-end
+  pipeline.workers: 1
+  path.config: "/etc/logstash/config/simulate_end.conf"
+
+- pipeline.id: output-block
+  pipeline.workers: 1
+  path.config: "/etc/logstash/config/output-block.conf"
+
+# Dynamic filter pipelines will be added below via API

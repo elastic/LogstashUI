@@ -18,7 +18,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project
-COPY . .
+COPY .. .
 
 # Install Tailwind dependencies (need fresh install for Linux)
 WORKDIR /app/LogstashUI/theme/static_src

@@ -178,7 +178,9 @@ LOGIN_URL = "/Management/Login/"
 LOGIN_REQUIRED_IGNORE_PATHS = [
     "/Management/Login/",
     "/Management/Logout/",
-    "/static/"
+    "/static/",
+    "/API/StreamSimulate/",
+    "/API/StreamSimulate"
 ]
 
 # Session Configuration
