@@ -1,12 +1,13 @@
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import JSONResponse
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 import os
 import yaml
 import json
 import glob
 from pathlib import Path as PathLib
+import slots
 
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
 
@@ -349,3 +350,137 @@ async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID"
         raise HTTPException(status_code=500, detail=f"Failed to update pipelines.yml: {str(e)}")
     
     return {"acknowledged": True}
+
+
+@app.post("/_logstash/slots/allocate")
+async def allocate_simulation_slot(body: Dict[str, Any]):
+    """
+    Allocate a slot for simulation pipelines.
+    
+    Request body:
+    {
+        "pipeline_name": "name of the pipeline being simulated",
+        "pipelines": [
+            {"config": "filter config 1", "index": 1},
+            {"config": "filter config 2", "index": 2},
+            ...
+        ]
+    }
+    
+    Returns:
+    {
+        "slot_id": 1-10,
+        "reused": true/false (whether an existing slot was reused)
+    }
+    """
+    pipeline_name = body.get('pipeline_name')
+    pipelines = body.get('pipelines', [])
+    
+    if not pipeline_name:
+        raise HTTPException(status_code=400, detail="Missing 'pipeline_name' field")
+    
+    if not pipelines:
+        raise HTTPException(status_code=400, detail="Missing 'pipelines' field or empty pipeline list")
+    
+    # Check if slot already exists with same content
+    content_hash = slots._compute_pipeline_hash(pipelines)
+    existing_slot = None
+    for slot_id, slot_data in slots.get_slot_state().items():
+        if slot_data.get('content_hash') == content_hash:
+            existing_slot = slot_id
+            break
+    
+    # Allocate or reuse slot
+    slot_id = slots.allocate_slot(pipeline_name, pipelines)
+    
+    if slot_id is None:
+        raise HTTPException(status_code=500, detail="Failed to allocate slot")
+    
+    # If slot is new or changed, create the pipelines
+    reused = existing_slot is not None
+    
+    if not reused:
+        # Create the slot pipelines in Logstash
+        try:
+            await _create_slot_pipelines(slot_id, pipelines)
+        except Exception as e:
+            # Release the slot if pipeline creation fails
+            slots.release_slot(slot_id)
+            raise HTTPException(status_code=500, detail=f"Failed to create slot pipelines: {str(e)}")
+    
+    return {
+        "slot_id": slot_id,
+        "reused": reused,
+        "pipeline_count": len(pipelines)
+    }
+
+
+async def _create_slot_pipelines(slot_id: int, pipelines: List[Dict[str, Any]]):
+    """
+    Create the filter pipelines for a specific slot.
+    
+    Args:
+        slot_id: Slot ID (1-10)
+        pipelines: List of pipeline configurations
+    """
+    for pipeline_data in pipelines:
+        idx = pipeline_data.get('index', 1)
+        config = pipeline_data.get('config', '')
+        
+        if not config:
+            continue
+        
+        # Determine next filter address
+        if idx < len(pipelines):
+            next_filter_id = f"slot{slot_id}-filter{idx + 1}"
+        else:
+            next_filter_id = "filter-final"
+        
+        # Generate pipeline config for this filter
+        pipeline_config = f"""input {{
+  pipeline {{ address => "slot{slot_id}-filter{idx}" }}
+}}
+
+filter {{
+{config}
+}}
+
+output {{
+  pipeline {{ send_to => "{next_filter_id}" }}
+}}
+"""
+        
+        # Create the pipeline
+        pipeline_name = f"slot{slot_id}-filter{idx}"
+        pipeline_body = {
+            "pipeline": pipeline_config,
+            "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            "pipeline_metadata": {
+                "version": 1,
+                "type": "logstash_pipeline"
+            },
+            "username": "LogstashAgent",
+            "pipeline_settings": {
+                "pipeline.workers": 1
+            }
+        }
+        
+        # Use the existing put_pipeline logic
+        await put_pipeline(pipeline_name, pipeline_body)
+
+
+@app.get("/_logstash/slots")
+async def get_slots():
+    """Get the current state of all slots."""
+    return slots.get_slot_state()
+
+
+@app.delete("/_logstash/slots/{slot_id}")
+async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=10)):
+    """Release a specific slot."""
+    success = slots.release_slot(slot_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Slot {slot_id} not found")
+    
+    return {"acknowledged": True, "slot_id": slot_id}

@@ -1,7 +1,7 @@
 # Logstash Configuration
 # Enable automatic config reloading for hot-swapping pipelines
 config.reload.automatic: true
-config.reload.interval: 3s
+config.reload.interval: 1s
 
 # Disable X-Pack management (we're managing pipelines via files)
 xpack.management.enabled: false

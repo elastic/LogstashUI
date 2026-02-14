@@ -956,58 +956,74 @@ def SimulatePipeline(request):
         
         # Determine protocol based on DEBUG mode
         protocol = "http" if settings.DEBUG else "https"
-        logstash_agent_url = f"{protocol}://127.0.0.1:9500/_logstash/pipeline"
+        logstash_agent_url = f"{protocol}://127.0.0.1:9500"
         
-        created_pipelines = []
-        
-        # Generate and create a pipeline for each filter
+        # Build pipeline list for slot allocation
+        pipeline_list = []
         for idx, filter_plugin in enumerate(filter_plugins, start=1):
-            # Determine next filter address
-            if idx < len(filter_plugins):
-                next_filter_id = f"filter{idx + 1}"
-            else:
-                next_filter_id = "filter-final"
-            
-            # Generate pipeline config for this filter
-            try:
-                pipeline_config = _generate_filter_pipeline_config(filter_plugin, idx, next_filter_id)
-            except Exception as e:
-                logger.error(f"Failed to generate config for filter {idx}: {e}")
-                logger.error(traceback.format_exc())
-                return HttpResponse(f'<div class="text-red-400">Error generating filter {idx} config: {str(e)}</div>')
-            
-            # Create the pipeline in LogstashAgent
-            pipeline_name = f"filter{idx}"
-            pipeline_body = {
-                "pipeline": pipeline_config,
-                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                "pipeline_metadata": {
-                    "version": 1,
-                    "type": "logstash_pipeline"
+            # Build instrumented filter list with ruby components before and after
+            instrumented_filters = [
+                # Pre-instrumentation ruby filter
+                {
+                    "id": f"comp_pre_{idx}",
+                    "type": "filter",
+                    "plugin": "ruby",
+                    "config": {
+                        "code": f"event.set('[@metadata][PIPELINE-ID][f{idx:03d}-pre]', event.to_hash)"
+                    }
                 },
-                "username": "LogstashUI",
-                "pipeline_settings": {
-                    "pipeline.workers": 1
+                # The actual filter plugin
+                filter_plugin,
+                # Post-instrumentation ruby filter
+                {
+                    "id": f"comp_post_{idx}",
+                    "type": "filter",
+                    "plugin": "ruby",
+                    "config": {
+                        "code": f"event.set('[@metadata][PIPELINE-ID][f{idx:03d}-post]', event.to_hash)"
+                    }
                 }
-            }
+            ]
             
-            try:
-                response = requests.put(
-                    f"{logstash_agent_url}/{pipeline_name}",
-                    json=pipeline_body,
-                    verify=False,
-                    timeout=10
-                )
-                response.raise_for_status()
-                created_pipelines.append(pipeline_name)
-                logger.info(f"Created simulation pipeline: {pipeline_name}")
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Failed to create pipeline {pipeline_name}: {e}")
-                return HttpResponse(f'<div class="text-red-400">Error creating pipeline {pipeline_name}: {str(e)}</div>')
+            # Convert the instrumented filter list to Logstash config format
+            converter = logstash_config_parse.ComponentToPipeline({'filter': instrumented_filters}, test=False)
+            filter_config = converter.components_to_logstash_config()
+            
+            # Extract just the filter block content (remove 'filter {' and closing '}')
+            lines = filter_config.strip().split('\n')
+            filter_content = '\n'.join(lines[1:-1])  # Skip first and last lines
+            
+            pipeline_list.append({
+                "config": filter_content,
+                "index": idx
+            })
         
-        # Wait a moment for Logstash to reload the pipelines
+        # Allocate a slot for these pipelines
+        slot_allocation_body = {
+            "pipeline_name": request.GET.get('pipeline', 'unknown'),
+            "pipelines": pipeline_list
+        }
+        
+        try:
+            response = requests.post(
+                f"{logstash_agent_url}/_logstash/slots/allocate",
+                json=slot_allocation_body,
+                verify=False,
+                timeout=10
+            )
+            response.raise_for_status()
+            slot_data = response.json()
+            slot_id = slot_data['slot_id']
+            reused = slot_data['reused']
+            logger.info(f"Allocated slot {slot_id} (reused: {reused})")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to allocate slot: {e}")
+            return HttpResponse(f'<div class="text-red-400">Error allocating slot: {str(e)}</div>')
+        
+        # Wait a moment for Logstash to reload the pipelines (only if new slot)
         import time
-        time.sleep(4)
+        if not reused:
+            time.sleep(4)
         
         # Send the user's log input to the simulation HTTP input
         simulation_input_url = f"{protocol}://127.0.0.1:8082"
@@ -1019,6 +1035,9 @@ def SimulatePipeline(request):
                 # Not JSON, wrap it in a message field
                 log_data = {"message": log_text}
             
+            # Add slot field to route to the correct slot
+            log_data["slot"] = slot_id
+            
             response = requests.post(
                 simulation_input_url,
                 json=log_data,
@@ -1026,7 +1045,7 @@ def SimulatePipeline(request):
                 timeout=10
             )
             response.raise_for_status()
-            logger.info(f"Sent simulation input to {simulation_input_url}")
+            logger.info(f"Sent simulation input to {simulation_input_url} with slot {slot_id}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to send simulation input: {e}")
             return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
@@ -1034,30 +1053,23 @@ def SimulatePipeline(request):
         # Wait a moment for pipeline processing to complete
         time.sleep(2)
         
-        # Cleanup: Delete the dynamically created filter pipelines
-        for pipeline_name in created_pipelines:
-            try:
-                response = requests.delete(
-                    f"{logstash_agent_url}/{pipeline_name}",
-                    verify=False,
-                    timeout=10
-                )
-                response.raise_for_status()
-                logger.info(f"Deleted simulation pipeline: {pipeline_name}")
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Failed to delete pipeline {pipeline_name}: {e}")
+        # Note: Pipelines are now persistent in slots and will be reused
+        # No cleanup needed - slots will be evicted when needed
+        
+        # Build pipeline chain display
+        slot_pipelines = [f"slot{slot_id}-filter{i}" for i in range(1, len(filter_plugins) + 1)]
         
         # Return success message - results will be streamed via StreamSimulate endpoint
         result_html = f'''
         <div class="space-y-4">
             <div class="p-4 bg-green-900/30 border border-green-600 rounded-lg">
                 <h3 class="text-lg font-semibold text-green-400 mb-2">✓ Simulation Started</h3>
-                <p class="text-green-200">Processing {len(created_pipelines)} filter(s) - results streaming below</p>
+                <p class="text-green-200">Processing {len(filter_plugins)} filter(s) in slot {slot_id} {"(reused)" if reused else "(new)"} - results streaming below</p>
             </div>
             
             <div class="p-4 bg-gray-700 rounded-lg">
                 <h4 class="text-sm font-semibold text-gray-300 mb-2">Pipeline Chain:</h4>
-                <pre class="text-xs text-gray-300 overflow-auto bg-gray-800 p-3 rounded">simulate-start → {' → '.join(created_pipelines)} → simulate-end → output-block → StreamSimulate</pre>
+                <pre class="text-xs text-gray-300 overflow-auto bg-gray-800 p-3 rounded">simulate-start → slot{slot_id} → {' → '.join(slot_pipelines)} → filter-final → output-block → StreamSimulate</pre>
             </div>
             
             <div id="simulation-results" class="p-4 bg-gray-800 rounded-lg">
