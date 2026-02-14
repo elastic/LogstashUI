@@ -425,9 +425,10 @@ async def _create_slot_pipelines(slot_id: int, pipelines: List[Dict[str, Any]]):
     """
     for pipeline_data in pipelines:
         idx = pipeline_data.get('index', 1)
-        config = pipeline_data.get('config', '')
+        filter_config = pipeline_data.get('filter_config', '')
+        output_config = pipeline_data.get('output_config', '')
         
-        if not config:
+        if not filter_config:
             continue
         
         # Determine next filter address
@@ -436,17 +437,18 @@ async def _create_slot_pipelines(slot_id: int, pipelines: List[Dict[str, Any]]):
         else:
             next_filter_id = "filter-final"
         
-        # Generate pipeline config for this filter
+        # Generate pipeline config with both pipeline and HTTP outputs
         pipeline_config = f"""input {{
   pipeline {{ address => "slot{slot_id}-filter{idx}" }}
 }}
 
 filter {{
-{config}
+{filter_config}
 }}
 
 output {{
   pipeline {{ send_to => "{next_filter_id}" }}
+{output_config}
 }}
 """
         

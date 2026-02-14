@@ -95,53 +95,6 @@ def validate_pipeline_name(pipeline_name):
     return True, None
 
 
-def _generate_filter_pipeline_config(filter_plugin, filter_num, next_filter_id):
-    """
-    Generate a mini-pipeline config for a single filter plugin with Ruby instrumentation.
-    
-    Args:
-        filter_plugin: The filter plugin component dict
-        filter_num: The filter number (1, 2, 3, etc.)
-        next_filter_id: The next pipeline address to send to (or 'filter-final' for last)
-    
-    Returns:
-        String containing the pipeline config
-    """
-    # Convert the single filter plugin to Logstash config format
-    converter = logstash_config_parse.ComponentToPipeline({'filter': [filter_plugin]}, test=False)
-    filter_config = converter.components_to_logstash_config()
-    
-    # Extract just the filter block content (remove 'filter {' and closing '}')
-    lines = filter_config.strip().split('\n')
-    filter_content = '\n'.join(lines[1:-1])  # Skip first and last lines
-    
-    # Build the mini-pipeline with Ruby instrumentation
-    pipeline_config = f'''input {{ pipeline {{ address => "filter{filter_num}" }} }}
-
-filter {{
-  ruby {{
-    code => "
-      event.set('[@metadata][PIPELINE-ID][f{filter_num:03d}-pre]', event.to_hash)
-    "
-  }}
-  
-{filter_content}
-  
-  ruby {{
-    code => "
-      event.set('[@metadata][PIPELINE-ID][f{filter_num:03d}-post]', event.to_hash)
-    "
-  }}
-}}
-
-output {{
-  pipeline {{ send_to => "{next_filter_id}" }}
-  pipeline {{ send_to => "output-block" }}
-}}
-'''
-    return pipeline_config
-
-
 @require_admin_role
 def SimulatePipeline(request):
     """
@@ -158,8 +111,6 @@ def SimulatePipeline(request):
         # Get the components from the request
         components_json = request.POST.get('components')
         log_text = request.POST.get('log_text', '').strip()
-
-        print(request.POST['components'])
 
         if not components_json:
             return HttpResponse('<div class="text-red-400">Error: No pipeline components provided</div>')
@@ -192,27 +143,51 @@ def SimulatePipeline(request):
             instrumented_filters = [
                 # The actual filter plugin
                 filter_plugin,
-                # Post-instrumentation ruby filter to capture state after this filter
+                # Post-instrumentation ruby filter to add step metadata for result ordering and mapping
                 {
                     "id": f"comp_post_{idx}",
                     "type": "filter",
                     "plugin": "ruby",
                     "config": {
-                        "code": f"snapshot = event.to_hash.clone; snapshot.delete('pipeline_snapshot'); event.set('[pipeline_snapshot][f{idx:03d}]', snapshot)"
+                        "code": f"event.set('[simulation_step]', {idx}); event.set('[step_id]', '{filter_plugin['id']}')"
+                    }
+                }
+            ]
+            
+            # Build output components - HTTP output for streaming results
+            output_components = [
+                {
+                    "id": f"comp_output_{idx}",
+                    "type": "output",
+                    "plugin": "http",
+                    "config": {
+                        "content_type": "application/json",
+                        "format": "json",
+                        "http_method": "post",
+                        "url": "http://host.docker.internal:8080/API/StreamSimulate/"
                     }
                 }
             ]
             
             # Convert the instrumented filter list to Logstash config format
-            converter = logstash_config_parse.ComponentToPipeline({'filter': instrumented_filters}, test=False)
-            filter_config = converter.components_to_logstash_config()
+            filter_converter = logstash_config_parse.ComponentToPipeline({'filter': instrumented_filters}, test=False)
+            filter_config = filter_converter.components_to_logstash_config()
+            
+            # Convert the output components to Logstash config format
+            output_converter = logstash_config_parse.ComponentToPipeline({'output': output_components}, test=False)
+            output_config = output_converter.components_to_logstash_config()
             
             # Extract just the filter block content (remove 'filter {' and closing '}')
-            lines = filter_config.strip().split('\n')
-            filter_content = '\n'.join(lines[1:-1])  # Skip first and last lines
+            filter_lines = filter_config.strip().split('\n')
+            filter_content = '\n'.join(filter_lines[1:-1])  # Skip first and last lines
+            
+            # Extract just the output block content (remove 'output {' and closing '}')
+            output_lines = output_config.strip().split('\n')
+            output_content = '\n'.join(output_lines[1:-1])  # Skip first and last lines
             
             pipeline_list.append({
-                "config": filter_content,
+                "filter_config": filter_content,
+                "output_config": output_content,
                 "index": idx
             })
         
@@ -269,9 +244,6 @@ def SimulatePipeline(request):
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to send simulation input: {e}")
                 return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
-            
-            # Wait a moment for pipeline processing to complete
-            time.sleep(2)
         
         # Note: Pipelines are now persistent in slots and will be reused
         # No cleanup needed - slots will be evicted when needed
@@ -312,7 +284,7 @@ def SimulatePipeline(request):
         (function() {{
             let pollCount = 0;
             const maxPolls = 30; // Poll for 30 seconds max
-            const pollInterval = 1000; // Poll every 1 second
+            const pollInterval = 250; // Poll every 250ms for faster updates
             
             function pollResults() {{
                 if (pollCount >= maxPolls) {{
@@ -356,8 +328,8 @@ def SimulatePipeline(request):
                     }});
             }}
             
-            // Start polling after a short delay
-            setTimeout(pollResults, 2000);
+            // Start polling immediately
+            setTimeout(pollResults, 100);
         }})();
         </script>
         '''
