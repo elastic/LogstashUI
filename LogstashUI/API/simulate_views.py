@@ -40,6 +40,250 @@ simulation_results = deque(maxlen=1000)
 simulation_lock = Lock()
 
 
+def flatten_filter_plugins(filter_plugins):
+    """
+    Flatten filter plugins, expanding conditionals into individual trackable steps.
+    Uses branch markers to handle field mutations and else blocks cleanly.
+    
+    Each conditional gets:
+    - A unique branch marker field (__branch_cond_N) for execution control
+    - User-visible metadata fields (conditional_N_*) for tracking which branch was taken
+    - Individual steps for each plugin inside the conditional
+    
+    Args:
+        filter_plugins: List of filter plugin dictionaries
+        
+    Returns:
+        List of dicts with:
+        - 'plugin': the plugin config
+        - 'condition': the condition under which it should execute (or None)
+        - 'branch_info': metadata about which branch this came from
+    """
+    flattened = []
+    conditional_counter = 0
+    
+    def convert_logstash_fields_to_ruby(condition):
+        """
+        Convert Logstash field references to Ruby event.get() calls.
+        Examples:
+          [network.transport] -> event.get("[network.transport]")
+          [type] -> event.get("[type]")
+          [event.code] -> event.get("[event.code]")
+        """
+        import re
+        # Match field references: [fieldname] or [field.subfield]
+        # Pattern: \[([a-zA-Z0-9_.@-]+)\]
+        pattern = r'\[([a-zA-Z0-9_.@-]+)\]'
+        
+        def replace_field(match):
+            field_name = match.group(1)
+            return f'event.get("[{field_name}]")'
+        
+        return re.sub(pattern, replace_field, condition)
+    
+    def normalize_condition_quotes(condition):
+        """
+        Convert single quotes to double quotes in conditions so the Ruby code
+        only contains double quotes, allowing ComponentToPipeline to wrap in single quotes.
+        This handles array syntax like: in ['a', 'b'] -> in ["a", "b"]
+        """
+        return condition.replace("'", '"')
+    
+    def escape_for_ruby_double_quoted_string(text):
+        """
+        Escape text for storing inside Ruby double-quoted strings.
+        Since we're using double quotes in our Ruby code, we need to escape
+        double quotes and backslashes for the metadata storage.
+        """
+        # Escape backslashes first, then double quotes, then newlines
+        return text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+    
+    for plugin in filter_plugins:
+        if plugin['plugin'] == 'if':
+            conditional_counter += 1
+            branch_marker = f"__branch_cond_{conditional_counter}"
+            original_plugin_id = plugin['id']
+            
+            if_condition = plugin['config']['condition']
+            if_plugins = plugin['config']['plugins']
+            else_ifs = plugin['config'].get('else_ifs', [])
+            else_block = plugin['config'].get('else')
+            
+            # Convert Logstash field references to Ruby, normalize quotes, and escape for storage
+            ruby_condition = convert_logstash_fields_to_ruby(if_condition)
+            ruby_condition = normalize_condition_quotes(ruby_condition)
+            escaped_if_condition = escape_for_ruby_double_quoted_string(normalize_condition_quotes(if_condition))
+            
+            # Step 1: Set branch marker for if - this determines which branch to take
+            # Use double quotes consistently so ComponentToPipeline wraps in single quotes
+            ruby_code = f"""
+if !event.get("[{branch_marker}]") && ({ruby_condition})
+  event.set("[{branch_marker}]", "if")
+  event.set("[conditional_{conditional_counter}_branch]", "if")
+  event.set("[conditional_{conditional_counter}_id]", "{original_plugin_id}")
+  event.set("[conditional_{conditional_counter}_condition]", "{escaped_if_condition}")
+end
+""".strip()
+            
+            flattened.append({
+                'plugin': {
+                    'id': f"{original_plugin_id}_set_if",
+                    'type': 'filter',
+                    'plugin': 'ruby',
+                    'config': {
+                        'code': ruby_code
+                    }
+                },
+                'condition': None,  # Always execute to check
+                'branch_info': {
+                    'type': 'branch_decision',
+                    'conditional_id': conditional_counter,
+                    'original_plugin_id': original_plugin_id,
+                    'branch': 'if'
+                }
+            })
+            
+            # Step 2: Add plugins from if block, conditioned on branch marker
+            for if_plugin in if_plugins:
+                # Recursively flatten if there are nested conditionals
+                if if_plugin['plugin'] == 'if':
+                    nested_flattened = flatten_filter_plugins([if_plugin])
+                    for nested_item in nested_flattened:
+                        # Wrap nested conditions with parent condition
+                        if nested_item['condition']:
+                            nested_item['condition'] = f"[{branch_marker}] == 'if' and ({nested_item['condition']})"
+                        else:
+                            nested_item['condition'] = f"[{branch_marker}] == 'if'"
+                        flattened.append(nested_item)
+                else:
+                    flattened.append({
+                        'plugin': if_plugin,
+                        'condition': f"[{branch_marker}] == 'if'",
+                        'branch_info': {
+                            'type': 'if',
+                            'condition': if_condition,
+                            'conditional_id': conditional_counter,
+                            'original_plugin_id': original_plugin_id
+                        }
+                    })
+            
+            # Step 3: Set branch markers for else if blocks
+            for idx, else_if in enumerate(else_ifs):
+                elif_condition = else_if['condition']
+                elif_label = f"elif_{idx}"
+                ruby_elif_condition = convert_logstash_fields_to_ruby(elif_condition)
+                ruby_elif_condition = normalize_condition_quotes(ruby_elif_condition)
+                escaped_elif_condition = escape_for_ruby_double_quoted_string(normalize_condition_quotes(elif_condition))
+                
+                ruby_code = f"""
+if !event.get("[{branch_marker}]") && ({ruby_elif_condition})
+  event.set("[{branch_marker}]", "{elif_label}")
+  event.set("[conditional_{conditional_counter}_branch]", "else_if")
+  event.set("[conditional_{conditional_counter}_id]", "{original_plugin_id}")
+  event.set("[conditional_{conditional_counter}_condition]", "{escaped_elif_condition}")
+end
+""".strip()
+                
+                flattened.append({
+                    'plugin': {
+                        'id': f"{original_plugin_id}_set_elif_{idx}",
+                        'type': 'filter',
+                        'plugin': 'ruby',
+                        'config': {
+                            'code': ruby_code
+                        }
+                    },
+                    'condition': None,
+                    'branch_info': {
+                        'type': 'branch_decision',
+                        'conditional_id': conditional_counter,
+                        'original_plugin_id': original_plugin_id,
+                        'branch': f'else_if_{idx}'
+                    }
+                })
+                
+                # Add plugins from else if block
+                for elif_plugin in else_if['plugins']:
+                    if elif_plugin['plugin'] == 'if':
+                        nested_flattened = flatten_filter_plugins([elif_plugin])
+                        for nested_item in nested_flattened:
+                            if nested_item['condition']:
+                                nested_item['condition'] = f"[{branch_marker}] == '{elif_label}' and ({nested_item['condition']})"
+                            else:
+                                nested_item['condition'] = f"[{branch_marker}] == '{elif_label}'"
+                            flattened.append(nested_item)
+                    else:
+                        flattened.append({
+                            'plugin': elif_plugin,
+                            'condition': f"[{branch_marker}] == '{elif_label}'",
+                            'branch_info': {
+                                'type': 'else_if',
+                                'condition': elif_condition,
+                                'conditional_id': conditional_counter,
+                                'original_plugin_id': original_plugin_id
+                            }
+                        })
+            
+            # Step 4: Set branch marker for else block
+            if else_block and else_block.get('plugins'):
+                ruby_code = f"""
+if !event.get("[{branch_marker}]")
+  event.set("[{branch_marker}]", "else")
+  event.set("[conditional_{conditional_counter}_branch]", "else")
+  event.set("[conditional_{conditional_counter}_id]", "{original_plugin_id}")
+  event.set("[conditional_{conditional_counter}_condition]", "else")
+end
+""".strip()
+                
+                flattened.append({
+                    'plugin': {
+                        'id': f"{original_plugin_id}_set_else",
+                        'type': 'filter',
+                        'plugin': 'ruby',
+                        'config': {
+                            'code': ruby_code
+                        }
+                    },
+                    'condition': None,
+                    'branch_info': {
+                        'type': 'branch_decision',
+                        'conditional_id': conditional_counter,
+                        'original_plugin_id': original_plugin_id,
+                        'branch': 'else'
+                    }
+                })
+                
+                # Add plugins from else block
+                for else_plugin in else_block['plugins']:
+                    if else_plugin['plugin'] == 'if':
+                        nested_flattened = flatten_filter_plugins([else_plugin])
+                        for nested_item in nested_flattened:
+                            if nested_item['condition']:
+                                nested_item['condition'] = f"[{branch_marker}] == 'else' and ({nested_item['condition']})"
+                            else:
+                                nested_item['condition'] = f"[{branch_marker}] == 'else'"
+                            flattened.append(nested_item)
+                    else:
+                        flattened.append({
+                            'plugin': else_plugin,
+                            'condition': f"[{branch_marker}] == 'else'",
+                            'branch_info': {
+                                'type': 'else',
+                                'conditional_id': conditional_counter,
+                                'original_plugin_id': original_plugin_id
+                            }
+                        })
+        else:
+            # Regular plugin (not conditional)
+            flattened.append({
+                'plugin': plugin,
+                'condition': None,
+                'branch_info': None
+            })
+    
+    return flattened
+
+
 def require_admin_role(view_func):
     """
     Decorator to check if user has admin role before allowing access to view.
@@ -132,13 +376,20 @@ def SimulatePipeline(request):
         if not filter_plugins:
             return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
         
+        # Flatten filter plugins to expand conditionals into individual trackable steps
+        flattened_filters = flatten_filter_plugins(filter_plugins)
+        
         # Determine protocol based on DEBUG mode
         protocol = "http" if settings.DEBUG else "https"
         logstash_agent_url = f"{protocol}://127.0.0.1:9500"
         
         # Build pipeline list for slot allocation
         pipeline_list = []
-        for idx, filter_plugin in enumerate(filter_plugins, start=1):
+        for idx, filter_item in enumerate(flattened_filters, start=1):
+            filter_plugin = filter_item['plugin']
+            condition = filter_item['condition']
+            branch_info = filter_item['branch_info']
+            
             # Build instrumented filter list with ruby component after each filter
             instrumented_filters = [
                 # The actual filter plugin
@@ -184,6 +435,19 @@ def SimulatePipeline(request):
             # Extract just the output block content (remove 'output {' and closing '}')
             output_lines = output_config.strip().split('\n')
             output_content = '\n'.join(output_lines[1:-1])  # Skip first and last lines
+            
+            # Wrap filter content with condition if present
+            # Important: We only wrap the filter, not the output
+            # The output should always fire to pass the event to the next pipeline
+            if condition:
+                # Indent the filter content
+                indented_filter = '\n'.join(['\t' + line if line.strip() else line for line in filter_content.split('\n')])
+                filter_content = f"if {condition} {{\n{indented_filter}\n}}"
+                
+                # Also wrap the HTTP output with the same condition
+                # This ensures we only send results when the filter actually executed
+                indented_output = '\n'.join(['\t' + line if line.strip() else line for line in output_content.split('\n')])
+                output_content = f"if {condition} {{\n{indented_output}\n}}"
             
             pipeline_list.append({
                 "filter_config": filter_content,
@@ -249,14 +513,14 @@ def SimulatePipeline(request):
         # No cleanup needed - slots will be evicted when needed
         
         # Build pipeline chain display
-        slot_pipelines = [f"slot{slot_id}-filter{i}" for i in range(1, len(filter_plugins) + 1)]
+        slot_pipelines = [f"slot{slot_id}-filter{i}" for i in range(1, len(flattened_filters) + 1)]
         
         # If no log_text was provided, this was just a preallocation - return simple success message
         if not log_text:
             result_html = f'''
             <div class="p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
                 <h3 class="text-lg font-semibold text-blue-400 mb-2">✓ Slot Allocated</h3>
-                <p class="text-blue-200">Slot {slot_id} {"(reused)" if reused else "(created)"} with {len(filter_plugins)} filter(s) ready for simulation</p>
+                <p class="text-blue-200">Slot {slot_id} {"(reused)" if reused else "(created)"} with {len(flattened_filters)} step(s) ready for simulation ({len(filter_plugins)} original filter(s))</p>
             </div>
             '''
             return HttpResponse(result_html)
@@ -266,7 +530,7 @@ def SimulatePipeline(request):
         <div class="space-y-4">
             <div class="p-4 bg-green-900/30 border border-green-600 rounded-lg">
                 <h3 class="text-lg font-semibold text-green-400 mb-2">✓ Simulation Started</h3>
-                <p class="text-green-200">Processing {len(filter_plugins)} filter(s) in slot {slot_id} {"(reused)" if reused else "(new)"} - results streaming below</p>
+                <p class="text-green-200">Processing {len(flattened_filters)} step(s) in slot {slot_id} {"(reused)" if reused else "(new)"} - results streaming below</p>
             </div>
             
             <div class="p-4 bg-gray-700 rounded-lg">

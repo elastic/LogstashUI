@@ -1,11 +1,11 @@
 <!-- Simulation Pipeline Modal -->
 <div id="simulationModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
-  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('simulationModal').classList.add('hidden')"></div>
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeSimulationModal()"></div>
   <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col relative z-10">
     <div class="p-4 border-b border-gray-700 flex justify-between items-center">
       <h2 class="text-xl font-semibold text-white">Simulate Pipeline</h2>
       <button 
-        onclick="document.getElementById('simulationModal').classList.add('hidden')" 
+        onclick="closeSimulationModal()" 
         class="text-gray-400 hover:text-white">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -39,7 +39,7 @@
       <div class="flex justify-end space-x-3 mt-4">
         <button 
           type="button"
-          onclick="document.getElementById('simulationModal').classList.add('hidden')" 
+          onclick="closeSimulationModal()" 
           class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors">
           Cancel
         </button>
@@ -59,3 +59,39 @@
     </form>
   </div>
 </div>
+
+<script>
+  // Function to clear simulation results
+  function clearSimulationResults() {
+    const resultsDiv = document.getElementById('simulationResults');
+    if (resultsDiv) {
+      resultsDiv.innerHTML = '';
+    }
+  }
+
+  // Function to close simulation modal (without clearing results)
+  function closeSimulationModal() {
+    const modal = document.getElementById('simulationModal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+  }
+
+  // Function to open simulation modal (without clearing results)
+  function openSimulationModal() {
+    const modal = document.getElementById('simulationModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  }
+
+  // Clear results when navigating away from the page
+  window.addEventListener('beforeunload', clearSimulationResults);
+  
+  // Clear results when page is hidden (tab switch, navigation)
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      clearSimulationResults();
+    }
+  });
+</script>

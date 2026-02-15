@@ -159,17 +159,53 @@ def evict_expired_slots() -> List[int]:
                     time_since_access = (current_time - last_accessed).total_seconds()
                     
                     if time_since_access > SLOT_TTL_SECONDS:
-                        slots_to_evict.append(slot_id)
+                        slots_to_evict.append((slot_id, slot_data))
                 except (ValueError, AttributeError):
                     # If we can't parse the timestamp, evict the slot to be safe
-                    slots_to_evict.append(slot_id)
+                    slots_to_evict.append((slot_id, slot_data))
         
         # Evict the expired slots
-        for slot_id in slots_to_evict:
+        for slot_id, slot_data in slots_to_evict:
             del _slots[slot_id]
             evicted_slots.append(slot_id)
     
+    # Delete Logstash pipelines for evicted slots (outside the lock)
+    for slot_id, slot_data in slots_to_evict:
+        _delete_slot_pipelines(slot_id, slot_data)
+    
     return evicted_slots
+
+
+def _delete_slot_pipelines(slot_id: int, slot_data: Dict[str, Any]):
+    """
+    Delete all Logstash pipelines associated with a slot.
+    
+    Args:
+        slot_id: Slot ID
+        slot_data: Slot data containing pipeline information
+    """
+    import requests
+    
+    try:
+        pipelines = slot_data.get('pipelines', [])
+        logstash_url = "http://localhost:9600"
+        
+        # Delete each filter pipeline
+        for idx in range(1, len(pipelines) + 1):
+            pipeline_name = f"slot{slot_id}-filter{idx}"
+            try:
+                response = requests.delete(f"{logstash_url}/_logstash/pipeline/{pipeline_name}")
+                if response.status_code in [200, 404]:
+                    # 200 = deleted, 404 = already gone
+                    pass
+                else:
+                    print(f"[Slots] Warning: Failed to delete pipeline {pipeline_name}: {response.status_code}")
+            except Exception as e:
+                print(f"[Slots] Error deleting pipeline {pipeline_name}: {e}")
+        
+        print(f"[Slots] Deleted {len(pipelines)} pipelines for slot {slot_id}")
+    except Exception as e:
+        print(f"[Slots] Error cleaning up pipelines for slot {slot_id}: {e}")
 
 
 def _background_cleanup_worker():

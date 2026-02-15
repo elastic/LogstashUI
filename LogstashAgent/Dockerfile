@@ -30,6 +30,7 @@ RUN mkdir -p /etc/logstash \
 # Copy Logstash configuration files
 COPY config/logstash.yml /etc/logstash/logstash.yml
 COPY config/pipelines.yml /etc/logstash/pipelines.yml
+COPY config/jvm.options /etc/logstash/jvm.options
 
 # Copy simulation pipeline configs
 COPY config/simulate_start.conf /etc/logstash/config/simulate_start.conf
