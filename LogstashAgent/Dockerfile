@@ -35,7 +35,6 @@ COPY config/jvm.options /etc/logstash/jvm.options
 # Copy simulation pipeline configs
 COPY config/simulate_start.conf /etc/logstash/config/simulate_start.conf
 COPY config/simulate_end.conf /etc/logstash/config/simulate_end.conf
-COPY config/output-block.conf /etc/logstash/config/output-block.conf
 
 # Set permissions
 RUN chown -R logstash:logstash /etc/logstash /var/log/logstash /app /tmp && \

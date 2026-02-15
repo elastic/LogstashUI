@@ -342,11 +342,12 @@ def validate_pipeline_name(pipeline_name):
 @require_admin_role
 def SimulatePipeline(request):
     """
-    Simulate a pipeline by generating dynamic filter pipelines with Ruby instrumentation.
-    Each filter plugin gets its own mini-pipeline that captures pre/post event state.
+    Simulate a pipeline by building a single pipeline with Ruby instrumentation
+    injected after each filter plugin to capture step-by-step event state.
     """
     import requests
     from django.conf import settings
+    import hashlib
     
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -369,96 +370,96 @@ def SimulatePipeline(request):
         # Extract filter plugins from components
         filter_plugins = components.get('filter', [])
         
-        # If no filter plugins and no log text, this is just a preallocation request
         if not filter_plugins and not log_text:
-            return HttpResponse('<div class="text-gray-400">No filters to simulate - slot ready for when you add filters</div>')
+            return HttpResponse('<div class="text-gray-400">No filters to simulate</div>')
         
         if not filter_plugins:
             return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
         
-        # Flatten filter plugins to expand conditionals into individual trackable steps
-        flattened_filters = flatten_filter_plugins(filter_plugins)
+        # Build a single instrumented filter list with Ruby metadata after each filter
+        instrumented_filters = []
+        
+        for idx, filter_plugin in enumerate(filter_plugins, start=1):
+            # Add the actual filter plugin
+            instrumented_filters.append(filter_plugin)
+            
+            # Add Ruby instrumentation after the filter to capture event snapshot
+            # Save the entire event state in snapshots[plugin_id]
+            instrumentation_code = f"""
+# Update step tracking
+event.set('[simulation_step]', {idx})
+event.set('[step_id]', '{filter_plugin['id']}')
+
+# Create snapshot of current event state
+snapshot = {{}}
+event.to_hash.each do |key, value|
+  # Skip metadata and snapshots field itself to avoid recursion
+  next if key.start_with?('@metadata') || key == 'snapshots'
+  snapshot[key] = value
+end
+
+# Store snapshot under the plugin ID
+event.set('[snapshots][{filter_plugin['id']}]', snapshot)
+""".strip()
+            
+            instrumentation_plugin = {
+                "id": f"instrumentation_{idx}",
+                "type": "filter",
+                "plugin": "ruby",
+                "config": {
+                    "code": instrumentation_code
+                }
+            }
+            
+            instrumented_filters.append(instrumentation_plugin)
+        
+        # Add HTTP output that only sends cloned events (identified by type field)
+        output_plugins = [
+            {
+                "id": "http_output",
+                "type": "output",
+                "plugin": "http",
+                "config": {
+                    "url": "http://host.docker.internal:8080/API/StreamSimulate/",
+                    "http_method": "post",
+                    "format": "json",
+                    "content_type": "application/json"
+                }
+            }
+        ]
+        
+        # Convert filter components to Logstash config
+        filter_converter = logstash_config_parse.ComponentToPipeline({'filter': instrumented_filters}, test=False)
+        filter_config = filter_converter.components_to_logstash_config()
+        
+        # Convert output components to Logstash config
+        output_converter = logstash_config_parse.ComponentToPipeline({'output': output_plugins}, test=False)
+        output_config = output_converter.components_to_logstash_config()
+        
+        # Extract just the content (remove 'filter {' and 'output {' wrappers)
+        # The LogstashAgent will add these wrappers when building the complete pipeline
+        filter_lines = filter_config.strip().split('\n')
+        filter_content = '\n'.join(filter_lines[1:-1]) if len(filter_lines) > 2 else ''
+        
+        output_lines = output_config.strip().split('\n')
+        output_content = '\n'.join(output_lines[1:-1]) if len(output_lines) > 2 else ''
         
         # Determine protocol based on DEBUG mode
         protocol = "http" if settings.DEBUG else "https"
         logstash_agent_url = f"{protocol}://127.0.0.1:9500"
         
-        # Build pipeline list for slot allocation
-        pipeline_list = []
-        for idx, filter_item in enumerate(flattened_filters, start=1):
-            filter_plugin = filter_item['plugin']
-            condition = filter_item['condition']
-            branch_info = filter_item['branch_info']
-            
-            # Build instrumented filter list with ruby component after each filter
-            instrumented_filters = [
-                # The actual filter plugin
-                filter_plugin,
-                # Post-instrumentation ruby filter to add step metadata for result ordering and mapping
-                {
-                    "id": f"comp_post_{idx}",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": f"event.set('[simulation_step]', {idx}); event.set('[step_id]', '{filter_plugin['id']}')"
-                    }
-                }
-            ]
-            
-            # Build output components - HTTP output for streaming results
-            output_components = [
-                {
-                    "id": f"comp_output_{idx}",
-                    "type": "output",
-                    "plugin": "http",
-                    "config": {
-                        "content_type": "application/json",
-                        "format": "json",
-                        "http_method": "post",
-                        "url": "http://host.docker.internal:8080/API/StreamSimulate/"
-                    }
-                }
-            ]
-            
-            # Convert the instrumented filter list to Logstash config format
-            filter_converter = logstash_config_parse.ComponentToPipeline({'filter': instrumented_filters}, test=False)
-            filter_config = filter_converter.components_to_logstash_config()
-            
-            # Convert the output components to Logstash config format
-            output_converter = logstash_config_parse.ComponentToPipeline({'output': output_components}, test=False)
-            output_config = output_converter.components_to_logstash_config()
-            
-            # Extract just the filter block content (remove 'filter {' and closing '}')
-            filter_lines = filter_config.strip().split('\n')
-            filter_content = '\n'.join(filter_lines[1:-1])  # Skip first and last lines
-            
-            # Extract just the output block content (remove 'output {' and closing '}')
-            output_lines = output_config.strip().split('\n')
-            output_content = '\n'.join(output_lines[1:-1])  # Skip first and last lines
-            
-            # Wrap filter content with condition if present
-            # Important: We only wrap the filter, not the output
-            # The output should always fire to pass the event to the next pipeline
-            if condition:
-                # Indent the filter content
-                indented_filter = '\n'.join(['\t' + line if line.strip() else line for line in filter_content.split('\n')])
-                filter_content = f"if {condition} {{\n{indented_filter}\n}}"
-                
-                # Also wrap the HTTP output with the same condition
-                # This ensures we only send results when the filter actually executed
-                indented_output = '\n'.join(['\t' + line if line.strip() else line for line in output_content.split('\n')])
-                output_content = f"if {condition} {{\n{indented_output}\n}}"
-            
-            pipeline_list.append({
-                "filter_config": filter_content,
-                "output_config": output_content,
-                "index": idx
-            })
+        # Prepare the pipeline data for slot allocation
+        # The slots system will hash this to detect configuration changes
+        pipeline_data = {
+            "filter_config": filter_content,
+            "output_config": output_content,
+            "index": 1
+        }
         
-        # Allocate a slot for these pipelines
+        # Allocate a slot - the LogstashAgent will detect if config changed
         slot_allocation_body = {
-            "pipeline_name": request.GET.get('pipeline', 'unknown'),
-            "pipelines": pipeline_list
+            "pipeline_name": request.GET.get('pipeline', 'simulation'),
+            "pipelines": [pipeline_data]
         }
         
         try:
@@ -470,17 +471,20 @@ def SimulatePipeline(request):
             )
             response.raise_for_status()
             slot_data = response.json()
-            slot_id = slot_data['slot_id']
-            reused = slot_data['reused']
+            slot_id = slot_data.get('slot_id')
+            reused = slot_data.get('reused', False)
             logger.info(f"Allocated slot {slot_id} (reused: {reused})")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to allocate slot: {e}")
             return HttpResponse(f'<div class="text-red-400">Error allocating slot: {str(e)}</div>')
         
-        # Wait a moment for Logstash to reload the pipelines (only if new slot)
+        # Wait for Logstash to reload the pipeline (only if new slot)
         import time
         if not reused:
-            time.sleep(4)
+            time.sleep(2)
+        
+        # Use the slot-based pipeline name
+        pipeline_name = f"slot{slot_id}-filter1"
         
         # If log_text is provided, send it through the pipeline
         if log_text:
@@ -494,7 +498,7 @@ def SimulatePipeline(request):
                     # Not JSON, wrap it in a message field
                     log_data = {"message": log_text}
                 
-                # Add slot field to route to the correct slot
+                # Add slot field for routing in simulate_start.conf
                 log_data["slot"] = slot_id
                 
                 response = requests.post(
@@ -504,99 +508,30 @@ def SimulatePipeline(request):
                     timeout=10
                 )
                 response.raise_for_status()
-                logger.info(f"Sent simulation input to {simulation_input_url} with slot {slot_id}")
+                logger.info(f"Sent simulation input to pipeline '{pipeline_name}'")
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to send simulation input: {e}")
                 return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
         
-        # Note: Pipelines are now persistent in slots and will be reused
-        # No cleanup needed - slots will be evicted when needed
-        
-        # Build pipeline chain display
-        slot_pipelines = [f"slot{slot_id}-filter{i}" for i in range(1, len(flattened_filters) + 1)]
-        
-        # If no log_text was provided, this was just a preallocation - return simple success message
+        # If no log_text was provided, this was just a slot allocation - return simple success message
         if not log_text:
             result_html = f'''
             <div class="p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
                 <h3 class="text-lg font-semibold text-blue-400 mb-2">✓ Slot Allocated</h3>
-                <p class="text-blue-200">Slot {slot_id} {"(reused)" if reused else "(created)"} with {len(flattened_filters)} step(s) ready for simulation ({len(filter_plugins)} original filter(s))</p>
+                <p class="text-blue-200">Slot {slot_id} {"(reused - same config)" if reused else "(new)"} with {len(filter_plugins)} instrumented filter(s)</p>
             </div>
             '''
             return HttpResponse(result_html)
         
         # Return success message - results will be streamed via StreamSimulate endpoint
-        result_html = f'''
-        <div class="space-y-4">
-            <div class="p-4 bg-green-900/30 border border-green-600 rounded-lg">
-                <h3 class="text-lg font-semibold text-green-400 mb-2">✓ Simulation Started</h3>
-                <p class="text-green-200">Processing {len(flattened_filters)} step(s) in slot {slot_id} {"(reused)" if reused else "(new)"} - results streaming below</p>
-            </div>
-            
-            <div class="p-4 bg-gray-700 rounded-lg">
-                <h4 class="text-sm font-semibold text-gray-300 mb-2">Pipeline Chain:</h4>
-                <pre class="text-xs text-gray-300 overflow-auto bg-gray-800 p-3 rounded">simulate-start → slot{slot_id} → {' → '.join(slot_pipelines)} → filter-final → output-block → StreamSimulate</pre>
-            </div>
-            
-            <div id="simulation-results" class="p-4 bg-gray-800 rounded-lg">
-                <h4 class="text-sm font-semibold text-gray-300 mb-2">📊 Results:</h4>
-                <div id="results-stream" class="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto bg-gray-900 p-3 rounded"></div>
-            </div>
-        </div>
-        
-        <script>
-        (function() {{
-            let pollCount = 0;
-            const maxPolls = 30; // Poll for 30 seconds max
-            const pollInterval = 250; // Poll every 250ms for faster updates
-            
-            function pollResults() {{
-                if (pollCount >= maxPolls) {{
-                    const stream = document.getElementById('results-stream');
-                    if (stream && stream.innerHTML.trim() === '') {{
-                        stream.innerHTML = '<span class="text-yellow-400">No results received. Check Logstash logs.</span>';
-                    }}
-                    return;
-                }}
-                
-                fetch('/API/GetSimulationResults/')
-                    .then(response => response.json())
-                    .then(data => {{
-                        console.log('Poll response:', data);
-                        console.log('Results count:', data.results ? data.results.length : 0);
-                        
-                        if (data.results && data.results.length > 0) {{
-                            console.log('Processing', data.results.length, 'events');
-                            const stream = document.getElementById('results-stream');
-                            console.log('Stream element:', stream);
-                            
-                            if (stream) {{
-                                data.results.forEach(event => {{
-                                    const eventStr = JSON.stringify(event, null, 2);
-                                    stream.innerHTML += eventStr + '\\n\\n---\\n\\n';
-                                }});
-                                stream.scrollTop = stream.scrollHeight;
-                                console.log('Updated stream innerHTML length:', stream.innerHTML.length);
-                            }} else {{
-                                console.error('results-stream element not found!');
-                            }}
-                        }}
-                        
-                        pollCount++;
-                        setTimeout(pollResults, pollInterval);
-                    }})
-                    .catch(error => {{
-                        console.error('Error polling results:', error);
-                        pollCount++;
-                        setTimeout(pollResults, pollInterval);
-                    }});
-            }}
-            
-            // Start polling immediately
-            setTimeout(pollResults, 100);
-        }})();
-        </script>
-        '''
+        # Render the template with context
+        template = get_template('components/pipeline_editor/simulation_results.html')
+        context = {
+            'filter_count': len(filter_plugins),
+            'slot_id': slot_id,
+            'reused': reused
+        }
+        result_html = template.render(context, request)
         
         return HttpResponse(result_html)
         

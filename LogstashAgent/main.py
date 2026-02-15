@@ -426,8 +426,7 @@ async def _create_slot_pipelines(slot_id: int, pipelines: List[Dict[str, Any]]):
     for pipeline_data in pipelines:
         idx = pipeline_data.get('index', 1)
         filter_config = pipeline_data.get('filter_config', '')
-        output_config = pipeline_data.get('output_config', '')
-        
+
         if not filter_config:
             continue
         
@@ -447,8 +446,7 @@ filter {{
 }}
 
 output {{
-  pipeline {{ send_to => "{next_filter_id}" }}
-{output_config}
+  pipeline {{ send_to => "simulate-end" }}
 }}
 """
         

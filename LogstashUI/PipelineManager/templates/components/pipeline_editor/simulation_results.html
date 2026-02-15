@@ -1,0 +1,21 @@
+<div class="space-y-4">
+    <div class="p-4 bg-green-900/30 border border-green-600 rounded-lg">
+        <h3 class="text-lg font-semibold text-green-400 mb-2">✓ Simulation Started</h3>
+        <p class="text-green-200">Processing {{ filter_count }} filter(s) in slot {{ slot_id }} {% if reused %}(reused){% else %}(new){% endif %} - results streaming below</p>
+    </div>
+    
+    <div class="p-4 bg-gray-700 rounded-lg">
+        <h4 class="text-sm font-semibold text-gray-300 mb-2">Slot Info:</h4>
+        <pre class="text-xs text-gray-300 overflow-auto bg-gray-800 p-3 rounded">Slot {{ slot_id }}: Single pipeline with {{ filter_count }} instrumented filters</pre>
+    </div>
+    
+    <div id="simulation-results" class="p-4 bg-gray-800 rounded-lg">
+        <h4 class="text-sm font-semibold text-gray-300 mb-2">Results:</h4>
+        <div id="results-stream" class="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto bg-gray-900 p-3 rounded"></div>
+    </div>
+</div>
+
+<script>
+    // Initialize the simulation results polling
+    initSimulationResults();
+</script>
