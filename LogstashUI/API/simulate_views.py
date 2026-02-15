@@ -348,6 +348,7 @@ def SimulatePipeline(request):
     import requests
     from django.conf import settings
     import hashlib
+    import uuid
     
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -376,19 +377,105 @@ def SimulatePipeline(request):
         if not filter_plugins:
             return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
         
-        # Build a single instrumented filter list with Ruby metadata after each filter
-        instrumented_filters = []
+        # Generate unique run_id for this simulation
+        run_id = str(uuid.uuid4())
+        logger.info(f"Starting simulation with run_id: {run_id}")
         
-        for idx, filter_plugin in enumerate(filter_plugins, start=1):
-            # Add the actual filter plugin
-            instrumented_filters.append(filter_plugin)
+        # Recursive function to instrument plugins, including nested conditionals
+        step_counter = [0]  # Use list to maintain counter across recursive calls
+        
+        def instrument_plugins(plugins_list):
+            """
+            Recursively instrument plugins, handling conditional (if) plugins specially.
+            For 'if' plugins, we instrument the nested plugins but not the condition itself.
+            """
+            instrumented = []
             
-            # Add Ruby instrumentation after the filter to capture event snapshot
-            # Save the entire event state in snapshots[plugin_id]
-            instrumentation_code = f"""
+            for plugin in plugins_list:
+                if plugin.get('plugin') == 'if':
+                    # This is a conditional plugin - we need to instrument its nested plugins
+                    conditional_plugin = plugin.copy()
+                    conditional_plugin['config'] = plugin['config'].copy()
+                    conditional_id = plugin['id']
+                    
+                    # Instrument plugins in the main 'if' block
+                    if 'plugins' in conditional_plugin['config']:
+                        # Add branch tracking at the start of the if block
+                        # Escape single quotes in the condition for Ruby string
+                        if_condition = conditional_plugin['config'].get('condition', '').replace("'", "\\'")
+                        branch_tracker = {
+                            "id": f"{conditional_id}_if_tracker",
+                            "type": "filter",
+                            "plugin": "ruby",
+                            "config": {
+                                "code": f"""
+event.set('[conditional_branches][{conditional_id}]', 'if')
+event.set('[conditional_conditions][{conditional_id}]', '{if_condition}')
+""".strip()
+                            }
+                        }
+                        conditional_plugin['config']['plugins'] = [branch_tracker] + instrument_plugins(
+                            conditional_plugin['config']['plugins']
+                        )
+                    
+                    # Instrument plugins in 'else_ifs' blocks
+                    if 'else_ifs' in conditional_plugin['config']:
+                        instrumented_else_ifs = []
+                        for else_if_idx, else_if in enumerate(conditional_plugin['config']['else_ifs']):
+                            else_if_copy = else_if.copy()
+                            if 'plugins' in else_if_copy:
+                                # Add branch tracking at the start of the else_if block
+                                # Escape single quotes in the condition for Ruby string
+                                else_if_condition = else_if.get('condition', '').replace("'", "\\'")
+                                branch_tracker = {
+                                    "id": f"{conditional_id}_elseif{else_if_idx}_tracker",
+                                    "type": "filter",
+                                    "plugin": "ruby",
+                                    "config": {
+                                        "code": f"""
+event.set('[conditional_branches][{conditional_id}]', 'else_if_{else_if_idx}')
+event.set('[conditional_conditions][{conditional_id}]', '{else_if_condition}')
+""".strip()
+                                    }
+                                }
+                                else_if_copy['plugins'] = [branch_tracker] + instrument_plugins(else_if_copy['plugins'])
+                            instrumented_else_ifs.append(else_if_copy)
+                        conditional_plugin['config']['else_ifs'] = instrumented_else_ifs
+                    
+                    # Instrument plugins in 'else' block
+                    if 'else' in conditional_plugin['config'] and conditional_plugin['config']['else']:
+                        else_block = conditional_plugin['config']['else'].copy()
+                        if 'plugins' in else_block:
+                            # Add branch tracking at the start of the else block
+                            branch_tracker = {
+                                "id": f"{conditional_id}_else_tracker",
+                                "type": "filter",
+                                "plugin": "ruby",
+                                "config": {
+                                    "code": f"""
+event.set('[conditional_branches][{conditional_id}]', 'else')
+""".strip()
+                                }
+                            }
+                            else_block['plugins'] = [branch_tracker] + instrument_plugins(else_block['plugins'])
+                        conditional_plugin['config']['else'] = else_block
+                    
+                    # Add the conditional plugin with instrumented nested plugins
+                    instrumented.append(conditional_plugin)
+                else:
+                    # Regular plugin - add it and then add instrumentation
+                    instrumented.append(plugin)
+                    
+                    # Increment step counter
+                    step_counter[0] += 1
+                    current_step = step_counter[0]
+                    
+                    # Add Ruby instrumentation after this plugin
+                    instrumentation_code = f"""
 # Update step tracking
-event.set('[simulation_step]', {idx})
-event.set('[step_id]', '{filter_plugin['id']}')
+event.set('[simulation_step]', {current_step})
+event.set('[step_id]', '{plugin['id']}')
+event.set('[run_id]', '{run_id}')
 
 # Create snapshot of current event state
 snapshot = {{}}
@@ -399,19 +486,51 @@ event.to_hash.each do |key, value|
 end
 
 # Store snapshot under the plugin ID
-event.set('[snapshots][{filter_plugin['id']}]', snapshot)
+event.set('[snapshots][{plugin['id']}]', snapshot)
 """.strip()
+                    
+                    instrumentation_plugin = {
+                        "id": f"instrumentation_{current_step}",
+                        "type": "filter",
+                        "plugin": "ruby",
+                        "config": {
+                            "code": instrumentation_code
+                        }
+                    }
+                    
+                    instrumented.append(instrumentation_plugin)
             
-            instrumentation_plugin = {
-                "id": f"instrumentation_{idx}",
-                "type": "filter",
-                "plugin": "ruby",
-                "config": {
-                    "code": instrumentation_code
-                }
-            }
-            
-            instrumented_filters.append(instrumentation_plugin)
+            return instrumented
+        
+        # Build instrumented filter list
+        instrumented_filters = instrument_plugins(filter_plugins)
+        
+        # Count total plugins including nested ones in conditionals
+        def count_all_plugins(plugins_list):
+            """Recursively count all plugins, including those nested in conditionals."""
+            count = 0
+            for plugin in plugins_list:
+                if plugin.get('plugin') == 'if':
+                    # Count nested plugins in if block
+                    if 'plugins' in plugin.get('config', {}):
+                        count += count_all_plugins(plugin['config']['plugins'])
+                    
+                    # Count nested plugins in else_ifs
+                    if 'else_ifs' in plugin.get('config', {}):
+                        for else_if in plugin['config']['else_ifs']:
+                            if 'plugins' in else_if:
+                                count += count_all_plugins(else_if['plugins'])
+                    
+                    # Count nested plugins in else
+                    if 'else' in plugin.get('config', {}) and plugin['config']['else']:
+                        if 'plugins' in plugin['config']['else']:
+                            count += count_all_plugins(plugin['config']['else']['plugins'])
+                else:
+                    # Regular plugin - count it
+                    count += 1
+            return count
+        
+        total_plugin_count = count_all_plugins(filter_plugins)
         
         # Add HTTP output that only sends cloned events (identified by type field)
         output_plugins = [
@@ -500,6 +619,8 @@ event.set('[snapshots][{filter_plugin['id']}]', snapshot)
                 
                 # Add slot field for routing in simulate_start.conf
                 log_data["slot"] = slot_id
+                # Add run_id for tracking this specific simulation run
+                log_data["run_id"] = run_id
                 
                 response = requests.post(
                     simulation_input_url,
@@ -527,9 +648,10 @@ event.set('[snapshots][{filter_plugin['id']}]', snapshot)
         # Render the template with context
         template = get_template('components/pipeline_editor/simulation_results.html')
         context = {
-            'filter_count': len(filter_plugins),
+            'filter_count': total_plugin_count,
             'slot_id': slot_id,
-            'reused': reused
+            'reused': reused,
+            'run_id': run_id
         }
         result_html = template.render(context, request)
         
@@ -573,22 +695,38 @@ def StreamSimulate(request):
 def GetSimulationResults(request):
     """
     Poll endpoint for frontend to retrieve simulation results.
-    Returns all stored results and clears the queue.
+    Filters results by run_id to ensure each simulation only gets its own results.
     """
     if request.method != 'GET':
         return JsonResponse({"error": "Method not allowed"}, status=405)
     
     try:
-        # Get all results and clear the queue
+        # Get run_id from query parameters
+        run_id = request.GET.get('run_id')
+        
+        if not run_id:
+            return JsonResponse({"error": "Missing run_id parameter"}, status=400)
+        
+        # Filter results by run_id and remove them from the queue
         with simulation_lock:
-            results = list(simulation_results)
+            matching_results = []
+            remaining_results = deque(maxlen=1000)
+            
+            for result in simulation_results:
+                if result.get('run_id') == run_id:
+                    matching_results.append(result)
+                else:
+                    remaining_results.append(result)
+            
+            # Replace the queue with non-matching results
             simulation_results.clear()
+            simulation_results.extend(remaining_results)
         
-        logger.info(f"GetSimulationResults: Returning {len(results)} events")
-        if results:
-            logger.debug(f"GetSimulationResults: First event keys: {list(results[0].keys())}")
+        logger.info(f"GetSimulationResults: Returning {len(matching_results)} events for run_id {run_id}")
+        if matching_results:
+            logger.debug(f"GetSimulationResults: First event keys: {list(matching_results[0].keys())}")
         
-        return JsonResponse({"results": results}, status=200)
+        return JsonResponse({"results": matching_results}, status=200)
         
     except Exception as e:
         logger.error(f"Error in GetSimulationResults: {e}")
