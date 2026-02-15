@@ -774,13 +774,12 @@ async function confirmSavePipeline() {
 
         const responseText = await saveResponse.text();
         
-        // Check if response contains permission denied (even with 200 status)
-        if (responseText.includes('showToast') && responseText.includes('Access denied')) {
-            console.log('Permission denied detected');
-            // Extract script content and execute it
-            const scriptMatch = responseText.match(/<script>([\s\S]*?)<\/script>/);
-            if (scriptMatch && scriptMatch[1]) {
-                eval(scriptMatch[1]);
+        // Check if response is 403 (permission denied)
+        if (saveResponse.status === 403) {
+            console.log('Permission denied (403)');
+            // Manually show toast since we're using fetch API, not HTMX
+            if (typeof showToast === 'function') {
+                showToast(responseText || 'Access denied: Admin role required', 'error');
             }
             // Close the modal
             hideDiffModal();

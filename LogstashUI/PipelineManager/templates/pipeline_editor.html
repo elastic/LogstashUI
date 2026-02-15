@@ -152,6 +152,29 @@
         }
     }
 
+    /* Simulation badge pop animation */
+    @keyframes badgePop {
+        0% {
+            transform: scale(0);
+            opacity: 0;
+        }
+        50% {
+            transform: scale(1.2);
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    /* Dim non-executed plugins during simulation */
+    .simulation-dimmed {
+        opacity: 0.3;
+        filter: blur(1px) grayscale(50%);
+        transition: opacity 0.3s ease, filter 0.3s ease;
+        pointer-events: none;
+    }
+
     /* Collapsible conditional blocks */
     .conditional-content {
         max-height: 10000px;

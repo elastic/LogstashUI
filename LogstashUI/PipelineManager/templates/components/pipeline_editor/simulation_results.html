@@ -1,25 +1,65 @@
-
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="space-y-4" data-run-id="{{ run_id }}">
-    <div class="p-4 bg-green-900/30 border border-green-600 rounded-lg">
-        <h3 class="text-lg font-semibold text-green-400 mb-2">✓ Simulation Started</h3>
-        <pre class="text-xs text-green-200 font-mono">Slot {{ slot_id }}: Single pipeline with {{ filter_count }} instrumented filters {% if reused %}(reused){% else %}(new){% endif %}
-Run ID: {{ run_id }}</pre>
-    </div>
-    
-    <div id="simulation-results" class="p-4 bg-gray-800 rounded-lg">
-        <h4 class="text-sm font-semibold text-gray-300 mb-2">Results:</h4>
-        <div id="results-container" class="bg-gray-900 rounded">
-            <svg id="pipeline-graph" width="100%" height="600" class="bg-gray-900"></svg>
-        </div>
-    </div>
-</div>
-
 <script>
-    // Get run_id from the data attribute
-    const runId = document.querySelector('[data-run-id]').getAttribute('data-run-id');
-    // Initialize the simulation results polling with run_id
-    initSimulationResults(runId);
+    // Execute immediately since this is loaded dynamically via HTMX
+    (function() {
+        // Close the modal using the correct function
+        setTimeout(() => {
+            // Use the closeSimulationModal function if available
+            if (typeof closeSimulationModal === 'function') {
+                closeSimulationModal();
+            } else {
+                // Fallback: close modal directly
+                const modal = document.getElementById('simulationModal');
+                if (modal) {
+                    modal.classList.add('hidden');
+                }
+            }
+        }, 100);
+        
+        // Remove any existing overlay
+        const existingOverlay = document.getElementById('simulation-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+        
+        // Create and show the overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'simulation-overlay';
+        overlay.className = 'fixed top-0 left-0 right-0 z-50 bg-gray-900 border-b-2 border-green-500 shadow-lg';
+        overlay.style.height = '150px';
+        overlay.setAttribute('data-run-id', '{{ run_id }}');
+        
+        overlay.innerHTML = `
+            <div class="h-full flex flex-col">
+                <div class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <span class="text-green-400 font-semibold">✓ Simulation Results</span>
+                        <span class="text-xs text-gray-400">Run ID: {{ run_id }}</span>
+                        <span class="text-xs text-gray-400">{{ filter_count }} filters</span>
+                        <div id="simulation-loading-indicator" class="flex items-center gap-2">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
+                            <span class="text-xs text-gray-400">Loading results...</span>
+                        </div>
+                    </div>
+                    <button onclick="cleanupSimulation()" 
+                            class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700">
+                        ✕ Close
+                    </button>
+                </div>
+                <div id="results-container" class="flex-1 bg-gray-900 overflow-x-auto">
+                    <svg id="pipeline-graph" width="100%" height="100" class="bg-gray-900"></svg>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Add padding to the main content to prevent overlap
+        const mainContent = document.querySelector('main') || document.body;
+        mainContent.style.paddingTop = '150px';
+        
+        // Initialize the simulation results polling with run_id
+        initSimulationResults('{{ run_id }}');
+    })();
 </script>

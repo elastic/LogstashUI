@@ -12,31 +12,6 @@ function markExecutedPlugins(nodes, originalEvent) {
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
     document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
     
-    // Remove any existing dimming
-    document.querySelectorAll('.simulation-dimmed').forEach(el => {
-        el.classList.remove('simulation-dimmed');
-    });
-    
-    // Collect IDs of executed plugins
-    const executedPluginIds = new Set();
-    nodes.forEach(node => {
-        if (node.id !== 'start') {
-            let componentId = node.id;
-            if (node.isDecisionPoint) {
-                componentId = node.conditionalId;
-            }
-            executedPluginIds.add(componentId);
-        }
-    });
-    
-    // Dim all plugins that were NOT executed
-    document.querySelectorAll('[data-id]').forEach(element => {
-        const componentId = element.getAttribute('data-id');
-        if (componentId && !executedPluginIds.has(componentId)) {
-            element.classList.add('simulation-dimmed');
-        }
-    });
-    
     // Add original event data flow indicator at the top of filter section
     if (originalEvent) {
         const filterContainer = document.getElementById('filterComponents');
@@ -186,7 +161,7 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
-        showDataFlowTooltip(e, this.dataset.eventJson, true); // sticky = true
+        showDataFlowTooltip(e, this.dataset.eventJson);
     });
     
     // Add hover effects and tooltip
@@ -195,8 +170,8 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         this.style.borderColor = 'rgba(16, 185, 129, 0.5)';
         this.style.transform = 'translateX(4px)';
         
-        // Show hover tooltip (non-sticky)
-        showDataFlowTooltip(e, this.dataset.eventJson, false);
+        // Show hover tooltip
+        showDataFlowTooltip(e, this.dataset.eventJson);
     });
     
     dataFlow.addEventListener('mouseleave', function() {
@@ -257,7 +232,7 @@ function addDataFlowIndicator(componentElement, node) {
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
-        showDataFlowTooltip(e, this.dataset.eventJson, true); // sticky = true
+        showDataFlowTooltip(e, this.dataset.eventJson);
     });
     
     // Add hover effects and tooltip
@@ -266,8 +241,8 @@ function addDataFlowIndicator(componentElement, node) {
         this.style.borderColor = 'rgba(59, 130, 246, 0.5)';
         this.style.transform = 'translateX(4px)';
         
-        // Show hover tooltip (non-sticky)
-        showDataFlowTooltip(e, this.dataset.eventJson, false);
+        // Show hover tooltip
+        showDataFlowTooltip(e, this.dataset.eventJson);
     });
     
     dataFlow.addEventListener('mouseleave', function() {
@@ -288,11 +263,8 @@ function addDataFlowIndicator(componentElement, node) {
 
 /**
  * Show tooltip with event JSON data
- * @param {Event} event - The mouse event
- * @param {string} eventJson - The JSON data to display
- * @param {boolean} sticky - If true, tooltip stays open until closed; if false, auto-hides on mouse out
  */
-function showDataFlowTooltip(event, eventJson, sticky = false) {
+function showDataFlowTooltip(event, eventJson) {
     let tooltip = document.getElementById('data-flow-tooltip');
     
     if (!tooltip) {
@@ -312,37 +284,48 @@ function showDataFlowTooltip(event, eventJson, sticky = false) {
             font-family: monospace;
             font-size: 11px;
             color: #d1d5db;
-            pointer-events: none;
-            cursor: default;
+            pointer-events: auto;
+            cursor: move;
         `;
+        
+        // Add close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '✕';
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        closeBtn.onmouseover = () => closeBtn.style.color = '#fff';
+        closeBtn.onmouseout = () => closeBtn.style.color = '#9ca3af';
+        closeBtn.onclick = hideDataFlowTooltip;
+        
+        tooltip.appendChild(closeBtn);
         document.body.appendChild(tooltip);
+        
+        // Make draggable
+        makeDraggable(tooltip);
     }
     
-    if (sticky) {
-        // Sticky mode: make interactive and draggable
-        tooltip.style.pointerEvents = 'auto';
-        tooltip.style.cursor = 'move';
-        
-        // Update content with close button
-        tooltip.innerHTML = `
-            <button onclick="hideDataFlowTooltip()" 
-                    style="position: absolute; top: 8px; right: 8px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"
-                    onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">✕</button>
-            <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px; padding-right: 24px;">Event State at This Point:</div>
-            <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
-        `;
-        
-        // Make draggable only when sticky
-        makeDraggable(tooltip);
-    } else {
-        // Hover mode: non-interactive, no close button
-        tooltip.style.pointerEvents = 'none';
-        tooltip.style.cursor = 'default';
-        
-        tooltip.innerHTML = `
-            <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px;">Event State at This Point:</div>
-            <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
-        `;
+    // Update content (preserve close button)
+    const closeBtn = tooltip.querySelector('button');
+    tooltip.innerHTML = `
+        <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px; padding-right: 24px;">Event State at This Point:</div>
+        <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+    `;
+    if (closeBtn) {
+        tooltip.appendChild(closeBtn);
     }
     
     // Position the tooltip near the cursor
@@ -450,18 +433,9 @@ function createForceDirectedGraph(graphData) {
         .attr("fill", "#6b7280");
     
     // Set fixed positions for nodes - completely static, no simulation
-    console.log('Setting node positions:', {
-        nodeCount: graphData.nodes.length,
-        padding,
-        nodeSpacing,
-        height,
-        nodes: graphData.nodes.map(n => ({ id: n.id, step: n.step }))
-    });
-    
     graphData.nodes.forEach((node, i) => {
         node.x = padding + (node.step * nodeSpacing); // Space nodes horizontally with proper spacing
         node.y = height / 2; // Center all nodes vertically for linear flow
-        console.log(`Node ${node.id}: step=${node.step}, x=${node.x}, y=${node.y}`);
     });
     
     // Resolve link source/target to actual node objects
@@ -473,13 +447,6 @@ function createForceDirectedGraph(graphData) {
             link.target = graphData.nodes.find(n => n.id === link.target);
         }
     });
-    
-    console.log('Links resolved:', graphData.links.map(l => ({ 
-        source: l.source.id, 
-        target: l.target.id,
-        sourceX: l.source.x,
-        targetX: l.target.x
-    })));
     
     // Create links with hover interaction
     const linkGroup = container.append("g")
@@ -590,21 +557,6 @@ function createForceDirectedGraph(graphData) {
         .attr("font-size", "10px")
         .attr("font-weight", "bold")
         .style("pointer-events", "none");
-    
-    // Manually position all elements since we have no simulation
-    link
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
-    
-    linkHover
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
-    
-    node.attr("transform", d => `translate(${d.x},${d.y})`);
     
     // Add click handlers to scroll to component in editor
     node.on("click", function(event, d) {
@@ -876,11 +828,6 @@ window.cleanupSimulation = function() {
     document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
     document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
-    
-    // Remove dimming effect from non-executed plugins
-    document.querySelectorAll('.simulation-dimmed').forEach(el => {
-        el.classList.remove('simulation-dimmed');
-    });
     
     // Close any open tooltips
     const dataFlowTooltip = document.getElementById('data-flow-tooltip');

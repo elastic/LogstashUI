@@ -1736,3 +1736,11 @@ window.toggleSensitiveValue = function(button, event) {
         `;
     }
 };
+
+// Function to open the simulation modal
+window.openSimulateModal = function() {
+    const modal = document.getElementById('simulationModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+};
