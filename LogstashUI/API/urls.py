@@ -27,5 +27,12 @@ urlpatterns = [
     path("GetNodeMetrics", views.GetNodeMetrics, name="GetNodeMetrics"),
     path("GetPipelineMetrics", views.GetPipelineMetrics, name="GetPipelineMetrics"),
     path("GetLogs", views.GetLogs, name="GetLogs"),
-    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport")
+    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport"),
+    
+    # Elasticsearch simulation endpoints
+    path("GetElasticsearchConnections/", views.GetElasticsearchConnections, name="GetElasticsearchConnections"),
+    path("GetElasticsearchIndices/", views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
+    path("GetElasticsearchFields/", views.GetElasticsearchFields, name="GetElasticsearchFields"),
+    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
+    path("PreviewElasticsearchData/", views.PreviewElasticsearchData, name="PreviewElasticsearchData")
 ]

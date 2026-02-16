@@ -1,51 +1,326 @@
 <!-- Simulation Pipeline Modal -->
 <div id="simulationModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
   <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeSimulationModal()"></div>
-  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col relative z-10">
-    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-      <h2 class="text-xl font-semibold text-white">Simulate Pipeline</h2>
-      <button 
-        onclick="closeSimulationModal()" 
-        class="text-gray-400 hover:text-white">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-        </svg>
-      </button>
+  <div class="bg-gray-800 rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+    
+    <!-- Modal Header -->
+    <div class="p-4 border-b border-blue-900/50 bg-gradient-to-r from-gray-800 to-gray-800">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold text-blue-400">Simulate Pipeline</h2>
+        <button onclick="closeSimulationModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- View Mode Selector -->
+      <div class="mb-2">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-sm font-semibold text-gray-300">Simulation View</span>
+          <div class="relative group">
+            <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+              <span class="text-xs font-bold text-blue-400">?</span>
+            </div>
+            <div class="absolute left-0 top-6 hidden group-hover:block w-96 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+              <div class="text-sm text-gray-200 leading-relaxed">
+                <span class="text-blue-400 font-semibold">Overlay Debugger:</span> Visual explanation of pipeline execution inside the editor<br/>
+                <span class="text-green-400 font-semibold">Text Mode:</span> JSON text sections showing exact alterations
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg w-fit">
+          <label class="flex items-center gap-2 cursor-pointer hover:text-blue-400 transition-colors">
+            <input type="radio" name="viewMode" value="overlay" checked onchange="switchSimulationViewMode('overlay')" class="text-blue-500 focus:ring-blue-500">
+            <span class="text-sm text-gray-300">Overlay Debugger</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer hover:text-green-400 transition-colors">
+            <input type="radio" name="viewMode" value="text" onchange="switchSimulationViewMode('text')" class="text-green-500 focus:ring-green-500">
+            <span class="text-sm text-gray-300">Text Mode</span>
+          </label>
+        </div>
+      </div>
     </div>
     
-    <form 
-      id="simulationForm"
-      hx-post="/API/SimulatePipeline/"
-      hx-target="#simulationResults"
-      hx-swap="innerHTML"
-      hx-vals="js:{'components': components}"
-      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-      hx-indicator="#simulationLoading"
-      class="p-6 overflow-y-auto flex-grow">
+    <form id="simulationForm" hx-post="/API/SimulatePipeline/" hx-target="#simulationResults" hx-swap="innerHTML" hx-vals="js:{'components': components}" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-indicator="#simulationLoading" class="p-6 overflow-y-auto flex-grow">
       
       {% csrf_token %}
       
-      <div class="mb-4">
-        <label for="logInput" class="block text-sm font-medium text-gray-300 mb-2">Log Input</label>
-        <textarea 
-          name="log_text"
-          id="logInput"
-          rows="6"
-          required
-          class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Paste your log line here...">{"message": "Message goes here!", "@timestamp": "2025-09-19T16:45:02.000Z"}</textarea>
+      <!-- Input Source Selector -->
+      <div class="mb-6">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-sm font-semibold text-gray-300">Input Source</span>
+          <div class="relative group">
+            <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+              <span class="text-xs font-bold text-blue-400">?</span>
+            </div>
+            <div class="absolute left-0 top-6 hidden group-hover:block w-96 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+              <div class="text-sm text-gray-200 leading-relaxed">
+                <span class="text-blue-400 font-semibold">From Text Input:</span> You input whatever you want!<br/>
+                <span class="text-blue-400 font-semibold">From Elasticsearch:</span> Various input options from an Elastic index
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-6 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="inputSource" value="text" checked onchange="switchInputSource('text')" class="text-blue-600 focus:ring-blue-500">
+            <span class="text-sm font-medium text-gray-300">From Text Input</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="inputSource" value="elasticsearch" onchange="switchInputSource('elasticsearch')" class="text-blue-600 focus:ring-blue-500">
+            <span class="text-sm font-medium text-gray-300">From Elasticsearch</span>
+          </label>
+        </div>
       </div>
       
-      <div class="flex justify-end space-x-3 mt-4">
-        <button 
-          type="button"
-          onclick="closeSimulationModal()" 
-          class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors">
+      <!-- Text Input Container -->
+      <div id="textInputContainer" class="mb-6">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold text-gray-300">Log Input</label>
+            <div class="relative group">
+              <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+                <span class="text-xs font-bold text-blue-400">?</span>
+              </div>
+              <div class="absolute left-0 top-6 hidden group-hover:block w-80 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+                <div class="text-sm text-gray-200 leading-relaxed">
+                  One event per line. <span class="text-yellow-400 font-semibold">Multiline mode:</span> each line will be treated as part of the event.
+                </div>
+              </div>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="multilineCheckbox" class="checkbox checkbox-sm" />
+            <span class="text-xs text-gray-400">Multiline Input</span>
+          </label>
+        </div>
+        
+        <!-- Multiline Banner -->
+        <div id="multilineInputBanner" class="hidden mb-2 bg-blue-900/30 border border-blue-700 rounded px-3 py-2 text-xs text-blue-300">
+          <span>📝 Multiple document mode - Each line will be tested separately</span>
+        </div>
+        
+        <!-- Text Input with Line Numbers -->
+        <div class="bg-gray-700 rounded-lg border border-gray-600 flex overflow-hidden">
+          <div id="logInputLineNumbers" class="bg-gray-800 text-gray-500 text-right pr-3 pl-2 pt-3 select-none font-mono text-sm overflow-hidden" style="min-width: 40px;">
+            <div>1</div>
+          </div>
+          <textarea id="logInput" name="log_text" rows="8" class="flex-1 bg-transparent text-white p-3 font-mono text-sm resize-none focus:outline-none overflow-auto" placeholder="Paste your log line here..." spellcheck="false">{"message": "Message goes here!", "@timestamp": "2025-09-19T16:45:02.000Z"}</textarea>
+        </div>
+      </div>
+      
+      <!-- Elasticsearch Input Container -->
+      <div id="elasticsearchInputContainer" class="hidden mb-6">
+        <div class="space-y-4">
+          
+          <!-- Connection Selector -->
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <label class="text-sm font-semibold text-gray-300">Elasticsearch Connection</label>
+              <div class="relative group">
+                <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+                  <span class="text-xs font-bold text-blue-400">?</span>
+                </div>
+                <div class="absolute left-0 top-6 hidden group-hover:block w-64 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+                  <div class="text-sm text-gray-200">
+                    The Elasticsearch cluster to pull data from
+                  </div>
+                </div>
+              </div>
+            </div>
+            <select id="esConnection" name="es_connection" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" disabled>
+              <option value="">Loading connections...</option>
+            </select>
+          </div>
+          
+          <!-- Index Selector with Typeahead -->
+          <div id="esIndexContainer" class="hidden">
+            <div class="flex items-center gap-2 mb-2">
+              <label class="text-sm font-semibold text-gray-300">Index</label>
+              <div class="relative group">
+                <div class="flex items-center justify-center w-4 h-4 rounded-full bg-green-500/20 border border-green-500/50 cursor-help hover:bg-green-500/30 transition-colors">
+                  <span class="text-xs font-bold text-green-400">?</span>
+                </div>
+                <div class="absolute left-0 top-6 hidden group-hover:block w-64 p-4 bg-gray-900 border border-green-500/30 rounded-lg shadow-xl z-50">
+                  <div class="text-sm text-gray-200">
+                    Index to pull the data from
+                  </div>
+                </div>
+              </div>
+            </div>
+            <input type="text" id="esIndexInput" name="es_index" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Start typing to search indices..." autocomplete="off">
+            <div id="esIndexDropdown" class="hidden mt-1 bg-gray-700 border border-gray-600 rounded-md max-h-64 overflow-y-auto"></div>
+          </div>
+          
+          <!-- Query Method Selector -->
+          <div id="esQueryMethodContainer" class="hidden">
+            <div class="flex items-center gap-6 px-4 py-3 bg-gray-700 rounded-lg mb-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="esQueryMethod" value="field" checked onchange="switchEsQueryMethod('field')" class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-gray-300">Single Field</span>
+                <div class="relative group ml-1">
+                  <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+                    <span class="text-xs font-bold text-blue-400">?</span>
+                  </div>
+                  <div class="absolute left-0 top-6 hidden group-hover:block w-72 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+                    <div class="text-sm text-gray-200">
+                      Get a set of values of a single field from the index
+                    </div>
+                  </div>
+                </div>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="esQueryMethod" value="entire" onchange="switchEsQueryMethod('entire')" class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-gray-300">Entire Document</span>
+                <div class="relative group ml-1">
+                  <div class="flex items-center justify-center w-4 h-4 rounded-full bg-green-500/20 border border-green-500/50 cursor-help hover:bg-green-500/30 transition-colors">
+                    <span class="text-xs font-bold text-green-400">?</span>
+                  </div>
+                  <div class="absolute left-0 top-6 hidden group-hover:block w-64 p-4 bg-gray-900 border border-green-500/30 rounded-lg shadow-xl z-50">
+                    <div class="text-sm text-gray-200">
+                      Process the entire <span class="text-orange-400 font-mono">_source</span> document
+                    </div>
+                  </div>
+                </div>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="esQueryMethod" value="docid" onchange="switchEsQueryMethod('docid')" class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-gray-300">Document ID(s)</span>
+                <div class="relative group ml-1">
+                  <div class="flex items-center justify-center w-4 h-4 rounded-full bg-purple-500/20 border border-purple-500/50 cursor-help hover:bg-purple-500/30 transition-colors">
+                    <span class="text-xs font-bold text-purple-400">?</span>
+                  </div>
+                  <div class="absolute left-0 top-6 hidden group-hover:block w-64 p-4 bg-gray-900 border border-purple-500/30 rounded-lg shadow-xl z-50">
+                    <div class="text-sm text-gray-200">
+                      One or many explicit <span class="text-pink-400 font-mono">_id</span> values to fetch
+                    </div>
+                  </div>
+                </div>
+              </label>
+            </div>
+            
+            <!-- Field Selection Container -->
+            <div id="esFieldContainer" class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-300 mb-2">Field</label>
+                <select id="esField" name="es_field" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select a field...</option>
+                </select>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <div class="flex items-center gap-2 mb-2">
+                    <label class="text-sm font-semibold text-gray-300">Size</label>
+                    <div class="relative group">
+                      <div class="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500/20 border border-indigo-500/50 cursor-help hover:bg-indigo-500/30 transition-colors">
+                        <span class="text-xs font-bold text-indigo-400">?</span>
+                      </div>
+                      <div class="absolute left-0 top-6 hidden group-hover:block w-48 p-4 bg-gray-900 border border-indigo-500/30 rounded-lg shadow-xl z-50">
+                        <div class="text-sm text-gray-200">
+                          Number of docs returned
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <input type="number" id="esSize" name="es_size" min="1" max="100" value="10" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 mb-2">
+                    <label class="text-sm font-semibold text-gray-300">Lucene Query (optional)</label>
+                    <div class="relative group">
+                      <div class="flex items-center justify-center w-4 h-4 rounded-full bg-teal-500/20 border border-teal-500/50 cursor-help hover:bg-teal-500/30 transition-colors">
+                        <span class="text-xs font-bold text-teal-400">?</span>
+                      </div>
+                      <div class="absolute left-0 top-6 hidden group-hover:block w-72 p-4 bg-gray-900 border border-teal-500/30 rounded-lg shadow-xl z-50">
+                        <div class="text-sm text-gray-200">
+                          Further filtering which documents get simulated
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="relative">
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input type="text" id="esQuery" name="es_query" placeholder="Search... (e.g., status:200)" class="w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Entire Document Container -->
+            <div id="esEntireContainer" class="hidden space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <div class="flex items-center gap-2 mb-2">
+                    <label class="text-sm font-semibold text-gray-300">Size</label>
+                    <div class="relative group">
+                      <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+                        <span class="text-xs font-bold text-blue-400">?</span>
+                      </div>
+                      <div class="absolute left-0 top-6 hidden group-hover:block w-48 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+                        <div class="text-sm text-gray-200">
+                          Number of docs returned
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <input type="number" id="esSizeEntire" name="es_size_entire" min="1" max="100" value="10" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 mb-2">
+                    <label class="text-sm font-semibold text-gray-300">Lucene Query (optional)</label>
+                    <div class="relative group">
+                      <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+                        <span class="text-xs font-bold text-blue-400">?</span>
+                      </div>
+                      <div class="absolute left-0 top-6 hidden group-hover:block w-72 p-4 bg-gray-900 border border-blue-500/30 rounded-lg shadow-xl z-50">
+                        <div class="text-sm text-gray-200">
+                          Further filtering which documents get simulated
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="relative">
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input type="text" id="esQueryEntire" name="es_query_entire" placeholder="Search... (e.g., status:200)" class="w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Document ID Container -->
+            <div id="esDocIdContainer" class="hidden">
+              <label class="block text-sm font-semibold text-gray-300 mb-2">Document ID(s)</label>
+              <textarea id="esDocIds" name="es_doc_ids" rows="4" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm" placeholder="Enter document IDs (one per line)"></textarea>
+              <p class="text-xs text-gray-400 mt-1">Enter one or more document IDs, one per line</p>
+            </div>
+            
+            <!-- Preview Button -->
+            <div class="mt-4">
+              <button type="button" id="previewBtn" onclick="showElasticsearchPreview()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 transition-colors flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>Preview Data</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Action Buttons -->
+      <div class="flex justify-end space-x-3 mt-6">
+        <button type="button" onclick="closeSimulationModal()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors">
           Cancel
         </button>
-        <button 
-          type="submit"
-          class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors flex items-center gap-2">
+        <button type="submit" id="runSimulationBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors flex items-center gap-2">
           <span>Run Simulation</span>
           <div id="simulationLoading" class="htmx-indicator">
             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -53,45 +328,638 @@
         </button>
       </div>
       
-      <div id="simulationResults" class="mt-6">
-        <!-- Results will be displayed here -->
+      <div id="simulationResults" class="mt-6"></div>
+      
+      <!-- Text View Container (for modal text mode) - Initially hidden and only shown when simulation runs -->
+      <div id="textViewContainerModal" style="display: none;" class="mt-6 bg-gray-900 rounded-lg border border-gray-700 p-4 max-h-96 overflow-y-auto">
+        <div id="textViewContentModal" class="space-y-4 font-mono text-sm"></div>
       </div>
     </form>
   </div>
 </div>
 
+<!-- Preview Modal -->
+<div id="previewModal" class="hidden fixed inset-0 flex items-center justify-center z-[60] p-4">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closePreviewModal()"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[80vh] flex flex-col relative z-10">
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-white">Elasticsearch Data Preview</h3>
+      <button onclick="closePreviewModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="p-6 overflow-y-auto flex-grow">
+      <div id="previewContent" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+        <div class="flex items-center justify-center py-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.10"></script>
 <script>
-  // Function to clear simulation results
+  // Store simulation data globally for view switching
+  window.simulationData = null;
+  
+  // Line numbers functionality
+  const logInput = document.getElementById('logInput');
+  const logInputLineNumbers = document.getElementById('logInputLineNumbers');
+  const multilineCheckbox = document.getElementById('multilineCheckbox');
+  const multilineInputBanner = document.getElementById('multilineInputBanner');
+  
+  function updateLineNumbers(textarea, lineNumbersContainer) {
+    const lines = textarea.value.split('\n');
+    const lineCount = lines.length;
+    let html = '';
+    for (let i = 0; i < lineCount; i++) {
+      html += `<div>${i + 1}</div>`;
+    }
+    lineNumbersContainer.innerHTML = html;
+    lineNumbersContainer.scrollTop = textarea.scrollTop;
+  }
+  
+  if (logInput && logInputLineNumbers) {
+    logInput.addEventListener('input', () => {
+      updateLineNumbers(logInput, logInputLineNumbers);
+      updateMultilineBanner();
+    });
+    
+    logInput.addEventListener('scroll', () => {
+      logInputLineNumbers.scrollTop = logInput.scrollTop;
+    });
+    
+    updateLineNumbers(logInput, logInputLineNumbers);
+  }
+  
+  function updateMultilineBanner() {
+    const lines = logInput.value.split('\n').filter(line => line.trim() !== '');
+    if (lines.length > 1 && !multilineCheckbox.checked) {
+      multilineInputBanner.classList.remove('hidden');
+    } else {
+      multilineInputBanner.classList.add('hidden');
+    }
+  }
+  
+  if (multilineCheckbox) {
+    multilineCheckbox.addEventListener('change', updateMultilineBanner);
+  }
+  
+  // Input source switching
+  function switchInputSource(source) {
+    const textContainer = document.getElementById('textInputContainer');
+    const esContainer = document.getElementById('elasticsearchInputContainer');
+    const logInput = document.getElementById('logInput');
+    const runBtn = document.getElementById('runSimulationBtn');
+    
+    if (source === 'text') {
+      textContainer.classList.remove('hidden');
+      esContainer.classList.add('hidden');
+      logInput.required = true;
+      runBtn.disabled = false;
+    } else if (source === 'elasticsearch') {
+      textContainer.classList.add('hidden');
+      esContainer.classList.remove('hidden');
+      logInput.required = false;
+      
+      // Load connections
+      loadElasticsearchConnections();
+    }
+  }
+  
+  // Load Elasticsearch connections
+  function loadElasticsearchConnections() {
+    const select = document.getElementById('esConnection');
+    fetch('/API/GetElasticsearchConnections/')
+      .then(response => response.json())
+      .then(data => {
+        select.innerHTML = '<option value="">Select a connection...</option>';
+        data.connections.forEach(conn => {
+          const option = document.createElement('option');
+          option.value = conn.id;
+          option.textContent = conn.name;
+          select.appendChild(option);
+        });
+        select.disabled = false;
+      })
+      .catch(error => {
+        console.error('Error loading connections:', error);
+        select.innerHTML = '<option value="">Error loading connections</option>';
+      });
+  }
+  
+  // ES Connection change handler
+  document.addEventListener('DOMContentLoaded', () => {
+    const esConnection = document.getElementById('esConnection');
+    if (esConnection) {
+      esConnection.addEventListener('change', function() {
+        const indexContainer = document.getElementById('esIndexContainer');
+        if (this.value) {
+          indexContainer.classList.remove('hidden');
+          setupIndexTypeahead();
+        } else {
+          indexContainer.classList.add('hidden');
+        }
+      });
+    }
+  });
+  
+  // Index typeahead
+  function setupIndexTypeahead() {
+    const input = document.getElementById('esIndexInput');
+    const dropdown = document.getElementById('esIndexDropdown');
+    const connectionId = document.getElementById('esConnection').value;
+    
+    let debounceTimer;
+    
+    input.addEventListener('input', function() {
+      clearTimeout(debounceTimer);
+      const searchTerm = this.value.trim();
+      
+      debounceTimer = setTimeout(() => {
+        if (searchTerm.length === 0) {
+          // Get top 50 indices
+          fetchIndices(connectionId, '*');
+        } else {
+          // Search with wildcard
+          fetchIndices(connectionId, searchTerm + '*');
+        }
+      }, 300);
+    });
+    
+    // Initial load
+    fetchIndices(connectionId, '*');
+  }
+  
+  function fetchIndices(connectionId, pattern) {
+    const dropdown = document.getElementById('esIndexDropdown');
+    
+    fetch(`/API/GetElasticsearchIndices/?connection_id=${connectionId}&pattern=${encodeURIComponent(pattern)}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.indices && data.indices.length > 0) {
+          let html = '';
+          data.indices.slice(0, 50).forEach(index => {
+            html += `<div class="px-3 py-2 hover:bg-gray-600 cursor-pointer text-sm text-white" onclick="selectIndex('${index}')">${index}</div>`;
+          });
+          dropdown.innerHTML = html;
+          dropdown.classList.remove('hidden');
+        } else {
+          dropdown.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">No indices found</div>';
+          dropdown.classList.remove('hidden');
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching indices:', error);
+        dropdown.innerHTML = '<div class="px-3 py-2 text-sm text-red-400">Error loading indices</div>';
+      });
+  }
+  
+  function selectIndex(indexName) {
+    const input = document.getElementById('esIndexInput');
+    const dropdown = document.getElementById('esIndexDropdown');
+    const queryMethodContainer = document.getElementById('esQueryMethodContainer');
+    
+    input.value = indexName;
+    dropdown.classList.add('hidden');
+    queryMethodContainer.classList.remove('hidden');
+    
+    // Load field mappings
+    loadFieldMappings(indexName);
+  }
+  
+  function loadFieldMappings(indexName) {
+    const connectionId = document.getElementById('esConnection').value;
+    const fieldSelect = document.getElementById('esField');
+    
+    fetch(`/API/GetElasticsearchFields/?connection_id=${connectionId}&index=${encodeURIComponent(indexName)}`)
+      .then(response => response.json())
+      .then(data => {
+        fieldSelect.innerHTML = '<option value="">Select a field...</option>';
+        data.fields.forEach(field => {
+          const option = document.createElement('option');
+          option.value = field;
+          option.textContent = field;
+          fieldSelect.appendChild(option);
+        });
+      })
+      .catch(error => {
+        console.error('Error loading fields:', error);
+      });
+  }
+  
+  // ES Query method switching
+  function switchEsQueryMethod(method) {
+    const fieldContainer = document.getElementById('esFieldContainer');
+    const entireContainer = document.getElementById('esEntireContainer');
+    const docIdContainer = document.getElementById('esDocIdContainer');
+    
+    if (method === 'field') {
+      fieldContainer.classList.remove('hidden');
+      entireContainer.classList.add('hidden');
+      docIdContainer.classList.add('hidden');
+    } else if (method === 'entire') {
+      fieldContainer.classList.add('hidden');
+      entireContainer.classList.remove('hidden');
+      docIdContainer.classList.add('hidden');
+    } else {
+      fieldContainer.classList.add('hidden');
+      entireContainer.classList.add('hidden');
+      docIdContainer.classList.remove('hidden');
+    }
+  }
+  
+  // Show Elasticsearch preview
+  function showElasticsearchPreview() {
+    const connectionId = document.getElementById('esConnection').value;
+    const index = document.getElementById('esIndexInput').value;
+    const queryMethod = document.querySelector('input[name="esQueryMethod"]:checked').value;
+    
+    if (!connectionId || !index) {
+      alert('Please select a connection and index first');
+      return;
+    }
+    
+    // Show preview modal
+    const previewModal = document.getElementById('previewModal');
+    const previewContent = document.getElementById('previewContent');
+    previewModal.classList.remove('hidden');
+    
+    // Show loading
+    previewContent.innerHTML = '<div class="flex items-center justify-center py-8"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400"></div></div>';
+    
+    // Build request data
+    let requestData = {
+      connection_id: connectionId,
+      index: index,
+      query_method: queryMethod
+    };
+    
+    if (queryMethod === 'field') {
+      const field = document.getElementById('esField').value;
+      const size = document.getElementById('esSize').value;
+      const query = document.getElementById('esQuery').value;
+      
+      if (!field) {
+        previewContent.innerHTML = '<div class="text-red-400">Please select a field first</div>';
+        return;
+      }
+      
+      requestData.field = field;
+      requestData.size = size;
+      requestData.query = query;
+    } else if (queryMethod === 'entire') {
+      const size = document.getElementById('esSizeEntire').value;
+      const query = document.getElementById('esQueryEntire').value;
+      
+      requestData.size = size;
+      requestData.query = query;
+    } else if (queryMethod === 'docid') {
+      const docIds = document.getElementById('esDocIds').value;
+      
+      if (!docIds.trim()) {
+        previewContent.innerHTML = '<div class="text-red-400">Please enter at least one document ID</div>';
+        return;
+      }
+      
+      requestData.doc_ids = docIds;
+    }
+    
+    // Fetch preview data
+    const formData = new FormData();
+    for (const key in requestData) {
+      formData.append(key, requestData[key]);
+    }
+    
+    fetch('/API/PreviewElasticsearchData/', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        previewContent.innerHTML = `<div class="text-red-400">Error: ${data.error}</div>`;
+      } else {
+        const documents = data.documents || [];
+        if (documents.length === 0) {
+          previewContent.innerHTML = '<div class="text-yellow-400">No documents found matching your criteria</div>';
+        } else {
+          let html = `<div class="text-green-400 mb-4">Found ${documents.length} document(s)</div>`;
+          documents.forEach((doc, idx) => {
+            html += `<div class="mb-4 pb-4 border-b border-gray-700">`;
+            html += `<div class="text-blue-400 font-semibold mb-2">Document ${idx + 1}:</div>`;
+            html += `<pre class="whitespace-pre-wrap overflow-x-auto">${JSON.stringify(doc, null, 2)}</pre>`;
+            html += `</div>`;
+          });
+          previewContent.innerHTML = html;
+        }
+      }
+    })
+    .catch(error => {
+      previewContent.innerHTML = `<div class="text-red-400">Error fetching preview: ${error.message}</div>`;
+    });
+  }
+  
+  function closePreviewModal() {
+    const previewModal = document.getElementById('previewModal');
+    previewModal.classList.add('hidden');
+  }
+  
+  // Global storage for simulation documents and run IDs
+  window.simulationDocuments = [];
+  window.simulationRunIds = [];
+  window.currentDocumentIndex = 0;
+  
+  // Intercept form submission to handle both ES and multiline text input
+  document.getElementById('simulationForm').addEventListener('submit', async function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const inputSource = document.querySelector('input[name="inputSource"]:checked').value;
+    const logInput = document.getElementById('logInput');
+    let documents = [];
+    
+    // Determine documents to simulate
+    if (inputSource === 'text') {
+      const multilineCheckbox = document.getElementById('multilineCheckbox');
+      const isMultiline = multilineCheckbox ? multilineCheckbox.checked : false;
+      
+      // Check if input has multiple lines
+      const lines = logInput.value.split('\n').filter(line => line.trim());
+      const hasMultipleLines = lines.length > 1;
+      
+      console.log('Text input mode, multiline checkbox:', isMultiline, ', lines:', lines.length);
+      
+      if (hasMultipleLines) {
+        // Multiple document mode - treat each line as separate document
+        console.log('Multiple document mode - processing', lines.length, 'documents');
+        documents = lines.map(line => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return { message: line };
+          }
+        });
+      } else {
+        // Single document
+        console.log('Single document mode');
+        try {
+          documents = [JSON.parse(logInput.value)];
+        } catch {
+          documents = [{ message: logInput.value }];
+        }
+      }
+    } else if (inputSource === 'elasticsearch') {
+      // Fetch ES documents
+      const connection_id = document.getElementById('esConnection').value;
+      const index = document.getElementById('esIndexInput').value;
+      const query_method = document.querySelector('input[name="esQueryMethod"]:checked').value;
+      
+      if (!connection_id || !index) {
+        alert('Please select a connection and index');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('connection_id', connection_id);
+      formData.append('index', index);
+      formData.append('query_method', query_method);
+      
+      if (query_method === 'field') {
+        const field = document.getElementById('esField').value;
+        const size = document.getElementById('esSize').value;
+        const query = document.getElementById('esQuery').value;
+        if (!field) {
+          alert('Please select a field');
+          return;
+        }
+        formData.append('field', field);
+        formData.append('size', size);
+        formData.append('query', query);
+      } else if (query_method === 'entire') {
+        const size = document.getElementById('esSizeEntire').value;
+        const query = document.getElementById('esQueryEntire').value;
+        formData.append('size', size);
+        formData.append('query', query);
+      } else if (query_method === 'docid') {
+        const doc_ids = document.getElementById('esDocIds').value;
+        if (!doc_ids.trim()) {
+          alert('Please enter at least one document ID');
+          return;
+        }
+        formData.append('doc_ids', doc_ids);
+      }
+      
+      try {
+        const response = await fetch('/API/QueryElasticsearchDocuments/', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          }
+        });
+        
+        const data = await response.json();
+        if (data.error) {
+          alert('Error fetching documents: ' + data.error);
+          return;
+        }
+        
+        documents = data.documents || [];
+        if (documents.length === 0) {
+          alert('No documents found matching your criteria');
+          return;
+        }
+      } catch (error) {
+        alert('Error fetching documents: ' + error.message);
+        return;
+      }
+    }
+    
+    // Store documents globally
+    window.simulationDocuments = documents;
+    window.currentDocumentIndex = 0;
+    window.simulationRunIds = [];
+    
+    console.log('Submitting', documents.length, 'documents for simulation');
+    
+    // Submit all documents simultaneously
+    submitAllDocuments(documents);
+  });
+  
+  // Function to submit all documents for simulation simultaneously
+  async function submitAllDocuments(documents) {
+    console.log('Submitting and polling', documents.length, 'documents simultaneously');
+    
+    // Show toast immediately
+    showToast('Simulation launched!', 'success');
+    
+    // Close modal
+    if (typeof closeSimulationModal === 'function') {
+      closeSimulationModal();
+    }
+    
+    // Initialize run_ids array
+    window.simulationRunIds = new Array(documents.length).fill(null);
+    
+    // Submit all documents and start polling for each
+    const submissions = documents.map((doc, index) => submitAndPollDocument(doc, index));
+    
+    // Wait for all submissions to complete
+    await Promise.all(submissions);
+    
+    console.log('All documents submitted. Run IDs:', window.simulationRunIds);
+  }
+  
+  // Function to submit a single document, start polling, and return its run_id
+  async function submitAndPollDocument(doc, index) {
+    console.log('submitAndPollDocument called for index', index);
+    
+    // Get components from the global scope (same as HTMX uses)
+    const componentsData = typeof components !== 'undefined' ? components : (window.components || {});
+    console.log('Using components:', componentsData);
+    
+    const formData = new FormData();
+    formData.append('log_text', JSON.stringify(doc));
+    formData.append('components', JSON.stringify(componentsData));
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    try {
+      const response = await fetch('/API/SimulatePipeline/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+      });
+      
+      const html = await response.text();
+      console.log('Received response for document', index, ', length:', html.length);
+      
+      // Extract run_id from response - matches initSimulationResults('run_id')
+      const runIdMatch = html.match(/initSimulationResults\(['"]([^'"]+)['"]\)/);
+      if (runIdMatch) {
+        const runId = runIdMatch[1];
+        console.log('Document', index, 'extracted run_id:', runId);
+        
+        // Store run_id BEFORE doing anything else
+        window.simulationRunIds[index] = runId;
+        console.log('Stored run_id at index', index, ', array now:', window.simulationRunIds);
+        
+        // For first document, show overlay by executing the script
+        if (index === 0) {
+          // Extract and execute the script from the HTML response
+          const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+          if (scriptMatch) {
+            const scriptContent = scriptMatch[1];
+            console.log('Executing overlay creation script for document 0');
+            eval(scriptContent);
+          } else {
+            console.error('No script found in response for document 0');
+          }
+        } else {
+          // For other documents, just start polling in background
+          if (typeof initSimulationResults === 'function') {
+            console.log('Starting background poller for document', index);
+            initSimulationResults(runId);
+          }
+        }
+        
+        return runId;
+      } else {
+        console.error('No run_id match found in response for document', index);
+        console.error('Response content:', html);
+        showToast('Error submitting document ' + (index + 1), 'error');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error submitting document', index, ':', error);
+      return null;
+    }
+  }
+  
+  // Toast notification function
+  function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 z-[100] px-6 py-3 rounded-lg shadow-lg transition-all duration-300 ${
+      type === 'success' ? 'bg-green-600 text-white' :
+      type === 'error' ? 'bg-red-600 text-white' :
+      'bg-blue-600 text-white'
+    }`;
+    toast.textContent = message;
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-20px)';
+    
+    document.body.appendChild(toast);
+    
+    // Fade in
+    setTimeout(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+    }, 10);
+    
+    // Fade out and remove
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-20px)';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+  
+  // View mode switching (in modal)
+  function switchSimulationViewMode(mode) {
+    // This function is called when user changes view mode radio buttons
+    // It doesn't affect the simulation results, just the UI preference
+  }
+  
+  // Listen for simulation data updates and display in text mode if selected
+  window.addEventListener('simulationDataReady', function(event) {
+    const viewMode = document.querySelector('input[name="viewMode"]:checked');
+    if (viewMode && viewMode.value === 'text') {
+      const textViewContainer = document.getElementById('textViewContainerModal');
+      if (textViewContainer && event.detail) {
+        textViewContainer.style.display = 'block';
+        generateTextViewModal(event.detail);
+      }
+    }
+  });
+  
+  function generateTextViewModal(data) {
+    const textViewContent = document.getElementById('textViewContentModal');
+    if (!textViewContent || !data.nodes) return;
+    
+    const html = window.generateTextView ? window.generateTextView(data) : '';
+    textViewContent.innerHTML = html;
+  }
+  
   function clearSimulationResults() {
     const resultsDiv = document.getElementById('simulationResults');
-    if (resultsDiv) {
-      resultsDiv.innerHTML = '';
-    }
+    if (resultsDiv) resultsDiv.innerHTML = '';
+    
+    const textView = document.getElementById('textViewContentModal');
+    if (textView) textView.innerHTML = '';
+    
+    window.simulationData = null;
   }
-
-  // Function to close simulation modal (without clearing results)
+  
   function closeSimulationModal() {
     const modal = document.getElementById('simulationModal');
-    if (modal) {
-      modal.classList.add('hidden');
-    }
+    if (modal) modal.classList.add('hidden');
   }
-
-  // Function to open simulation modal (without clearing results)
+  
   function openSimulationModal() {
     const modal = document.getElementById('simulationModal');
-    if (modal) {
-      modal.classList.remove('hidden');
-    }
+    if (modal) modal.classList.remove('hidden');
   }
-
-  // Clear results when navigating away from the page
-  window.addEventListener('beforeunload', clearSimulationResults);
   
-  // Clear results when page is hidden (tab switch, navigation)
+  window.addEventListener('beforeunload', clearSimulationResults);
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      clearSimulationResults();
-    }
+    if (document.hidden) clearSimulationResults();
   });
 </script>

@@ -3,7 +3,18 @@
 <script>
     // Execute immediately since this is loaded dynamically via HTMX
     (function() {
-        // Close the modal using the correct function
+        // Check if Text Mode is selected in the modal
+        const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
+        const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
+        
+        if (isTextMode) {
+            // Text Mode: Don't create overlay, keep modal open and show results in modal
+            // Don't close the modal, just initialize results polling
+            initSimulationResults('{{ run_id }}');
+            return;
+        }
+        
+        // Overlay Mode: Close the modal and create overlay
         setTimeout(() => {
             // Use the closeSimulationModal function if available
             if (typeof closeSimulationModal === 'function') {
@@ -41,14 +52,52 @@
                             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
                             <span class="text-xs text-gray-400">Loading results...</span>
                         </div>
+                        <div id="documentNavigation" style="display: none;" class="flex items-center gap-2 ml-4 px-3 py-1 bg-gray-700 rounded-lg">
+                            <button onclick="previousDocument()" id="prevDocBtn" class="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" title="Previous document">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                            </button>
+                            <span id="documentCounter" class="text-xs text-gray-300 min-w-[60px] text-center">1 / 1</span>
+                            <button onclick="nextDocument()" id="nextDocBtn" class="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" title="Next document">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="viewModeSelector" style="display: none;" class="flex items-center gap-3 ml-4 px-3 py-1 bg-gray-700 rounded-lg">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="overlayViewMode" value="debugger" checked onchange="switchOverlayView('debugger')" class="text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-300">Overlay</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="overlayViewMode" value="text" onchange="switchOverlayView('text')" class="text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-300">Text</span>
+                            </label>
+                        </div>
                     </div>
-                    <button onclick="cleanupSimulation()" 
-                            class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700">
-                        ✕ Close
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="toggleOverlayExpand()" 
+                                id="expandOverlayBtn"
+                                class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700"
+                                title="Expand to full screen">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                            </svg>
+                        </button>
+                        <button onclick="cleanupSimulation()" 
+                                class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700">
+                            ✕ Close
+                        </button>
+                    </div>
                 </div>
                 <div id="results-container" class="flex-1 bg-gray-900 overflow-x-auto">
                     <svg id="pipeline-graph" width="100%" height="100" class="bg-gray-900"></svg>
+                </div>
+                <div id="textViewContainer" style="display: none;" class="flex-1 bg-gray-900 overflow-y-auto p-4">
+                    <div id="textViewContent" class="space-y-4 font-mono text-sm">
+                        <!-- Text view will be populated here -->
+                    </div>
                 </div>
             </div>
         `;

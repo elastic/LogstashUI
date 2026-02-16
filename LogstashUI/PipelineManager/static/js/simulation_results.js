@@ -635,7 +635,8 @@ function createForceDirectedGraph(graphData) {
             setTimeout(() => {
                 componentElement.classList.remove('newly-added');
             }, 2000);
-        } else {
+        } else if (componentId !== 'start') {
+            // Don't warn about 'start' - it's a virtual node not in the editor
             console.warn(`Component not found: ${componentId}`);
         }
     });
@@ -858,6 +859,269 @@ function diffObjects(prev, curr, path = '') {
     return changes;
 }
 
+// Global function to switch between overlay views
+window.switchOverlayView = function(mode) {
+    const resultsContainer = document.getElementById('results-container');
+    const textViewContainer = document.getElementById('textViewContainer');
+    const textViewContent = document.getElementById('textViewContent');
+    
+    if (mode === 'debugger') {
+        resultsContainer.style.display = 'block';
+        textViewContainer.style.display = 'none';
+    } else if (mode === 'text') {
+        resultsContainer.style.display = 'none';
+        textViewContainer.style.display = 'block';
+        
+        // Generate text view if we have simulation data
+        if (window.simulationData && textViewContent) {
+            textViewContent.innerHTML = generateTextView(window.simulationData);
+        }
+    }
+};
+
+// Global function to generate text view HTML from simulation data
+window.generateTextView = function(data) {
+    if (!data || !data.nodes) return '<div class="text-gray-500 text-center py-8">No simulation data available</div>';
+    
+    let html = '';
+    
+    // Filter out the 'start' node and sort by step
+    const pluginNodes = data.nodes.filter(n => n.id !== 'start').sort((a, b) => a.step - b.step);
+    
+    pluginNodes.forEach((node, index) => {
+        const stepNum = index + 1;
+        const pluginName = node.label;
+        const hasChanges = node.hasChanges;
+        const changesText = node.changesText || 'No changes';
+        const eventJson = node.eventJson || 'No event data';
+        
+        html += `
+            <div class="border border-gray-700 rounded-lg p-4 bg-gray-800">
+                <div class="text-lg font-bold text-blue-400 mb-3 pb-2 border-b border-gray-700">
+                    ~~~ Step ${stepNum}: ${pluginName} ~~~
+                </div>
+                
+                <div class="mb-4">
+                    <div class="text-sm font-semibold text-gray-400 mb-2">Plugin Changes:</div>
+                    <pre class="text-xs ${hasChanges ? 'text-green-300' : 'text-gray-500'} bg-gray-900 p-3 rounded border border-gray-700 overflow-x-auto">${changesText}</pre>
+                </div>
+                
+                <div>
+                    <div class="text-sm font-semibold text-gray-400 mb-2">Event After Plugin Execution:</div>
+                    <pre class="text-xs text-cyan-300 bg-gray-900 p-3 rounded border border-gray-700 overflow-x-auto">${eventJson}</pre>
+                </div>
+            </div>
+        `;
+    });
+    
+    return html || '<div class="text-gray-500 text-center py-8">No simulation data available</div>';
+};
+
+// Global function to toggle overlay expansion
+window.toggleOverlayExpand = function() {
+    const overlay = document.getElementById('simulation-overlay');
+    const mainContent = document.querySelector('main');
+    const expandBtn = document.getElementById('expandOverlayBtn');
+    
+    if (!overlay) return;
+    
+    const isExpanded = overlay.style.height === '100vh' || overlay.style.height === '100%';
+    
+    if (isExpanded) {
+        // Collapse back to 150px
+        overlay.style.height = '150px';
+        if (mainContent) {
+            mainContent.style.paddingTop = '150px';
+        }
+        if (expandBtn) {
+            expandBtn.title = 'Expand to full screen';
+            expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>`;
+        }
+    } else {
+        // Expand to full screen
+        overlay.style.height = '100vh';
+        if (mainContent) {
+            mainContent.style.paddingTop = '100vh';
+        }
+        if (expandBtn) {
+            expandBtn.title = 'Collapse';
+            expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>`;
+        }
+    }
+};
+
+// Document cycling functions
+window.previousDocument = function() {
+    if (!window.simulationDocuments || window.simulationDocuments.length <= 1) return;
+    
+    window.currentDocumentIndex--;
+    if (window.currentDocumentIndex < 0) {
+        window.currentDocumentIndex = window.simulationDocuments.length - 1;
+    }
+    
+    switchToDocument(window.currentDocumentIndex);
+};
+
+window.nextDocument = function() {
+    if (!window.simulationDocuments || window.simulationDocuments.length <= 1) return;
+    
+    window.currentDocumentIndex++;
+    if (window.currentDocumentIndex >= window.simulationDocuments.length) {
+        window.currentDocumentIndex = 0;
+    }
+    
+    switchToDocument(window.currentDocumentIndex);
+};
+
+function switchToDocument(index) {
+    console.log('=== Switching to document', index, '===');
+    console.log('simulationRunIds array:', window.simulationRunIds);
+    console.log('simulationDocuments array length:', window.simulationDocuments ? window.simulationDocuments.length : 0);
+    
+    // Check if we have a run_id for this document
+    if (!window.simulationRunIds || !window.simulationRunIds[index]) {
+        console.error('No run_id available for document', index);
+        console.error('Available run_ids:', window.simulationRunIds);
+        alert('Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.');
+        return;
+    }
+    
+    const runId = window.simulationRunIds[index];
+    console.log('Switching to run_id:', runId);
+    
+    // Initialize results cache if needed
+    if (!window.simulationResultsCache) {
+        window.simulationResultsCache = {};
+    }
+    
+    // Check if we have cached results for this run_id
+    if (window.simulationResultsCache[runId]) {
+        console.log('Using cached results for run_id:', runId);
+        renderCachedResults(runId, index);
+    } else {
+        console.log('No cached results, starting poller for run_id:', runId);
+        console.log('Active pollers before switch:', window.activePollers ? Array.from(window.activePollers) : []);
+        
+        // Clear existing simulation artifacts
+        clearSimulationArtifacts();
+        
+        // Update counter
+        updateDocumentCounter();
+        
+        // Show loading indicator
+        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'flex';
+            console.log('Loading indicator shown');
+        } else {
+            console.error('Loading indicator not found');
+        }
+        
+        // Hide view mode selector during reload
+        const viewModeSelector = document.getElementById('viewModeSelector');
+        if (viewModeSelector) {
+            viewModeSelector.style.display = 'none';
+        }
+        
+        // Start polling for this run_id
+        console.log('Calling initSimulationResults for run_id:', runId);
+        initSimulationResults(runId);
+    }
+}
+
+function renderCachedResults(runId, index) {
+    const cachedData = window.simulationResultsCache[runId];
+    console.log('Rendering cached results for run_id:', runId, 'data:', cachedData);
+    
+    // Clear existing simulation artifacts
+    clearSimulationArtifacts();
+    
+    // Update counter
+    updateDocumentCounter();
+    
+    // Re-render the graph and badges with cached data
+    if (cachedData.nodes && cachedData.links) {
+        // Mark executed plugins
+        if (cachedData.originalEvent) {
+            markExecutedPlugins(cachedData.nodes, cachedData.originalEvent);
+        }
+        
+        // Create the graph
+        createForceDirectedGraph({ nodes: cachedData.nodes, links: cachedData.links });
+        
+        // Show view mode selector
+        const viewModeSelector = document.getElementById('viewModeSelector');
+        if (viewModeSelector) {
+            viewModeSelector.style.display = 'flex';
+        }
+        
+        // Hide loading indicator
+        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+        
+        console.log('Cached results rendered successfully');
+    } else {
+        console.error('Cached data missing nodes or links');
+    }
+}
+
+function clearSimulationArtifacts() {
+    // Clear graph
+    const svg = d3.select("#pipeline-graph");
+    if (svg) {
+        svg.selectAll("*").remove();
+    }
+    
+    // Remove all simulation badges and indicators from pipeline editor
+    document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
+    document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
+    document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
+    
+    // Remove dimming effect
+    document.querySelectorAll('.simulation-dimmed').forEach(el => {
+        el.classList.remove('simulation-dimmed');
+    });
+    
+    // Close any open tooltips
+    const dataFlowTooltip = document.getElementById('data-flow-tooltip');
+    if (dataFlowTooltip) {
+        dataFlowTooltip.remove();
+    }
+    
+    const linkTooltip = document.querySelector('.d3-link-tooltip');
+    if (linkTooltip) {
+        linkTooltip.remove();
+    }
+    
+    // Clear text view
+    const textViewContent = document.getElementById('textViewContent');
+    if (textViewContent) {
+        textViewContent.innerHTML = '';
+    }
+}
+
+function updateDocumentCounter() {
+    const counter = document.getElementById('documentCounter');
+    const prevBtn = document.getElementById('prevDocBtn');
+    const nextBtn = document.getElementById('nextDocBtn');
+    
+    if (counter && window.simulationDocuments) {
+        const total = window.simulationDocuments.length;
+        const current = window.currentDocumentIndex + 1;
+        counter.textContent = `${current} / ${total}`;
+        
+        // Enable/disable buttons
+        if (prevBtn) prevBtn.disabled = total <= 1;
+        if (nextBtn) nextBtn.disabled = total <= 1;
+    }
+}
+
 // Global cleanup function
 window.cleanupSimulation = function() {
     // Remove overlay
@@ -873,28 +1137,27 @@ window.cleanupSimulation = function() {
     }
     
     // Remove all simulation artifacts
-    document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
-    document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
-    document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
+    clearSimulationArtifacts();
     
-    // Remove dimming effect from non-executed plugins
-    document.querySelectorAll('.simulation-dimmed').forEach(el => {
-        el.classList.remove('simulation-dimmed');
-    });
-    
-    // Close any open tooltips
-    const dataFlowTooltip = document.getElementById('data-flow-tooltip');
-    if (dataFlowTooltip) {
-        dataFlowTooltip.remove();
-    }
-    
-    const linkTooltip = document.querySelector('.d3-link-tooltip');
-    if (linkTooltip) {
-        linkTooltip.remove();
-    }
+    // Clear document storage
+    window.simulationDocuments = [];
+    window.currentDocumentIndex = 0;
 };
 
 function initSimulationResults(runId) {
+    // Initialize active pollers set if it doesn't exist
+    if (!window.activePollers) {
+        window.activePollers = new Set();
+    }
+    
+    // Prevent double polling for the same run_id
+    if (window.activePollers.has(runId)) {
+        console.log('Already polling for run_id:', runId, '- skipping duplicate');
+        return;
+    }
+    window.activePollers.add(runId);
+    console.log('Active pollers:', Array.from(window.activePollers));
+    
     let pollCount = 0;
     const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
     const pollInterval = 250; // Poll every 250ms for faster updates
@@ -1103,16 +1366,70 @@ function initSimulationResults(runId) {
                                     // Process all filter plugins
                                     processPlugins(components.filter, lastNodeId);
                                     
-                                    // Mark executed plugins in the editor with visual indicators
-                                    markExecutedPlugins(nodes, originalEvent);
+                                    // Store simulation data globally for view switching
+                                    window.simulationData = { nodes, links };
                                     
-                                    // Create the force-directed graph
-                                    createForceDirectedGraph({ nodes, links });
+                                    // Cache results for this run_id
+                                    if (!window.simulationResultsCache) {
+                                        window.simulationResultsCache = {};
+                                    }
+                                    window.simulationResultsCache[runId] = {
+                                        nodes: nodes,
+                                        links: links,
+                                        originalEvent: originalEvent
+                                    };
+                                    console.log('Cached results for run_id:', runId);
                                     
-                                    // Hide loading indicator
-                                    const loadingIndicator = document.getElementById('simulation-loading-indicator');
-                                    if (loadingIndicator) {
-                                        loadingIndicator.style.display = 'none';
+                                    // Check if we're in text mode (modal-based) or overlay mode
+                                    const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
+                                    const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
+                                    
+                                    if (isTextMode) {
+                                        // Text Mode: Skip graph creation, just dispatch event for modal
+                                        window.dispatchEvent(new CustomEvent('simulationDataReady', { 
+                                            detail: { nodes, links } 
+                                        }));
+                                    } else {
+                                        // Overlay Mode: Mark plugins and create graph
+                                        markExecutedPlugins(nodes, originalEvent);
+                                        createForceDirectedGraph({ nodes, links });
+                                        
+                                        // Show view mode selector in overlay
+                                        const viewModeSelector = document.getElementById('viewModeSelector');
+                                        console.log('Looking for viewModeSelector:', viewModeSelector);
+                                        if (viewModeSelector) {
+                                            console.log('Setting viewModeSelector display to flex');
+                                            viewModeSelector.style.display = 'flex';
+                                            console.log('viewModeSelector display is now:', viewModeSelector.style.display);
+                                        } else {
+                                            console.error('viewModeSelector element not found in DOM');
+                                        }
+                                        
+                                        // Show document navigation if multiple documents
+                                        console.log('Checking for document navigation:', window.simulationDocuments ? window.simulationDocuments.length : 0, 'documents');
+                                        if (window.simulationDocuments && window.simulationDocuments.length > 1) {
+                                            const docNav = document.getElementById('documentNavigation');
+                                            console.log('Document navigation element:', docNav);
+                                            if (docNav) {
+                                                docNav.style.display = 'flex';
+                                                updateDocumentCounter();
+                                                console.log('Navigation buttons shown');
+                                            }
+                                        } else {
+                                            console.log('Not showing navigation - only', window.simulationDocuments ? window.simulationDocuments.length : 0, 'documents');
+                                        }
+                                        
+                                        // Hide loading indicator
+                                        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+                                        if (loadingIndicator) {
+                                            loadingIndicator.style.display = 'none';
+                                        }
+                                        
+                                        // Remove from active pollers
+                                        if (window.activePollers) {
+                                            window.activePollers.delete(runId);
+                                            console.log('Polling complete for', runId, ', active pollers:', Array.from(window.activePollers));
+                                        }
                                     }
                                 } else {
                                     console.error('Components variable not accessible or snapshots missing');
@@ -1123,6 +1440,10 @@ function initSimulationResults(runId) {
                 
                 // Stop polling if we received the final event
                 if (receivedFinal) {
+                    if (window.activePollers) {
+                        window.activePollers.delete(runId);
+                        console.log('Polling complete for', runId, ', active pollers:', Array.from(window.activePollers));
+                    }
                     return;
                 }
                 

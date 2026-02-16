@@ -12,6 +12,31 @@ function markExecutedPlugins(nodes, originalEvent) {
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
     document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
     
+    // Remove any existing dimming
+    document.querySelectorAll('.simulation-dimmed').forEach(el => {
+        el.classList.remove('simulation-dimmed');
+    });
+    
+    // Collect IDs of executed plugins
+    const executedPluginIds = new Set();
+    nodes.forEach(node => {
+        if (node.id !== 'start') {
+            let componentId = node.id;
+            if (node.isDecisionPoint) {
+                componentId = node.conditionalId;
+            }
+            executedPluginIds.add(componentId);
+        }
+    });
+    
+    // Dim all plugins that were NOT executed
+    document.querySelectorAll('[data-id]').forEach(element => {
+        const componentId = element.getAttribute('data-id');
+        if (componentId && !executedPluginIds.has(componentId)) {
+            element.classList.add('simulation-dimmed');
+        }
+    });
+    
     // Add original event data flow indicator at the top of filter section
     if (originalEvent) {
         const filterContainer = document.getElementById('filterComponents');
@@ -161,7 +186,7 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
-        showDataFlowTooltip(e, this.dataset.eventJson);
+        showDataFlowTooltip(e, this.dataset.eventJson, true); // sticky = true
     });
     
     // Add hover effects and tooltip
@@ -170,8 +195,8 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         this.style.borderColor = 'rgba(16, 185, 129, 0.5)';
         this.style.transform = 'translateX(4px)';
         
-        // Show hover tooltip
-        showDataFlowTooltip(e, this.dataset.eventJson);
+        // Show hover tooltip (non-sticky)
+        showDataFlowTooltip(e, this.dataset.eventJson, false);
     });
     
     dataFlow.addEventListener('mouseleave', function() {
@@ -232,7 +257,7 @@ function addDataFlowIndicator(componentElement, node) {
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
-        showDataFlowTooltip(e, this.dataset.eventJson);
+        showDataFlowTooltip(e, this.dataset.eventJson, true); // sticky = true
     });
     
     // Add hover effects and tooltip
@@ -241,8 +266,8 @@ function addDataFlowIndicator(componentElement, node) {
         this.style.borderColor = 'rgba(59, 130, 246, 0.5)';
         this.style.transform = 'translateX(4px)';
         
-        // Show hover tooltip
-        showDataFlowTooltip(e, this.dataset.eventJson);
+        // Show hover tooltip (non-sticky)
+        showDataFlowTooltip(e, this.dataset.eventJson, false);
     });
     
     dataFlow.addEventListener('mouseleave', function() {
@@ -263,8 +288,11 @@ function addDataFlowIndicator(componentElement, node) {
 
 /**
  * Show tooltip with event JSON data
+ * @param {Event} event - The mouse event
+ * @param {string} eventJson - The JSON data to display
+ * @param {boolean} sticky - If true, tooltip stays open until closed; if false, auto-hides on mouse out
  */
-function showDataFlowTooltip(event, eventJson) {
+function showDataFlowTooltip(event, eventJson, sticky = false) {
     let tooltip = document.getElementById('data-flow-tooltip');
     
     if (!tooltip) {
@@ -284,48 +312,37 @@ function showDataFlowTooltip(event, eventJson) {
             font-family: monospace;
             font-size: 11px;
             color: #d1d5db;
-            pointer-events: auto;
-            cursor: move;
+            pointer-events: none;
+            cursor: default;
         `;
-        
-        // Add close button
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '✕';
-        closeBtn.style.cssText = `
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: transparent;
-            border: none;
-            color: #9ca3af;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 0;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-        closeBtn.onmouseover = () => closeBtn.style.color = '#fff';
-        closeBtn.onmouseout = () => closeBtn.style.color = '#9ca3af';
-        closeBtn.onclick = hideDataFlowTooltip;
-        
-        tooltip.appendChild(closeBtn);
         document.body.appendChild(tooltip);
-        
-        // Make draggable
-        makeDraggable(tooltip);
     }
     
-    // Update content (preserve close button)
-    const closeBtn = tooltip.querySelector('button');
-    tooltip.innerHTML = `
-        <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px; padding-right: 24px;">Event State at This Point:</div>
-        <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
-    `;
-    if (closeBtn) {
-        tooltip.appendChild(closeBtn);
+    if (sticky) {
+        // Sticky mode: make interactive and draggable
+        tooltip.style.pointerEvents = 'auto';
+        tooltip.style.cursor = 'move';
+        
+        // Update content with close button
+        tooltip.innerHTML = `
+            <button onclick="hideDataFlowTooltip()" 
+                    style="position: absolute; top: 8px; right: 8px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"
+                    onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">✕</button>
+            <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px; padding-right: 24px;">Event State at This Point:</div>
+            <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+        `;
+        
+        // Make draggable only when sticky
+        makeDraggable(tooltip);
+    } else {
+        // Hover mode: non-interactive, no close button
+        tooltip.style.pointerEvents = 'none';
+        tooltip.style.cursor = 'default';
+        
+        tooltip.innerHTML = `
+            <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px;">Event State at This Point:</div>
+            <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+        `;
     }
     
     // Position the tooltip near the cursor
@@ -433,9 +450,18 @@ function createForceDirectedGraph(graphData) {
         .attr("fill", "#6b7280");
     
     // Set fixed positions for nodes - completely static, no simulation
+    console.log('Setting node positions:', {
+        nodeCount: graphData.nodes.length,
+        padding,
+        nodeSpacing,
+        height,
+        nodes: graphData.nodes.map(n => ({ id: n.id, step: n.step }))
+    });
+    
     graphData.nodes.forEach((node, i) => {
         node.x = padding + (node.step * nodeSpacing); // Space nodes horizontally with proper spacing
         node.y = height / 2; // Center all nodes vertically for linear flow
+        console.log(`Node ${node.id}: step=${node.step}, x=${node.x}, y=${node.y}`);
     });
     
     // Resolve link source/target to actual node objects
@@ -447,6 +473,13 @@ function createForceDirectedGraph(graphData) {
             link.target = graphData.nodes.find(n => n.id === link.target);
         }
     });
+    
+    console.log('Links resolved:', graphData.links.map(l => ({ 
+        source: l.source.id, 
+        target: l.target.id,
+        sourceX: l.source.x,
+        targetX: l.target.x
+    })));
     
     // Create links with hover interaction
     const linkGroup = container.append("g")
@@ -558,6 +591,21 @@ function createForceDirectedGraph(graphData) {
         .attr("font-weight", "bold")
         .style("pointer-events", "none");
     
+    // Manually position all elements since we have no simulation
+    link
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+    
+    linkHover
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+    
+    node.attr("transform", d => `translate(${d.x},${d.y})`);
+    
     // Add click handlers to scroll to component in editor
     node.on("click", function(event, d) {
         event.stopPropagation();
@@ -587,7 +635,8 @@ function createForceDirectedGraph(graphData) {
             setTimeout(() => {
                 componentElement.classList.remove('newly-added');
             }, 2000);
-        } else {
+        } else if (componentId !== 'start') {
+            // Don't warn about 'start' - it's a virtual node not in the editor
             console.warn(`Component not found: ${componentId}`);
         }
     });
@@ -810,6 +859,210 @@ function diffObjects(prev, curr, path = '') {
     return changes;
 }
 
+// Global function to switch between overlay views
+window.switchOverlayView = function(mode) {
+    const resultsContainer = document.getElementById('results-container');
+    const textViewContainer = document.getElementById('textViewContainer');
+    const textViewContent = document.getElementById('textViewContent');
+    
+    if (mode === 'debugger') {
+        resultsContainer.style.display = 'block';
+        textViewContainer.style.display = 'none';
+    } else if (mode === 'text') {
+        resultsContainer.style.display = 'none';
+        textViewContainer.style.display = 'block';
+        
+        // Generate text view if we have simulation data
+        if (window.simulationData && textViewContent) {
+            textViewContent.innerHTML = generateTextView(window.simulationData);
+        }
+    }
+};
+
+// Global function to generate text view HTML from simulation data
+window.generateTextView = function(data) {
+    if (!data || !data.nodes) return '<div class="text-gray-500 text-center py-8">No simulation data available</div>';
+    
+    let html = '';
+    
+    // Filter out the 'start' node and sort by step
+    const pluginNodes = data.nodes.filter(n => n.id !== 'start').sort((a, b) => a.step - b.step);
+    
+    pluginNodes.forEach((node, index) => {
+        const stepNum = index + 1;
+        const pluginName = node.label;
+        const hasChanges = node.hasChanges;
+        const changesText = node.changesText || 'No changes';
+        const eventJson = node.eventJson || 'No event data';
+        
+        html += `
+            <div class="border border-gray-700 rounded-lg p-4 bg-gray-800">
+                <div class="text-lg font-bold text-blue-400 mb-3 pb-2 border-b border-gray-700">
+                    ~~~ Step ${stepNum}: ${pluginName} ~~~
+                </div>
+                
+                <div class="mb-4">
+                    <div class="text-sm font-semibold text-gray-400 mb-2">Plugin Changes:</div>
+                    <pre class="text-xs ${hasChanges ? 'text-green-300' : 'text-gray-500'} bg-gray-900 p-3 rounded border border-gray-700 overflow-x-auto">${changesText}</pre>
+                </div>
+                
+                <div>
+                    <div class="text-sm font-semibold text-gray-400 mb-2">Event After Plugin Execution:</div>
+                    <pre class="text-xs text-cyan-300 bg-gray-900 p-3 rounded border border-gray-700 overflow-x-auto">${eventJson}</pre>
+                </div>
+            </div>
+        `;
+    });
+    
+    return html || '<div class="text-gray-500 text-center py-8">No simulation data available</div>';
+};
+
+// Global function to toggle overlay expansion
+window.toggleOverlayExpand = function() {
+    const overlay = document.getElementById('simulation-overlay');
+    const mainContent = document.querySelector('main');
+    const expandBtn = document.getElementById('expandOverlayBtn');
+    
+    if (!overlay) return;
+    
+    const isExpanded = overlay.style.height === '100vh' || overlay.style.height === '100%';
+    
+    if (isExpanded) {
+        // Collapse back to 150px
+        overlay.style.height = '150px';
+        if (mainContent) {
+            mainContent.style.paddingTop = '150px';
+        }
+        if (expandBtn) {
+            expandBtn.title = 'Expand to full screen';
+            expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>`;
+        }
+    } else {
+        // Expand to full screen
+        overlay.style.height = '100vh';
+        if (mainContent) {
+            mainContent.style.paddingTop = '100vh';
+        }
+        if (expandBtn) {
+            expandBtn.title = 'Collapse';
+            expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>`;
+        }
+    }
+};
+
+// Document cycling functions
+window.previousDocument = function() {
+    if (!window.simulationDocuments || window.simulationDocuments.length <= 1) return;
+    
+    window.currentDocumentIndex--;
+    if (window.currentDocumentIndex < 0) {
+        window.currentDocumentIndex = window.simulationDocuments.length - 1;
+    }
+    
+    switchToDocument(window.currentDocumentIndex);
+};
+
+window.nextDocument = function() {
+    if (!window.simulationDocuments || window.simulationDocuments.length <= 1) return;
+    
+    window.currentDocumentIndex++;
+    if (window.currentDocumentIndex >= window.simulationDocuments.length) {
+        window.currentDocumentIndex = 0;
+    }
+    
+    switchToDocument(window.currentDocumentIndex);
+};
+
+function switchToDocument(index) {
+    console.log('Switching to document', index);
+    
+    // Check if we have a run_id for this document
+    if (!window.simulationRunIds || !window.simulationRunIds[index]) {
+        console.error('No run_id available for document', index);
+        alert('Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.');
+        return;
+    }
+    
+    const runId = window.simulationRunIds[index];
+    console.log('Switching to run_id:', runId);
+    
+    // Clear existing simulation artifacts
+    clearSimulationArtifacts();
+    
+    // Update counter
+    updateDocumentCounter();
+    
+    // Show loading indicator
+    const loadingIndicator = document.getElementById('simulation-loading-indicator');
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'flex';
+    }
+    
+    // Hide view mode selector during reload
+    const viewModeSelector = document.getElementById('viewModeSelector');
+    if (viewModeSelector) {
+        viewModeSelector.style.display = 'none';
+    }
+    
+    // Start polling for this run_id (will use cached results if already complete)
+    initSimulationResults(runId);
+}
+
+function clearSimulationArtifacts() {
+    // Clear graph
+    const svg = d3.select("#pipeline-graph");
+    if (svg) {
+        svg.selectAll("*").remove();
+    }
+    
+    // Remove all simulation badges and indicators from pipeline editor
+    document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
+    document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
+    document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
+    
+    // Remove dimming effect
+    document.querySelectorAll('.simulation-dimmed').forEach(el => {
+        el.classList.remove('simulation-dimmed');
+    });
+    
+    // Close any open tooltips
+    const dataFlowTooltip = document.getElementById('data-flow-tooltip');
+    if (dataFlowTooltip) {
+        dataFlowTooltip.remove();
+    }
+    
+    const linkTooltip = document.querySelector('.d3-link-tooltip');
+    if (linkTooltip) {
+        linkTooltip.remove();
+    }
+    
+    // Clear text view
+    const textViewContent = document.getElementById('textViewContent');
+    if (textViewContent) {
+        textViewContent.innerHTML = '';
+    }
+}
+
+function updateDocumentCounter() {
+    const counter = document.getElementById('documentCounter');
+    const prevBtn = document.getElementById('prevDocBtn');
+    const nextBtn = document.getElementById('nextDocBtn');
+    
+    if (counter && window.simulationDocuments) {
+        const total = window.simulationDocuments.length;
+        const current = window.currentDocumentIndex + 1;
+        counter.textContent = `${current} / ${total}`;
+        
+        // Enable/disable buttons
+        if (prevBtn) prevBtn.disabled = total <= 1;
+        if (nextBtn) nextBtn.disabled = total <= 1;
+    }
+}
+
 // Global cleanup function
 window.cleanupSimulation = function() {
     // Remove overlay
@@ -825,23 +1078,21 @@ window.cleanupSimulation = function() {
     }
     
     // Remove all simulation artifacts
-    document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
-    document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
-    document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
+    clearSimulationArtifacts();
     
-    // Close any open tooltips
-    const dataFlowTooltip = document.getElementById('data-flow-tooltip');
-    if (dataFlowTooltip) {
-        dataFlowTooltip.remove();
-    }
-    
-    const linkTooltip = document.querySelector('.d3-link-tooltip');
-    if (linkTooltip) {
-        linkTooltip.remove();
-    }
+    // Clear document storage
+    window.simulationDocuments = [];
+    window.currentDocumentIndex = 0;
 };
 
 function initSimulationResults(runId) {
+    // Prevent double polling
+    if (window.currentPollingRunId === runId) {
+        console.log('Already polling for run_id:', runId, '- skipping duplicate');
+        return;
+    }
+    window.currentPollingRunId = runId;
+    
     let pollCount = 0;
     const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
     const pollInterval = 250; // Poll every 250ms for faster updates
@@ -1050,16 +1301,56 @@ function initSimulationResults(runId) {
                                     // Process all filter plugins
                                     processPlugins(components.filter, lastNodeId);
                                     
-                                    // Mark executed plugins in the editor with visual indicators
-                                    markExecutedPlugins(nodes, originalEvent);
+                                    // Store simulation data globally for view switching
+                                    window.simulationData = { nodes, links };
                                     
-                                    // Create the force-directed graph
-                                    createForceDirectedGraph({ nodes, links });
+                                    // Check if we're in text mode (modal-based) or overlay mode
+                                    const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
+                                    const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
                                     
-                                    // Hide loading indicator
-                                    const loadingIndicator = document.getElementById('simulation-loading-indicator');
-                                    if (loadingIndicator) {
-                                        loadingIndicator.style.display = 'none';
+                                    if (isTextMode) {
+                                        // Text Mode: Skip graph creation, just dispatch event for modal
+                                        window.dispatchEvent(new CustomEvent('simulationDataReady', { 
+                                            detail: { nodes, links } 
+                                        }));
+                                    } else {
+                                        // Overlay Mode: Mark plugins and create graph
+                                        markExecutedPlugins(nodes, originalEvent);
+                                        createForceDirectedGraph({ nodes, links });
+                                        
+                                        // Show view mode selector in overlay
+                                        const viewModeSelector = document.getElementById('viewModeSelector');
+                                        console.log('Looking for viewModeSelector:', viewModeSelector);
+                                        if (viewModeSelector) {
+                                            console.log('Setting viewModeSelector display to flex');
+                                            viewModeSelector.style.display = 'flex';
+                                            console.log('viewModeSelector display is now:', viewModeSelector.style.display);
+                                        } else {
+                                            console.error('viewModeSelector element not found in DOM');
+                                        }
+                                        
+                                        // Show document navigation if multiple documents
+                                        console.log('Checking for document navigation:', window.simulationDocuments ? window.simulationDocuments.length : 0, 'documents');
+                                        if (window.simulationDocuments && window.simulationDocuments.length > 1) {
+                                            const docNav = document.getElementById('documentNavigation');
+                                            console.log('Document navigation element:', docNav);
+                                            if (docNav) {
+                                                docNav.style.display = 'flex';
+                                                updateDocumentCounter();
+                                                console.log('Navigation buttons shown');
+                                            }
+                                        } else {
+                                            console.log('Not showing navigation - only', window.simulationDocuments ? window.simulationDocuments.length : 0, 'documents');
+                                        }
+                                        
+                                        // Hide loading indicator
+                                        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+                                        if (loadingIndicator) {
+                                            loadingIndicator.style.display = 'none';
+                                        }
+                                        
+                                        // Clear polling flag
+                                        window.currentPollingRunId = null;
                                     }
                                 } else {
                                     console.error('Components variable not accessible or snapshots missing');
@@ -1070,6 +1361,7 @@ function initSimulationResults(runId) {
                 
                 // Stop polling if we received the final event
                 if (receivedFinal) {
+                    window.currentPollingRunId = null;
                     return;
                 }
                 

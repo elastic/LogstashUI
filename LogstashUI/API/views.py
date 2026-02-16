@@ -860,3 +860,154 @@ def GetLogs(request):
     except Exception as e:
         logger.error(f"Error fetching logs for connection {connection_id}: {e}")
         return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)
+
+
+@login_required
+def GetElasticsearchConnections(request):
+    """
+    Get all Elasticsearch connections for simulation input
+    """
+    try:
+        # Use existing function that returns connections with ES clients
+        connections_list = get_elastic_connections_from_list()
+        
+        # Format for dropdown: extract id and name
+        connections = [{'id': conn['id'], 'name': conn['name']} for conn in connections_list]
+        
+        return JsonResponse({"connections": connections})
+    except Exception as e:
+        logger.error(f"Error fetching Elasticsearch connections: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def GetElasticsearchIndices(request):
+    """
+    Get Elasticsearch indices with typeahead support
+    """
+    from Core.views import get_elasticsearch_indices
+    
+    connection_id = request.GET.get("connection_id")
+    pattern = request.GET.get("pattern", "*")
+    
+    if not connection_id:
+        return JsonResponse({"error": "connection_id is required"}, status=400)
+    
+    try:
+        indices = get_elasticsearch_indices(connection_id, pattern)
+        return JsonResponse({"indices": indices})
+    except Exception as e:
+        logger.error(f"Error fetching Elasticsearch indices: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def GetElasticsearchFields(request):
+    """
+    Get field mappings from an Elasticsearch index
+    """
+    from Core.views import get_elasticsearch_field_mappings
+    
+    connection_id = request.GET.get("connection_id")
+    index = request.GET.get("index")
+    
+    if not connection_id or not index:
+        return JsonResponse({"error": "connection_id and index are required"}, status=400)
+    
+    try:
+        fields = get_elasticsearch_field_mappings(connection_id, index)
+        return JsonResponse({"fields": fields})
+    except Exception as e:
+        logger.error(f"Error fetching Elasticsearch fields: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def QueryElasticsearchDocuments(request):
+    """
+    Query Elasticsearch documents for simulation
+    """
+    from Core.views import query_elasticsearch_documents
+    
+    connection_id = request.POST.get("connection_id")
+    index = request.POST.get("index")
+    query_method = request.POST.get("query_method")  # 'field' or 'docid'
+    
+    if not connection_id or not index:
+        return JsonResponse({"error": "connection_id and index are required"}, status=400)
+    
+    try:
+        if query_method == "docid":
+            doc_ids = request.POST.get("doc_ids", "").strip().split("\n")
+            doc_ids = [d.strip() for d in doc_ids if d.strip()]
+            documents = query_elasticsearch_documents(connection_id, index, doc_ids=doc_ids)
+        elif query_method == "entire":
+            # Entire document - fetch with all fields
+            size = int(request.POST.get("size", 10))
+            query = request.POST.get("query", "")
+            documents = query_elasticsearch_documents(
+                connection_id, index, field=None, size=size, query_string=query
+            )
+        else:  # field method
+            field = request.POST.get("field")
+            size = int(request.POST.get("size", 10))
+            query = request.POST.get("query", "")
+            
+            if not field:
+                return JsonResponse({"error": "field is required for field-based queries"}, status=400)
+            
+            documents = query_elasticsearch_documents(
+                connection_id, index, field=field, size=size, query_string=query
+            )
+        
+        return JsonResponse({"documents": documents})
+    except Exception as e:
+        logger.error(f"Error querying Elasticsearch documents: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def PreviewElasticsearchData(request):
+    """
+    Preview Elasticsearch data before running simulation
+    """
+    from Core.views import query_elasticsearch_documents
+    
+    connection_id = request.POST.get("connection_id")
+    index = request.POST.get("index")
+    query_method = request.POST.get("query_method")
+    
+    if not connection_id or not index:
+        return JsonResponse({"error": "connection_id and index are required"}, status=400)
+    
+    try:
+        # Limit preview to 3 documents max
+        preview_size = 3
+        
+        if query_method == "docid":
+            doc_ids = request.POST.get("doc_ids", "").strip().split("\n")
+            doc_ids = [d.strip() for d in doc_ids if d.strip()][:preview_size]
+            documents = query_elasticsearch_documents(connection_id, index, doc_ids=doc_ids)
+        elif query_method == "entire":
+            # Entire document - fetch with all fields
+            size = min(int(request.POST.get("size", 10)), preview_size)
+            query = request.POST.get("query", "")
+            documents = query_elasticsearch_documents(
+                connection_id, index, field=None, size=size, query_string=query
+            )
+        else:  # field method
+            field = request.POST.get("field")
+            size = min(int(request.POST.get("size", 10)), preview_size)
+            query = request.POST.get("query", "")
+            
+            if not field:
+                return JsonResponse({"error": "field is required for field-based queries"}, status=400)
+            
+            documents = query_elasticsearch_documents(
+                connection_id, index, field=field, size=size, query_string=query
+            )
+        
+        return JsonResponse({"documents": documents})
+    except Exception as e:
+        logger.error(f"Error previewing Elasticsearch data: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
