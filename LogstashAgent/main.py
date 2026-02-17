@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Path
+from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -6,8 +6,19 @@ import os
 import yaml
 import json
 import glob
+import logging
+import logging.handlers
 from pathlib import Path as PathLib
 import slots
+import log_analyzer
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s %(name)s %(funcName)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
 
@@ -50,6 +61,65 @@ def _save_pipelines_yml(pipelines: list):
         if os.path.exists(temp_path):
             os.remove(temp_path)
         raise e
+
+
+def delete_pipeline_internal(pipeline_id: str) -> bool:
+    """
+    Delete a pipeline directly without going through the HTTP API.
+    This is used by slots.py to avoid HTTP overhead during cleanup.
+    
+    Args:
+        pipeline_id: The pipeline ID to delete
+        
+    Returns:
+        True if deleted successfully, False if not found or error occurred
+    """
+    try:
+        # Load existing pipelines
+        pipelines = _load_pipelines_yml()
+        
+        # Find and remove the pipeline
+        pipeline_found = False
+        config_path = None
+        new_pipelines = []
+        
+        for pipeline in pipelines:
+            if pipeline.get('pipeline.id') == pipeline_id:
+                pipeline_found = True
+                config_path = pipeline.get('path.config')
+            else:
+                new_pipelines.append(pipeline)
+        
+        if not pipeline_found:
+            return False
+        
+        # Delete pipeline config file
+        if config_path and os.path.exists(config_path):
+            try:
+                os.remove(config_path)
+            except Exception as e:
+                logger.error(f"Failed to delete pipeline config {config_path}: {e}")
+                return False
+        
+        # Delete metadata file
+        metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
+        if os.path.exists(metadata_path):
+            try:
+                os.remove(metadata_path)
+            except Exception:
+                pass  # Non-critical if metadata deletion fails
+        
+        # Save updated pipelines.yml
+        try:
+            _save_pipelines_yml(new_pipelines)
+        except Exception as e:
+            logger.error(f"Failed to update pipelines.yml: {e}")
+            return False
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting pipeline {pipeline_id}: {e}")
+        return False
 
 
 def _load_pipeline_config(pipeline_id: str) -> Optional[str]:
@@ -382,25 +452,39 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
     if not pipelines:
         raise HTTPException(status_code=400, detail="Missing 'pipelines' field or empty pipeline list")
     
-    # Check if slot already exists with same content
+    # Check if a slot with this exact configuration already exists
     content_hash = slots._compute_pipeline_hash(pipelines)
-    existing_slot = None
-    for slot_id, slot_data in slots.get_slot_state().items():
-        if slot_data.get('content_hash') == content_hash:
-            existing_slot = slot_id
-            break
+    existing_slots = slots.get_slot_state()
+    slot_existed_before = any(
+        slot_data.get('content_hash') == content_hash 
+        for slot_data in existing_slots.values()
+    )
     
-    # Allocate or reuse slot
+    # Allocate or reuse slot (allocate_slot handles hash checking internally)
     slot_id = slots.allocate_slot(pipeline_name, pipelines)
     
     if slot_id is None:
         raise HTTPException(status_code=500, detail="Failed to allocate slot")
     
-    # If slot is new or changed, create the pipelines
-    reused = existing_slot is not None
+    # If the slot existed before with the same hash, it's reused
+    reused = slot_existed_before
     
-    if not reused:
-        # Create the slot pipelines in Logstash
+    logger.info(f"Slot {slot_id} - reused: {reused}, hash: {content_hash[:8]}...")
+    
+    # Check if pipelines actually exist when reusing a slot
+    # They may have been deleted during previous failure cleanup or eviction
+    pipelines_exist = False
+    if reused:
+        # Check if the first pipeline exists in Logstash
+        first_pipeline_name = f"slot{slot_id}-filter1"
+        pipeline_status = log_analyzer.get_running_pipelines()
+        if pipeline_status:
+            running_pipelines = pipeline_status.get('running_pipelines', [])
+            pipelines_exist = first_pipeline_name in running_pipelines
+            logger.info(f"Slot {slot_id} reused - pipelines exist: {pipelines_exist}")
+    
+    # Create pipelines if they don't exist (new slot or reused slot with deleted pipelines)
+    if not reused or not pipelines_exist:
         try:
             await _create_slot_pipelines(slot_id, pipelines)
         except Exception as e:
@@ -467,6 +551,33 @@ output {{
         
         # Use the existing put_pipeline logic
         await put_pipeline(pipeline_name, pipeline_body)
+    
+    # Verify all slot pipelines loaded successfully
+    # Use longer retry window when system is under load
+    verification_success = await slots.verify_slot_pipelines_loaded(
+        slot_id, 
+        len(pipelines),
+        max_retries=10,  # Increased from default 5
+        retry_delay=2.0   # Increased from default 1.0
+    )
+    if not verification_success:
+        # Delete the failed pipelines from Logstash to prevent log pollution
+        logger.warning(f"Verification failed for slot {slot_id}, cleaning up pipelines")
+        for idx in range(1, len(pipelines) + 1):
+            pipeline_name = f"slot{slot_id}-filter{idx}"
+            try:
+                await delete_pipeline(pipeline_name)
+                logger.info(f"Deleted failed pipeline {pipeline_name}")
+            except Exception as cleanup_error:
+                logger.error(f"Error deleting failed pipeline {pipeline_name}: {cleanup_error}")
+        
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "message": f"Slot {slot_id} pipelines created but failed to load in Logstash. Check logs for errors.",
+                "slot_id": slot_id
+            }
+        )
 
 
 @app.get("/_logstash/slots")
@@ -484,3 +595,80 @@ async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=
         raise HTTPException(status_code=404, detail=f"Slot {slot_id} not found")
     
     return {"acknowledged": True, "slot_id": slot_id}
+
+
+@app.get("/_logstash/pipeline/{pipeline_id}/logs")
+async def get_pipeline_logs(
+    pipeline_id: str = Path(..., description="Pipeline ID"),
+    max_entries: int = Query(50, description="Maximum number of log entries to return", ge=1, le=500),
+    min_level: str = Query("WARN", description="Minimum log level (DEBUG, INFO, WARN, ERROR)"),
+    min_timestamp: int = Query(None, description="Minimum timestamp in milliseconds. Only logs at or after this time will be included.")
+):
+    """
+    Get log entries related to a specific pipeline.
+    
+    This endpoint searches Logstash JSON logs for entries related to the given pipeline,
+    including errors, warnings, and other diagnostic information.
+    
+    Args:
+        pipeline_id: The pipeline ID to search for (e.g., "slot4-filter1")
+        max_entries: Maximum number of log entries to return (default: 50, max: 500)
+        min_level: Minimum log level to include (default: WARN)
+        min_timestamp: Optional minimum timestamp in milliseconds. Only logs at or after this time will be included.
+    
+    Returns:
+        JSON response with:
+        - pipeline_id: The pipeline ID searched
+        - log_count: Number of log entries found
+        - logs: List of log entries with full context
+    """
+    try:
+        # Fetch logs using log_analyzer
+        logs = log_analyzer.find_related_logs(
+            pipeline_id=pipeline_id,
+            max_entries=max_entries,
+            min_level=min_level.upper(),
+            min_timestamp=min_timestamp
+        )
+        
+        return {
+            "pipeline_id": pipeline_id,
+            "log_count": len(logs),
+            "logs": logs
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching logs for pipeline {pipeline_id}: {str(e)}"
+        )
+
+
+@app.get("/_logstash/pipelines/status")
+async def get_pipelines_status():
+    """
+    Get the current status of all running pipelines from Logstash logs.
+    
+    Returns:
+        JSON response with:
+        - running_pipelines: List of pipeline IDs currently running
+        - non_running_pipelines: List of pipeline IDs not running
+        - count: Total count of running pipelines
+        - timestamp: When this status was logged
+    """
+    try:
+        status = log_analyzer.get_running_pipelines()
+        
+        if not status:
+            raise HTTPException(
+                status_code=404,
+                detail="No pipeline status found in logs. Logstash may not be running or logs not available."
+            )
+        
+        return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching pipeline status: {str(e)}"
+        )

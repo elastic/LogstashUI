@@ -37,9 +37,10 @@
         // Create and show the overlay
         const overlay = document.createElement('div');
         overlay.id = 'simulation-overlay';
-        overlay.className = 'fixed top-0 left-0 right-0 z-50 bg-gray-900 border-b-2 border-green-500 shadow-lg';
+        overlay.className = 'sticky top-0 z-40 bg-gray-900 border-b-2 border-green-500 shadow-lg rounded-lg';
         overlay.style.height = '150px';
         overlay.setAttribute('data-run-id', '{{ run_id }}');
+        overlay.setAttribute('data-slot-id', '{{ slot_id }}');
         
         overlay.innerHTML = `
             <div class="h-full flex flex-col">
@@ -48,11 +49,7 @@
                         <span class="text-green-400 font-semibold">✓ Simulation Results</span>
                         <span class="text-xs text-gray-400">Run ID: {{ run_id }}</span>
                         <span class="text-xs text-gray-400">{{ filter_count }} filters</span>
-                        <div id="simulation-loading-indicator" class="flex items-center gap-2">
-                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
-                            <span class="text-xs text-gray-400">Loading results...</span>
-                        </div>
-                        <div id="documentNavigation" style="display: none;" class="flex items-center gap-2 ml-4 px-3 py-1 bg-gray-700 rounded-lg">
+                        <div id="documentNavigation" style="display: none;" class="flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-lg">
                             <button onclick="previousDocument()" id="prevDocBtn" class="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" title="Previous document">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -65,7 +62,11 @@
                                 </svg>
                             </button>
                         </div>
-                        <div id="viewModeSelector" style="display: none;" class="flex items-center gap-3 ml-4 px-3 py-1 bg-gray-700 rounded-lg">
+                        <div id="simulation-loading-indicator" class="flex items-center gap-2">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
+                            <span class="text-xs text-gray-400">Loading results...</span>
+                        </div>
+                        <div id="viewModeSelector" style="display: none;" class="flex items-center gap-3 px-3 py-1 bg-gray-700 rounded-lg">
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="radio" name="overlayViewMode" value="debugger" checked onchange="switchOverlayView('debugger')" class="text-blue-600 focus:ring-blue-500">
                                 <span class="text-sm text-gray-300">Overlay</span>
@@ -77,6 +78,15 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
+                        <button onclick="viewSimulationLogs()" 
+                                id="viewLogsBtn"
+                                class="text-blue-400 hover:text-blue-300 px-3 py-1 rounded hover:bg-gray-700 flex items-center gap-2 text-sm"
+                                title="View Logstash logs for this simulation">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            View Logs
+                        </button>
                         <button onclick="toggleOverlayExpand()" 
                                 id="expandOverlayBtn"
                                 class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700"
@@ -91,7 +101,7 @@
                         </button>
                     </div>
                 </div>
-                <div id="results-container" class="flex-1 bg-gray-900 overflow-x-auto">
+                <div id="results-container" class="flex-1 bg-gray-900 overflow-x-auto overflow-y-hidden">
                     <svg id="pipeline-graph" width="100%" height="100" class="bg-gray-900"></svg>
                 </div>
                 <div id="textViewContainer" style="display: none;" class="flex-1 bg-gray-900 overflow-y-auto p-4">
@@ -102,11 +112,13 @@
             </div>
         `;
         
-        document.body.appendChild(overlay);
-        
-        // Add padding to the main content to prevent overlap
-        const mainContent = document.querySelector('main') || document.body;
-        mainContent.style.paddingTop = '150px';
+        // Insert overlay at the beginning of the content area (after navigation)
+        const contentArea = document.querySelector('main') || document.querySelector('.container') || document.body;
+        if (contentArea.firstChild) {
+            contentArea.insertBefore(overlay, contentArea.firstChild);
+        } else {
+            contentArea.appendChild(overlay);
+        }
         
         // Initialize the simulation results polling with run_id
         initSimulationResults('{{ run_id }}');

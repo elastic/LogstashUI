@@ -32,256 +32,13 @@ import logging
 from django.views.decorators.csrf import csrf_exempt
 from collections import deque
 from threading import Lock
+import requests
 
 logger = logging.getLogger(__name__)
 
 # Global storage for simulation results (in-memory for now)
 simulation_results = deque(maxlen=1000)
 simulation_lock = Lock()
-
-
-def flatten_filter_plugins(filter_plugins):
-    """
-    Flatten filter plugins, expanding conditionals into individual trackable steps.
-    Uses branch markers to handle field mutations and else blocks cleanly.
-    
-    Each conditional gets:
-    - A unique branch marker field (__branch_cond_N) for execution control
-    - User-visible metadata fields (conditional_N_*) for tracking which branch was taken
-    - Individual steps for each plugin inside the conditional
-    
-    Args:
-        filter_plugins: List of filter plugin dictionaries
-        
-    Returns:
-        List of dicts with:
-        - 'plugin': the plugin config
-        - 'condition': the condition under which it should execute (or None)
-        - 'branch_info': metadata about which branch this came from
-    """
-    flattened = []
-    conditional_counter = 0
-    
-    def convert_logstash_fields_to_ruby(condition):
-        """
-        Convert Logstash field references to Ruby event.get() calls.
-        Examples:
-          [network.transport] -> event.get("[network.transport]")
-          [type] -> event.get("[type]")
-          [event.code] -> event.get("[event.code]")
-        """
-        import re
-        # Match field references: [fieldname] or [field.subfield]
-        # Pattern: \[([a-zA-Z0-9_.@-]+)\]
-        pattern = r'\[([a-zA-Z0-9_.@-]+)\]'
-        
-        def replace_field(match):
-            field_name = match.group(1)
-            return f'event.get("[{field_name}]")'
-        
-        return re.sub(pattern, replace_field, condition)
-    
-    def normalize_condition_quotes(condition):
-        """
-        Convert single quotes to double quotes in conditions so the Ruby code
-        only contains double quotes, allowing ComponentToPipeline to wrap in single quotes.
-        This handles array syntax like: in ['a', 'b'] -> in ["a", "b"]
-        """
-        return condition.replace("'", '"')
-    
-    def escape_for_ruby_double_quoted_string(text):
-        """
-        Escape text for storing inside Ruby double-quoted strings.
-        Since we're using double quotes in our Ruby code, we need to escape
-        double quotes and backslashes for the metadata storage.
-        """
-        # Escape backslashes first, then double quotes, then newlines
-        return text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-    
-    for plugin in filter_plugins:
-        if plugin['plugin'] == 'if':
-            conditional_counter += 1
-            branch_marker = f"__branch_cond_{conditional_counter}"
-            original_plugin_id = plugin['id']
-            
-            if_condition = plugin['config']['condition']
-            if_plugins = plugin['config']['plugins']
-            else_ifs = plugin['config'].get('else_ifs', [])
-            else_block = plugin['config'].get('else')
-            
-            # Convert Logstash field references to Ruby, normalize quotes, and escape for storage
-            ruby_condition = convert_logstash_fields_to_ruby(if_condition)
-            ruby_condition = normalize_condition_quotes(ruby_condition)
-            escaped_if_condition = escape_for_ruby_double_quoted_string(normalize_condition_quotes(if_condition))
-            
-            # Step 1: Set branch marker for if - this determines which branch to take
-            # Use double quotes consistently so ComponentToPipeline wraps in single quotes
-            ruby_code = f"""
-if !event.get("[{branch_marker}]") && ({ruby_condition})
-  event.set("[{branch_marker}]", "if")
-  event.set("[conditional_{conditional_counter}_branch]", "if")
-  event.set("[conditional_{conditional_counter}_id]", "{original_plugin_id}")
-  event.set("[conditional_{conditional_counter}_condition]", "{escaped_if_condition}")
-end
-""".strip()
-            
-            flattened.append({
-                'plugin': {
-                    'id': f"{original_plugin_id}_set_if",
-                    'type': 'filter',
-                    'plugin': 'ruby',
-                    'config': {
-                        'code': ruby_code
-                    }
-                },
-                'condition': None,  # Always execute to check
-                'branch_info': {
-                    'type': 'branch_decision',
-                    'conditional_id': conditional_counter,
-                    'original_plugin_id': original_plugin_id,
-                    'branch': 'if'
-                }
-            })
-            
-            # Step 2: Add plugins from if block, conditioned on branch marker
-            for if_plugin in if_plugins:
-                # Recursively flatten if there are nested conditionals
-                if if_plugin['plugin'] == 'if':
-                    nested_flattened = flatten_filter_plugins([if_plugin])
-                    for nested_item in nested_flattened:
-                        # Wrap nested conditions with parent condition
-                        if nested_item['condition']:
-                            nested_item['condition'] = f"[{branch_marker}] == 'if' and ({nested_item['condition']})"
-                        else:
-                            nested_item['condition'] = f"[{branch_marker}] == 'if'"
-                        flattened.append(nested_item)
-                else:
-                    flattened.append({
-                        'plugin': if_plugin,
-                        'condition': f"[{branch_marker}] == 'if'",
-                        'branch_info': {
-                            'type': 'if',
-                            'condition': if_condition,
-                            'conditional_id': conditional_counter,
-                            'original_plugin_id': original_plugin_id
-                        }
-                    })
-            
-            # Step 3: Set branch markers for else if blocks
-            for idx, else_if in enumerate(else_ifs):
-                elif_condition = else_if['condition']
-                elif_label = f"elif_{idx}"
-                ruby_elif_condition = convert_logstash_fields_to_ruby(elif_condition)
-                ruby_elif_condition = normalize_condition_quotes(ruby_elif_condition)
-                escaped_elif_condition = escape_for_ruby_double_quoted_string(normalize_condition_quotes(elif_condition))
-                
-                ruby_code = f"""
-if !event.get("[{branch_marker}]") && ({ruby_elif_condition})
-  event.set("[{branch_marker}]", "{elif_label}")
-  event.set("[conditional_{conditional_counter}_branch]", "else_if")
-  event.set("[conditional_{conditional_counter}_id]", "{original_plugin_id}")
-  event.set("[conditional_{conditional_counter}_condition]", "{escaped_elif_condition}")
-end
-""".strip()
-                
-                flattened.append({
-                    'plugin': {
-                        'id': f"{original_plugin_id}_set_elif_{idx}",
-                        'type': 'filter',
-                        'plugin': 'ruby',
-                        'config': {
-                            'code': ruby_code
-                        }
-                    },
-                    'condition': None,
-                    'branch_info': {
-                        'type': 'branch_decision',
-                        'conditional_id': conditional_counter,
-                        'original_plugin_id': original_plugin_id,
-                        'branch': f'else_if_{idx}'
-                    }
-                })
-                
-                # Add plugins from else if block
-                for elif_plugin in else_if['plugins']:
-                    if elif_plugin['plugin'] == 'if':
-                        nested_flattened = flatten_filter_plugins([elif_plugin])
-                        for nested_item in nested_flattened:
-                            if nested_item['condition']:
-                                nested_item['condition'] = f"[{branch_marker}] == '{elif_label}' and ({nested_item['condition']})"
-                            else:
-                                nested_item['condition'] = f"[{branch_marker}] == '{elif_label}'"
-                            flattened.append(nested_item)
-                    else:
-                        flattened.append({
-                            'plugin': elif_plugin,
-                            'condition': f"[{branch_marker}] == '{elif_label}'",
-                            'branch_info': {
-                                'type': 'else_if',
-                                'condition': elif_condition,
-                                'conditional_id': conditional_counter,
-                                'original_plugin_id': original_plugin_id
-                            }
-                        })
-            
-            # Step 4: Set branch marker for else block
-            if else_block and else_block.get('plugins'):
-                ruby_code = f"""
-if !event.get("[{branch_marker}]")
-  event.set("[{branch_marker}]", "else")
-  event.set("[conditional_{conditional_counter}_branch]", "else")
-  event.set("[conditional_{conditional_counter}_id]", "{original_plugin_id}")
-  event.set("[conditional_{conditional_counter}_condition]", "else")
-end
-""".strip()
-                
-                flattened.append({
-                    'plugin': {
-                        'id': f"{original_plugin_id}_set_else",
-                        'type': 'filter',
-                        'plugin': 'ruby',
-                        'config': {
-                            'code': ruby_code
-                        }
-                    },
-                    'condition': None,
-                    'branch_info': {
-                        'type': 'branch_decision',
-                        'conditional_id': conditional_counter,
-                        'original_plugin_id': original_plugin_id,
-                        'branch': 'else'
-                    }
-                })
-                
-                # Add plugins from else block
-                for else_plugin in else_block['plugins']:
-                    if else_plugin['plugin'] == 'if':
-                        nested_flattened = flatten_filter_plugins([else_plugin])
-                        for nested_item in nested_flattened:
-                            if nested_item['condition']:
-                                nested_item['condition'] = f"[{branch_marker}] == 'else' and ({nested_item['condition']})"
-                            else:
-                                nested_item['condition'] = f"[{branch_marker}] == 'else'"
-                            flattened.append(nested_item)
-                    else:
-                        flattened.append({
-                            'plugin': else_plugin,
-                            'condition': f"[{branch_marker}] == 'else'",
-                            'branch_info': {
-                                'type': 'else',
-                                'conditional_id': conditional_counter,
-                                'original_plugin_id': original_plugin_id
-                            }
-                        })
-        else:
-            # Regular plugin (not conditional)
-            flattened.append({
-                'plugin': plugin,
-                'condition': None,
-                'branch_info': None
-            })
-    
-    return flattened
 
 
 def require_admin_role(view_func):
@@ -471,11 +228,12 @@ event.set('[conditional_branches][{conditional_id}]', 'else')
                     current_step = step_counter[0]
                     
                     # Add Ruby instrumentation after this plugin
+                    # Note: run_id is NOT included here - it's added to the event data when sent to Logstash
+                    # This keeps the instrumentation static so the pipeline config hash is consistent
                     instrumentation_code = f"""
 # Update step tracking
 event.set('[simulation_step]', {current_step})
 event.set('[step_id]', '{plugin['id']}')
-event.set('[run_id]', '{run_id}')
 
 # Create snapshot of current event state
 snapshot = {{}}
@@ -488,7 +246,7 @@ end
 # Store snapshot under the plugin ID
 event.set('[snapshots][{plugin['id']}]', snapshot)
 """.strip()
-                    
+
                     instrumentation_plugin = {
                         "id": f"instrumentation_{current_step}",
                         "type": "filter",
@@ -497,14 +255,14 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                             "code": instrumentation_code
                         }
                     }
-                    
+
                     instrumented.append(instrumentation_plugin)
-            
+
             return instrumented
-        
+
         # Build instrumented filter list
         instrumented_filters = instrument_plugins(filter_plugins)
-        
+
         # Count total plugins including nested ones in conditionals
         def count_all_plugins(plugins_list):
             """Recursively count all plugins, including those nested in conditionals."""
@@ -514,13 +272,13 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                     # Count nested plugins in if block
                     if 'plugins' in plugin.get('config', {}):
                         count += count_all_plugins(plugin['config']['plugins'])
-                    
+
                     # Count nested plugins in else_ifs
                     if 'else_ifs' in plugin.get('config', {}):
                         for else_if in plugin['config']['else_ifs']:
                             if 'plugins' in else_if:
                                 count += count_all_plugins(else_if['plugins'])
-                    
+
                     # Count nested plugins in else
                     if 'else' in plugin.get('config', {}) and plugin['config']['else']:
                         if 'plugins' in plugin['config']['else']:
@@ -529,9 +287,9 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                     # Regular plugin - count it
                     count += 1
             return count
-        
+
         total_plugin_count = count_all_plugins(filter_plugins)
-        
+
         # Add HTTP output that only sends cloned events (identified by type field)
         output_plugins = [
             {
@@ -546,27 +304,27 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                 }
             }
         ]
-        
+
         # Convert filter components to Logstash config
         filter_converter = logstash_config_parse.ComponentToPipeline({'filter': instrumented_filters}, test=False)
         filter_config = filter_converter.components_to_logstash_config()
-        
+
         # Convert output components to Logstash config
         output_converter = logstash_config_parse.ComponentToPipeline({'output': output_plugins}, test=False)
         output_config = output_converter.components_to_logstash_config()
-        
+
         # Extract just the content (remove 'filter {' and 'output {' wrappers)
         # The LogstashAgent will add these wrappers when building the complete pipeline
         filter_lines = filter_config.strip().split('\n')
         filter_content = '\n'.join(filter_lines[1:-1]) if len(filter_lines) > 2 else ''
-        
+
         output_lines = output_config.strip().split('\n')
         output_content = '\n'.join(output_lines[1:-1]) if len(output_lines) > 2 else ''
-        
+
         # Determine protocol based on DEBUG mode
         protocol = "http" if settings.DEBUG else "https"
         logstash_agent_url = f"{protocol}://127.0.0.1:9500"
-        
+
         # Prepare the pipeline data for slot allocation
         # The slots system will hash this to detect configuration changes
         pipeline_data = {
@@ -581,21 +339,74 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             "pipelines": [pipeline_data]
         }
         
+        slot_id = None
         try:
             response = requests.post(
                 f"{logstash_agent_url}/_logstash/slots/allocate",
                 json=slot_allocation_body,
                 verify=False,
-                timeout=10
+                timeout=30  # Increased timeout for slot eviction + allocation when slots are full
             )
+            
+            # Try to extract slot_id from response before checking status
+            # This way we have it even if verification fails
+            try:
+                response_data = response.json()
+                slot_id = response_data.get('slot_id')
+                reused = response_data.get('reused', False)
+            except Exception:
+                pass
+            
+            # Now check if the request was successful
             response.raise_for_status()
-            slot_data = response.json()
-            slot_id = slot_data.get('slot_id')
-            reused = slot_data.get('reused', False)
+            
             logger.info(f"Allocated slot {slot_id} (reused: {reused})")
+            
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to allocate slot: {e}")
-            return HttpResponse(f'<div class="text-red-400">Error allocating slot: {str(e)}</div>')
+            logger.error(f"slot_id extracted before error: {slot_id}")
+            
+            # If slot_id wasn't extracted from successful response, try to get it from error response
+            if not slot_id and hasattr(e, 'response') and e.response is not None:
+                try:
+                    logger.info(f"Error response status: {e.response.status_code}")
+                    logger.info(f"Error response content: {e.response.text[:500]}")
+                    
+                    error_data = e.response.json()
+                    logger.info(f"Error response JSON: {error_data}")
+                    
+                    # Check if detail is a dict with slot_id (new format)
+                    detail = error_data.get('detail')
+                    logger.info(f"Error detail type: {type(detail)}, value: {detail}")
+                    
+                    if isinstance(detail, dict):
+                        slot_id = detail.get('slot_id')
+                        logger.info(f"Extracted slot_id {slot_id} from error response detail dict")
+                    elif isinstance(detail, str) and 'Slot' in detail:
+                        # Fallback: try to extract from string
+                        import re
+                        match = re.search(r'Slot (\d+)', detail)
+                        if match:
+                            slot_id = int(match.group(1))
+                            logger.info(f"Extracted slot_id {slot_id} from error detail string")
+                except Exception as extract_error:
+                    logger.error(f"Could not extract slot_id from error detail: {extract_error}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            
+            # Build error response with slot_id if we have it
+            slot_id_attr = f' data-slot-id="{slot_id}"' if slot_id else ""
+            # Mark that the pipeline failed so JavaScript doesn't re-check status
+            failed_attr = ' data-pipeline-failed="true"'
+            
+            if slot_id:
+                logger.info(f"Including slot_id {slot_id} in error response for logs access")
+            else:
+                logger.warning("No slot_id available for error response - logs will not be accessible")
+            
+            error_html = f'<div class="text-red-400"{slot_id_attr}{failed_attr}>Error allocating slot: {str(e)}</div>'
+            logger.info(f"Returning error HTML: {error_html}")
+            return HttpResponse(error_html)
         
         # Wait for Logstash to reload the pipeline (only if new slot)
         import time
@@ -637,7 +448,7 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
         # If no log_text was provided, this was just a slot allocation - return simple success message
         if not log_text:
             result_html = f'''
-            <div class="p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
+            <div class="p-4 bg-blue-900/30 border border-blue-600 rounded-lg" data-slot-id="{slot_id}">
                 <h3 class="text-lg font-semibold text-blue-400 mb-2">✓ Slot Allocated</h3>
                 <p class="text-blue-200">Slot {slot_id} {"(reused - same config)" if reused else "(new)"} with {len(filter_plugins)} instrumented filter(s)</p>
             </div>
@@ -732,3 +543,152 @@ def GetSimulationResults(request):
         logger.error(f"Error in GetSimulationResults: {e}")
         logger.error(traceback.format_exc())
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def CheckIfPipelineLoaded(request):
+    """
+    Check if a pipeline successfully loaded in the Logstash instance.
+    Calls LogstashAgent's is_pipeline_running endpoint to verify pipeline status.
+    
+    Expected GET parameters:
+        - pipeline_name: The name of the pipeline to check
+    
+    Returns:
+        JSON response with:
+        - is_running: Boolean indicating if pipeline is running
+        - pipeline_name: The pipeline name that was checked
+        - error: Error message if check failed
+    """
+    try:
+        pipeline_name = request.GET.get('pipeline_name')
+        
+        if not pipeline_name:
+            return JsonResponse({
+                "error": "pipeline_name parameter is required"
+            }, status=400)
+        
+        # Call LogstashAgent to check pipeline status
+        logstash_agent_url = "http://localhost:9500/_logstash/pipelines/status"
+        
+        try:
+            response = requests.get(logstash_agent_url, timeout=5)
+            response.raise_for_status()
+            
+            data = response.json()
+            running_pipelines = data.get('running_pipelines', [])
+            is_running = pipeline_name in running_pipelines
+            
+            logger.info(f"CheckIfPipelineLoaded: Pipeline '{pipeline_name}' running status: {is_running}")
+            
+            return JsonResponse({
+                "is_running": is_running,
+                "pipeline_name": pipeline_name,
+                "running_pipelines": running_pipelines
+            }, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to connect to LogstashAgent: {e}")
+            return JsonResponse({
+                "error": f"Failed to connect to LogstashAgent: {str(e)}",
+                "is_running": False,
+                "pipeline_name": pipeline_name
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in CheckIfPipelineLoaded: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "error": str(e),
+            "is_running": False
+        }, status=500)
+
+
+@login_required
+def GetRelatedLogs(request):
+    """
+    Get log entries related to a specific slot pipeline.
+    Calls LogstashAgent's pipeline logs endpoint to fetch related logs.
+    
+    Expected GET parameters:
+        - slot_id: The slot ID to get logs for
+        - max_entries: Maximum number of log entries to return (default: 100, max: 500)
+        - min_level: Minimum log level (default: INFO, options: DEBUG, INFO, WARN, ERROR)
+    
+    Returns:
+        JSON response with:
+        - pipeline_id: The pipeline ID searched
+        - log_count: Number of log entries found
+        - logs: List of log entries
+        - error: Error message if fetch failed
+    """
+    try:
+        slot_id = request.GET.get('slot_id')
+        max_entries = int(request.GET.get('max_entries', 100))
+        min_level = request.GET.get('min_level', 'INFO').upper()
+        
+        if not slot_id:
+            return JsonResponse({
+                "error": "slot_id parameter is required"
+            }, status=400)
+        
+        # Construct the slot pipeline name
+        pipeline_id = f"slot{slot_id}-filter1"
+        
+        # Get slot creation timestamp from LogstashAgent
+        min_timestamp = None
+        try:
+            slots_response = requests.get("http://localhost:9500/_logstash/slots", timeout=5)
+            slots_response.raise_for_status()
+            slots_data = slots_response.json()
+            
+            # Find the slot and get its creation timestamp
+            slot_info = slots_data.get(str(slot_id))
+            if slot_info:
+                # Subtract 5 seconds to avoid race condition where logs are requested
+                # before pipelines have written any logs
+                min_timestamp = slot_info.get('created_at_millis')
+                if min_timestamp:
+                    min_timestamp = min_timestamp - 5000  # 5 seconds buffer
+                logger.info(f"Retrieved slot {slot_id} creation timestamp: {min_timestamp}")
+        except Exception as e:
+            logger.warning(f"Could not retrieve slot creation timestamp: {e}")
+        
+        # Call LogstashAgent to get pipeline logs
+        logstash_agent_url = f"http://localhost:9500/_logstash/pipeline/{pipeline_id}/logs"
+        params = {
+            "max_entries": min(max_entries, 500),
+            "min_level": min_level
+        }
+        
+        # Add min_timestamp if available
+        if min_timestamp:
+            params["min_timestamp"] = min_timestamp
+        
+        try:
+            response = requests.get(logstash_agent_url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            logger.info(f"GetRelatedLogs: Retrieved {data.get('log_count', 0)} logs for slot {slot_id}")
+            
+            return JsonResponse(data, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch logs from LogstashAgent: {e}")
+            return JsonResponse({
+                "error": f"Failed to fetch logs from LogstashAgent: {str(e)}",
+                "pipeline_id": pipeline_id,
+                "log_count": 0,
+                "logs": []
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in GetRelatedLogs: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "error": str(e),
+            "log_count": 0,
+            "logs": []
+        }, status=500)

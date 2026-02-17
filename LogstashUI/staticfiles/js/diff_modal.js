@@ -807,13 +807,10 @@ async function confirmSavePipeline() {
       <span class="text-green-400">${responseText}</span>
     `;
 
-        // Close the modal
-        hideDiffModal();
-
-        // Clear success message after 3 seconds
+        // Close modal after successful save
         setTimeout(() => {
-            document.getElementById('saveStatus').innerHTML = '';
-        }, 3000);
+            hideDiffModal();
+        }, 1500);
 
     } catch (error) {
         console.error('Error saving pipeline:', error);
@@ -827,3 +824,4 @@ async function confirmSavePipeline() {
         }
     }
 }
+

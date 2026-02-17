@@ -103,11 +103,11 @@
         </div>
         
         <!-- Text Input with Line Numbers -->
-        <div class="bg-gray-700 rounded-lg border border-gray-600 flex overflow-hidden">
-          <div id="logInputLineNumbers" class="bg-gray-800 text-gray-500 text-right pr-3 pl-2 pt-3 select-none font-mono text-sm overflow-hidden" style="min-width: 40px;">
+        <div class="bg-gray-700 rounded-lg border border-gray-600 flex overflow-hidden" style="max-height: 300px;">
+          <div id="logInputLineNumbers" class="bg-gray-800 text-gray-500 text-right pr-3 pl-2 pt-3 select-none font-mono text-sm overflow-hidden" style="min-width: 40px; line-height: 1.5rem;">
             <div>1</div>
           </div>
-          <textarea id="logInput" name="log_text" rows="8" class="flex-1 bg-transparent text-white p-3 font-mono text-sm resize-none focus:outline-none overflow-auto" placeholder="Paste your log line here..." spellcheck="false">{"message": "Message goes here!", "@timestamp": "2025-09-19T16:45:02.000Z"}</textarea>
+          <textarea id="logInput" name="log_text" rows="8" class="flex-1 bg-transparent text-white p-3 font-mono text-sm resize-none focus:outline-none overflow-y-auto overflow-x-auto" placeholder="Paste your log line here..." spellcheck="false" style="line-height: 1.5rem;">{"message": "Message goes here!", "@timestamp": "2025-09-19T16:45:02.000Z"}</textarea>
         </div>
       </div>
       
@@ -374,11 +374,53 @@
   function updateLineNumbers(textarea, lineNumbersContainer) {
     const lines = textarea.value.split('\n');
     const lineCount = lines.length;
-    let html = '';
+
+    // Create a mirror div to measure actual line heights
+    const mirror = document.createElement('div');
+    const computedStyle = window.getComputedStyle(textarea);
+
+    // Copy relevant styles from textarea to mirror
+    mirror.style.position = 'absolute';
+    mirror.style.visibility = 'hidden';
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.wordWrap = 'break-word';
+    mirror.style.overflowWrap = 'break-word';
+    // Calculate width minus padding to match actual text area
+    const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+    const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+    mirror.style.width = (textarea.clientWidth - paddingLeft - paddingRight) + 'px';
+    mirror.style.font = computedStyle.font;
+    mirror.style.fontSize = computedStyle.fontSize;
+    mirror.style.fontFamily = computedStyle.fontFamily;
+    mirror.style.lineHeight = computedStyle.lineHeight;
+    mirror.style.padding = '0';
+    mirror.style.border = 'none';
+    mirror.style.boxSizing = 'content-box';
+
+    document.body.appendChild(mirror);
+
+    // Get single line height
+    mirror.textContent = 'X';
+    const singleLineHeight = mirror.offsetHeight;
+
+    // Generate line numbers with measured heights for each logical line
+    let lineNumbersHTML = '';
     for (let i = 0; i < lineCount; i++) {
-      html += `<div>${i + 1}</div>`;
+      // Set mirror content to this line
+      mirror.textContent = lines[i] || ' '; // Use space for empty lines
+      const totalLineHeight = mirror.offsetHeight;
+
+      // Create line number that appears at the top of this logical line
+      // but takes up the full height so the next line number appears in the right place
+      lineNumbersHTML += `<div style="height: ${totalLineHeight}px; line-height: ${singleLineHeight}px;">${i + 1}</div>`;
     }
-    lineNumbersContainer.innerHTML = html;
+
+    // Clean up mirror
+    document.body.removeChild(mirror);
+
+    lineNumbersContainer.innerHTML = lineNumbersHTML;
+
+    // Sync scroll position
     lineNumbersContainer.scrollTop = textarea.scrollTop;
   }
   
@@ -910,12 +952,6 @@
       toast.style.transform = 'translateY(-20px)';
       setTimeout(() => toast.remove(), 300);
     }, 3000);
-  }
-  
-  // View mode switching (in modal)
-  function switchSimulationViewMode(mode) {
-    // This function is called when user changes view mode radio buttons
-    // It doesn't affect the simulation results, just the UI preference
   }
   
   // Listen for simulation data updates and display in text mode if selected

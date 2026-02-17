@@ -2,11 +2,24 @@
 set -e
 
 echo "=========================================="
-echo "  Starting LogstashAgent (StashPilot)"
+echo "  Starting LogstashAgent"
 echo "=========================================="
 
-# Start Logstash in the background
-echo "Starting Logstash with pipelines.yml..."
+# Ensure log directory exists and has proper permissions
+echo "Setting up log directory..."
+mkdir -p /var/log/logstash
+chmod 755 /var/log/logstash
+
+# Verify log4j2.properties exists
+if [ -f /etc/logstash/log4j2.properties ]; then
+    echo "✓ log4j2.properties found at /etc/logstash/log4j2.properties"
+else
+    echo "⚠ WARNING: log4j2.properties not found!"
+fi
+
+# Start Logstash in the background with explicit log4j2 config
+echo "Starting Logstash with pipelines.yml and custom logging..."
+export LS_JAVA_OPTS="-Dlog4j.configurationFile=/etc/logstash/log4j2.properties"
 /usr/share/logstash/bin/logstash --path.settings /etc/logstash &
 LOGSTASH_PID=$!
 

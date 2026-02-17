@@ -613,9 +613,23 @@ function createForceDirectedGraph(graphData) {
         // Extract the component ID from the node
         let componentId = d.id;
         
-        // For decision point nodes, extract the original conditional ID
+        // For decision point nodes, find the first plugin in the taken branch instead
         if (d.isDecisionPoint) {
-            componentId = d.conditionalId;
+            // Find the next node in the graph that is NOT a decision point
+            // This will be the first plugin in the condition branch
+            const currentStep = d.step;
+            const nextPlugin = graphData.nodes.find(node => 
+                node.step > currentStep && !node.isDecisionPoint && node.id !== 'start'
+            );
+            
+            if (nextPlugin) {
+                componentId = nextPlugin.id;
+                console.log(`Decision point clicked - focusing on first plugin in branch: ${componentId}`);
+            } else {
+                // Fallback to the condition block if no plugin found
+                componentId = d.conditionalId;
+                console.log(`No plugin found after decision point - focusing on condition block: ${componentId}`);
+            }
         }
         
         // Find the component in the editor using data-id
@@ -756,38 +770,6 @@ function createForceDirectedGraph(graphData) {
 }
 
 /**
- * Format config value for display
- */
-function formatConfigValue(value) {
-    if (value === null || value === undefined) {
-        return '';
-    }
-    
-    if (Array.isArray(value)) {
-        if (value.length === 0) return '[]';
-        const formattedItems = value.map(item => `"${String(item).replace(/"/g, '&quot;')}"`);
-        const joined = formattedItems.join(', ');
-        return joined.length > 50 ? joined.substring(0, 50) + '...' : joined;
-    }
-    
-    if (typeof value === 'object') {
-        const entries = Object.entries(value);
-        if (entries.length === 0) return '{}';
-        const formattedPairs = entries.map(([k, v]) => {
-            if (typeof v === 'object' && v !== null) {
-                return `"${k}" => {...}`;
-            }
-            return `"${k}" => "${String(v).replace(/"/g, '&quot;')}"`;
-        });
-        const joined = formattedPairs.join(', ');
-        return joined.length > 50 ? joined.substring(0, 50) + '...' : joined;
-    }
-    
-    const strValue = String(value).replace(/"/g, '&quot;');
-    return strValue.length > 30 ? strValue.substring(0, 30) + '...' : strValue;
-}
-
-/**
  * Deep diff two objects and return only the changes
  * Returns an object with added, modified, and deleted fields
  */
@@ -920,7 +902,6 @@ window.generateTextView = function(data) {
 // Global function to toggle overlay expansion
 window.toggleOverlayExpand = function() {
     const overlay = document.getElementById('simulation-overlay');
-    const mainContent = document.querySelector('main');
     const expandBtn = document.getElementById('expandOverlayBtn');
     
     if (!overlay) return;
@@ -930,9 +911,6 @@ window.toggleOverlayExpand = function() {
     if (isExpanded) {
         // Collapse back to 150px
         overlay.style.height = '150px';
-        if (mainContent) {
-            mainContent.style.paddingTop = '150px';
-        }
         if (expandBtn) {
             expandBtn.title = 'Expand to full screen';
             expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -942,9 +920,6 @@ window.toggleOverlayExpand = function() {
     } else {
         // Expand to full screen
         overlay.style.height = '100vh';
-        if (mainContent) {
-            mainContent.style.paddingTop = '100vh';
-        }
         if (expandBtn) {
             expandBtn.title = 'Collapse';
             expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -978,11 +953,14 @@ window.nextDocument = function() {
 };
 
 function switchToDocument(index) {
-    console.log('Switching to document', index);
+    console.log('=== Switching to document', index, '===');
+    console.log('simulationRunIds array:', window.simulationRunIds);
+    console.log('simulationDocuments array length:', window.simulationDocuments ? window.simulationDocuments.length : 0);
     
     // Check if we have a run_id for this document
     if (!window.simulationRunIds || !window.simulationRunIds[index]) {
         console.error('No run_id available for document', index);
+        console.error('Available run_ids:', window.simulationRunIds);
         alert('Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.');
         return;
     }
@@ -990,26 +968,82 @@ function switchToDocument(index) {
     const runId = window.simulationRunIds[index];
     console.log('Switching to run_id:', runId);
     
+    // Initialize results cache if needed
+    if (!window.simulationResultsCache) {
+        window.simulationResultsCache = {};
+    }
+    
+    // Check if we have cached results for this run_id
+    if (window.simulationResultsCache[runId]) {
+        console.log('Using cached results for run_id:', runId);
+        renderCachedResults(runId, index);
+    } else {
+        console.log('No cached results, starting poller for run_id:', runId);
+        console.log('Active pollers before switch:', window.activePollers ? Array.from(window.activePollers) : []);
+        
+        // Clear existing simulation artifacts
+        clearSimulationArtifacts();
+        
+        // Update counter
+        updateDocumentCounter();
+        
+        // Show loading indicator
+        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'flex';
+            console.log('Loading indicator shown');
+        } else {
+            console.error('Loading indicator not found');
+        }
+        
+        // Hide view mode selector during reload
+        const viewModeSelector = document.getElementById('viewModeSelector');
+        if (viewModeSelector) {
+            viewModeSelector.style.display = 'none';
+        }
+        
+        // Start polling for this run_id
+        console.log('Calling initSimulationResults for run_id:', runId);
+        initSimulationResults(runId);
+    }
+}
+
+function renderCachedResults(runId, index) {
+    const cachedData = window.simulationResultsCache[runId];
+    console.log('Rendering cached results for run_id:', runId, 'data:', cachedData);
+    
     // Clear existing simulation artifacts
     clearSimulationArtifacts();
     
     // Update counter
     updateDocumentCounter();
     
-    // Show loading indicator
-    const loadingIndicator = document.getElementById('simulation-loading-indicator');
-    if (loadingIndicator) {
-        loadingIndicator.style.display = 'flex';
+    // Re-render the graph and badges with cached data
+    if (cachedData.nodes && cachedData.links) {
+        // Mark executed plugins
+        if (cachedData.originalEvent) {
+            markExecutedPlugins(cachedData.nodes, cachedData.originalEvent);
+        }
+        
+        // Create the graph
+        createForceDirectedGraph({ nodes: cachedData.nodes, links: cachedData.links });
+        
+        // Show view mode selector
+        const viewModeSelector = document.getElementById('viewModeSelector');
+        if (viewModeSelector) {
+            viewModeSelector.style.display = 'flex';
+        }
+        
+        // Hide loading indicator
+        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+        
+        console.log('Cached results rendered successfully');
+    } else {
+        console.error('Cached data missing nodes or links');
     }
-    
-    // Hide view mode selector during reload
-    const viewModeSelector = document.getElementById('viewModeSelector');
-    if (viewModeSelector) {
-        viewModeSelector.style.display = 'none';
-    }
-    
-    // Start polling for this run_id (will use cached results if already complete)
-    initSimulationResults(runId);
 }
 
 function clearSimulationArtifacts() {
@@ -1071,12 +1105,6 @@ window.cleanupSimulation = function() {
         overlay.remove();
     }
     
-    // Reset padding
-    const mainContent = document.querySelector('main');
-    if (mainContent) {
-        mainContent.style.paddingTop = '0';
-    }
-    
     // Remove all simulation artifacts
     clearSimulationArtifacts();
     
@@ -1086,12 +1114,18 @@ window.cleanupSimulation = function() {
 };
 
 function initSimulationResults(runId) {
-    // Prevent double polling
-    if (window.currentPollingRunId === runId) {
+    // Initialize active pollers set if it doesn't exist
+    if (!window.activePollers) {
+        window.activePollers = new Set();
+    }
+    
+    // Prevent double polling for the same run_id
+    if (window.activePollers.has(runId)) {
         console.log('Already polling for run_id:', runId, '- skipping duplicate');
         return;
     }
-    window.currentPollingRunId = runId;
+    window.activePollers.add(runId);
+    console.log('Active pollers:', Array.from(window.activePollers));
     
     let pollCount = 0;
     const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
@@ -1100,6 +1134,23 @@ function initSimulationResults(runId) {
     let originalEvent = null; // Store the original event for baseline comparison
     
     console.log('Starting simulation polling for run_id:', runId);
+    
+    // Add a 10-second timeout to show a warning message
+    const loadingTimeout = setTimeout(() => {
+        if (!receivedFinal) {
+            const loadingIndicator = document.getElementById('simulation-loading-indicator');
+            if (loadingIndicator) {
+                // Check if warning doesn't already exist
+                if (!document.getElementById('loading-timeout-warning')) {
+                    const warning = document.createElement('span');
+                    warning.id = 'loading-timeout-warning';
+                    warning.className = 'text-xs text-yellow-400 ml-2';
+                    warning.textContent = 'This is taking a while, you should check the logs. If you drop logs or execute a "sleep" function, you wont see a response here and this is normal.';
+                    loadingIndicator.appendChild(warning);
+                }
+            }
+        }
+    }, 10000); // 10 seconds
     
     function pollResults() {
         // Stop if we've received the final event
@@ -1304,6 +1355,17 @@ function initSimulationResults(runId) {
                                     // Store simulation data globally for view switching
                                     window.simulationData = { nodes, links };
                                     
+                                    // Cache results for this run_id
+                                    if (!window.simulationResultsCache) {
+                                        window.simulationResultsCache = {};
+                                    }
+                                    window.simulationResultsCache[runId] = {
+                                        nodes: nodes,
+                                        links: links,
+                                        originalEvent: originalEvent
+                                    };
+                                    console.log('Cached results for run_id:', runId);
+                                    
                                     // Check if we're in text mode (modal-based) or overlay mode
                                     const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
                                     const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
@@ -1349,8 +1411,16 @@ function initSimulationResults(runId) {
                                             loadingIndicator.style.display = 'none';
                                         }
                                         
-                                        // Clear polling flag
-                                        window.currentPollingRunId = null;
+                                        // Clear the loading timeout
+                                        if (loadingTimeout) {
+                                            clearTimeout(loadingTimeout);
+                                        }
+                                        
+                                        // Remove from active pollers
+                                        if (window.activePollers) {
+                                            window.activePollers.delete(runId);
+                                            console.log('Polling complete for', runId, ', active pollers:', Array.from(window.activePollers));
+                                        }
                                     }
                                 } else {
                                     console.error('Components variable not accessible or snapshots missing');
@@ -1361,7 +1431,10 @@ function initSimulationResults(runId) {
                 
                 // Stop polling if we received the final event
                 if (receivedFinal) {
-                    window.currentPollingRunId = null;
+                    if (window.activePollers) {
+                        window.activePollers.delete(runId);
+                        console.log('Polling complete for', runId, ', active pollers:', Array.from(window.activePollers));
+                    }
                     return;
                 }
                 
@@ -1379,4 +1452,100 @@ function initSimulationResults(runId) {
     setTimeout(pollResults, 100);
 }
 
+/**
+ * View Logstash logs for the current simulation
+ */
+window.viewSimulationLogs = function() {
+    const overlay = document.getElementById('simulation-overlay');
+    if (!overlay) {
+        console.error('Simulation overlay not found');
+        alert('Unable to fetch logs - simulation overlay not found');
+        return;
+    }
+    
+    const slotId = overlay.getAttribute('data-slot-id');
+    if (!slotId) {
+        console.error('Slot ID not found in overlay');
+        alert('Unable to fetch logs - slot information not available');
+        return;
+    }
+    
+    // Show loading modal
+    const modal = document.createElement('div');
+    modal.id = 'logs-modal';
+    modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
+    modal.innerHTML = `
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('logs-modal').remove()"></div>
+        <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${slotId}-filter1</h3>
+                <button onclick="document.getElementById('logs-modal').remove()" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-grow">
+                <div id="logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+                    <div class="flex items-center justify-center py-8">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                        <span class="ml-3">Loading logs...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Fetch logs from Django API endpoint
+    fetch(`/API/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`)
+        .then(response => response.json())
+        .then(data => {
+            const logsContent = document.getElementById('logs-content');
+            
+            if (!data.logs || data.logs.length === 0) {
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                return;
+            }
+            
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries</div>`;
+            
+            data.logs.forEach((log, idx) => {
+                const level = log.level || 'INFO';
+                const levelColor = {
+                    'ERROR': 'text-red-400',
+                    'WARN': 'text-yellow-400',
+                    'INFO': 'text-blue-400',
+                    'DEBUG': 'text-gray-400'
+                }[level] || 'text-gray-400';
+                
+                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
+                const logEvent = log.logEvent || {};
+                const message = logEvent.message || log.message || 'No message';
+                const logger = log.loggerName || 'unknown';
+                
+                html += `
+                    <div class="mb-4 pb-4 border-b border-gray-700">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="${levelColor} font-bold">[${level}]</span>
+                            <span class="text-gray-500 text-xs">${timestamp}</span>
+                            <span class="text-gray-400 text-xs">${logger}</span>
+                        </div>
+                        <div class="text-gray-200 mb-2">${message}</div>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
+                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            });
+            
+            logsContent.innerHTML = html;
+        })
+        .catch(error => {
+            const logsContent = document.getElementById('logs-content');
+            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
+        });
+};
 
