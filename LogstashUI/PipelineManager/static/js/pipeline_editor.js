@@ -148,6 +148,12 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
 }
 
 function loadExistingComponents() {
+    // Check if we're in simulation mode before clearing
+    const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
+    const simulationNodes = wasInSimulationMode && window.simulationData ? window.simulationData.nodes : null;
+    const originalEventData = wasInSimulationMode && window.simulationResultsCache ? 
+        Object.values(window.simulationResultsCache)[0]?.originalEvent : null;
+    
     // Clears all existing components first
     const componentTypes = ['input', 'filter', 'output'];
 
@@ -200,6 +206,11 @@ function loadExistingComponents() {
     } else if (pendingAnimationPluginId && !newlyAddedPluginId) {
         // If we only have a pending ID, preserve it
         newlyAddedPluginId = pendingAnimationPluginId;
+    }
+    
+    // Restore simulation data if we were in simulation mode
+    if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
+        markExecutedPlugins(simulationNodes, originalEventData);
     }
 }
 

@@ -4,37 +4,68 @@
 <!-- Plugin Configuration Modal -->
 <div id="configModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="PluginConfigModal.cancel()"></div>
-    <div class="bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col relative z-10">
-        <!-- Modal Header -->
-        <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
-            <div class="flex items-center">
-                <img src="" alt="Plugin Icon" class="w-6 h-6 mr-3 object-contain" id="pluginIconImg" onerror="this.style.display='none'">
-                <h3 class="text-lg font-semibold text-white"></h3>
+    <div id="configModalContainer" class="bg-gray-800 rounded-lg w-full max-h-[90vh] flex relative z-10" style="max-width: 1400px;">
+        <!-- Left Panel: Configuration Form -->
+        <div class="flex flex-col" style="flex: 1; min-width: 600px;">
+            <!-- Modal Header -->
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+                <div class="flex items-center">
+                    <img src="" alt="Plugin Icon" class="w-6 h-6 mr-3 object-contain" id="pluginIconImg" onerror="this.style.display='none'">
+                    <h3 class="text-lg font-semibold text-white"></h3>
+                </div>
+                <button onclick="PluginConfigModal.cancel()" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
             </div>
-            <button onclick="PluginConfigModal.cancel()" class="text-gray-400 hover:text-white">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
 
-        <!-- Configuration Form -->
-        <div class="p-4 overflow-y-auto flex-1">
-            <form id="configForm" class="space-y-4">
-                <!-- Dynamic content will be inserted here -->
-            </form>
-        </div>
+            <!-- Configuration Form -->
+            <div class="p-4 overflow-y-auto flex-1">
+                <form id="configForm" class="space-y-4">
+                    <!-- Dynamic content will be inserted here -->
+                </form>
+            </div>
 
-        <!-- Modal Footer (Pinned) -->
-        <div id="configModalFooter" class="p-4 border-t border-gray-700 flex justify-end space-x-2 flex-shrink-0">
-            <button type="button" onclick="PluginConfigModal.cancel()"
-                    class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
-                Cancel
-            </button>
-            <button type="button" onclick="PluginConfigModal.saveConfig()"
-                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
-                Save Configuration
-            </button>
+            <!-- Modal Footer (Pinned) -->
+            <div id="configModalFooter" class="p-4 border-t border-gray-700 flex justify-end space-x-2 flex-shrink-0">
+                <button type="button" onclick="PluginConfigModal.cancel()"
+                        class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
+                    Cancel
+                </button>
+                <button type="button" onclick="PluginConfigModal.saveConfig()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
+                    Save Configuration
+                </button>
+            </div>
+        </div>
+        
+        <!-- Right Panel: Event Data (shown only in simulation mode) -->
+        <div id="eventDataPanel" class="hidden border-l border-gray-700 flex flex-col" style="flex: 1; min-width: 400px;">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+                <h4 class="text-sm font-semibold text-gray-300">Event Data</h4>
+            </div>
+            <div class="overflow-y-auto flex-1">
+                <!-- Before Section -->
+                <div class="border-b border-gray-700">
+                    <div class="p-3 bg-gray-900/50">
+                        <h5 class="text-xs font-semibold text-blue-400">Before This Plugin</h5>
+                    </div>
+                    <div class="p-4">
+                        <pre id="eventDataBefore" class="text-xs font-mono text-green-400 whitespace-pre-wrap"></pre>
+                    </div>
+                </div>
+                
+                <!-- After Section -->
+                <div>
+                    <div class="p-3 bg-gray-900/50">
+                        <h5 class="text-xs font-semibold text-purple-400">After This Plugin</h5>
+                    </div>
+                    <div class="p-4">
+                        <pre id="eventDataAfter" class="text-xs font-mono text-green-400 whitespace-pre-wrap"></pre>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
