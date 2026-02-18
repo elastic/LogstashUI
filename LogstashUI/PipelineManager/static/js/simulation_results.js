@@ -223,11 +223,13 @@ function addDataFlowIndicator(componentElement, node) {
     const dataFlow = document.createElement('div');
     dataFlow.className = 'simulation-data-flow';
     dataFlow.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M23 12h-6m-6 0H1m18.2 5.2l-4.2-4.2m0-6l4.2-4.2"/>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2v4"/>
+            <path d="M16 2v4"/>
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <path d="M3 10h18"/>
         </svg>
-        <span>Data Flow</span>
+        <span>View Full Event</span>
     `;
     
     dataFlow.style.cssText = `
@@ -610,6 +612,47 @@ function createForceDirectedGraph(graphData) {
     node.on("click", function(event, d) {
         event.stopPropagation();
         
+        // Special handling for "Start" node - scroll to Original Event
+        if (d.id === 'start') {
+            const originalEventElement = document.querySelector('.simulation-data-flow');
+            if (originalEventElement) {
+                originalEventElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+                
+                // Apply the same glowing animation
+                originalEventElement.classList.add('newly-added');
+                
+                // Remove the animation class after it completes
+                setTimeout(() => {
+                    originalEventElement.classList.remove('newly-added');
+                }, 2000);
+            }
+            return;
+        }
+        
+        // Special handling for "End" node - scroll to last "View Full Event"
+        if (d.id === 'end') {
+            const allDataFlows = document.querySelectorAll('.simulation-data-flow');
+            if (allDataFlows.length > 0) {
+                const lastDataFlow = allDataFlows[allDataFlows.length - 1];
+                lastDataFlow.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+                
+                // Apply the same glowing animation
+                lastDataFlow.classList.add('newly-added');
+                
+                // Remove the animation class after it completes
+                setTimeout(() => {
+                    lastDataFlow.classList.remove('newly-added');
+                }, 2000);
+            }
+            return;
+        }
+        
         // Extract the component ID from the node
         let componentId = d.id;
         
@@ -649,8 +692,7 @@ function createForceDirectedGraph(graphData) {
             setTimeout(() => {
                 componentElement.classList.remove('newly-added');
             }, 2000);
-        } else if (componentId !== 'start') {
-            // Don't warn about 'start' - it's a virtual node not in the editor
+        } else {
             console.warn(`Component not found: ${componentId}`);
         }
     });
@@ -1350,7 +1392,26 @@ function initSimulationResults(runId) {
                                     }
                                     
                                     // Process all filter plugins
-                                    processPlugins(components.filter, lastNodeId);
+                                    const finalNodeId = processPlugins(components.filter, lastNodeId);
+                                    
+                                    // Add ending node
+                                    stepNumber++;
+                                    nodes.push({
+                                        id: 'end',
+                                        label: 'End',
+                                        step: stepNumber,
+                                        hasChanges: false,
+                                        changesText: 'Pipeline complete',
+                                        isConditional: false
+                                    });
+                                    
+                                    // Connect final plugin to end node
+                                    links.push({
+                                        source: finalNodeId,
+                                        target: 'end',
+                                        eventJson: 'Pipeline complete',
+                                        isConditional: false
+                                    });
                                     
                                     // Store simulation data globally for view switching
                                     window.simulationData = { nodes, links };
