@@ -981,23 +981,20 @@ def PreviewElasticsearchData(request):
         return JsonResponse({"error": "connection_id and index are required"}, status=400)
     
     try:
-        # Limit preview to 3 documents max
-        preview_size = 3
-        
         if query_method == "docid":
             doc_ids = request.POST.get("doc_ids", "").strip().split("\n")
-            doc_ids = [d.strip() for d in doc_ids if d.strip()][:preview_size]
+            doc_ids = [d.strip() for d in doc_ids if d.strip()]
             documents = query_elasticsearch_documents(connection_id, index, doc_ids=doc_ids)
         elif query_method == "entire":
             # Entire document - fetch with all fields
-            size = min(int(request.POST.get("size", 10)), preview_size)
+            size = int(request.POST.get("size", 10))
             query = request.POST.get("query", "")
             documents = query_elasticsearch_documents(
                 connection_id, index, field=None, size=size, query_string=query
             )
         else:  # field method
             field = request.POST.get("field")
-            size = min(int(request.POST.get("size", 10)), preview_size)
+            size = int(request.POST.get("size", 10))
             query = request.POST.get("query", "")
             
             if not field:
