@@ -43,7 +43,7 @@
       </div>
     </div>
     
-    <form id="simulationForm" hx-post="/API/SimulatePipeline/" hx-target="#simulationResults" hx-swap="innerHTML" hx-vals="js:{'components': components}" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-indicator="#simulationLoading" class="p-6 overflow-y-auto flex-grow">
+    <form id="simulationForm" class="p-6 overflow-y-auto flex-grow">
       
       {% csrf_token %}
       
@@ -360,7 +360,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.10"></script>
 <script>
   // Store simulation data globally for view switching
   window.simulationData = null;
@@ -863,9 +862,15 @@
   async function submitAndPollDocument(doc, index) {
     console.log('submitAndPollDocument called for index', index);
     
-    // Get components from the global scope (same as HTMX uses)
-    const componentsData = typeof components !== 'undefined' ? components : (window.components || {});
-    console.log('Using components:', componentsData);
+    // Get components - use subset if in subset mode, otherwise use all components
+    let componentsData;
+    if (typeof getSubsetComponents === 'function') {
+      componentsData = getSubsetComponents();
+      console.log('Using subset components:', componentsData);
+    } else {
+      componentsData = typeof components !== 'undefined' ? components : (window.components || {});
+      console.log('Using all components:', componentsData);
+    }
     
     const formData = new FormData();
     formData.append('log_text', JSON.stringify(doc));

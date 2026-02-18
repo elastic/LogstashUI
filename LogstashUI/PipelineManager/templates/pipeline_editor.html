@@ -192,6 +192,64 @@
     .collapse-toggle svg {
         transition: transform 0.3s ease;
     }
+
+    /* Simulation selection styles */
+    .simulation-selected {
+        border: 2px solid #10b981 !important;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+    }
+
+    .simulation-selected-checkbox {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #10b981;
+        border-radius: 4px;
+        background-color: #10b981;
+    }
+
+    .simulation-selected-checkbox svg {
+        width: 14px;
+        height: 14px;
+        color: white;
+    }
+
+    /* Floating Simulate Subset button container */
+    #simulateSubsetContainer {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        z-index: 40;
+        transition: all 0.3s ease;
+    }
+
+    #simulateSubsetContainer.hidden {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(20px);
+    }
+
+    #simulateSubsetBtn {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(139, 92, 246, 0.2);
+        transition: all 0.3s ease;
+    }
+
+    #simulateSubsetBtn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(139, 92, 246, 0.3);
+    }
+
+    #clearSelectionsBtn {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+    }
+
+    #clearSelectionsBtn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+    }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
@@ -563,6 +621,28 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Floating Simulate Subset and Clear Buttons -->
+<div id="simulateSubsetContainer" class="hidden fixed bottom-30px right-30px z-40 flex gap-3">
+    <button id="clearSelectionsBtn" 
+            class="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2 font-semibold"
+            onclick="clearAllSelections()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        <span>Clear</span>
+    </button>
+    <button id="simulateSubsetBtn" 
+            class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-3 font-semibold"
+            onclick="openSimulateSubsetModal()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Simulate Subset</span>
+        <span id="selectedCount" class="px-2 py-0.5 bg-purple-800 rounded-full text-xs">0</span>
+    </button>
 </div>
 
 <!--- Simulation modal -->
