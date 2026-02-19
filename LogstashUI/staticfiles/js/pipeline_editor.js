@@ -2,7 +2,325 @@
 let newlyAddedPluginId = null;
 let pendingAnimationPluginId = null; // Plugin waiting for config modal to close
 
+// Track selection mode state
+let isSelectionMode = false;
+
 // Note: moveMode is now defined in move_mode.js as window.moveMode
+
+// Function to update the floating Simulate Subset button
+function updateSimulateSubsetButton() {
+    const selectedElements = document.querySelectorAll('.simulation-selected');
+    const container = document.getElementById('simulateSubsetContainer');
+    const countBadge = document.getElementById('selectedCount');
+    
+    if (!container || !countBadge) return;
+    
+    const count = selectedElements.length;
+    
+    if (count > 0) {
+        container.classList.remove('hidden');
+        countBadge.textContent = count;
+    } else {
+        container.classList.add('hidden');
+        countBadge.textContent = '0';
+    }
+}
+
+// Function to clear all selections
+window.clearAllSelections = function() {
+    const selectedElements = document.querySelectorAll('.simulation-selected');
+    
+    selectedElements.forEach(element => {
+        const componentId = element.getAttribute('data-id');
+        if (!componentId) return;
+        
+        // Find the component to determine if it's a conditional block
+        const component = findComponentById(componentId);
+        
+        if (component && component.plugin === 'if') {
+            // It's a conditional block
+            deselectConditionalBlock(componentId);
+        } else {
+            // It's a regular plugin
+            deselectPlugin(componentId);
+        }
+    });
+    
+    // Update the button visibility
+    updateSimulateSubsetButton();
+};
+
+// Track if we're in subset simulation mode
+let isSubsetSimulation = false;
+let selectedComponentIds = [];
+
+// Function to get all selected component IDs
+function getSelectedComponentIds() {
+    const selectedElements = document.querySelectorAll('.simulation-selected');
+    const ids = [];
+    
+    selectedElements.forEach(element => {
+        const id = element.getAttribute('data-id');
+        if (id) {
+            ids.push(id);
+        }
+    });
+    
+    return ids;
+}
+
+// Function to filter components to only include selected ones
+function getSubsetComponents() {
+    if (!isSubsetSimulation || selectedComponentIds.length === 0) {
+        return components;
+    }
+    
+    // Create a deep copy of components
+    const subsetComponents = {
+        input: [],
+        filter: [],
+        output: []
+    };
+    
+    // Helper function to check if a component or any of its children are selected
+    function isComponentSelected(component) {
+        return selectedComponentIds.includes(component.id);
+    }
+    
+    // Helper function to recursively filter conditional blocks
+    function filterConditionalBlock(component) {
+        if (!isComponentSelected(component)) {
+            return null;
+        }
+        
+        // Clone the component
+        const filtered = JSON.parse(JSON.stringify(component));
+        
+        // If it's a conditional block, we include all its nested plugins
+        // (they were already selected when the parent was selected)
+        return filtered;
+    }
+    
+    // Filter each section
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type]) {
+            components[type].forEach(component => {
+                if (component.plugin === 'if') {
+                    const filtered = filterConditionalBlock(component);
+                    if (filtered) {
+                        subsetComponents[type].push(filtered);
+                    }
+                } else if (isComponentSelected(component)) {
+                    subsetComponents[type].push(JSON.parse(JSON.stringify(component)));
+                }
+            });
+        }
+    });
+    
+    return subsetComponents;
+}
+
+// Function to open simulation modal for subset
+window.openSimulateSubsetModal = function() {
+    // Set subset mode and collect selected IDs
+    isSubsetSimulation = true;
+    selectedComponentIds = getSelectedComponentIds();
+    
+    // Open the same simulation modal
+    const modal = document.getElementById('simulationModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+};
+
+// Helper function to select a plugin for simulation
+function selectPlugin(componentId) {
+    const componentElement = document.querySelector(`[data-id="${componentId}"]`);
+    if (!componentElement) return;
+    
+    // Add green border
+    componentElement.classList.add('simulation-selected');
+    
+    // Replace play button with checkmark
+    const playBtn = componentElement.querySelector('.play-btn');
+    if (playBtn) {
+        playBtn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+        `;
+        playBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
+        playBtn.classList.add('simulation-selected-checkbox');
+        playBtn.title = 'Deselect from simulation';
+    }
+    
+    // Update floating button
+    updateSimulateSubsetButton();
+}
+
+// Helper function to deselect a plugin
+function deselectPlugin(componentId) {
+    const componentElement = document.querySelector(`[data-id="${componentId}"]`);
+    if (!componentElement) return;
+    
+    // Remove green border
+    componentElement.classList.remove('simulation-selected');
+    
+    // Restore play button
+    const playBtn = componentElement.querySelector('.play-btn');
+    if (playBtn) {
+        playBtn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        `;
+        playBtn.classList.add('opacity-0', 'group-hover:opacity-100');
+        playBtn.classList.remove('simulation-selected-checkbox');
+        playBtn.title = 'Select for simulation';
+    }
+    
+    // Update floating button
+    updateSimulateSubsetButton();
+}
+
+// Helper function to select an entire conditional block (if/else if/else)
+function selectConditionalBlock(componentId) {
+    const component = findComponentById(componentId);
+    if (!component || component.plugin !== 'if') return;
+    
+    const componentElement = document.querySelector(`[data-id="${componentId}"]`);
+    if (!componentElement) return;
+    
+    // Add green border to the main conditional block
+    componentElement.classList.add('simulation-selected');
+    
+    // Replace play button with checkmark
+    const playBtn = componentElement.querySelector('.play-btn');
+    if (playBtn) {
+        playBtn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+        `;
+        playBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
+        playBtn.classList.add('simulation-selected-checkbox');
+        playBtn.title = 'Deselect from simulation';
+    }
+    
+    // Helper to select a plugin and convert its play button
+    const selectNestedPlugin = (plugin) => {
+        const pluginElement = document.querySelector(`[data-id="${plugin.id}"]`);
+        if (pluginElement) {
+            pluginElement.classList.add('simulation-selected');
+            
+            // Convert play button to checkmark
+            const nestedPlayBtn = pluginElement.querySelector('.play-btn');
+            if (nestedPlayBtn) {
+                nestedPlayBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                `;
+                nestedPlayBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
+                nestedPlayBtn.classList.add('simulation-selected-checkbox');
+                nestedPlayBtn.title = 'Deselect from simulation';
+            }
+        }
+    };
+    
+    // Select all plugins in the if block
+    if (component.config.plugins) {
+        component.config.plugins.forEach(selectNestedPlugin);
+    }
+    
+    // Select all plugins in else-if blocks
+    if (component.config.else_ifs) {
+        component.config.else_ifs.forEach(elseIf => {
+            if (elseIf.plugins) {
+                elseIf.plugins.forEach(selectNestedPlugin);
+            }
+        });
+    }
+    
+    // Select all plugins in else block
+    if (component.config.else && component.config.else.plugins) {
+        component.config.else.plugins.forEach(selectNestedPlugin);
+    }
+    
+    // Update floating button
+    updateSimulateSubsetButton();
+}
+
+// Helper function to deselect an entire conditional block
+function deselectConditionalBlock(componentId) {
+    const component = findComponentById(componentId);
+    if (!component || component.plugin !== 'if') return;
+    
+    const componentElement = document.querySelector(`[data-id="${componentId}"]`);
+    if (!componentElement) return;
+    
+    // Remove green border from the main conditional block
+    componentElement.classList.remove('simulation-selected');
+    
+    // Restore play button
+    const playBtn = componentElement.querySelector('.play-btn');
+    if (playBtn) {
+        playBtn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        `;
+        playBtn.classList.add('opacity-0', 'group-hover:opacity-100');
+        playBtn.classList.remove('simulation-selected-checkbox');
+        playBtn.title = 'Select entire condition for simulation';
+    }
+    
+    // Helper to deselect a plugin and restore its play button
+    const deselectNestedPlugin = (plugin) => {
+        const pluginElement = document.querySelector(`[data-id="${plugin.id}"]`);
+        if (pluginElement) {
+            pluginElement.classList.remove('simulation-selected');
+            
+            // Restore play button
+            const nestedPlayBtn = pluginElement.querySelector('.play-btn');
+            if (nestedPlayBtn) {
+                nestedPlayBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                `;
+                nestedPlayBtn.classList.add('opacity-0', 'group-hover:opacity-100');
+                nestedPlayBtn.classList.remove('simulation-selected-checkbox');
+                nestedPlayBtn.title = 'Select for simulation';
+            }
+        }
+    };
+    
+    // Deselect all plugins in the if block
+    if (component.config.plugins) {
+        component.config.plugins.forEach(deselectNestedPlugin);
+    }
+    
+    // Deselect all plugins in else-if blocks
+    if (component.config.else_ifs) {
+        component.config.else_ifs.forEach(elseIf => {
+            if (elseIf.plugins) {
+                elseIf.plugins.forEach(deselectNestedPlugin);
+            }
+        });
+    }
+    
+    // Deselect all plugins in else block
+    if (component.config.else && component.config.else.plugins) {
+        component.config.else.plugins.forEach(deselectNestedPlugin);
+    }
+    
+    // Update floating button
+    updateSimulateSubsetButton();
+}
 
 function createInsertionPoint(type, index = 0, isConditional = false, parentId = null) {
     const insertionPoint = document.createElement('div');
@@ -148,6 +466,12 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
 }
 
 function loadExistingComponents() {
+    // Check if we're in simulation mode before clearing
+    const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
+    const simulationNodes = wasInSimulationMode && window.simulationData ? window.simulationData.nodes : null;
+    const originalEventData = wasInSimulationMode && window.simulationResultsCache ? 
+        Object.values(window.simulationResultsCache)[0]?.originalEvent : null;
+    
     // Clears all existing components first
     const componentTypes = ['input', 'filter', 'output'];
 
@@ -200,6 +524,11 @@ function loadExistingComponents() {
     } else if (pendingAnimationPluginId && !newlyAddedPluginId) {
         // If we only have a pending ID, preserve it
         newlyAddedPluginId = pendingAnimationPluginId;
+    }
+    
+    // Restore simulation data if we were in simulation mode
+    if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
+        markExecutedPlugins(simulationNodes, originalEventData);
     }
 }
 
@@ -398,6 +727,18 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     ${configSummary}
   </div>
   <div class="flex space-x-1 ml-2">
+    ${component.type === 'filter' ? `
+    <!-- Play button / Checkbox (toggles based on selection state) -->
+    <button class="play-btn text-gray-400 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
+            data-component-id="${component.id}"
+            title="Select for simulation">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </button>
+    ` : ''}
+    
     <button class="config-btn text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
             data-component-id="${component.id}"
             title="Configure">
@@ -501,6 +842,22 @@ function createConditionalBlockElement(component, depth = 0) {
 // Create button container
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'flex space-x-2 ml-2 opacity-0 group-hover:opacity-100 transition-opacity';
+
+// Add play button for filter conditionals (before else-if button)
+    if (component.type === 'filter') {
+        const playBtn = document.createElement('button');
+        playBtn.className = 'play-btn text-gray-400 hover:text-green-400';
+        playBtn.setAttribute('data-component-id', component.id);
+        playBtn.setAttribute('data-is-conditional', 'true');
+        playBtn.title = 'Select entire condition for simulation';
+        playBtn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        `;
+        buttonContainer.appendChild(playBtn);
+    }
 
 // Add else-if button with text
     const addElseIfBtn = document.createElement('button');
@@ -1083,6 +1440,40 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (component) {
                     event.preventDefault();
                     window.PluginConfigModal.show(component);
+                }
+            }
+        });
+        
+        // Add click handler for play buttons
+        document.addEventListener('click', function (event) {
+            const playBtn = event.target.closest('.play-btn');
+            if (playBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                const componentId = playBtn.getAttribute('data-component-id');
+                const isConditional = playBtn.getAttribute('data-is-conditional') === 'true';
+                const componentElement = document.querySelector(`[data-id="${componentId}"]`);
+                
+                if (!componentElement) return;
+                
+                // Check if already selected
+                const isSelected = componentElement.classList.contains('simulation-selected');
+                
+                if (isSelected) {
+                    // Deselect
+                    if (isConditional) {
+                        deselectConditionalBlock(componentId);
+                    } else {
+                        deselectPlugin(componentId);
+                    }
+                } else {
+                    // Select
+                    if (isConditional) {
+                        selectConditionalBlock(componentId);
+                    } else {
+                        selectPlugin(componentId);
+                    }
                 }
             }
         });
@@ -1734,5 +2125,17 @@ window.toggleSensitiveValue = function(button, event) {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
         `;
+    }
+};
+
+// Function to open the simulation modal
+window.openSimulateModal = function() {
+    // Reset subset mode when opening regular simulation
+    isSubsetSimulation = false;
+    selectedComponentIds = [];
+    
+    const modal = document.getElementById('simulationModal');
+    if (modal) {
+        modal.classList.remove('hidden');
     }
 };

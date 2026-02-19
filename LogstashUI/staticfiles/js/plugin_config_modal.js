@@ -640,6 +640,75 @@ window.PluginConfigModal = (function () {
         // Show the modal
         modal.classList.remove('hidden');
 
+        // Check if we're in simulation mode and show event data panel
+        const eventDataPanel = document.getElementById('eventDataPanel');
+        const eventDataBefore = document.getElementById('eventDataBefore');
+        const eventDataAfter = document.getElementById('eventDataAfter');
+        const modalContainer = document.getElementById('configModalContainer');
+        
+        // Check if simulation mode is active by looking for simulation badges
+        const isSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
+        
+        if (isSimulationMode && eventDataPanel && eventDataBefore && eventDataAfter) {
+            // Find the component element for this plugin
+            const componentElement = document.querySelector(`[data-id="${component.id}"]`);
+            
+            if (componentElement) {
+                // Find all "Original Event" or "View Full Event" elements
+                const allDataFlows = document.querySelectorAll('.simulation-data-flow');
+                
+                // Find the data flow elements that come BEFORE and AFTER this component in the DOM
+                let beforeDataFlow = null;
+                let afterDataFlow = null;
+                
+                for (let i = 0; i < allDataFlows.length; i++) {
+                    const dataFlow = allDataFlows[i];
+                    
+                    // Check if this data flow comes before the component element in the DOM
+                    const position = componentElement.compareDocumentPosition(dataFlow);
+                    
+                    // If dataFlow comes before componentElement (position & 2 means PRECEDING)
+                    if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+                        beforeDataFlow = dataFlow;
+                    } else if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+                        // If dataFlow comes after componentElement and we haven't found one yet
+                        if (!afterDataFlow) {
+                            afterDataFlow = dataFlow;
+                        }
+                    }
+                }
+                
+                // Populate before section
+                if (beforeDataFlow && beforeDataFlow.dataset.eventJson) {
+                    eventDataBefore.textContent = beforeDataFlow.dataset.eventJson;
+                } else {
+                    eventDataBefore.textContent = 'No event data available';
+                }
+                
+                // Populate after section
+                if (afterDataFlow && afterDataFlow.dataset.eventJson) {
+                    eventDataAfter.textContent = afterDataFlow.dataset.eventJson;
+                } else {
+                    eventDataAfter.textContent = 'No event data available (plugin may be last in pipeline)';
+                }
+                
+                // Show the panel
+                eventDataPanel.classList.remove('hidden');
+                modalContainer.style.maxWidth = '1400px';
+            } else {
+                eventDataPanel.classList.add('hidden');
+                modalContainer.style.maxWidth = '600px';
+            }
+        } else {
+            // Not in simulation mode, hide the event data panel
+            if (eventDataPanel) {
+                eventDataPanel.classList.add('hidden');
+            }
+            if (modalContainer) {
+                modalContainer.style.maxWidth = '600px';
+            }
+        }
+
         // Populate existing hash, array, and array_of_hashes values
         setTimeout(() => {
             populateExistingValues(component);

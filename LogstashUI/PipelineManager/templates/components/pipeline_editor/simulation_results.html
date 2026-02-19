@@ -1,0 +1,126 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // Execute immediately since this is loaded dynamically via HTMX
+    (function() {
+        // Check if Text Mode is selected in the modal
+        const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
+        const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
+        
+        if (isTextMode) {
+            // Text Mode: Don't create overlay, keep modal open and show results in modal
+            // Don't close the modal, just initialize results polling
+            initSimulationResults('{{ run_id }}');
+            return;
+        }
+        
+        // Overlay Mode: Close the modal and create overlay
+        setTimeout(() => {
+            // Use the closeSimulationModal function if available
+            if (typeof closeSimulationModal === 'function') {
+                closeSimulationModal();
+            } else {
+                // Fallback: close modal directly
+                const modal = document.getElementById('simulationModal');
+                if (modal) {
+                    modal.classList.add('hidden');
+                }
+            }
+        }, 100);
+        
+        // Remove any existing overlay
+        const existingOverlay = document.getElementById('simulation-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+        
+        // Create and show the overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'simulation-overlay';
+        overlay.className = 'sticky top-0 z-40 bg-gray-900 border-b-2 border-green-500 shadow-lg rounded-lg';
+        overlay.style.height = '150px';
+        overlay.setAttribute('data-run-id', '{{ run_id }}');
+        overlay.setAttribute('data-slot-id', '{{ slot_id }}');
+        
+        overlay.innerHTML = `
+            <div class="h-full flex flex-col">
+                <div class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <span class="text-green-400 font-semibold">✓ Simulation Results</span>
+                        <span class="text-xs text-gray-400">Run ID: {{ run_id }}</span>
+                        <span class="text-xs text-gray-400">{{ filter_count }} filters</span>
+                        <div id="documentNavigation" style="display: none;" class="flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-lg">
+                            <button onclick="previousDocument()" id="prevDocBtn" class="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" title="Previous document">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                            </button>
+                            <span id="documentCounter" class="text-xs text-gray-300 min-w-[60px] text-center">1 / 1</span>
+                            <button onclick="nextDocument()" id="nextDocBtn" class="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" title="Next document">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="simulation-loading-indicator" class="flex items-center gap-2">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
+                            <span class="text-xs text-gray-400">Loading results...</span>
+                        </div>
+                        <div id="viewModeSelector" style="display: none;" class="flex items-center gap-3 px-3 py-1 bg-gray-700 rounded-lg">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="overlayViewMode" value="debugger" checked onchange="switchOverlayView('debugger')" class="text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-300">Overlay</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="overlayViewMode" value="text" onchange="switchOverlayView('text')" class="text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-300">Text</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="viewSimulationLogs()" 
+                                id="viewLogsBtn"
+                                class="text-blue-400 hover:text-blue-300 px-3 py-1 rounded hover:bg-gray-700 flex items-center gap-2 text-sm"
+                                title="View Logstash logs for this simulation">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            View Logs
+                        </button>
+                        <button onclick="toggleOverlayExpand()" 
+                                id="expandOverlayBtn"
+                                class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700"
+                                title="Expand to full screen">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                            </svg>
+                        </button>
+                        <button onclick="cleanupSimulation()" 
+                                class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700">
+                            ✕ Close
+                        </button>
+                    </div>
+                </div>
+                <div id="results-container" class="flex-1 bg-gray-900 overflow-x-auto overflow-y-hidden">
+                    <svg id="pipeline-graph" width="100%" height="100" class="bg-gray-900"></svg>
+                </div>
+                <div id="textViewContainer" style="display: none;" class="flex-1 bg-gray-900 overflow-y-auto p-4">
+                    <div id="textViewContent" class="space-y-4 font-mono text-sm">
+                        <!-- Text view will be populated here -->
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Insert overlay at the beginning of the content area (after navigation)
+        const contentArea = document.querySelector('main') || document.querySelector('.container') || document.body;
+        if (contentArea.firstChild) {
+            contentArea.insertBefore(overlay, contentArea.firstChild);
+        } else {
+            contentArea.appendChild(overlay);
+        }
+        
+        // Initialize the simulation results polling with run_id
+        initSimulationResults('{{ run_id }}');
+    })();
+</script>

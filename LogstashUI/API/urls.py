@@ -1,5 +1,6 @@
 from django.urls import path, include
 from . import views
+from . import simulate_views
 
 urlpatterns = [
     path('TestConnectivity', views.TestConnectivity, name='TestConnectivity'),
@@ -12,7 +13,11 @@ urlpatterns = [
     path("GetCurrentPipelineCode/", views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", views.GetDiff, name="GetDiff"),
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
-    # path("SimulatePipeline/", views.SimulatePipeline, name="SimulatePipeline"),
+    path("SimulatePipeline/", simulate_views.SimulatePipeline, name="SimulatePipeline"),
+    path("StreamSimulate/", simulate_views.StreamSimulate, name="StreamSimulate"),
+    path("GetSimulationResults/", simulate_views.GetSimulationResults, name="GetSimulationResults"),
+    path("CheckIfPipelineLoaded/", simulate_views.CheckIfPipelineLoaded, name="CheckIfPipelineLoaded"),
+    path("GetRelatedLogs/", simulate_views.GetRelatedLogs, name="GetRelatedLogs"),
 
     path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
     path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),
@@ -24,5 +29,12 @@ urlpatterns = [
     path("GetNodeMetrics", views.GetNodeMetrics, name="GetNodeMetrics"),
     path("GetPipelineMetrics", views.GetPipelineMetrics, name="GetPipelineMetrics"),
     path("GetLogs", views.GetLogs, name="GetLogs"),
-    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport")
+    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport"),
+    
+    # Elasticsearch simulation endpoints
+    path("GetElasticsearchConnections/", views.GetElasticsearchConnections, name="GetElasticsearchConnections"),
+    path("GetElasticsearchIndices/", views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
+    path("GetElasticsearchFields/", views.GetElasticsearchFields, name="GetElasticsearchFields"),
+    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
+    path("PreviewElasticsearchData/", views.PreviewElasticsearchData, name="PreviewElasticsearchData")
 ]

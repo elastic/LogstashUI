@@ -1,6 +1,6 @@
 # Git
 .git
-.gitignore
+../.gitignore
 
 # Python
 __pycache__
@@ -37,6 +37,6 @@ node_modules/
 Thumbs.db
 
 # Docker
-Dockerfile
+LogstashUI/Dockerfile
 docker-compose*.yml
 .dockerignore
