@@ -34,7 +34,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-__VERSION__ = "0.1.11"
+__VERSION__ = "0.1.12"
 # Application definition
 
 INSTALLED_APPS = [
