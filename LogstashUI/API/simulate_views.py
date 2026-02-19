@@ -5,6 +5,7 @@ from django.http import JsonResponse, HttpResponseRedirect
 from functools import wraps
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
+from django.conf import settings
 
 ## Tables
 from Core.models import Connection as ConnectionTable
@@ -289,7 +290,8 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             return count
 
         total_plugin_count = count_all_plugins(filter_plugins)
-
+        # Use configured LogstashAgent URL
+        logstash_agent_url = settings.LOGSTASH_AGENT_URL
         # Add HTTP output that only sends cloned events (identified by type field)
         output_plugins = [
             {
@@ -297,7 +299,7 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                 "type": "output",
                 "plugin": "http",
                 "config": {
-                    "url": "http://host.docker.internal:8080/API/StreamSimulate/",
+                    "url": f"{logstash_agent_url}/API/StreamSimulate/",
                     "http_method": "post",
                     "format": "json",
                     "content_type": "application/json"
@@ -321,9 +323,7 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
         output_lines = output_config.strip().split('\n')
         output_content = '\n'.join(output_lines[1:-1]) if len(output_lines) > 2 else ''
 
-        # Determine protocol based on DEBUG mode
-        protocol = "http" if settings.DEBUG else "https"
-        logstash_agent_url = f"{protocol}://127.0.0.1:9500"
+
 
         # Prepare the pipeline data for slot allocation
         # The slots system will hash this to detect configuration changes
@@ -418,8 +418,9 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
         
         # If log_text is provided, send it through the pipeline
         if log_text:
-            # Send the user's log input to the simulation HTTP input
-            simulation_input_url = f"{protocol}://127.0.0.1:8082"
+            # Send the user's log input via LogstashAgent's simulate endpoint
+            # This proxies the request to the local Logstash HTTP input on port 8082
+            simulation_input_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/simulate"
             try:
                 # Parse log_text as JSON if it looks like JSON, otherwise send as message field
                 try:
@@ -569,10 +570,10 @@ def CheckIfPipelineLoaded(request):
             }, status=400)
         
         # Call LogstashAgent to check pipeline status
-        logstash_agent_url = "http://localhost:9500/_logstash/pipelines/status"
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipelines/status"
         
         try:
-            response = requests.get(logstash_agent_url, timeout=5)
+            response = requests.get(logstash_agent_url, timeout=5, verify=False)
             response.raise_for_status()
             
             data = response.json()
@@ -638,7 +639,7 @@ def GetRelatedLogs(request):
         # Get slot creation timestamp from LogstashAgent
         min_timestamp = None
         try:
-            slots_response = requests.get("http://localhost:9500/_logstash/slots", timeout=5)
+            slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
             slots_response.raise_for_status()
             slots_data = slots_response.json()
             
@@ -655,7 +656,7 @@ def GetRelatedLogs(request):
             logger.warning(f"Could not retrieve slot creation timestamp: {e}")
         
         # Call LogstashAgent to get pipeline logs
-        logstash_agent_url = f"http://localhost:9500/_logstash/pipeline/{pipeline_id}/logs"
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_id}/logs"
         params = {
             "max_entries": min(max_entries, 500),
             "min_level": min_level
@@ -666,7 +667,7 @@ def GetRelatedLogs(request):
             params["min_timestamp"] = min_timestamp
         
         try:
-            response = requests.get(logstash_agent_url, params=params, timeout=10)
+            response = requests.get(logstash_agent_url, params=params, timeout=10, verify=False)
             response.raise_for_status()
             
             data = response.json()

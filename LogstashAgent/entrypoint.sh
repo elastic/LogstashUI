@@ -5,6 +5,15 @@ echo "=========================================="
 echo "  Starting LogstashAgent"
 echo "=========================================="
 
+# Set default LOGSTASH_URL if not provided (for standalone docker run)
+export LOGSTASH_URL="${LOGSTASH_URL:-http://host.docker.internal:8080}"
+echo "Using LOGSTASH_URL: $LOGSTASH_URL"
+
+# Update simulate_end.conf with the correct URL
+echo "Updating simulate_end.conf with LOGSTASH_URL..."
+sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/API/StreamSimulate/\"|url => \"${LOGSTASH_URL}/API/StreamSimulate/\"|g" /etc/logstash/config/simulate_end.conf
+sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/API/StreamSimulate/\"|url => \"${LOGSTASH_URL}/API/StreamSimulate/\"|g" /etc/logstash/config/simulate_start.conf
+
 # Ensure log directory exists and has proper permissions
 echo "Setting up log directory..."
 mkdir -p /var/log/logstash
@@ -20,7 +29,8 @@ fi
 # Start Logstash in the background with explicit log4j2 config
 echo "Starting Logstash with pipelines.yml and custom logging..."
 export LS_JAVA_OPTS="-Dlog4j.configurationFile=/etc/logstash/log4j2.properties"
-/usr/share/logstash/bin/logstash --path.settings /etc/logstash &
+# Ensure LOGSTASH_URL is available to Logstash process
+env LOGSTASH_URL="$LOGSTASH_URL" /usr/share/logstash/bin/logstash --path.settings /etc/logstash &
 LOGSTASH_PID=$!
 
 # Wait a moment for Logstash to initialize

@@ -242,6 +242,18 @@ else:
     SECURE_SSL_REDIRECT = False
     X_FRAME_OPTIONS = 'SAMEORIGIN'
 
+# LogstashAgent Configuration
+# URL for the LogstashAgent API
+# In production (DEBUG=False): Use nginx proxy with HTTPS for internal communication
+# In development (DEBUG=True): Use direct HTTP connection
+# Can be overridden with LOGSTASH_AGENT_URL environment variable
+if DEBUG:
+    # Development: Direct HTTP connection to LogstashAgent
+    LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://127.0.0.1:9500')
+else:
+    # Production: HTTPS through nginx reverse proxy (self-signed cert)
+    LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'https://nginx:9500')
+
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/
 

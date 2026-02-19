@@ -1,4 +1,4 @@
-name: Build & Push Docker Image
+name: Build & Push Docker Images
 
 on:
   push:
@@ -22,28 +22,36 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Decide what tags to publish based on whether this is main or a release tag
       - name: Compute image tags
         id: vars
         run: |
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/logstashui"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          USER="${{ secrets.DOCKERHUB_USERNAME }}"
+          APP_IMAGE="$USER/logstashui"
+          SIM_IMAGE="$USER/logstashagent"
 
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "tags=$IMAGE:$VERSION,$IMAGE:latest" >> $GITHUB_OUTPUT
-            echo "app_version=$VERSION" >> $GITHUB_OUTPUT
-          else
-            SHORT_SHA="$(echo $GITHUB_SHA | cut -c1-7)"
-            echo "version=edge" >> $GITHUB_OUTPUT
-            echo "tags=$IMAGE:edge,$IMAGE:sha-$SHORT_SHA" >> $GITHUB_OUTPUT
-            echo "app_version=edge" >> $GITHUB_OUTPUT
-          fi
+          echo "app_image=$APP_IMAGE" >> $GITHUB_OUTPUT
+          echo "sim_image=$SIM_IMAGE" >> $GITHUB_OUTPUT
 
-      - name: Build and push
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          echo "app_tags=$APP_IMAGE:$VERSION,$APP_IMAGE:latest" >> $GITHUB_OUTPUT
+          echo "sim_tags=$SIM_IMAGE:$VERSION,$SIM_IMAGE:latest" >> $GITHUB_OUTPUT
+
+      # ---- Image 1: Django app (LogstashUI)
+      - name: Build and push (LogstashUI)
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./LogstashUI
+          file: ./LogstashUI/Dockerfile
           push: true
-          tags: ${{ steps.vars.outputs.tags }}
+          tags: ${{ steps.vars.outputs.app_tags }}
+
+      # ---- Image 2: Logstash + FastAPI sidecar (LogstashAgent)
+      - name: Build and push (LogstashAgent)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./LogstashAgent
+          file: ./LogstashAgent/Dockerfile
+          push: true
+          tags: ${{ steps.vars.outputs.sim_tags }}

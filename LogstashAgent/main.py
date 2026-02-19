@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -11,6 +11,7 @@ import logging.handlers
 from pathlib import Path as PathLib
 import slots
 import log_analyzer
+import requests
 
 # Configure logging
 logging.basicConfig(
@@ -226,6 +227,47 @@ async def root():
         "status": "running",
         "logstash_version": "9.3.0"
     }
+
+
+@app.post("/_logstash/simulate")
+async def simulate_log(request: Request):
+    """
+    Proxy endpoint for simulation log input.
+    Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 8082.
+    
+    This allows LogstashUI to send simulation logs over HTTPS (via nginx) while
+    Logstash's HTTP input plugin only accepts HTTP on localhost.
+    """
+    try:
+        # Get the JSON body from the request
+        log_data = await request.json()
+        
+        # Forward to local Logstash HTTP input on port 8082
+        response = requests.post(
+            "http://127.0.0.1:8082",
+            json=log_data,
+            timeout=10
+        )
+        response.raise_for_status()
+        
+        logger.info(f"Forwarded simulation log to Logstash: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={"status": "success", "message": "Log forwarded to Logstash"}
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to forward log to Logstash: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to forward log to Logstash: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error in simulate_log endpoint: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing simulation log: {str(e)}"
+        )
 
 
 @app.get("/_logstash/pipeline")

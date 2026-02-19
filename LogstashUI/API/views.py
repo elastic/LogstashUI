@@ -508,9 +508,7 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
         
         if simulate:
             # Send to LogstashAgent
-            # Determine protocol based on DEBUG mode
-            protocol = "http" if settings.DEBUG else "https"
-            logstash_agent_url = f"{protocol}://127.0.0.1:9500/_logstash/pipeline/{pipeline_name}"
+            logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_name}"
             
             try:
                 response = requests.put(
