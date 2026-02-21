@@ -1,3 +1,17 @@
+## [0.1.13] - TBD
+### Added
+- Toggle button for simulation that turns on/off simulation metadat
+### Changed
+
+### Fixed
+
+
+## [0.1.11-12] - 02/12/2026
+### Added
+- Instrumented pipeline simulation
+- LogstashAgent
+- Containerized Logstash
+
 ## [0.1.10] - 02/12/2026
 ### Added
 - Tests for all APIs

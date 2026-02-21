@@ -680,14 +680,26 @@ window.PluginConfigModal = (function () {
                 
                 // Populate before section
                 if (beforeDataFlow && beforeDataFlow.dataset.eventJson) {
-                    eventDataBefore.textContent = beforeDataFlow.dataset.eventJson;
+                    // Use highlightJSON if available (from simulation_results.js)
+                    if (typeof highlightJSON === 'function') {
+                        const beforeChanges = beforeDataFlow.dataset.changes ? JSON.parse(beforeDataFlow.dataset.changes) : null;
+                        eventDataBefore.innerHTML = highlightJSON(beforeDataFlow.dataset.eventJson, beforeChanges);
+                    } else {
+                        eventDataBefore.textContent = beforeDataFlow.dataset.eventJson;
+                    }
                 } else {
                     eventDataBefore.textContent = 'No event data available';
                 }
                 
                 // Populate after section
                 if (afterDataFlow && afterDataFlow.dataset.eventJson) {
-                    eventDataAfter.textContent = afterDataFlow.dataset.eventJson;
+                    // Use highlightJSON if available (from simulation_results.js)
+                    if (typeof highlightJSON === 'function') {
+                        const afterChanges = afterDataFlow.dataset.changes ? JSON.parse(afterDataFlow.dataset.changes) : null;
+                        eventDataAfter.innerHTML = highlightJSON(afterDataFlow.dataset.eventJson, afterChanges);
+                    } else {
+                        eventDataAfter.textContent = afterDataFlow.dataset.eventJson;
+                    }
                 } else {
                     eventDataAfter.textContent = 'No event data available (plugin may be last in pipeline)';
                 }

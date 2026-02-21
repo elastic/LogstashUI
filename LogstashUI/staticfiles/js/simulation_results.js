@@ -4,6 +4,287 @@
  */
 
 /**
+ * Annotate an object with change status metadata
+ * Walks through the object and marks fields based on the changes diff
+ * Also includes deleted fields from the changes object
+ */
+function annotateWithChanges(obj, changes, path = '', inheritedStatus = null) {
+    const annotated = {};
+    
+    // First, process existing fields
+    for (const key in obj) {
+        if (!obj.hasOwnProperty(key)) continue;
+        
+        const fullPath = path ? `${path}.${key}` : key;
+        const value = obj[key];
+        
+        // Determine the status of this field
+        let status = inheritedStatus; // Start with inherited status from parent
+        if (changes) {
+            if (changes.added && changes.added.hasOwnProperty(fullPath)) {
+                status = 'added';
+            } else if (changes.modified && changes.modified.hasOwnProperty(fullPath)) {
+                status = 'modified';
+            }
+        }
+        
+        // If this is an object, recursively annotate it
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            annotated[key] = {
+                __status: status,
+                __value: annotateWithChanges(value, changes, fullPath, status) // Pass status down
+            };
+        } else {
+            annotated[key] = {
+                __status: status,
+                __value: value
+            };
+        }
+    }
+    
+    // Now add deleted fields if we're at the root level (path is empty)
+    if (path === '' && changes && changes.deleted) {
+        for (const deletedPath in changes.deleted) {
+            if (changes.deleted.hasOwnProperty(deletedPath)) {
+                const deletedValue = changes.deleted[deletedPath];
+                
+                // Add the deleted field to the annotated object
+                if (deletedValue && typeof deletedValue === 'object' && !Array.isArray(deletedValue)) {
+                    annotated[deletedPath] = {
+                        __status: 'deleted',
+                        __value: annotateDeletedObject(deletedValue, 'deleted')
+                    };
+                } else {
+                    annotated[deletedPath] = {
+                        __status: 'deleted',
+                        __value: deletedValue
+                    };
+                }
+            }
+        }
+    }
+    
+    return annotated;
+}
+
+/**
+ * Helper to annotate deleted objects - all nested fields inherit 'deleted' status
+ */
+function annotateDeletedObject(obj, status) {
+    const annotated = {};
+    
+    for (const key in obj) {
+        if (!obj.hasOwnProperty(key)) continue;
+        
+        const value = obj[key];
+        
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            annotated[key] = {
+                __status: status,
+                __value: annotateDeletedObject(value, status)
+            };
+        } else {
+            annotated[key] = {
+                __status: status,
+                __value: value
+            };
+        }
+    }
+    
+    return annotated;
+}
+
+/**
+ * Syntax highlight JSON string with colors, optionally showing change context
+ * @param {string} jsonString - The JSON string to highlight
+ * @param {Object} changes - Optional diff object with added/modified/deleted fields
+ * Returns HTML with colored JSON elements
+ */
+function highlightJSON(jsonString, changes = null) {
+    try {
+        // Parse the JSON
+        const obj = JSON.parse(jsonString);
+        
+        console.log('highlightJSON called with changes:', JSON.stringify(changes, null, 2));
+        
+        // Add deleted fields to the object for display
+        if (changes && changes.deleted) {
+            for (const deletedPath in changes.deleted) {
+                if (changes.deleted.hasOwnProperty(deletedPath)) {
+                    obj[deletedPath] = changes.deleted[deletedPath];
+                }
+            }
+        }
+        
+        // Annotate with change information
+        const annotated = changes ? annotateWithChanges(obj, changes) : null;
+        
+        console.log('Annotated object:', JSON.stringify(annotated, null, 2));
+        
+        // Format for display
+        const formatted = JSON.stringify(obj, null, 2);
+        
+        // Track path as we process lines
+        let pathStack = [];
+        let lastKey = '';
+        
+        const highlighted = formatted.split('\n').map(line => {
+            const trimmed = line.trim();
+            
+            // Update path stack based on braces BEFORE processing the line
+            if (trimmed.endsWith('{')) {
+                // Line ends with opening brace - this key starts an object
+                // The key will be captured in the regex below, then we push it
+            } else if (trimmed === '}' || trimmed === '},') {
+                // Closing brace - pop from stack
+                if (pathStack.length > 0) {
+                    pathStack.pop();
+                }
+            }
+            
+            let shouldPushKey = trimmed.endsWith('{');
+            
+            return line.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+                const escaped = match.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                if (/^"/.test(match) && /:$/.test(match)) {
+                    // This is a key
+                    lastKey = match.slice(1, -2);
+                    
+                    // If this line ends with {, push this key to the stack after we process it
+                    if (shouldPushKey) {
+                        pathStack.push(lastKey);
+                        shouldPushKey = false; // Only push once per line
+                    }
+                    
+                    return `<span style="color: #60a5fa">${escaped}</span>`;
+                } else {
+                    // Value - get status from annotated object
+                    const fullPath = pathStack.length > 0 ? pathStack.join('.') + '.' + lastKey : lastKey;
+                    let color = '#ffffff';
+                    
+                    if (annotated) {
+                        const status = getStatus(annotated, fullPath);
+                        console.log('Path:', fullPath, 'pathStack:', JSON.stringify(pathStack), 'lastKey:', lastKey, 'Status:', status);
+                        if (status === 'added') color = '#86efac'; // green
+                        else if (status === 'modified') color = '#fbbf24'; // yellow
+                        else if (status === 'deleted') color = '#ef4444'; // red
+                    }
+                    
+                    if (/null/.test(match)) color = '#9ca3af';
+                    
+                    return `<span style="color: ${color}">${escaped}</span>`;
+                }
+            });
+        }).join('\n');
+        
+        return highlighted;
+    } catch (e) {
+        return jsonString.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+}
+
+/**
+ * Get the status of a field from the annotated object
+ * Handles both dot-notation keys (like "log.original") and nested paths (like "observer.ip" -> "name")
+ */
+function getStatus(annotated, path) {
+    // First, try the path as a single key (for Logstash dot-notation fields like "log.original")
+    if (annotated[path] && annotated[path].__status) {
+        return annotated[path].__status;
+    }
+    
+    // Try as a nested path
+    const parts = path.split('.');
+    let current = annotated;
+    
+    // Try different combinations - e.g., for "observer.ip.name", try:
+    // 1. "observer.ip" as key, then "name"
+    // 2. "observer" -> "ip" -> "name"
+    for (let i = parts.length - 1; i >= 0; i--) {
+        const keyPart = parts.slice(0, i + 1).join('.');
+        const remainingParts = parts.slice(i + 1);
+        
+        if (annotated[keyPart]) {
+            // Found a key that matches - now traverse the remaining parts
+            let temp = annotated[keyPart];
+            
+            if (remainingParts.length === 0) {
+                // This is the exact field
+                return temp.__status || null;
+            }
+            
+            // Navigate through remaining parts
+            for (const part of remainingParts) {
+                if (!temp || !temp.__value || !temp.__value[part]) {
+                    break;
+                }
+                temp = temp.__value[part];
+            }
+            
+            if (temp && temp.__status) {
+                return temp.__status;
+            }
+        }
+    }
+    
+    // Fallback: try as fully nested path
+    current = annotated;
+    for (const part of parts) {
+        if (!current || !current[part]) return null;
+        
+        const status = current[part].__status;
+        if (status) return status;
+        
+        current = current[part].__value;
+    }
+    
+    return null;
+}
+
+/**
+ * Helper to filter simulation metadata from event objects
+ * Returns a copy without simulation, slot, run_id if Debug Metadata toggle is unchecked
+ */
+function filterMetadata(obj) {
+    if (!obj) {
+        return obj;
+    }
+    
+    const toggle = document.getElementById('debugMetadataToggle');
+    const showMetadata = toggle ? toggle.checked : false; // Default to hiding metadata
+    
+    console.log('filterMetadata called:', {
+        toggleExists: !!toggle,
+        toggleChecked: toggle ? toggle.checked : 'N/A',
+        showMetadata: showMetadata,
+        hasSimulation: obj.hasOwnProperty('simulation'),
+        hasSlot: obj.hasOwnProperty('slot'),
+        hasRunId: obj.hasOwnProperty('run_id')
+    });
+    
+    if (showMetadata) {
+        console.log('Returning original object (metadata visible)');
+        return obj; // Return original if showing metadata
+    }
+    
+    // Create copy and remove metadata fields
+    console.log('Creating filtered copy (removing metadata)');
+    const copy = JSON.parse(JSON.stringify(obj));
+    delete copy.simulation;
+    delete copy.slot;
+    delete copy.run_id;
+    
+    console.log('Filtered copy created:', {
+        hasSimulation: copy.hasOwnProperty('simulation'),
+        hasSlot: copy.hasOwnProperty('slot'),
+        hasRunId: copy.hasOwnProperty('run_id')
+    });
+    
+    return copy;
+}
+
+/**
  * Mark executed plugins in the editor with visual indicators
  */
 function markExecutedPlugins(nodes, originalEvent) {
@@ -180,13 +461,16 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         transition: all 0.2s ease;
     `;
     
-    // Store the original event data
-    dataFlow.dataset.eventJson = JSON.stringify(originalEvent, null, 2);
+    // Store the original event data (filter metadata if toggle unchecked)
+    console.log('addOriginalEventIndicator: About to filter original event');
+    const filtered = filterMetadata(originalEvent);
+    console.log('addOriginalEventIndicator: Filtered, now stringifying');
+    dataFlow.dataset.eventJson = JSON.stringify(filtered, null, 2);
     
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
-        showDataFlowTooltip(e, this.dataset.eventJson, true); // sticky = true
+        showDataFlowTooltip(e, this.dataset.eventJson, true, null); // No changes for original event
     });
     
     // Add hover effects and tooltip
@@ -196,7 +480,7 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         this.style.transform = 'translateX(4px)';
         
         // Show hover tooltip (non-sticky)
-        showDataFlowTooltip(e, this.dataset.eventJson, false);
+        showDataFlowTooltip(e, this.dataset.eventJson, false, null);
     });
     
     dataFlow.addEventListener('mouseleave', function() {
@@ -223,11 +507,13 @@ function addDataFlowIndicator(componentElement, node) {
     const dataFlow = document.createElement('div');
     dataFlow.className = 'simulation-data-flow';
     dataFlow.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M23 12h-6m-6 0H1m18.2 5.2l-4.2-4.2m0-6l4.2-4.2"/>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2v4"/>
+            <path d="M16 2v4"/>
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <path d="M3 10h18"/>
         </svg>
-        <span>Full Event</span>
+        <span>View Full Event</span>
     `;
     
     dataFlow.style.cssText = `
@@ -248,16 +534,26 @@ function addDataFlowIndicator(componentElement, node) {
     
     // Store the full event snapshot data for tooltip (from node's eventJson if available)
     let eventData = 'No data available';
+    let changesData = null;
     if (node.eventJson) {
-        // node.eventJson contains the full snapshot
-        eventData = node.eventJson;
+        // Parse, filter, and re-stringify
+        console.log('addDataFlowIndicator: About to parse and filter node eventJson');
+        const parsed = JSON.parse(node.eventJson);
+        const filtered = filterMetadata(parsed);
+        eventData = JSON.stringify(filtered, null, 2);
+        changesData = node.changes || null; // Store changes for highlighting
+        console.log('addDataFlowIndicator: Filtered and stringified');
     }
     dataFlow.dataset.eventJson = eventData;
+    if (changesData) {
+        dataFlow.dataset.changes = JSON.stringify(changesData);
+    }
     
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
-        showDataFlowTooltip(e, this.dataset.eventJson, true); // sticky = true
+        const changes = this.dataset.changes ? JSON.parse(this.dataset.changes) : null;
+        showDataFlowTooltip(e, this.dataset.eventJson, true, changes); // sticky = true
     });
     
     // Add hover effects and tooltip
@@ -267,7 +563,8 @@ function addDataFlowIndicator(componentElement, node) {
         this.style.transform = 'translateX(4px)';
         
         // Show hover tooltip (non-sticky)
-        showDataFlowTooltip(e, this.dataset.eventJson, false);
+        const changes = this.dataset.changes ? JSON.parse(this.dataset.changes) : null;
+        showDataFlowTooltip(e, this.dataset.eventJson, false, changes);
     });
     
     dataFlow.addEventListener('mouseleave', function() {
@@ -291,8 +588,9 @@ function addDataFlowIndicator(componentElement, node) {
  * @param {Event} event - The mouse event
  * @param {string} eventJson - The JSON data to display
  * @param {boolean} sticky - If true, tooltip stays open until closed; if false, auto-hides on mouse out
+ * @param {Object} changes - Optional changes object for context-aware highlighting
  */
-function showDataFlowTooltip(event, eventJson, sticky = false) {
+function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
     let tooltip = document.getElementById('data-flow-tooltip');
     
     if (!tooltip) {
@@ -323,13 +621,16 @@ function showDataFlowTooltip(event, eventJson, sticky = false) {
         tooltip.style.pointerEvents = 'auto';
         tooltip.style.cursor = 'move';
         
+        // Apply syntax highlighting with change context
+        const highlightedJSON = highlightJSON(eventJson, changes);
+        
         // Update content with close button
         tooltip.innerHTML = `
             <button onclick="hideDataFlowTooltip()" 
                     style="position: absolute; top: 8px; right: 8px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"
                     onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">✕</button>
             <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px; padding-right: 24px;">Event State at This Point:</div>
-            <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+            <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
         
         // Make draggable only when sticky
@@ -339,9 +640,12 @@ function showDataFlowTooltip(event, eventJson, sticky = false) {
         tooltip.style.pointerEvents = 'none';
         tooltip.style.cursor = 'default';
         
+        // Apply syntax highlighting with change context
+        const highlightedJSON = highlightJSON(eventJson, changes);
+        
         tooltip.innerHTML = `
             <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px;">Event State at This Point:</div>
-            <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+            <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
     }
     
@@ -610,6 +914,47 @@ function createForceDirectedGraph(graphData) {
     node.on("click", function(event, d) {
         event.stopPropagation();
         
+        // Special handling for "Start" node - scroll to Original Event
+        if (d.id === 'start') {
+            const originalEventElement = document.querySelector('.simulation-data-flow');
+            if (originalEventElement) {
+                originalEventElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+                
+                // Apply the same glowing animation
+                originalEventElement.classList.add('newly-added');
+                
+                // Remove the animation class after it completes
+                setTimeout(() => {
+                    originalEventElement.classList.remove('newly-added');
+                }, 2000);
+            }
+            return;
+        }
+        
+        // Special handling for "End" node - scroll to last "View Full Event"
+        if (d.id === 'end') {
+            const allDataFlows = document.querySelectorAll('.simulation-data-flow');
+            if (allDataFlows.length > 0) {
+                const lastDataFlow = allDataFlows[allDataFlows.length - 1];
+                lastDataFlow.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+                
+                // Apply the same glowing animation
+                lastDataFlow.classList.add('newly-added');
+                
+                // Remove the animation class after it completes
+                setTimeout(() => {
+                    lastDataFlow.classList.remove('newly-added');
+                }, 2000);
+            }
+            return;
+        }
+        
         // Extract the component ID from the node
         let componentId = d.id;
         
@@ -649,8 +994,7 @@ function createForceDirectedGraph(graphData) {
             setTimeout(() => {
                 componentElement.classList.remove('newly-added');
             }, 2000);
-        } else if (componentId !== 'start') {
-            // Don't warn about 'start' - it's a virtual node not in the editor
+        } else {
             console.warn(`Component not found: ${componentId}`);
         }
     });
@@ -675,6 +1019,9 @@ function createForceDirectedGraph(graphData) {
         .style("pointer-events", "none");
     
     function showLinkTooltip(event, eventJson, sticky = false) {
+        // Apply syntax highlighting
+        const highlightedJSON = highlightJSON(eventJson);
+        
         if (sticky) {
             // Make tooltip interactive and draggable when pinned
             linkTooltip.style("pointer-events", "auto")
@@ -687,7 +1034,7 @@ function createForceDirectedGraph(graphData) {
                             style="position: absolute; top: -8px; right: -8px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;"
                             onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">✕</button>
                     <div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.5rem;">Event State:</div>
-                    <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+                    <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
                 </div>
             `;
             linkTooltip.html(content);
@@ -697,7 +1044,7 @@ function createForceDirectedGraph(graphData) {
         } else {
             linkTooltip.html(`
                 <div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.5rem;">Event State:</div>
-                <pre style="margin: 0; white-space: pre-wrap; color: #86efac;">${eventJson}</pre>
+                <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
             `);
         }
         
@@ -877,6 +1224,9 @@ window.generateTextView = function(data) {
         const changesText = node.changesText || 'No changes';
         const eventJson = node.eventJson || 'No event data';
         
+        // Apply syntax highlighting to the event JSON
+        const highlightedEventJson = highlightJSON(eventJson);
+        
         html += `
             <div class="border border-gray-700 rounded-lg p-4 bg-gray-800">
                 <div class="text-lg font-bold text-blue-400 mb-3 pb-2 border-b border-gray-700">
@@ -890,7 +1240,7 @@ window.generateTextView = function(data) {
                 
                 <div>
                     <div class="text-sm font-semibold text-gray-400 mb-2">Event After Plugin Execution:</div>
-                    <pre class="text-xs text-cyan-300 bg-gray-900 p-3 rounded border border-gray-700 overflow-x-auto">${eventJson}</pre>
+                    <pre class="text-xs bg-gray-900 p-3 rounded border border-gray-700 overflow-x-auto">${highlightedEventJson}</pre>
                 </div>
             </div>
         `;
@@ -1178,12 +1528,12 @@ function initSimulationResults(runId) {
                     
                     data.results.forEach(event => {
                         // Check if this is the original event
-                        if (event.step_id === 'original') {
+                        if (event.simulation.id === 'original') {
                             console.log('Storing original event for baseline comparison');
                             originalEvent = event;
                         }
                         // Check if this is the final event
-                        else if (event.step_id === 'final') {
+                        else if (event.simulation.id === 'final') {
                                 console.log('Found final event, processing snapshots in order');
                                 receivedFinal = true;
                                 // Access the components variable from the page
@@ -1299,8 +1649,12 @@ function initSimulationResults(runId) {
                                                 if (snapshot) {
                                                     stepNumber++;
                                                     
+                                                    // Filter metadata from both snapshots before comparing
+                                                    const filteredPrevious = filterMetadata(previousSnapshot);
+                                                    const filteredCurrent = filterMetadata(snapshot);
+                                                    
                                                     // Compare with previous snapshot (or original) and show only changes
-                                                    const changes = diffObjects(previousSnapshot, snapshot);
+                                                    const changes = diffObjects(filteredPrevious, filteredCurrent);
                                                     
                                                     // Check if there are any changes
                                                     const hasChanges = Object.keys(changes.added).length > 0 ||
@@ -1317,14 +1671,20 @@ function initSimulationResults(runId) {
                                                         changesText = JSON.stringify(changesObj, null, 2);
                                                     }
                                                     
-                                                    // Add node
+                                                    // Filter snapshot before storing
+                                                    console.log('About to call filterMetadata for plugin:', pluginId);
+                                                    const filteredSnap = filterMetadata(snapshot);
+                                                    console.log('filterMetadata returned, storing in node');
+                                                    
+                                                    // Add node with changes for context-aware highlighting
                                                     nodes.push({
                                                         id: pluginId,
                                                         label: filterPlugin.plugin,
                                                         step: stepNumber,
                                                         hasChanges: hasChanges,
                                                         changesText: changesText,
-                                                        eventJson: JSON.stringify(snapshot, null, 2),
+                                                        eventJson: JSON.stringify(filteredSnap, null, 2),
+                                                        changes: changes, // Store changes for highlighting
                                                         isConditional: false
                                                     });
                                                     
@@ -1333,7 +1693,7 @@ function initSimulationResults(runId) {
                                                     links.push({
                                                         source: currentNodeId,
                                                         target: pluginId,
-                                                        eventJson: JSON.stringify(snapshot, null, 2),
+                                                        eventJson: JSON.stringify(filteredSnap, null, 2),
                                                         isConditional: false
                                                     });
                                                     
@@ -1350,7 +1710,26 @@ function initSimulationResults(runId) {
                                     }
                                     
                                     // Process all filter plugins
-                                    processPlugins(components.filter, lastNodeId);
+                                    const finalNodeId = processPlugins(components.filter, lastNodeId);
+                                    
+                                    // Add ending node
+                                    stepNumber++;
+                                    nodes.push({
+                                        id: 'end',
+                                        label: 'End',
+                                        step: stepNumber,
+                                        hasChanges: false,
+                                        changesText: 'Pipeline complete',
+                                        isConditional: false
+                                    });
+                                    
+                                    // Connect final plugin to end node
+                                    links.push({
+                                        source: finalNodeId,
+                                        target: 'end',
+                                        eventJson: 'Pipeline complete',
+                                        isConditional: false
+                                    });
                                     
                                     // Store simulation data globally for view switching
                                     window.simulationData = { nodes, links };

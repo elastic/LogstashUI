@@ -233,8 +233,8 @@ event.set('[conditional_branches][{conditional_id}]', 'else')
                     # This keeps the instrumentation static so the pipeline config hash is consistent
                     instrumentation_code = f"""
 # Update step tracking
-event.set('[simulation_step]', {current_step})
-event.set('[step_id]', '{plugin['id']}')
+event.set('[simulation][step]', {current_step})
+event.set('[simulation][id]', '{plugin['id']}')
 
 # Create snapshot of current event state
 snapshot = {{}}

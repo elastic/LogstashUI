@@ -316,16 +316,22 @@
       </div>
       
       <!-- Action Buttons -->
-      <div class="flex justify-end space-x-3 mt-6">
-        <button type="button" onclick="closeSimulationModal()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors">
-          Cancel
-        </button>
-        <button type="submit" id="runSimulationBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors flex items-center gap-2">
-          <span>Run Simulation</span>
-          <div id="simulationLoading" class="htmx-indicator">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-          </div>
-        </button>
+      <div class="flex justify-between items-center mt-6">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="debugMetadataToggle" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2">
+          <span class="text-sm text-gray-300">Debug Metadata</span>
+        </label>
+        <div class="flex space-x-3">
+          <button type="button" onclick="closeSimulationModal()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors">
+            Cancel
+          </button>
+          <button type="submit" id="runSimulationBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors flex items-center gap-2">
+            <span>Run Simulation</span>
+            <div id="simulationLoading" class="htmx-indicator">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            </div>
+          </button>
+        </div>
       </div>
       
       <div id="simulationResults" class="mt-6"></div>
