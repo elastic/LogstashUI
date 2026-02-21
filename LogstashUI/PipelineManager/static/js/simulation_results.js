@@ -370,6 +370,34 @@ function markExecutedPlugins(nodes, originalEvent) {
                 componentElement.appendChild(badge);
             }
             
+            // Add execution time badge if available
+            if (node.executionTimeMs && !componentElement.querySelector('.simulation-timing-badge')) {
+                const timingBadge = document.createElement('div');
+                timingBadge.className = 'simulation-timing-badge';
+                timingBadge.innerHTML = `⏱ ${node.executionTimeMs}ms`;
+                timingBadge.title = `Execution time: ${node.executionTimeMs} milliseconds`;
+                timingBadge.style.cssText = `
+                    position: absolute;
+                    top: 8px;
+                    right: 120px;
+                    padding: 4px 8px;
+                    background: linear-gradient(135deg, #eab308, #ca8a04);
+                    color: white;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 11px;
+                    font-weight: bold;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                    z-index: 10;
+                    animation: badgePop 0.3s ease-out;
+                    white-space: nowrap;
+                `;
+                
+                componentElement.appendChild(timingBadge);
+            }
+            
             // Add change indicators inside the plugin row
             if (!node.isDecisionPoint && node.hasChanges && node.changesText && node.changesText !== 'No changes') {
                 const changesIndicator = document.createElement('div');
@@ -1378,6 +1406,13 @@ function renderCachedResults(runId, index) {
         // Create the graph
         createForceDirectedGraph({ nodes: cachedData.nodes, links: cachedData.links });
         
+        // Display total execution time
+        const totalTimeElement = document.getElementById('totalExecutionTime');
+        if (totalTimeElement && cachedData.totalExecutionTimeMs) {
+            totalTimeElement.textContent = `⏱ ${cachedData.totalExecutionTimeMs}ms`;
+            totalTimeElement.style.display = 'inline';
+        }
+        
         // Show view mode selector
         const viewModeSelector = document.getElementById('viewModeSelector');
         if (viewModeSelector) {
@@ -1405,6 +1440,7 @@ function clearSimulationArtifacts() {
     
     // Remove all simulation badges and indicators from pipeline editor
     document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
+    document.querySelectorAll('.simulation-timing-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
     document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
     
@@ -1676,6 +1712,13 @@ function initSimulationResults(runId) {
                                                     const filteredSnap = filterMetadata(snapshot);
                                                     console.log('filterMetadata returned, storing in node');
                                                     
+                                                    // Extract timing data if available
+                                                    let executionTimeMs = null;
+                                                    if (snapshot.simulation && snapshot.simulation.timing && snapshot.simulation.timing.execution_ns) {
+                                                        // Convert nanoseconds to milliseconds, rounded to 3 decimal places
+                                                        executionTimeMs = (snapshot.simulation.timing.execution_ns / 1000000).toFixed(3);
+                                                    }
+                                                    
                                                     // Add node with changes for context-aware highlighting
                                                     nodes.push({
                                                         id: pluginId,
@@ -1685,7 +1728,8 @@ function initSimulationResults(runId) {
                                                         changesText: changesText,
                                                         eventJson: JSON.stringify(filteredSnap, null, 2),
                                                         changes: changes, // Store changes for highlighting
-                                                        isConditional: false
+                                                        isConditional: false,
+                                                        executionTimeMs: executionTimeMs // Store execution time in milliseconds
                                                     });
                                                     
                                                     // Add link from the last actual node that was added
@@ -1731,8 +1775,16 @@ function initSimulationResults(runId) {
                                         isConditional: false
                                     });
                                     
+                                    // Calculate total execution time from all nodes
+                                    let totalExecutionTimeMs = 0;
+                                    nodes.forEach(node => {
+                                        if (node.executionTimeMs) {
+                                            totalExecutionTimeMs += parseFloat(node.executionTimeMs);
+                                        }
+                                    });
+                                    
                                     // Store simulation data globally for view switching
-                                    window.simulationData = { nodes, links };
+                                    window.simulationData = { nodes, links, totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3) };
                                     
                                     // Cache results for this run_id
                                     if (!window.simulationResultsCache) {
@@ -1741,7 +1793,8 @@ function initSimulationResults(runId) {
                                     window.simulationResultsCache[runId] = {
                                         nodes: nodes,
                                         links: links,
-                                        originalEvent: originalEvent
+                                        originalEvent: originalEvent,
+                                        totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3)
                                     };
                                     console.log('Cached results for run_id:', runId);
                                     
@@ -1758,6 +1811,13 @@ function initSimulationResults(runId) {
                                         // Overlay Mode: Mark plugins and create graph
                                         markExecutedPlugins(nodes, originalEvent);
                                         createForceDirectedGraph({ nodes, links });
+                                        
+                                        // Display total execution time
+                                        const totalTimeElement = document.getElementById('totalExecutionTime');
+                                        if (totalTimeElement && totalExecutionTimeMs > 0) {
+                                            totalTimeElement.textContent = `⏱ ${totalExecutionTimeMs.toFixed(3)}ms`;
+                                            totalTimeElement.style.display = 'inline';
+                                        }
                                         
                                         // Show view mode selector in overlay
                                         const viewModeSelector = document.getElementById('viewModeSelector');

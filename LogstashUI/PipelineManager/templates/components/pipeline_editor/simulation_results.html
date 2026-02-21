@@ -48,6 +48,7 @@
                     <div class="flex items-center gap-3">
                         <span class="text-green-400 font-semibold">✓ Simulation Results</span>
                         <span class="text-xs text-gray-400">Run ID: {{ run_id }}</span>
+                        <span id="totalExecutionTime" class="text-xs text-yellow-400 font-semibold" style="display: none;"></span>
                         <span class="text-xs text-gray-400">{{ filter_count }} filters</span>
                         <div id="documentNavigation" style="display: none;" class="flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-lg">
                             <button onclick="previousDocument()" id="prevDocBtn" class="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" title="Previous document">

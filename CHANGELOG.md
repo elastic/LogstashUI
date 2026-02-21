@@ -1,7 +1,11 @@
 ## [0.1.13] - TBD
 ### Added
 - Toggle button for simulation that turns on/off simulation metadat
+- Simulate now shows time in ms of plugin and entire execution
+
 ### Changed
+- Colorized the "after" json output to be more readable and clearly convey what was changed
+
 
 ### Fixed
 

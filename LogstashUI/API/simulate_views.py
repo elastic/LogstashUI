@@ -221,13 +221,31 @@ event.set('[conditional_branches][{conditional_id}]', 'else')
                     # Add the conditional plugin with instrumented nested plugins
                     instrumented.append(conditional_plugin)
                 else:
-                    # Regular plugin - add it and then add instrumentation
-                    instrumented.append(plugin)
-                    
+                    # Regular plugin - add pre-plugin timing instrumentation
                     # Increment step counter
                     step_counter[0] += 1
                     current_step = step_counter[0]
                     
+                    # Add pre-plugin timing instrumentation
+                    pre_instrumentation_code = f"""
+# Capture start time in nanoseconds before plugin execution
+event.set('[simulation][timing][start_ns]', (Time.now.to_f * 1_000_000_000).to_i)
+""".strip()
+
+                    pre_instrumentation_plugin = {
+                        "id": f"pre_instrumentation_{current_step}",
+                        "type": "filter",
+                        "plugin": "ruby",
+                        "config": {
+                            "code": pre_instrumentation_code
+                        }
+                    }
+
+                    instrumented.append(pre_instrumentation_plugin)
+
+                    # Add the actual plugin
+                    instrumented.append(plugin)
+
                     # Add Ruby instrumentation after this plugin
                     # Note: run_id is NOT included here - it's added to the event data when sent to Logstash
                     # This keeps the instrumentation static so the pipeline config hash is consistent
@@ -235,6 +253,15 @@ event.set('[conditional_branches][{conditional_id}]', 'else')
 # Update step tracking
 event.set('[simulation][step]', {current_step})
 event.set('[simulation][id]', '{plugin['id']}')
+
+# Calculate execution time in nanoseconds
+end_ns = (Time.now.to_f * 1_000_000_000).to_i
+start_ns = event.get('[simulation][timing][start_ns]')
+if start_ns
+  execution_ns = end_ns - start_ns
+  event.set('[simulation][timing][execution_ns]', execution_ns)
+  event.set('[simulation][timing][end_ns]', end_ns)
+end
 
 # Create snapshot of current event state
 snapshot = {{}}
