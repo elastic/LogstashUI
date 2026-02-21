@@ -2,12 +2,14 @@
 ### Added
 - Toggle button for simulation that turns on/off simulation metadat
 - Simulate now shows time in ms of plugin and entire execution
+- Visual indicator of parsing failure / tag on failure in simulate
 
 ### Changed
 - Colorized the "after" json output to be more readable and clearly convey what was changed
 
 
 ### Fixed
+- Drops no longer time out in the simulation feature
 
 
 ## [0.1.11-12] - 02/12/2026

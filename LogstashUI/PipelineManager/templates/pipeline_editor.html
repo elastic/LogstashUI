@@ -167,6 +167,18 @@
         }
     }
 
+    /* Failure pulse animation for parsing failure badges */
+    @keyframes failurePulse {
+        0%, 100% {
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.8), 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: scale(1);
+        }
+        50% {
+            box-shadow: 0 0 30px rgba(220, 38, 38, 1), 0 0 40px rgba(220, 38, 38, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: scale(1.05);
+        }
+    }
+
     /* Dim non-executed plugins during simulation */
     .simulation-dimmed {
         opacity: 0.3;

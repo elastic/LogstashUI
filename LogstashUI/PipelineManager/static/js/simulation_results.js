@@ -243,6 +243,74 @@ function getStatus(annotated, path) {
 }
 
 /**
+ * Check if an event has parsing failure tags
+ * Looks for common Logstash failure tags in the tags field
+ * Also checks for custom tag_on_failure values if they exist in the event
+ * @param {Object} event - The event object to check
+ * @returns {Object} - Object with hasFailure boolean and failureTags array
+ */
+function checkForParsingFailures(event) {
+    const result = {
+        hasFailure: false,
+        failureTags: []
+    };
+    
+    if (!event) {
+        console.log('checkForParsingFailures: No event provided');
+        return result;
+    }
+    
+    console.log('checkForParsingFailures: Checking event for failures', event);
+    
+    // Common Logstash parsing failure tags
+    const commonFailureTags = [
+        '_grokparsefailure',
+        '_dissectfailure',
+        '_dateparsefailure',
+        '_jsonparsefailure'
+    ];
+    
+    // Check if event has a tags field
+    if (event.tags && Array.isArray(event.tags)) {
+        console.log('checkForParsingFailures: Event has tags:', event.tags);
+        
+        // Check for common failure tags (case-insensitive)
+        const foundCommonFailures = event.tags.filter(tag => 
+            typeof tag === 'string' && commonFailureTags.includes(tag.toLowerCase())
+        );
+        
+        if (foundCommonFailures.length > 0) {
+            console.log('checkForParsingFailures: Found common failure tags:', foundCommonFailures);
+            result.hasFailure = true;
+            result.failureTags.push(...foundCommonFailures);
+        }
+        
+        // Also check for ANY tag that starts with underscore and contains "fail"
+        // This catches custom failure tags like "_grok_syslog_wrapper_fail", "_grok_ciscotag_fail", etc.
+        const customFailureTags = event.tags.filter(tag => 
+            typeof tag === 'string' && 
+            tag.startsWith('_') && 
+            tag.toLowerCase().includes('fail')
+        );
+        
+        if (customFailureTags.length > 0) {
+            console.log('checkForParsingFailures: Found custom failure tags:', customFailureTags);
+            result.hasFailure = true;
+            result.failureTags.push(...customFailureTags);
+        }
+    } else {
+        console.log('checkForParsingFailures: Event has no tags field or tags is not an array');
+    }
+    
+    // Remove duplicates from failureTags
+    result.failureTags = [...new Set(result.failureTags)];
+    
+    console.log('checkForParsingFailures: Result:', result);
+    
+    return result;
+}
+
+/**
  * Helper to filter simulation metadata from event objects
  * Returns a copy without simulation, slot, run_id if Debug Metadata toggle is unchecked
  */
@@ -342,30 +410,98 @@ function markExecutedPlugins(nodes, originalEvent) {
         const componentElement = document.querySelector(`[data-id="${componentId}"]`);
         
         if (componentElement) {
-            // Add badge indicator
+            // Check for parsing failures ADDED by this plugin
+            let hasFailure = false;
+            let failureTags = [];
+            if (node.eventJson && node.changes) {
+                try {
+                    // Check if this plugin ADDED any failure tags
+                    // Look in the changes.added or changes.modified for the 'tags' field
+                    const changes = typeof node.changes === 'string' ? JSON.parse(node.changes) : node.changes;
+                    
+                    // Check if tags were added
+                    if (changes.added && changes.added.tags) {
+                        const addedTags = Array.isArray(changes.added.tags) ? changes.added.tags : [changes.added.tags];
+                        const failureCheck = checkForParsingFailures({ tags: addedTags });
+                        if (failureCheck.hasFailure) {
+                            hasFailure = true;
+                            failureTags = failureCheck.failureTags;
+                        }
+                    }
+                    
+                    // Check if tags were modified (from old value to new value)
+                    if (!hasFailure && changes.modified && changes.modified.tags) {
+                        const modifiedTags = changes.modified.tags;
+                        const oldTags = Array.isArray(modifiedTags.from) ? modifiedTags.from : [];
+                        const newTags = Array.isArray(modifiedTags.to) ? modifiedTags.to : [];
+                        
+                        // Find tags that were added (in new but not in old)
+                        const addedInModification = newTags.filter(tag => !oldTags.includes(tag));
+                        
+                        if (addedInModification.length > 0) {
+                            const failureCheck = checkForParsingFailures({ tags: addedInModification });
+                            if (failureCheck.hasFailure) {
+                                hasFailure = true;
+                                failureTags = failureCheck.failureTags;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error checking for failure tags in changes:', e);
+                }
+            }
+            
+            // Add badge indicator (success or failure)
             if (!componentElement.querySelector('.simulation-executed-badge')) {
                 const badge = document.createElement('div');
                 badge.className = 'simulation-executed-badge';
-                badge.innerHTML = '✓';
-                badge.title = 'Executed in simulation';
-                badge.style.cssText = `
-                    position: absolute;
-                    top: 8px;
-                    right: 8px;
-                    width: 24px;
-                    height: 24px;
-                    background: linear-gradient(135deg, #10b981, #059669);
-                    color: white;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 12px;
-                    font-weight: bold;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-                    z-index: 10;
-                    animation: badgePop 0.3s ease-out;
-                `;
+                
+                if (hasFailure) {
+                    // Failure badge - clean and professional
+                    badge.innerHTML = '!';
+                    badge.title = `PARSING FAILURE DETECTED\nFailed tags: ${failureTags.join(', ')}`;
+                    badge.style.cssText = `
+                        position: absolute;
+                        top: 8px;
+                        right: 8px;
+                        width: 20px;
+                        height: 20px;
+                        background: #dc2626;
+                        color: white;
+                        border-radius: 3px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 13px;
+                        font-weight: 700;
+                        font-family: system-ui, -apple-system, sans-serif;
+                        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+                        z-index: 10;
+                        animation: badgePop 0.3s ease-out;
+                    `;
+                } else {
+                    // Success badge
+                    badge.innerHTML = '✓';
+                    badge.title = 'Executed in simulation';
+                    badge.style.cssText = `
+                        position: absolute;
+                        top: 8px;
+                        right: 8px;
+                        width: 24px;
+                        height: 24px;
+                        background: linear-gradient(135deg, #10b981, #059669);
+                        color: white;
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        font-weight: bold;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                        z-index: 10;
+                        animation: badgePop 0.3s ease-out;
+                    `;
+                }
                 
                 componentElement.appendChild(badge);
             }
@@ -867,6 +1003,50 @@ function createForceDirectedGraph(graphData) {
     node.each(function(d) {
         const nodeGroup = d3.select(this);
         
+        // Check for parsing failures ADDED by this node
+        let hasFailure = false;
+        let failureTags = [];
+        if (d.eventJson && !d.isConditional && d.changes) {
+            try {
+                // Check if this plugin ADDED any failure tags
+                const changes = typeof d.changes === 'string' ? JSON.parse(d.changes) : d.changes;
+                
+                // Check if tags were added
+                if (changes.added && changes.added.tags) {
+                    const addedTags = Array.isArray(changes.added.tags) ? changes.added.tags : [changes.added.tags];
+                    const failureCheck = checkForParsingFailures({ tags: addedTags });
+                    if (failureCheck.hasFailure) {
+                        hasFailure = true;
+                        failureTags = failureCheck.failureTags;
+                    }
+                }
+                
+                // Check if tags were modified (from old value to new value)
+                if (!hasFailure && changes.modified && changes.modified.tags) {
+                    const modifiedTags = changes.modified.tags;
+                    const oldTags = Array.isArray(modifiedTags.from) ? modifiedTags.from : [];
+                    const newTags = Array.isArray(modifiedTags.to) ? modifiedTags.to : [];
+                    
+                    // Find tags that were added (in new but not in old)
+                    const addedInModification = newTags.filter(tag => !oldTags.includes(tag));
+                    
+                    if (addedInModification.length > 0) {
+                        const failureCheck = checkForParsingFailures({ tags: addedInModification });
+                        if (failureCheck.hasFailure) {
+                            hasFailure = true;
+                            failureTags = failureCheck.failureTags;
+                        }
+                    }
+                }
+                
+                // Store failure info on the node for tooltip
+                d.hasFailure = hasFailure;
+                d.failureTags = failureTags;
+            } catch (e) {
+                console.error('Error checking for failure tags in changes:', e);
+            }
+        }
+        
         if (d.isConditional && d.isDecisionPoint) {
             // Hexagon shape for decision point nodes (path taken)
             const size = 20;
@@ -892,21 +1072,35 @@ function createForceDirectedGraph(graphData) {
                 });
         } else {
             // Circle for regular plugin nodes
+            // Color based on failure status, then changes
+            let fillColor, strokeColor;
+            if (hasFailure) {
+                fillColor = "#dc2626"; // Red for failures
+                strokeColor = "#ef4444";
+            } else if (d.hasChanges) {
+                fillColor = "#16a34a"; // Green for changes
+                strokeColor = "#22c55e";
+            } else {
+                fillColor = "#4b5563"; // Gray for no changes
+                strokeColor = "#6b7280";
+            }
+            
             nodeGroup.append("circle")
                 .attr("r", 18)
-                .attr("fill", d.hasChanges ? "#16a34a" : "#4b5563")
-                .attr("stroke", d.hasChanges ? "#22c55e" : "#6b7280")
-                .attr("stroke-width", 2)
+                .attr("fill", fillColor)
+                .attr("stroke", strokeColor)
+                .attr("stroke-width", hasFailure ? 3 : 2)
                 .style("cursor", "pointer")
+                .style("filter", hasFailure ? "drop-shadow(0 0 8px rgba(220, 38, 38, 0.8))" : "none")
                 .on("mouseover", function(event, d) {
                     d3.select(this)
-                        .attr("stroke-width", 3)
+                        .attr("stroke-width", hasFailure ? 4 : 3)
                         .attr("r", 22);
                     showNodeTooltip(event, d);
                 })
                 .on("mouseout", function(event, d) {
                     d3.select(this)
-                        .attr("stroke-width", 2)
+                        .attr("stroke-width", hasFailure ? 3 : 2)
                         .attr("r", 18);
                     hideNodeTooltip();
                 });
@@ -1126,11 +1320,22 @@ function createForceDirectedGraph(graphData) {
                 <pre style="color: #86efac; white-space: pre-wrap; margin: 0; font-size: 10px;">${d.condition}</pre>
             </div>`;
         } else {
-            // Regular plugin node - show changes
-            title = `<div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.5rem;">Step ${d.step}: ${d.label}<br/><span style="font-weight: 400; font-size: 10px;">${d.id}</span></div>`;
-            content = d.hasChanges 
+            // Regular plugin node - show changes and failure status
+            let titleColor = d.hasFailure ? '#ef4444' : '#9ca3af';
+            let failureWarning = '';
+            
+            if (d.hasFailure) {
+                failureWarning = `<div style="background: rgba(220, 38, 38, 0.2); border: 2px solid #dc2626; border-radius: 6px; padding: 8px; margin-bottom: 0.5rem;">
+                    <div style="font-weight: 700; color: #fca5a5; margin-bottom: 0.25rem; font-size: 12px;">⚠ PARSING FAILURE DETECTED</div>
+                    <div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem; font-size: 10px;">Failed tags:</div>
+                    <div style="color: #ef4444; font-weight: 600; font-size: 11px;">${d.failureTags.join(', ')}</div>
+                </div>`;
+            }
+            
+            title = `<div style="font-weight: 600; color: ${titleColor}; margin-bottom: 0.5rem;">Step ${d.step}: ${d.label}<br/><span style="font-weight: 400; font-size: 10px;">${d.id}</span></div>`;
+            content = failureWarning + (d.hasChanges 
                 ? `<div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem;">Changes:</div><pre style="color: #86efac; white-space: pre-wrap; margin: 0;">${d.changesText}</pre>`
-                : `<div style="color: #6b7280; font-style: italic;">No changes</div>`;
+                : `<div style="color: #6b7280; font-style: italic;">No changes</div>`);
         }
         
         nodeTooltip.html(title + content)
@@ -1595,8 +1800,8 @@ function initSimulationResults(runId) {
                                     let stepNumber = 0;
                                     
                                     // Get conditional branches taken from the final event
-                                    const conditionalBranches = event.conditional_branches || {};
-                                    const conditionalConditions = event.conditional_conditions || {};
+                                    const conditionalBranches = event.simulation?.conditional_branches || {};
+                                    const conditionalConditions = event.simulation?.conditional_conditions || {};
                                     
                                     // Helper function to recursively process plugins and conditionals
                                     function processPlugins(pluginsList, parentNodeId) {

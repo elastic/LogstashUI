@@ -139,6 +139,17 @@ def SimulatePipeline(request):
         run_id = str(uuid.uuid4())
         logger.info(f"Starting simulation with run_id: {run_id}")
         
+        # Get LogstashAgent URL early so we can use it in instrumentation
+        logstash_agent_url = settings.LOGSTASH_AGENT_URL
+        
+        # Determine LOGSTASH_URL for Ruby code based on DEBUG mode
+        # DEBUG=True: http://host.docker.internal:8080
+        # DEBUG=False: https://host.docker.internal
+        if settings.DEBUG:
+            logstash_ui_url = "http://host.docker.internal:8080"
+        else:
+            logstash_ui_url = "https://host.docker.internal"
+        
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls
         
@@ -167,8 +178,8 @@ def SimulatePipeline(request):
                             "plugin": "ruby",
                             "config": {
                                 "code": f"""
-event.set('[conditional_branches][{conditional_id}]', 'if')
-event.set('[conditional_conditions][{conditional_id}]', '{if_condition}')
+event.set('[simulation][conditional_branches][{conditional_id}]', 'if')
+event.set('[simulation][conditional_conditions][{conditional_id}]', '{if_condition}')
 """.strip()
                             }
                         }
@@ -191,8 +202,8 @@ event.set('[conditional_conditions][{conditional_id}]', '{if_condition}')
                                     "plugin": "ruby",
                                     "config": {
                                         "code": f"""
-event.set('[conditional_branches][{conditional_id}]', 'else_if_{else_if_idx}')
-event.set('[conditional_conditions][{conditional_id}]', '{else_if_condition}')
+event.set('[simulation][conditional_branches][{conditional_id}]', 'else_if_{else_if_idx}')
+event.set('[simulation][conditional_conditions][{conditional_id}]', '{else_if_condition}')
 """.strip()
                                     }
                                 }
@@ -211,7 +222,7 @@ event.set('[conditional_conditions][{conditional_id}]', '{else_if_condition}')
                                 "plugin": "ruby",
                                 "config": {
                                     "code": f"""
-event.set('[conditional_branches][{conditional_id}]', 'else')
+event.set('[simulation][conditional_branches][{conditional_id}]', 'else')
 """.strip()
                                 }
                             }
@@ -225,6 +236,73 @@ event.set('[conditional_branches][{conditional_id}]', 'else')
                     # Increment step counter
                     step_counter[0] += 1
                     current_step = step_counter[0]
+                    
+                    # Check if this is a drop plugin - if so, add Ruby code to send event to API before drop
+                    if plugin.get('plugin') == 'drop':
+                        # Send the event to StreamSimulate API before it gets dropped
+                        # This mimics what simulate_end.conf does
+                        # URL is determined in Python based on DEBUG mode and injected here
+                        # We need to set simulation.step and simulation.id BEFORE the drop happens
+                        # Use current_step + 1 for the final event (since drop is the last step)
+                        final_step = current_step + 1
+                        drop_plugin_id = plugin['id']
+                        pre_drop_code = f"""
+require 'net/http'
+require 'uri'
+require 'json'
+
+# First, create a snapshot for the drop plugin itself (before it executes)
+# This ensures the frontend knows the drop plugin was reached
+event.set('[simulation][step]', {current_step})
+event.set('[simulation][id]', '{drop_plugin_id}')
+
+# Create snapshot of current event state for the drop plugin
+snapshot = {{}}
+event.to_hash.each do |key, value|
+  # Skip metadata and snapshots field itself to avoid recursion
+  next if key.start_with?('@metadata') || key == 'snapshots'
+  snapshot[key] = value
+end
+event.set('[snapshots][{drop_plugin_id}]', snapshot)
+
+# Now set to final for the API call
+event.set('[simulation][step]', {final_step})
+event.set('[simulation][id]', 'final')
+
+# Ensure run_id is set (should already be in the event from input)
+# But we'll set it explicitly to be safe
+if !event.get('run_id')
+  event.set('run_id', '{run_id}')
+end
+
+# Convert event to hash and send to API
+event_hash = event.to_hash
+
+# Send HTTP POST to StreamSimulate endpoint
+uri = URI.parse('{logstash_ui_url}/API/StreamSimulate/')
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = (uri.scheme == 'https')
+http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
+
+request = Net::HTTP::Post.new(uri.path, {{'Content-Type' => 'application/json'}})
+request.body = event_hash.to_json
+
+begin
+  response = http.request(request)
+rescue => e
+  # Log error but don't fail the pipeline
+end
+""".strip()
+                        
+                        pre_drop_plugin = {
+                            "id": f"pre_drop_api_call_{plugin['id']}",
+                            "type": "filter",
+                            "plugin": "ruby",
+                            "config": {
+                                "code": pre_drop_code
+                            }
+                        }
+                        instrumented.append(pre_drop_plugin)
                     
                     # Add pre-plugin timing instrumentation
                     pre_instrumentation_code = f"""
@@ -317,8 +395,6 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             return count
 
         total_plugin_count = count_all_plugins(filter_plugins)
-        # Use configured LogstashAgent URL
-        logstash_agent_url = settings.LOGSTASH_AGENT_URL
         # Add HTTP output that only sends cloned events (identified by type field)
         output_plugins = [
             {
