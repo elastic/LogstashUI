@@ -126,6 +126,9 @@ window.openSimulateSubsetModal = function() {
     isSubsetSimulation = true;
     selectedComponentIds = getSelectedComponentIds();
     
+    // Check for memory-intensive filter plugins
+    checkMemoryIntensivePlugins();
+    
     // Open the same simulation modal
     const modal = document.getElementById('simulationModal');
     if (modal) {
@@ -2134,8 +2137,93 @@ window.openSimulateModal = function() {
     isSubsetSimulation = false;
     selectedComponentIds = [];
     
+    // Check for memory-intensive filter plugins
+    checkMemoryIntensivePlugins();
+    
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
     }
 };
+
+// Function to check for memory-intensive filter plugins and display warning
+function checkMemoryIntensivePlugins() {
+    const warningDiv = document.getElementById('memoryIntensiveWarning');
+    const pluginListDiv = document.getElementById('memoryIntensivePluginList');
+    
+    if (!warningDiv || !pluginListDiv) return;
+    
+    // Get components to check (either subset or all)
+    const componentsToCheck = isSubsetSimulation ? getSubsetComponents() : components;
+    
+    // Find all memory-intensive filter plugins
+    const memoryIntensivePlugins = [];
+    
+    if (componentsToCheck.filter && Array.isArray(componentsToCheck.filter)) {
+        componentsToCheck.filter.forEach(component => {
+            // Check if this is a regular plugin (not a conditional block)
+            if (component.plugin && component.plugin !== 'if') {
+                const pluginInfo = pluginData?.filter?.[component.plugin];
+                if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                    memoryIntensivePlugins.push(component.plugin);
+                }
+            }
+            
+            // Check plugins inside conditional blocks
+            if (component.plugin === 'if') {
+                // Check plugins in the if block
+                if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                    component.config.plugins.forEach(plugin => {
+                        const pluginInfo = pluginData?.filter?.[plugin.plugin];
+                        if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                            memoryIntensivePlugins.push(plugin.plugin);
+                        }
+                    });
+                }
+                
+                // Check plugins in else-if blocks
+                if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                    component.config.else_ifs.forEach(elseIf => {
+                        if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                            elseIf.plugins.forEach(plugin => {
+                                const pluginInfo = pluginData?.filter?.[plugin.plugin];
+                                if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                                    memoryIntensivePlugins.push(plugin.plugin);
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                // Check plugins in else block
+                if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                    component.config.else.plugins.forEach(plugin => {
+                        const pluginInfo = pluginData?.filter?.[plugin.plugin];
+                        if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                            memoryIntensivePlugins.push(plugin.plugin);
+                        }
+                    });
+                }
+            }
+        });
+    }
+    
+    // Remove duplicates
+    const uniquePlugins = [...new Set(memoryIntensivePlugins)];
+    
+    // Display warning if any memory-intensive plugins found
+    if (uniquePlugins.length > 0) {
+        let message = "Looks like you're using ";
+        if (uniquePlugins.length === 1) {
+            message += `<strong>${uniquePlugins[0]}</strong>. This plugin can use a lot of memory. You may have to bump up your JVM heap if it fails.`;
+        } else {
+            const pluginNames = uniquePlugins.map(p => `<strong>${p}</strong>`).join(', ');
+            message += `${pluginNames}. These plugins can use a lot of memory. You may have to bump up your JVM heap if it fails.`;
+        }
+        
+        pluginListDiv.innerHTML = message;
+        warningDiv.classList.remove('hidden');
+    } else {
+        warningDiv.classList.add('hidden');
+    }
+}

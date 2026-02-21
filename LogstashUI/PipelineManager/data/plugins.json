@@ -7360,7 +7360,7 @@
                     "input_type": "array",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-community",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
@@ -16601,7 +16601,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "aggregate": {
             "name": "aggregate",
@@ -16775,7 +16776,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         },
         "alter": {
             "name": "alter",
@@ -16862,7 +16864,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "bytes": {
             "name": "bytes",
@@ -16949,7 +16952,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "cidr": {
             "name": "cidr",
@@ -17050,7 +17054,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "cipher": {
             "name": "cipher",
@@ -17197,7 +17202,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "clone": {
             "name": "clone",
@@ -17277,7 +17283,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "csv": {
             "name": "csv",
@@ -17447,7 +17454,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "date": {
             "name": "date",
@@ -17548,7 +17556,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "de_dot": {
             "name": "de_dot",
@@ -17650,7 +17659,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "dissect": {
             "name": "dissect",
@@ -17737,7 +17747,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "dns": {
             "name": "dns",
@@ -17891,7 +17902,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "drop": {
             "name": "drop",
@@ -17964,7 +17976,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "elapsed": {
             "name": "elapsed",
@@ -18076,7 +18089,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "elastic_integration": {
             "name": "elastic_integration",
@@ -18284,7 +18298,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "elasticsearch": {
             "name": "elasticsearch",
@@ -18607,7 +18622,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         },
         "environment": {
             "name": "environment",
@@ -18680,7 +18696,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "extractnumbers": {
             "name": "extractnumbers",
@@ -18753,7 +18770,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "fingerprint": {
             "name": "fingerprint",
@@ -18899,7 +18917,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "geoip": {
             "name": "geoip",
@@ -19021,7 +19040,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "grok": {
             "name": "grok",
@@ -19190,7 +19210,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "http": {
             "name": "http",
@@ -19525,7 +19546,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "i18n": {
             "name": "i18n",
@@ -19598,7 +19620,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "java_uuid": {
             "name": "java_uuid",
@@ -19682,7 +19705,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "jdbc_streaming": {
             "name": "jdbc_streaming",
@@ -19911,7 +19935,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         },
         "json": {
             "name": "json",
@@ -20016,7 +20041,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "json_encode": {
             "name": "json_encode",
@@ -20096,7 +20122,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "kv": {
             "name": "kv",
@@ -20367,7 +20394,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "memcached": {
             "name": "memcached",
@@ -20475,7 +20503,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "metricize": {
             "name": "metricize",
@@ -20573,7 +20602,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "metrics": {
             "name": "metrics",
@@ -20688,7 +20718,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "mutate": {
             "name": "mutate",
@@ -20859,7 +20890,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "prune": {
             "name": "prune",
@@ -20964,7 +20996,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "range": {
             "name": "range",
@@ -21048,7 +21081,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "ruby": {
             "name": "ruby",
@@ -21160,7 +21194,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "sleep": {
             "name": "sleep",
@@ -21251,7 +21286,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "split": {
             "name": "split",
@@ -21338,7 +21374,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "syslog_pri": {
             "name": "syslog_pri",
@@ -21443,7 +21480,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "threats_classifier": {
             "name": "threats_classifier",
@@ -21466,7 +21504,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "throttle": {
             "name": "throttle",
@@ -21574,7 +21613,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "tld": {
             "name": "tld",
@@ -21654,7 +21694,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "translate": {
             "name": "translate",
@@ -21837,7 +21878,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "truncate": {
             "name": "truncate",
@@ -21917,7 +21959,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "urldecode": {
             "name": "urldecode",
@@ -22187,7 +22230,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "useragent": {
             "name": "useragent",
@@ -22295,7 +22339,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "uuid": {
             "name": "uuid",
@@ -22379,7 +22424,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "wurfl_device_detection": {
             "name": "wurfl_device_detection",
@@ -22456,7 +22502,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "xml": {
             "name": "xml",
@@ -22612,7 +22659,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "jdbc_static": {
             "name": "jdbc_static",
@@ -22704,7 +22752,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         }
     },
     "codec": {
