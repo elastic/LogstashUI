@@ -129,6 +129,9 @@ window.openSimulateSubsetModal = function() {
     // Check for memory-intensive filter plugins
     checkMemoryIntensivePlugins();
     
+    // Check for plugins requiring file paths
+    checkFilePathRequiredPlugins();
+    
     // Open the same simulation modal
     const modal = document.getElementById('simulationModal');
     if (modal) {
@@ -2140,6 +2143,9 @@ window.openSimulateModal = function() {
     // Check for memory-intensive filter plugins
     checkMemoryIntensivePlugins();
     
+    // Check for plugins requiring file paths
+    checkFilePathRequiredPlugins();
+    
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
@@ -2227,3 +2233,213 @@ function checkMemoryIntensivePlugins() {
         warningDiv.classList.add('hidden');
     }
 }
+
+// Function to check for plugins requiring file paths and display warning
+function checkFilePathRequiredPlugins() {
+    const warningDiv = document.getElementById('filePathRequiredWarning');
+    const pluginListDiv = document.getElementById('filePathPluginList');
+    
+    if (!warningDiv || !pluginListDiv) return;
+    
+    // Get components to check (either subset or all)
+    const componentsToCheck = isSubsetSimulation ? getSubsetComponents() : components;
+    
+    // Find all plugins with fs_path options
+    const pluginsWithFilePaths = [];
+    
+    // Helper function to check a component for fs_path options
+    function checkComponentForFilePaths(component, type) {
+        if (!component.plugin || component.plugin === 'if') return;
+        
+        const pluginInfo = pluginData?.[type]?.[component.plugin];
+        if (!pluginInfo || !pluginInfo.options) return;
+        
+        // Check if any option has input_type: "fs_path" AND has a value configured
+        const fsPathOptionsWithValues = [];
+        Object.entries(pluginInfo.options).forEach(([optionName, optionInfo]) => {
+            if (optionInfo.input_type && optionInfo.input_type.toLowerCase() === 'fs_path') {
+                // Only include if the component has a value for this option
+                const configValue = component.config?.[optionName];
+                if (configValue !== undefined && configValue !== null && configValue !== '') {
+                    fsPathOptionsWithValues.push(optionName);
+                }
+            }
+        });
+        
+        if (fsPathOptionsWithValues.length > 0) {
+            pluginsWithFilePaths.push({
+                name: component.plugin,
+                type: type,
+                options: fsPathOptionsWithValues,
+                componentId: component.id
+            });
+        }
+    }
+    
+    // Check all plugin types
+    ['input', 'filter', 'output'].forEach(type => {
+        if (componentsToCheck[type] && Array.isArray(componentsToCheck[type])) {
+            componentsToCheck[type].forEach(component => {
+                checkComponentForFilePaths(component, type);
+                
+                // Check plugins inside conditional blocks (for filters)
+                if (type === 'filter' && component.plugin === 'if') {
+                    // Check plugins in the if block
+                    if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                        component.config.plugins.forEach(plugin => {
+                            checkComponentForFilePaths(plugin, type);
+                        });
+                    }
+                    
+                    // Check plugins in else-if blocks
+                    if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                        component.config.else_ifs.forEach(elseIf => {
+                            if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                                elseIf.plugins.forEach(plugin => {
+                                    checkComponentForFilePaths(plugin, type);
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Check plugins in else block
+                    if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                        component.config.else.plugins.forEach(plugin => {
+                            checkComponentForFilePaths(plugin, type);
+                        });
+                    }
+                }
+            });
+        }
+    });
+    
+    // Display warning if any plugins with file paths found
+    if (pluginsWithFilePaths.length > 0) {
+        let html = '';
+        
+        pluginsWithFilePaths.forEach((plugin, index) => {
+            const pluginId = `file-path-plugin-${index}`;
+            
+            html += `
+                <div class="bg-gray-800/50 rounded p-3 border border-gray-600">
+                    ${plugin.options.map((optionName, optIndex) => {
+                        const inputId = `${pluginId}-${optIndex}`;
+                        const checkboxId = `${pluginId}-ignore-${optIndex}`;
+                        return `
+                            <div class="mb-3">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="font-medium text-blue-200">${plugin.name}</span>
+                                    <span class="text-gray-400">(${plugin.type})</span>
+                                    <span class="text-gray-400">${optionName}</span>
+                                    <label class="flex items-center gap-1 cursor-pointer ml-auto">
+                                        <input type="checkbox" id="${checkboxId}" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500" onchange="toggleFilePathInput('${inputId}', this.checked)">
+                                        <span class="text-xs text-gray-300">Ignore</span>
+                                    </label>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="text" id="${inputId}" 
+                                           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" 
+                                           placeholder="Enter file path or click Browse..."
+                                           data-plugin-name="${plugin.name}"
+                                           data-plugin-type="${plugin.type}"
+                                           data-option-name="${optionName}"
+                                           data-component-id="${plugin.componentId}">
+                                    <button type="button" class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap" onclick="browseFilePathForSimulation('${inputId}')" title="Browse for file">
+                                        <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        Browse...
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        });
+        
+        pluginListDiv.innerHTML = html;
+        warningDiv.classList.remove('hidden');
+    } else {
+        warningDiv.classList.add('hidden');
+    }
+}
+
+// Toggle file path input enabled/disabled based on ignore checkbox
+window.toggleFilePathInput = function(inputId, isIgnored) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.disabled = isIgnored;
+        if (isIgnored) {
+            input.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            input.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+};
+
+// Browse file path for simulation and upload the file
+window.browseFilePathForSimulation = function(inputId) {
+    // Create a hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.style.display = 'none';
+    
+    fileInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const textInput = document.getElementById(inputId);
+            if (!textInput) return;
+            
+            // Get metadata from data attributes
+            const componentId = textInput.dataset.componentId;
+            const optionName = textInput.dataset.optionName;
+            
+            // Get file extension
+            const originalExtension = file.name.split('.').pop();
+            
+            // Generate filename for backend: {component_id}_{option_name}.{extension}
+            const generatedFilename = `${componentId}_${optionName}.${originalExtension}`;
+            
+            // Show the original filename to the user
+            textInput.value = file.name;
+            
+            // Store the generated filename in a data attribute for later use
+            textInput.dataset.generatedFilename = generatedFilename;
+            
+            // Upload the file to the API with the generated filename
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('filename', generatedFilename);
+                
+                const response = await fetch('/API/UploadFile/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                });
+                
+                if (response.ok) {
+                    // Show success toast
+                    showToast('Upload successful', 'success');
+                } else {
+                    const errorData = await response.json();
+                    console.error('File upload failed:', errorData);
+                    showToast('Upload failed: ' + (errorData.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                showToast('Upload failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Clean up
+        document.body.removeChild(fileInput);
+    });
+    
+    // Trigger the file picker
+    document.body.appendChild(fileInput);
+    fileInput.click();
+};

@@ -1,3 +1,15 @@
+// Helper function to escape HTML (used by populate functions)
+function escapeHtml(unsafe) {
+    if (unsafe === undefined || unsafe === null) return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // Plugin Configuration Modal Controller
 window.PluginConfigModal = (function () {
     let currentComponent = null;
@@ -186,6 +198,70 @@ window.PluginConfigModal = (function () {
               <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array_of_hashes" value='${escapeHtml(JSON.stringify(arrayValue))}'>
             </div>
           `;
+                } else if (inputType === 'key_list_hash') {
+                    // Handle key_list_hash input type (e.g., grok match field)
+                    let keyListHashValue = {};
+                    try {
+                        if (typeof value === 'string' && value.trim() !== '') {
+                            keyListHashValue = JSON.parse(value);
+                        } else if (typeof value === 'object' && value !== null) {
+                            keyListHashValue = {...value};
+                        }
+                    } catch (e) {
+                        console.error('Error parsing key_list_hash value:', e);
+                    }
+
+                    const containerId = `key-list-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    
+                    inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3" data-section-id="${sectionId}">
+                <div class="flex items-center gap-2">
+                  <input type="text"
+                         class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                         placeholder="Key (e.g., message, field1)"
+                         onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                  <button type="button"
+                          class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                          onclick="removeKeyListHashSection('${containerId}', '${fieldId}', this)">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove Section
+                  </button>
+                </div>
+                <div class="ml-4 space-y-2 section-values">
+                  <div class="flex items-center gap-2">
+                    <span class="text-gray-400 text-sm">=></span>
+                    <input type="text"
+                           class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                           placeholder="Value (e.g., pattern1)"
+                           onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                    <button type="button"
+                            class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                            onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Remove
+                    </button>
+                  </div>
+                </div>
+                <button type="button"
+                        class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                        onclick="addKeyListHashValue('${containerId}', '${fieldId}', this)">
+                    + Add Value
+                </button>
+              </div>
+              <button type="button"
+                      class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition-colors"
+                      onclick="addKeyListHashSection('${containerId}', '${fieldId}')">
+                + Add Section
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="key_list_hash" value='${escapeHtml(JSON.stringify(keyListHashValue))}'>
+            </div>
+          `;
                 } else if (inputType.includes('hash') || inputType === 'object') {
                     // Handle hash/object input type
                     let hashValue = {};
@@ -201,7 +277,7 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -213,13 +289,16 @@ window.PluginConfigModal = (function () {
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addHashPair('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -247,20 +326,23 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addArrayItem('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -488,6 +570,70 @@ window.PluginConfigModal = (function () {
               <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array_of_hashes" value='${escapeHtml(JSON.stringify(arrayValue))}'>
             </div>
           `;
+                    } else if (inputType === 'key_list_hash') {
+                        // Handle key_list_hash input type (e.g., grok match field)
+                        let keyListHashValue = {};
+                        try {
+                            if (typeof value === 'string' && value.trim() !== '') {
+                                keyListHashValue = JSON.parse(value);
+                            } else if (typeof value === 'object' && value !== null) {
+                                keyListHashValue = {...value};
+                            }
+                        } catch (e) {
+                            console.error('Error parsing key_list_hash value:', e);
+                        }
+
+                        const containerId = `key-list-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        
+                        inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3" data-section-id="${sectionId}">
+                <div class="flex items-center gap-2">
+                  <input type="text"
+                         class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                         placeholder="Key (e.g., message, field1)"
+                         onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                  <button type="button"
+                          class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                          onclick="removeKeyListHashSection('${containerId}', '${fieldId}', this)">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove Section
+                  </button>
+                </div>
+                <div class="ml-4 space-y-2 section-values">
+                  <div class="flex items-center gap-2">
+                    <span class="text-gray-400 text-sm">=></span>
+                    <input type="text"
+                           class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                           placeholder="Value (e.g., pattern1)"
+                           onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                    <button type="button"
+                            class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                            onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Remove
+                    </button>
+                  </div>
+                </div>
+                <button type="button"
+                        class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                        onclick="addKeyListHashValue('${containerId}', '${fieldId}', this)">
+                    + Add Value
+                </button>
+              </div>
+              <button type="button"
+                      class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition-colors"
+                      onclick="addKeyListHashSection('${containerId}', '${fieldId}')">
+                + Add Section
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="key_list_hash" value='${escapeHtml(JSON.stringify(keyListHashValue))}'>
+            </div>
+          `;
                     } else if (inputType.includes('hash') || inputType === 'object') {
                         // Handle hash/object input type
                         let hashValue = {};
@@ -503,7 +649,7 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -515,13 +661,16 @@ window.PluginConfigModal = (function () {
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addHashPair('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -549,20 +698,23 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addArrayItem('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -756,11 +908,12 @@ window.PluginConfigModal = (function () {
             }
         }
 
-        // Populate existing hash, array, and array_of_hashes values
+        // Populate existing hash, array, array_of_hashes, and key_list_hash values
         setTimeout(() => {
             populateExistingValues(component);
             populateCodecValues(component);
             populateArrayOfHashesValues(component);
+            populateKeyListHashValues(component);
         }, 10);
 
         // Focus the first input field
@@ -810,8 +963,11 @@ window.PluginConfigModal = (function () {
                      value="${escapeHtml(value)}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'value')">
               <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeHashPair('${container.id}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
                 Remove
               </button>
             `;
@@ -853,8 +1009,11 @@ window.PluginConfigModal = (function () {
                      value="${escapeHtml(value)}"
                      onchange="updateArrayItem('${container.id}', '${hiddenField.id}', this, ${index})">
               <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeArrayItem('${container.id}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
                 Remove
               </button>
             `;
@@ -1003,7 +1162,7 @@ window.PluginConfigModal = (function () {
                     if (Object.keys(parsedValue).length > 0) {
                         config[key] = parsedValue;
                     }
-                } else if (fieldType === 'hash' || fieldType === 'array' || fieldType === 'array_of_hashes') {
+                } else if (fieldType === 'hash' || fieldType === 'array' || fieldType === 'array_of_hashes' || fieldType === 'key_list_hash') {
                     const parsedValue = JSON.parse(value);
                     // Only add if the hash/array is not empty
                     if (Object.keys(parsedValue).length > 0 || (Array.isArray(parsedValue) && parsedValue.length > 0)) {
@@ -1086,7 +1245,7 @@ window.PluginConfigModal = (function () {
                         isEmpty = true;
                     }
                 }
-            } else if (fieldType === 'hash' || fieldType === 'object') {
+            } else if (fieldType === 'hash' || fieldType === 'object' || fieldType === 'key_list_hash') {
                 const hiddenInput = fieldGroup.querySelector('input[type="hidden"]');
                 if (hiddenInput) {
                     try {
@@ -1118,18 +1277,6 @@ window.PluginConfigModal = (function () {
         }
         
         return null;
-    }
-
-    // Helper function to escape HTML
-    function escapeHtml(unsafe) {
-        if (unsafe === undefined || unsafe === null) return '';
-        return unsafe
-            .toString()
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
     }
 
     // Helper function to get color based on plugin type
@@ -1188,8 +1335,11 @@ window.addHashPair = function (containerId, fieldId) {
            placeholder="Value"
            onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
     <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeHashPair('${containerId}', this)">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
       Remove
     </button>
   `;
@@ -1256,8 +1406,11 @@ window.addArrayItem = function (containerId, fieldId) {
            placeholder="Value"
            onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${newIndex})">
     <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeArrayItem('${containerId}', this)">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
       Remove
     </button>
   `;
@@ -1529,6 +1682,254 @@ function populateArrayOfHashesValues(component) {
             }
         } catch (e) {
             console.error('Error populating array_of_hashes values:', e);
+        }
+    });
+}
+
+// Key List Hash helper functions (for fields like grok match)
+window.addKeyListHashSection = function (containerId, fieldId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const addButton = container.querySelector('button[onclick*="addKeyListHashSection"]');
+    if (!addButton) return;
+
+    // Create unique ID for this section
+    const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const sectionDiv = document.createElement('div');
+    sectionDiv.className = 'p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3';
+    sectionDiv.dataset.sectionId = sectionId;
+    
+    sectionDiv.innerHTML = `
+        <div class="flex items-center gap-2">
+            <input type="text"
+                   class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                   placeholder="Key (e.g., message, field1)"
+                   onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+            <button type="button"
+                    class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                    onclick="removeKeyListHashSection('${containerId}', '${fieldId}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Remove Section
+            </button>
+        </div>
+        <div class="ml-4 space-y-2 section-values">
+            <div class="flex items-center gap-2">
+                <span class="text-gray-400 text-sm">=></span>
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                       placeholder="Value (e.g., pattern1)"
+                       onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                <button type="button"
+                        class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                        onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Remove
+                </button>
+            </div>
+        </div>
+        <button type="button"
+                class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                onclick="addKeyListHashValue('${containerId}', '${fieldId}', this)">
+            + Add Value
+        </button>
+    `;
+    
+    addButton.parentNode.insertBefore(sectionDiv, addButton);
+    updateKeyListHashField(containerId, fieldId);
+};
+
+window.removeKeyListHashSection = function (containerId, fieldId, button) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const sectionDiv = button.closest('[data-section-id]');
+    if (sectionDiv) {
+        // Check if there are any sections left
+        const remainingSections = container.querySelectorAll('[data-section-id]');
+        
+        // Only remove if there's more than one section (keep at least one)
+        if (remainingSections.length > 1) {
+            sectionDiv.remove();
+            updateKeyListHashField(containerId, fieldId);
+        } else {
+            // Clear the inputs instead of removing the last section
+            const keyInput = sectionDiv.querySelector('.section-key');
+            const valueInputs = sectionDiv.querySelectorAll('.section-values input[type="text"]');
+            
+            if (keyInput) keyInput.value = '';
+            valueInputs.forEach(input => input.value = '');
+            
+            updateKeyListHashField(containerId, fieldId);
+        }
+    }
+};
+
+window.addKeyListHashValue = function (containerId, fieldId, button) {
+    const sectionDiv = button.closest('[data-section-id]');
+    if (!sectionDiv) return;
+
+    const valuesContainer = sectionDiv.querySelector('.section-values');
+    if (!valuesContainer) return;
+
+    const newValue = document.createElement('div');
+    newValue.className = 'flex items-center gap-2';
+    newValue.innerHTML = `
+        <span class="text-gray-400 text-sm">=></span>
+        <input type="text"
+               class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+               placeholder="Value"
+               onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+        <button type="button"
+                class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Remove
+        </button>
+    `;
+    
+    valuesContainer.appendChild(newValue);
+    updateKeyListHashField(containerId, fieldId);
+};
+
+window.removeKeyListHashValue = function (containerId, fieldId, button) {
+    const valueDiv = button.closest('.flex.items-center.space-x-2');
+    if (valueDiv) {
+        valueDiv.remove();
+        updateKeyListHashField(containerId, fieldId);
+    }
+};
+
+window.updateKeyListHashField = function (containerId, fieldId) {
+    const container = document.getElementById(containerId);
+    const hiddenField = document.getElementById(fieldId);
+    if (!container || !hiddenField) return;
+
+    const sections = container.querySelectorAll('[data-section-id]');
+    const result = {};
+
+    sections.forEach(section => {
+        const keyInput = section.querySelector('.section-key');
+        if (!keyInput) return;
+
+        const key = keyInput.value.trim();
+        if (!key) return;
+
+        const valueInputs = section.querySelectorAll('.section-values input[type="text"]');
+        const values = [];
+        
+        valueInputs.forEach(input => {
+            const value = input.value.trim();
+            if (value) {
+                values.push(value);
+            }
+        });
+
+        // Store as single value if only one, or array if multiple
+        if (values.length === 1) {
+            result[key] = values[0];
+        } else if (values.length > 1) {
+            result[key] = values;
+        }
+    });
+
+    hiddenField.value = JSON.stringify(result);
+};
+
+// Populate existing key_list_hash values
+function populateKeyListHashValues(component) {
+    const configForm = document.getElementById('configForm');
+    if (!configForm) return;
+
+    configForm.querySelectorAll('[id^="key-list-hash-container-"]').forEach(container => {
+        const hiddenField = container.querySelector('input[type="hidden"]');
+        if (!hiddenField) return;
+
+        try {
+            const keyListHashValue = JSON.parse(hiddenField.value);
+            const entries = Object.entries(keyListHashValue);
+
+            if (entries.length > 0) {
+                // Remove the default empty section first
+                const defaultSection = container.querySelector('[data-section-id]');
+                if (defaultSection) {
+                    const keyInput = defaultSection.querySelector('.section-key');
+                    if (keyInput && !keyInput.value) {
+                        defaultSection.remove();
+                    }
+                }
+
+                const addButton = container.querySelector('button[onclick*="addKeyListHashSection"]');
+                
+                entries.forEach(([key, value]) => {
+                    const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3';
+                    sectionDiv.dataset.sectionId = sectionId;
+                    
+                    // Normalize value to array
+                    const values = Array.isArray(value) ? value : [value];
+                    
+                    let valuesHtml = '';
+                    values.forEach(val => {
+                        valuesHtml += `
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-400 text-sm">=></span>
+                                <input type="text"
+                                       class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                                       placeholder="Value"
+                                       value="${escapeHtml(val)}"
+                                       onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
+                                <button type="button"
+                                        class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                                        onclick="removeKeyListHashValue('${container.id}', '${hiddenField.id}', this)">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Remove
+                                </button>
+                            </div>
+                        `;
+                    });
+                    
+                    sectionDiv.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <input type="text"
+                                   class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                                   placeholder="Key (e.g., message, field1)"
+                                   value="${escapeHtml(key)}"
+                                   onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
+                            <button type="button"
+                                    class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                                    onclick="removeKeyListHashSection('${container.id}', '${hiddenField.id}', this)">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Remove Section
+                            </button>
+                        </div>
+                        <div class="ml-4 space-y-2 section-values">
+                            ${valuesHtml}
+                        </div>
+                        <button type="button"
+                                class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                                onclick="addKeyListHashValue('${container.id}', '${hiddenField.id}', this)">
+                            + Add Value
+                        </button>
+                    `;
+                    
+                    addButton.parentNode.insertBefore(sectionDiv, addButton);
+                });
+            }
+        } catch (e) {
+            console.error('Error populating key_list_hash values:', e);
         }
     });
 }

@@ -19109,7 +19109,7 @@
                 },
                 "match": {
                     "setting": "match",
-                    "input_type": "hash",
+                    "input_type": "key_list_hash",
                     "required": "No",
                     "setting_link": "#plugins-filters-grok-match",
                     "important": "Yes"
