@@ -157,7 +157,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "beats": {
             "name": "beats",
@@ -355,7 +356,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "cloudwatch": {
             "name": "cloudwatch",
@@ -1927,7 +1929,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "ganglia": {
             "name": "ganglia",
@@ -2538,7 +2541,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "important": "Yes"
         },
         "graphite": {
             "name": "graphite",
@@ -3020,7 +3024,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "http_poller": {
             "name": "http_poller",
@@ -4186,7 +4191,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "jms": {
             "name": "jms",
@@ -5187,7 +5193,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "kinesis": {
             "name": "kinesis",
@@ -6364,7 +6371,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "relp": {
             "name": "relp",
@@ -6805,7 +6813,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "s3-sns-sqs": {
             "name": "s3-sns-sqs",
@@ -8169,7 +8178,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "tcp": {
             "name": "tcp",
@@ -8372,7 +8382,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "twitter": {
             "name": "twitter",
@@ -8673,7 +8684,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "unix": {
             "name": "unix",
@@ -10595,7 +10607,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "email": {
             "name": "email",
@@ -10934,7 +10947,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "ganglia": {
             "name": "ganglia",
@@ -11614,7 +11628,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "important": "Yes"
         },
         "graphite": {
             "name": "graphite",
@@ -12154,7 +12169,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "influxdb": {
             "name": "influxdb",
@@ -12961,7 +12977,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "librato": {
             "name": "librato",
@@ -14100,7 +14117,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "redis": {
             "name": "redis",
@@ -14301,7 +14319,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "redmine": {
             "name": "redmine",
@@ -14948,7 +14967,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "sink": {
             "name": "sink",
@@ -15451,7 +15471,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "stomp": {
             "name": "stomp",
@@ -15729,7 +15750,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "important": "Yes"
         },
         "tcp": {
             "name": "tcp",
@@ -15871,7 +15893,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "timber": {
             "name": "timber",
@@ -16072,7 +16095,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "webhdfs": {
             "name": "webhdfs",
@@ -17455,7 +17479,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "date": {
             "name": "date",
@@ -17557,7 +17582,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "de_dot": {
             "name": "de_dot",
@@ -17748,7 +17774,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "dns": {
             "name": "dns",
@@ -18918,7 +18945,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "geoip": {
             "name": "geoip",
@@ -19041,7 +19069,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "grok": {
             "name": "grok",
@@ -19211,7 +19240,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "http": {
             "name": "http",
@@ -20042,7 +20072,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "json_encode": {
             "name": "json_encode",
@@ -20395,7 +20426,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "memcached": {
             "name": "memcached",
@@ -20891,7 +20923,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "prune": {
             "name": "prune",
@@ -21195,7 +21228,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "sleep": {
             "name": "sleep",
@@ -21879,7 +21913,8 @@
                 }
             },
             "bundled": "Yes",
-            "memory_intensive": "No"
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "truncate": {
             "name": "truncate",
