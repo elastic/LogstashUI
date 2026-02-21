@@ -9,11 +9,12 @@
 
 ### Changed
 - Colorized the "after" json output to be more readable and clearly convey what was changed
-
+- Overhaul of plugin config modal to be more user friendly
 
 ### Fixed
 - Drops no longer time out in the simulation feature
 - Chevron icon when expanding advanced options in pipeline settings
+- Bug that caused null lists to be inserted into the list
 
 ## [0.1.11-12] - 02/12/2026
 ### Added

@@ -820,10 +820,12 @@ def UploadFile(request):
         
         # Read file content
         file_content = uploaded_file.read()
+        logger.info(f"Read {len(file_content)} bytes from uploaded file")
         
         # Encode as base64 for transmission
         import base64
         encoded_content = base64.b64encode(file_content).decode('utf-8')
+        logger.info(f"Encoded content length: {len(encoded_content)} characters")
         
         # Send to LogstashAgent
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/write-file"

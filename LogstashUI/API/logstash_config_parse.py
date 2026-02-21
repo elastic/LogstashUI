@@ -175,8 +175,7 @@ class LogstashTransformer(Transformer):
         return {"type": "env_var", "value": v[0]}
 
     def array(self, items):
-        # Filter out None values that might appear in empty or malformed arrays
-        return [item for item in items if item is not None]
+        return list(items)
 
     def hash(self, pairs):
         return dict(pairs)
@@ -718,12 +717,8 @@ class ComponentToPipeline:
 
                 config += "\t}\n"
             elif type(plugin_config_value) is list:
-                # Skip empty lists entirely - don't add them to config
-                if not plugin_config_value:
-                    continue
-                
                 # Check if this is an array of hashes (list of dictionaries)
-                if isinstance(plugin_config_value[0], dict):
+                if plugin_config_value and isinstance(plugin_config_value[0], dict):
                     # Array of hashes - format each hash using Logstash syntax
                     config += f"\t{plugin_config_name} => [\n"
                     for i, hash_item in enumerate(plugin_config_value):

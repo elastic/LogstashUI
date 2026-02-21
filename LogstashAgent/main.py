@@ -595,12 +595,12 @@ output {{
         await put_pipeline(pipeline_name, pipeline_body)
     
     # Verify all slot pipelines loaded successfully
-    # Use longer retry window when system is under load
+    # Fail fast to prevent failed pipelines from blocking other slot allocations
     verification_success = await slots.verify_slot_pipelines_loaded(
         slot_id, 
         len(pipelines),
-        max_retries=10,  # Increased from default 5
-        retry_delay=2.0   # Increased from default 1.0
+        max_retries=1,  # Fail fast - only 2 retries
+        retry_delay=2.0
     )
     if not verification_success:
         # Delete the failed pipelines from Logstash to prevent log pollution
@@ -758,10 +758,13 @@ async def write_file(request: Request):
         
         # Decode base64 content and write file
         import base64
+        logger.info(f"Received content length: {len(content)} characters")
         file_content = base64.b64decode(content)
+        logger.info(f"Decoded to {len(file_content)} bytes")
         
         with open(file_path, 'wb') as f:
-            f.write(file_content)
+            bytes_written = f.write(file_content)
+            logger.info(f"Wrote {bytes_written} bytes to {file_path}")
         
         logger.info(f"File written successfully: {file_path}")
         
