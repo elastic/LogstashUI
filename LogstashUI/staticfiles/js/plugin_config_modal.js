@@ -300,6 +300,25 @@ window.PluginConfigModal = (function () {
               </button>
             </div>
           `;
+                } else if (inputType === 'fs_path') {
+                    // Handle filesystem path input type with file picker button
+                    inputField = `
+            <div class="flex items-center space-x-2">
+              <input type="text" id="${fieldId}" name="${key}"
+                     value="${escapeHtml(value)}"
+                     class="${inputClasses} flex-1"
+                     placeholder="Enter file path or click Browse...">
+              <button type="button" 
+                      class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap"
+                      onclick="browseFilePath('${fieldId}')"
+                      title="Browse for file">
+                <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Browse...
+              </button>
+            </div>
+          `;
                 } else {
                     // Default to text input
                     inputField = `
@@ -362,7 +381,7 @@ window.PluginConfigModal = (function () {
                 
                 advancedHeader.innerHTML = `
                     <h4 class="text-sm font-semibold text-gray-300">Advanced Settings</h4>
-                    <span class="toggle-icon text-gray-400 text-xs">▶</span>
+                    <span class="toggle-icon text-gray-400 text-xs">▼</span>
                 `;
                 
                 advancedSection.appendChild(advancedHeader);
@@ -568,9 +587,9 @@ window.PluginConfigModal = (function () {
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
           `;
-                    } else if (inputType === 'password') {
-                        // Handle password input type with show/hide functionality
-                        inputField = `
+    } else if (inputType === 'password') {
+        // Handle password input type with show/hide functionality
+        inputField = `
             <div class="relative">
               <input type="password" id="${fieldId}" name="${key}"
                      value="${escapeHtml(value)}"
@@ -583,6 +602,25 @@ window.PluginConfigModal = (function () {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
+              </button>
+            </div>
+          `;
+    } else if (inputType === 'fs_path') {
+        // Handle filesystem path input type with file picker button
+        inputField = `
+            <div class="flex items-center space-x-2">
+              <input type="text" id="${fieldId}" name="${key}"
+                     value="${escapeHtml(value)}"
+                     class="${inputClasses} flex-1"
+                     placeholder="Enter file path or click Browse...">
+              <button type="button" 
+                      class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap"
+                      onclick="browseFilePath('${fieldId}')"
+                      title="Browse for file">
+                <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Browse...
               </button>
             </div>
           `;
@@ -1677,6 +1715,35 @@ window.togglePasswordVisibility = function(fieldId, button) {
             </svg>
         `;
     }
+};
+
+// Browse file path function for fs_path input type
+window.browseFilePath = function(fieldId) {
+    const targetInput = document.getElementById(fieldId);
+    if (!targetInput) return;
+    
+    // Create a hidden file input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.style.display = 'none';
+    
+    // Handle file selection
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            // Get the file path (webkitRelativePath or name)
+            // Note: For security reasons, browsers don't expose the full file system path
+            // We'll use the file name as a placeholder
+            const filePath = file.webkitRelativePath || file.name;
+            targetInput.value = filePath;
+        }
+        // Clean up the temporary file input
+        document.body.removeChild(fileInput);
+    });
+    
+    // Add to DOM and trigger click
+    document.body.appendChild(fileInput);
+    fileInput.click();
 };
 
 // Initialize when the DOM is ready

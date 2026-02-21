@@ -239,7 +239,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-beats-ssl_certificate",
                     "important": "Yes"
@@ -290,7 +290,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-beats-ssl_key",
                     "important": "Yes"
@@ -578,7 +578,7 @@
                 },
                 "ca_file": {
                     "setting": "ca_file",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-couchdb_changes-ca_file",
                     "important": "No"
@@ -776,7 +776,7 @@
                 },
                 "path": {
                     "setting": "path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-dead_letter_queue-path",
                     "important": "Yes"
@@ -930,7 +930,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_agent-ssl_certificate",
                     "important": "Yes"
@@ -981,7 +981,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_agent-ssl_key",
                     "important": "Yes"
@@ -1096,7 +1096,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_serverless_forwarder-ssl_certificate",
                     "important": "No"
@@ -1147,7 +1147,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_serverless_forwarder-ssl_key",
                     "important": "No"
@@ -1422,7 +1422,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_certificate",
                     "important": "No"
@@ -1454,7 +1454,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_key",
                     "important": "No"
@@ -1468,7 +1468,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_keystore_path",
                     "important": "No"
@@ -1496,7 +1496,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_truststore_path",
                     "important": "No"
@@ -2320,7 +2320,7 @@
                 },
                 "json_key_file": {
                     "setting": "json_key_file",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-google_cloud_storage-json_key_file",
                     "important": "Yes"
@@ -2355,7 +2355,7 @@
                 },
                 "processed_db_path": {
                     "setting": "processed_db_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-google_cloud_storage-processed_db_path",
                     "important": "No"
@@ -2439,7 +2439,7 @@
             "options": {
                 "json_key_file": {
                     "setting": "json_key_file",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-google_pubsub-json_key_file",
                     "important": "Yes"
@@ -2588,7 +2588,7 @@
                 },
                 "ssl_cert": {
                     "setting": "ssl_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-graphite-ssl_cert",
                     "important": "No"
@@ -2613,7 +2613,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-graphite-ssl_key",
                     "important": "No"
@@ -2851,7 +2851,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_certificate",
                     "important": "Yes"
@@ -2902,7 +2902,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_key",
                     "important": "Yes"
@@ -2923,7 +2923,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_keystore_path",
                     "important": "No"
@@ -2951,7 +2951,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_truststore_path",
                     "important": "No"
@@ -3156,7 +3156,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ssl_certificate",
                     "important": "No"
@@ -3195,7 +3195,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ssl_keystore_path",
                     "important": "No"
@@ -3216,7 +3216,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ssl_truststore_path",
                     "important": "No"
@@ -3943,7 +3943,7 @@
                 },
                 "jdbc_password_filepath": {
                     "setting": "jdbc_password_filepath",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jdbc-jdbc_password_filepath",
                     "important": "No"
@@ -4078,7 +4078,7 @@
                 },
                 "statement_filepath": {
                     "setting": "statement_filepath",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jdbc-statement_filepath",
                     "important": "No"
@@ -4334,7 +4334,7 @@
                 },
                 "keystore": {
                     "setting": "keystore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jms-keystore",
                     "important": "No"
@@ -4447,7 +4447,7 @@
                 },
                 "truststore": {
                     "setting": "truststore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jms-truststore",
                     "important": "No"
@@ -4776,14 +4776,14 @@
                 },
                 "jaas_path": {
                     "setting": "jaas_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-jaas_path",
                     "important": "No"
                 },
                 "kerberos_config": {
                     "setting": "kerberos_config",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-kerberos_config",
                     "important": "No"
@@ -4972,7 +4972,7 @@
                 },
                 "schema_registry_ssl_keystore_location": {
                     "setting": "schema_registry_ssl_keystore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-schema_registry_ssl_keystore_location",
                     "important": "No"
@@ -4997,7 +4997,7 @@
                 },
                 "schema_registry_ssl_truststore_location": {
                     "setting": "schema_registry_ssl_truststore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-schema_registry_ssl_truststore_location",
                     "important": "No"
@@ -5077,7 +5077,7 @@
                 },
                 "ssl_keystore_location": {
                     "setting": "ssl_keystore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-ssl_keystore_location",
                     "important": "No"
@@ -5102,7 +5102,7 @@
                 },
                 "ssl_truststore_location": {
                     "setting": "ssl_truststore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-ssl_truststore_location",
                     "important": "No"
@@ -5459,7 +5459,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-logstash-ssl_certificate",
                     "important": "No"
@@ -5496,7 +5496,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-logstash-ssl_key",
                     "important": "No"
@@ -5510,7 +5510,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-logstash-ssl_keystore_path",
                     "important": "No"
@@ -5600,14 +5600,14 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-lumberjack-ssl_certificate",
                     "important": "Yes"
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-lumberjack-ssl_key",
                     "important": "Yes"
@@ -5877,14 +5877,14 @@
                 },
                 "private_key": {
                     "setting": "private_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-puppet_facter-private_key",
                     "important": "No"
                 },
                 "public_key": {
                     "setting": "public_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-puppet_facter-public_key",
                     "important": "No"
@@ -6136,7 +6136,7 @@
                 },
                 "ssl_certificate_path": {
                     "setting": "ssl_certificate_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-rabbitmq-ssl_certificate_path",
                     "important": "No"
@@ -6396,14 +6396,14 @@
                 },
                 "ssl_cacert": {
                     "setting": "ssl_cacert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-relp-ssl_cacert",
                     "important": "No"
                 },
                 "ssl_cert": {
                     "setting": "ssl_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-relp-ssl_cert",
                     "important": "No"
@@ -6421,7 +6421,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-relp-ssl_key",
                     "important": "No"
@@ -7164,7 +7164,7 @@
                 },
                 "mib_paths": {
                     "setting": "mib_paths",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-mib_paths",
                     "important": "No"
@@ -7387,7 +7387,7 @@
                 },
                 "mib_paths": {
                     "setting": "mib_paths",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-mib_paths",
                     "important": "No"
@@ -8243,7 +8243,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-tcp-ssl_certificate",
                     "important": "Yes"
@@ -8294,7 +8294,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-tcp-ssl_key",
                     "important": "Yes"
@@ -9928,7 +9928,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elastic_workplace_search-ssl_truststore_path",
                     "important": "No"
@@ -10405,7 +10405,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_certificate",
                     "important": "No"
@@ -10437,7 +10437,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_key",
                     "important": "No"
@@ -10451,7 +10451,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_keystore_path",
                     "important": "No"
@@ -10479,7 +10479,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_truststore_path",
                     "important": "No"
@@ -10504,7 +10504,7 @@
                 },
                 "template": {
                     "setting": "template",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-template",
                     "important": "No"
@@ -10759,7 +10759,7 @@
                 },
                 "template_file": {
                     "setting": "template_file",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-email-template_file",
                     "important": "No"
@@ -11569,7 +11569,7 @@
                 },
                 "json_key_file": {
                     "setting": "json_key_file",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-google_pubsub-json_key_file",
                     "important": "Yes"
@@ -12039,7 +12039,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-http-ssl_certificate",
                     "important": "No"
@@ -12078,7 +12078,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-http-ssl_keystore_path",
                     "important": "No"
@@ -12106,7 +12106,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-http-ssl_truststore_path",
                     "important": "No"
@@ -12674,14 +12674,14 @@
                 },
                 "jaas_path": {
                     "setting": "jaas_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-jaas_path",
                     "important": "No"
                 },
                 "kerberos_config": {
                     "setting": "kerberos_config",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-kerberos_config",
                     "important": "No"
@@ -12897,7 +12897,7 @@
                 },
                 "ssl_keystore_location": {
                     "setting": "ssl_keystore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-ssl_keystore_location",
                     "important": "No"
@@ -12918,7 +12918,7 @@
                 },
                 "ssl_truststore_location": {
                     "setting": "ssl_truststore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-ssl_truststore_location",
                     "important": "No"
@@ -13222,7 +13222,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_certificate",
                     "important": "No"
@@ -13236,14 +13236,14 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_key",
                     "important": "No"
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_keystore_path",
                     "important": "No"
@@ -13257,7 +13257,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_truststore_path",
                     "important": "No"
@@ -13344,7 +13344,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-outputs-lumberjack-ssl_certificate",
                     "important": "Yes"
@@ -13687,7 +13687,7 @@
                 },
                 "send_nsca_config": {
                     "setting": "send_nsca_config",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-nagios_nsca-send_nsca_config",
                     "important": "No"
@@ -14065,7 +14065,7 @@
                 },
                 "ssl_certificate_path": {
                     "setting": "ssl_certificate_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-rabbitmq-ssl_certificate_path",
                     "important": "No"
@@ -14231,7 +14231,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-redis-ssl_certificate",
                     "important": "No"
@@ -14263,7 +14263,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-redis-ssl_key",
                     "important": "No"
@@ -15676,21 +15676,21 @@
                 },
                 "ssl_cacert": {
                     "setting": "ssl_cacert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-syslog-ssl_cacert",
                     "important": "No"
                 },
                 "ssl_cert": {
                     "setting": "ssl_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-syslog-ssl_cert",
                     "important": "No"
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-syslog-ssl_key",
                     "important": "No"
@@ -15793,7 +15793,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-tcp-ssl_certificate",
                     "important": "No"
@@ -15837,7 +15837,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-tcp-ssl_key",
                     "important": "No"
@@ -15911,21 +15911,21 @@
                 },
                 "cacert": {
                     "setting": "cacert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-cacert",
                     "important": "No"
                 },
                 "client_cert": {
                     "setting": "client_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-client_cert",
                     "important": "No"
                 },
                 "client_key": {
                     "setting": "client_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-client_key",
                     "important": "No"
@@ -15939,7 +15939,7 @@
                 },
                 "keystore": {
                     "setting": "keystore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-keystore",
                     "important": "No"
@@ -15988,7 +15988,7 @@
                 },
                 "truststore": {
                     "setting": "truststore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-truststore",
                     "important": "No"
@@ -16636,7 +16636,7 @@
             "options": {
                 "aggregate_maps_path": {
                     "setting": "aggregate_maps_path",
-                    "input_type": "string, a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-aggregate-aggregate_maps_path",
                     "important": "No"
@@ -17001,7 +17001,7 @@
                 },
                 "network_path": {
                     "setting": "network_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-cidr-network_path",
                     "important": "No"
@@ -18148,7 +18148,7 @@
                 },
                 "geoip_database_directory": {
                     "setting": "geoip_database_directory",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-geoip_database_directory",
                     "important": "No"
@@ -18183,7 +18183,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_certificate",
                     "important": "No"
@@ -18208,7 +18208,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_key",
                     "important": "No"
@@ -18222,7 +18222,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_keystore_path",
                     "important": "No"
@@ -18236,7 +18236,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_truststore_path",
                     "important": "No"
@@ -18473,7 +18473,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_certificate",
                     "important": "No"
@@ -18505,7 +18505,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_key",
                     "important": "No"
@@ -18519,7 +18519,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_keystore_path",
                     "important": "No"
@@ -18547,7 +18547,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_truststore_path",
                     "important": "No"
@@ -18963,7 +18963,7 @@
                 },
                 "database": {
                     "setting": "database",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-geoip-database",
                     "important": "Yes"
@@ -19414,7 +19414,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ssl_certificate",
                     "important": "No"
@@ -19453,7 +19453,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ssl_keystore_path",
                     "important": "No"
@@ -19481,7 +19481,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ssl_truststore_path",
                     "important": "No"
@@ -19781,7 +19781,7 @@
                 },
                 "jdbc_driver_library": {
                     "setting": "jdbc_driver_library",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-jdbc_streaming-jdbc_driver_library",
                     "important": "Yes"
@@ -21753,7 +21753,7 @@
                 },
                 "dictionary_path": {
                     "setting": "dictionary_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-translate-dictionary_path",
                     "important": "Yes"
@@ -22718,7 +22718,7 @@
                 },
                 "jdbc_driver_library": {
                     "setting": "jdbc_driver_library",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-jdbc_static-jdbc_driver_library",
                     "important": "Yes"
@@ -25318,7 +25318,7 @@
             "options": {
                 "cache_save_path": {
                     "setting": "cache_save_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-codecs-netflow-cache_save_path",
                     "important": "No"
@@ -25343,14 +25343,14 @@
                 },
                 "ipfix_definitions": {
                     "setting": "ipfix_definitions",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-codecs-netflow-ipfix_definitions",
                     "important": "No"
                 },
                 "netflow_definitions": {
                     "setting": "netflow_definitions",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-codecs-netflow-netflow_definitions",
                     "important": "No"
