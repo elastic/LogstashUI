@@ -75,7 +75,7 @@ urlpatterns = [
     path("GetElasticsearchIndices/", views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
     path("GetElasticsearchFields/", views.GetElasticsearchFields, name="GetElasticsearchFields"),
     path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
-    path("PreviewElasticsearchData/", views.PreviewElasticsearchData, name="PreviewElasticsearchData")
+    path("PreviewElasticsearchData/", views.PreviewElasticsearchData, name="PreviewElasticsearchData"),
     path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport"),
 
     # SNMP Credential endpoints
