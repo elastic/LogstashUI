@@ -871,8 +871,8 @@
   async function submitAllDocuments(documents) {
     console.log('Submitting and polling', documents.length, 'documents simultaneously');
     
-    // Update component configs with generated filenames before submitting
-    updateComponentConfigsWithFilePaths();
+    // Create a deep copy of components with file paths updated for simulation
+    window.simulationComponents = createSimulationComponentsCopy();
     
     // Show toast immediately
     showToast('Simulation launched!', 'success');
@@ -894,11 +894,23 @@
     console.log('All documents submitted. Run IDs:', window.simulationRunIds);
   }
   
-  // Function to update component configs with generated file paths
-  function updateComponentConfigsWithFilePaths() {
+  // Function to create a deep copy of components with file paths updated for simulation only
+  function createSimulationComponentsCopy() {
+    // Get the original components (use subset if in subset mode)
+    let originalComponents;
+    if (typeof getSubsetComponents === 'function') {
+      originalComponents = getSubsetComponents();
+    } else {
+      originalComponents = typeof components !== 'undefined' ? components : (window.components || {});
+    }
+    
+    // Create a deep copy using JSON parse/stringify
+    const componentsCopy = JSON.parse(JSON.stringify(originalComponents));
+    
     // Find all file path inputs in the modal
     const filePathInputs = document.querySelectorAll('#filePathPluginList input[type="text"][data-generated-filename]');
     
+    // Update the copy with file paths
     filePathInputs.forEach(input => {
       const componentId = input.dataset.componentId;
       const optionName = input.dataset.optionName;
@@ -913,39 +925,28 @@
       // Prepend the LogstashAgent uploaded directory path
       const fullPath = `/tmp/uploaded/${generatedFilename}`;
       
-      // Get the components object (use subset if in subset mode)
-      let componentsToUpdate;
-      if (typeof getSubsetComponents === 'function') {
-        componentsToUpdate = getSubsetComponents();
-      } else {
-        componentsToUpdate = typeof components !== 'undefined' ? components : (window.components || {});
-      }
-      
-      // Find the component by ID and update its config
-      if (componentsToUpdate[pluginType]) {
-        const component = componentsToUpdate[pluginType].find(c => c.id === componentId);
+      // Find the component by ID in the COPY and update its config
+      if (componentsCopy[pluginType]) {
+        const component = componentsCopy[pluginType].find(c => c.id === componentId);
         if (component && component.config) {
-          // Update the config with the full path
+          // Update the config with the full path in the COPY only
           component.config[optionName] = fullPath;
-          console.log(`Updated ${pluginType} component ${componentId}: ${optionName} = ${fullPath}`);
+          console.log(`Simulation copy: Updated ${pluginType} component ${componentId}: ${optionName} = ${fullPath}`);
         }
       }
     });
+    
+    return componentsCopy;
   }
   
   // Function to submit a single document, start polling, and return its run_id
   async function submitAndPollDocument(doc, index) {
     console.log('submitAndPollDocument called for index', index);
     
-    // Get components - use subset if in subset mode, otherwise use all components
-    let componentsData;
-    if (typeof getSubsetComponents === 'function') {
-      componentsData = getSubsetComponents();
-      console.log('Using subset components:', componentsData);
-    } else {
-      componentsData = typeof components !== 'undefined' ? components : (window.components || {});
-      console.log('Using all components:', componentsData);
-    }
+    // Use the simulation components copy (with file paths updated)
+    // This was created in submitAllDocuments and stored in window.simulationComponents
+    const componentsData = window.simulationComponents;
+    console.log('Using simulation components copy:', componentsData);
     
     const formData = new FormData();
     formData.append('log_text', JSON.stringify(doc));
