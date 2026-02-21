@@ -714,3 +714,71 @@ async def get_pipelines_status():
             status_code=500,
             detail=f"Error fetching pipeline status: {str(e)}"
         )
+
+
+@app.post("/_logstash/write-file")
+async def write_file(request: Request):
+    """
+    Write a file to the uploaded directory for simulation use.
+    Only enabled when SIMULATION_MODE environment variable is set to true.
+    
+    Request body:
+    {
+        "filename": "filter_translate_10_dictionary_path.json",
+        "content": "<base64 encoded file content>"
+    }
+    """
+    # Check if simulation mode is enabled (defaults to true for development)
+    # Set SIMULATION_MODE=false to explicitly disable file uploads
+    simulation_mode = os.getenv("SIMULATION_MODE", "true").lower() == "true"
+    if not simulation_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="File upload is only allowed in simulation mode"
+        )
+    
+    try:
+        body = await request.json()
+        filename = body.get("filename")
+        content = body.get("content")
+        
+        if not filename or not content:
+            raise HTTPException(
+                status_code=400,
+                detail="Both 'filename' and 'content' are required"
+            )
+        
+        # Create uploaded directory in /tmp if it doesn't exist
+        uploaded_dir = "/tmp/uploaded"
+        os.makedirs(uploaded_dir, exist_ok=True)
+        
+        # Sanitize filename to prevent path traversal
+        safe_filename = os.path.basename(filename)
+        file_path = os.path.join(uploaded_dir, safe_filename)
+        
+        # Decode base64 content and write file
+        import base64
+        file_content = base64.b64decode(content)
+        
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
+        
+        logger.info(f"File written successfully: {file_path}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "message": f"File written to {file_path}",
+                "path": file_path
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error writing file: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error writing file: {str(e)}"
+        )

@@ -2337,7 +2337,13 @@ function checkFilePathRequiredPlugins() {
                                     </label>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <input type="text" id="${inputId}" class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" placeholder="Enter file path or click Browse...">
+                                    <input type="text" id="${inputId}" 
+                                           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" 
+                                           placeholder="Enter file path or click Browse..."
+                                           data-plugin-name="${plugin.name}"
+                                           data-plugin-type="${plugin.type}"
+                                           data-option-name="${optionName}"
+                                           data-component-id="${plugin.componentId}">
                                     <button type="button" class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap" onclick="browseFilePathForSimulation('${inputId}')" title="Browse for file">
                                         <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -2372,9 +2378,68 @@ window.toggleFilePathInput = function(inputId, isIgnored) {
     }
 };
 
-// Browse file path for simulation (reuse the existing function)
+// Browse file path for simulation and upload the file
 window.browseFilePathForSimulation = function(inputId) {
-    if (typeof window.browseFilePath === 'function') {
-        window.browseFilePath(inputId);
-    }
+    // Create a hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.style.display = 'none';
+    
+    fileInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const textInput = document.getElementById(inputId);
+            if (!textInput) return;
+            
+            // Get metadata from data attributes
+            const componentId = textInput.dataset.componentId;
+            const optionName = textInput.dataset.optionName;
+            
+            // Get file extension
+            const originalExtension = file.name.split('.').pop();
+            
+            // Generate filename for backend: {component_id}_{option_name}.{extension}
+            const generatedFilename = `${componentId}_${optionName}.${originalExtension}`;
+            
+            // Show the original filename to the user
+            textInput.value = file.name;
+            
+            // Store the generated filename in a data attribute for later use
+            textInput.dataset.generatedFilename = generatedFilename;
+            
+            // Upload the file to the API with the generated filename
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('filename', generatedFilename);
+                
+                const response = await fetch('/API/UploadFile/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                });
+                
+                if (response.ok) {
+                    // Show success toast
+                    showToast('Upload successful', 'success');
+                } else {
+                    const errorData = await response.json();
+                    console.error('File upload failed:', errorData);
+                    showToast('Upload failed: ' + (errorData.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                showToast('Upload failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Clean up
+        document.body.removeChild(fileInput);
+    });
+    
+    // Trigger the file picker
+    document.body.appendChild(fileInput);
+    fileInput.click();
 };

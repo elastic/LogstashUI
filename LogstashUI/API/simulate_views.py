@@ -796,3 +796,64 @@ def GetRelatedLogs(request):
             "log_count": 0,
             "logs": []
         }, status=500)
+
+
+@require_admin_role
+def UploadFile(request):
+    """
+    Upload a file for use in simulation.
+    Receives file binary data and transmits it to LogstashAgent for storage.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        # Get the uploaded file and filename
+        uploaded_file = request.FILES.get('file')
+        filename = request.POST.get('filename')
+        
+        if not uploaded_file:
+            return JsonResponse({"error": "No file provided"}, status=400)
+        
+        if not filename:
+            return JsonResponse({"error": "No filename provided"}, status=400)
+        
+        # Read file content
+        file_content = uploaded_file.read()
+        
+        # Encode as base64 for transmission
+        import base64
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
+        
+        # Send to LogstashAgent
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/write-file"
+        
+        response = requests.post(
+            logstash_agent_url,
+            json={
+                "filename": filename,
+                "content": encoded_content
+            },
+            verify=False,
+            timeout=10
+        )
+        
+        response.raise_for_status()
+        
+        logger.info(f"File uploaded successfully: {filename}")
+        
+        return JsonResponse({
+            "status": "ok",
+            "message": "File uploaded successfully",
+            "filename": filename
+        }, status=200)
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error transmitting file to LogstashAgent: {e}")
+        return JsonResponse({
+            "error": f"Failed to upload file to LogstashAgent: {str(e)}"
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Error in UploadFile: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({"error": str(e)}, status=500)

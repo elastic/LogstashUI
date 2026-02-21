@@ -871,6 +871,9 @@
   async function submitAllDocuments(documents) {
     console.log('Submitting and polling', documents.length, 'documents simultaneously');
     
+    // Update component configs with generated filenames before submitting
+    updateComponentConfigsWithFilePaths();
+    
     // Show toast immediately
     showToast('Simulation launched!', 'success');
     
@@ -889,6 +892,45 @@
     await Promise.all(submissions);
     
     console.log('All documents submitted. Run IDs:', window.simulationRunIds);
+  }
+  
+  // Function to update component configs with generated file paths
+  function updateComponentConfigsWithFilePaths() {
+    // Find all file path inputs in the modal
+    const filePathInputs = document.querySelectorAll('#filePathPluginList input[type="text"][data-generated-filename]');
+    
+    filePathInputs.forEach(input => {
+      const componentId = input.dataset.componentId;
+      const optionName = input.dataset.optionName;
+      const pluginType = input.dataset.pluginType;
+      const generatedFilename = input.dataset.generatedFilename;
+      const isIgnored = input.disabled; // If disabled, it's ignored
+      
+      if (!componentId || !optionName || !generatedFilename || isIgnored) {
+        return; // Skip if missing data or ignored
+      }
+      
+      // Prepend the LogstashAgent uploaded directory path
+      const fullPath = `/tmp/uploaded/${generatedFilename}`;
+      
+      // Get the components object (use subset if in subset mode)
+      let componentsToUpdate;
+      if (typeof getSubsetComponents === 'function') {
+        componentsToUpdate = getSubsetComponents();
+      } else {
+        componentsToUpdate = typeof components !== 'undefined' ? components : (window.components || {});
+      }
+      
+      // Find the component by ID and update its config
+      if (componentsToUpdate[pluginType]) {
+        const component = componentsToUpdate[pluginType].find(c => c.id === componentId);
+        if (component && component.config) {
+          // Update the config with the full path
+          component.config[optionName] = fullPath;
+          console.log(`Updated ${pluginType} component ${componentId}: ${optionName} = ${fullPath}`);
+        }
+      }
+    });
   }
   
   // Function to submit a single document, start polling, and return its run_id

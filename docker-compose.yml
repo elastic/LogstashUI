@@ -38,6 +38,7 @@ services:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
     environment:
       - LOGSTASH_URL=https://host.docker.internal  # HTTPS via nginx (no port needed - uses 443)
+      - SIMULATION_MODE=true  # Enable file upload for simulation
     restart: unless-stopped
     networks:
       - logstashui_network

@@ -21,6 +21,7 @@ urlpatterns = [
     path("GetSimulationResults/", simulate_views.GetSimulationResults, name="GetSimulationResults"),
     path("CheckIfPipelineLoaded/", simulate_views.CheckIfPipelineLoaded, name="CheckIfPipelineLoaded"),
     path("GetRelatedLogs/", simulate_views.GetRelatedLogs, name="GetRelatedLogs"),
+    path("UploadFile/", simulate_views.UploadFile, name="UploadFile"),
 
     path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
     path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),
