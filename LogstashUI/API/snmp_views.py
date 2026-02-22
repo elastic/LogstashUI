@@ -11,6 +11,7 @@ from Core import snmp_metrics
 import json
 import os
 import re
+import ipaddress
 
 
 def _sanitize_pipeline_name_component(name):
@@ -131,6 +132,7 @@ def GetNetworks(request):
                 'logstash_name': network.logstash_name,
                 'discovery_enabled': network.discovery_enabled,
                 'traps_enabled': network.traps_enabled,
+                'discovery_credential': network.discovery_credential_id,
                 'connection': network.connection_id,
                 'connection_name': network.connection.name if network.connection else None
             })
@@ -322,6 +324,7 @@ def AddNetwork(request):
         logstash_name = request.POST.get('logstash_name')
         connection_id = request.POST.get('connection')
         credential_id = request.POST.get('credential')
+        discovery_credential_id = request.POST.get('discovery_credential')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         
@@ -338,7 +341,11 @@ def AddNetwork(request):
         if connection_id:
             network.connection_id = connection_id
         
-        # Set credential if provided
+        # Set discovery credential if provided
+        if discovery_credential_id:
+            network.discovery_credential_id = discovery_credential_id
+        
+        # Set trap credential if provided
         if credential_id:
             network.credential_id = credential_id
         
@@ -376,7 +383,14 @@ def UpdateNetwork(request, network_id):
         else:
             network.connection = None
         
-        # Update credential
+        # Update discovery credential
+        discovery_credential_id = request.POST.get('discovery_credential')
+        if discovery_credential_id:
+            network.discovery_credential_id = discovery_credential_id
+        else:
+            network.discovery_credential = None
+        
+        # Update trap credential
         credential_id = request.POST.get('credential')
         if credential_id:
             network.credential_id = credential_id
@@ -411,6 +425,7 @@ def GetNetwork(request, network_id):
             'network_range': network.network_range,
             'logstash_name': network.logstash_name,
             'connection': network.connection_id if network.connection else None,
+            'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,
             'credential': network.credential_id if network.credential else None,
             'discovery_enabled': network.discovery_enabled,
             'traps_enabled': network.traps_enabled,
@@ -789,6 +804,200 @@ def _generate_input(input_data, profile_cache=None):
     return input_components, oid_mappings
 
 
+def _load_system_profile_oids():
+    """
+    Load the System profile OIDs for discovery.
+    Returns a dictionary with 'get', 'walk', 'table' keys.
+    """
+    system_profile_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles', 'system.json')
+    
+    try:
+        with open(system_profile_path, 'r') as f:
+            profile_data = json.load(f)
+            return {
+                'get': profile_data.get('get', {}),
+                'walk': profile_data.get('walk', {}),
+                'table': profile_data.get('table', {})
+            }
+    except Exception as e:
+        # If we can't load the system profile, return empty OIDs
+        return {'get': {}, 'walk': {}, 'table': {}}
+
+
+def _get_discovery_ip_addresses(network):
+    """
+    Get all IP addresses in the network range, excluding existing devices.
+    
+    Args:
+        network: Network object with network_range field
+        
+    Returns:
+        List of IP addresses (as strings) to scan for discovery
+    """
+    try:
+        # Parse the network range
+        network_obj = ipaddress.ip_network(network.network_range, strict=False)
+        
+        # Get all IP addresses in the range (excluding network and broadcast)
+        all_ips = set(str(ip) for ip in network_obj.hosts())
+        print(f"[DEBUG] Network {network.name} ({network.network_range}): Generated {len(all_ips)} total IPs")
+        
+        # Get existing devices in this network
+        existing_devices = Device.objects.filter(network=network).values_list('ip_address', flat=True)
+        print(f"[DEBUG] Network {network.name}: Found {len(existing_devices)} existing devices")
+        
+        # Filter out IPs that are already devices (only if they're valid IP addresses)
+        for device_ip in existing_devices:
+            try:
+                # Check if device IP is a valid IP address (not a hostname)
+                ipaddress.ip_address(device_ip)
+                # If it's a valid IP and in our network range, remove it
+                if device_ip in all_ips:
+                    all_ips.discard(device_ip)
+            except ValueError:
+                # Not a valid IP address (probably a hostname), skip it
+                continue
+        
+        result = sorted(list(all_ips))
+        print(f"[DEBUG] Network {network.name}: Returning {len(result)} IPs for discovery")
+        return result
+    except Exception as e:
+        # If there's any error, return empty list
+        print(f"[DEBUG] Error in _get_discovery_ip_addresses for network {network.name}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def _generate_discovery_input(network):
+    """
+    Generate SNMP input components for network discovery.
+    Uses the System profile OIDs and scans all IPs in the network range
+    (excluding existing devices).
+    
+    Args:
+        network: Network object
+        
+    Returns:
+        Tuple of (input_components, oid_mappings)
+    """
+    input_components = []
+    
+    # Check if discovery is enabled and has a credential
+    if not network.discovery_enabled or not network.discovery_credential:
+        return input_components, {'get': {}, 'walk': {}, 'table': {}}
+    
+    # Load System profile OIDs
+    oid_mappings = _load_system_profile_oids()
+    
+    # Get IP addresses to scan
+    ip_addresses = _get_discovery_ip_addresses(network)
+    
+    # If no IPs to scan, still create a minimal pipeline with a dummy host
+    # This ensures the pipeline exists and can be updated when devices are removed
+    if not ip_addresses:
+        # Use a non-routable IP as placeholder - pipeline will exist but won't actually scan anything
+        ip_addresses = ['192.0.2.1']  # RFC 5737 TEST-NET-1 address
+    
+    # Get the discovery credential
+    credential = network.discovery_credential
+    
+    # Global input configuration
+    global_input_config = {
+        "ecs_compatibility": "disabled",
+        "oid_mapping_format": "dotted_string"
+    }
+    
+    # Build hosts list with credential info
+    hosts = []
+    for ip in ip_addresses:
+        host_config = {
+            "host": f"udp:{ip}/161"
+        }
+        
+        # Add version-specific configuration
+        if credential.version in ['1', '2c']:
+            host_config["community"] = credential.get_community()
+            host_config["version"] = credential.version
+        
+        hosts.append(host_config)
+    
+    # Create input configuration with 5-minute interval for discovery
+    config = {
+        "hosts": hosts,
+        "interval": 300  # 5 minutes in seconds
+    } | global_input_config
+    
+    # Add SNMPv3 configuration if needed
+    if credential.version == '3':
+        config["security_name"] = credential.security_name
+        config["security_level"] = credential.security_level
+        
+        if credential.security_level in ['authNoPriv', 'authPriv']:
+            config["auth_protocol"] = credential.auth_protocol
+            config["auth_pass"] = credential.get_auth_pass()
+        
+        if credential.security_level == 'authPriv':
+            config["priv_protocol"] = credential.priv_protocol
+            config["priv_pass"] = credential.get_priv_pass()
+    
+    # Add OIDs from System profile
+    if oid_mappings['get']:
+        config['get'] = list(oid_mappings['get'].values())
+    
+    input_components.append({
+        "id": f"input_snmp_discovery_{network.id}",
+        "type": "input",
+        "plugin": "snmp",
+        "config": config
+    })
+    
+    return input_components, oid_mappings
+
+
+def _generate_discovery_filters(oid_mappings, network):
+    """
+    Generate filter components for discovery pipeline.
+    Adds event.kind: discovery field to distinguish from regular metrics.
+    
+    Args:
+        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
+        network: Network object for accessing network name
+        
+    Returns:
+        List of filter components
+    """
+    # Build rename mappings for get OIDs
+    get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
+    
+    filter_components = [
+        {
+            "id": "filter_mutate_discovery_1",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "rename": {
+                    "host": "[host][hostname]"
+                } | get_renames
+            }
+        },
+        {
+            "id": "filter_mutate_discovery_2",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "[network][name]": f"{network.name}",
+                    "[metricset][module]": "snmp",
+                    "[event][kind]": "discovery"
+                }
+            }
+        }
+    ]
+    
+    return filter_components
+
+
 def _format_field_name(field_name):
     """
     Format field name for Logstash filter usage.
@@ -1033,7 +1242,7 @@ def GetCommitDiff(request):
         from django.db.models import Prefetch
         
         # Prefetch all related data in one go to avoid N+1 queries
-        networks = Network.objects.select_related('connection', 'credential').prefetch_related(
+        networks = Network.objects.select_related('connection', 'credential', 'discovery_credential').prefetch_related(
             Prefetch(
                 'devices',
                 queryset=Device.objects.select_related('credential').prefetch_related('profiles')
@@ -1055,11 +1264,13 @@ def GetCommitDiff(request):
                 
                 pipeline_name = _get_pipeline_name(network)
                 trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
                 
-                pipeline_names_by_connection[conn_id].extend([pipeline_name, trap_pipeline_name])
+                pipeline_names_by_connection[conn_id].extend([pipeline_name, trap_pipeline_name, discovery_pipeline_name])
                 network_pipeline_map[network.id] = {
                     'main': pipeline_name,
-                    'trap': trap_pipeline_name
+                    'trap': trap_pipeline_name,
+                    'discovery': discovery_pipeline_name
                 }
         
         # Batch fetch all pipelines from Elasticsearch
@@ -1149,6 +1360,7 @@ def GetCommitDiff(request):
                 'current': current_config if has_devices else "",
                 'new': new_config if has_devices else "",
                 'trap_pipeline': None,
+                'discovery_pipeline': None,
                 'has_devices': has_devices
             }
             
@@ -1193,7 +1405,18 @@ def GetCommitDiff(request):
                         "plugin": "snmptrap",
                         "config": trap_input_config
                     }],
-                    "filter": [],
+                    "filter": [
+                        {
+                            "id": "filter_mutate_trap_1",
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "add_field": {
+                                    "[event][kind]": "traps"
+                                }
+                            }
+                        }
+                    ],
                     "output": _generate_output(input_data, network)
                 }
                 
@@ -1213,23 +1436,87 @@ def GetCommitDiff(request):
                     'new': new_trap_config,
                     'action': 'create' if not current_trap_config else 'update'
                 }
-            elif not network.traps_enabled:
-                # Check if trap pipeline exists and needs to be deleted
+            else:
+                # Traps disabled or no credential - check if trap pipeline exists and needs to be deleted
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap', f"snmp-{network.logstash_name}-traps")
                 current_trap_config = ""
+                
+                print(f"[DEBUG DIFF] Network '{network.name}': Traps disabled/no credential, checking for existing trap pipeline '{trap_pipeline_name}'")
+                print(f"[DEBUG DIFF] Pipeline in existing_pipelines: {trap_pipeline_name in existing_pipelines}")
                 
                 if trap_pipeline_name in existing_pipelines:
                     pipeline_data = existing_pipelines[trap_pipeline_name]
                     if 'pipeline' in pipeline_data:
                         current_trap_config = pipeline_data['pipeline']
+                        print(f"[DEBUG DIFF] Found existing trap pipeline config, length: {len(current_trap_config)}")
                 
                 if current_trap_config:
+                    print(f"[DEBUG DIFF] Adding trap pipeline deletion to diff")
                     network_diff['trap_pipeline'] = {
                         'pipeline_name': trap_pipeline_name,
                         'current': current_trap_config,
                         'new': '',
                         'action': 'delete'
                     }
+                else:
+                    print(f"[DEBUG DIFF] No existing trap pipeline found, skipping deletion")
+            
+            # Handle discovery pipeline if discovery is enabled
+            print(f"[DEBUG DIFF] Network '{network.name}': discovery_enabled={network.discovery_enabled}, discovery_credential={network.discovery_credential}")
+            if network.discovery_enabled and network.discovery_credential:
+                print(f"[DEBUG DIFF] Generating discovery pipeline for network '{network.name}'")
+                discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery', f"snmp-{network.logstash_name}-discovery")
+                
+                # Generate discovery pipeline components
+                discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
+                discovery_filter_components = _generate_discovery_filters(discovery_oid_mappings, network)
+                
+                discovery_components = {
+                    "input": discovery_input_components,
+                    "filter": discovery_filter_components,
+                    "output": _generate_output(input_data, network)
+                }
+                
+                # Generate new discovery pipeline configuration
+                new_discovery_config = ComponentToPipeline(discovery_components, test=False).components_to_logstash_config()
+                
+                # Get current discovery pipeline configuration from pre-fetched data
+                current_discovery_config = ""
+                if discovery_pipeline_name in existing_pipelines:
+                    pipeline_data = existing_pipelines[discovery_pipeline_name]
+                    if 'pipeline' in pipeline_data:
+                        current_discovery_config = pipeline_data['pipeline']
+                
+                network_diff['discovery_pipeline'] = {
+                    'pipeline_name': discovery_pipeline_name,
+                    'current': current_discovery_config,
+                    'new': new_discovery_config,
+                    'action': 'create' if not current_discovery_config else 'update'
+                }
+            else:
+                # Discovery is disabled or no credential - check if pipeline exists and needs to be deleted
+                discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery', f"snmp-{network.logstash_name}-discovery")
+                current_discovery_config = ""
+                
+                print(f"[DEBUG DIFF] Network '{network.name}': Discovery disabled/no credential, checking for existing discovery pipeline '{discovery_pipeline_name}'")
+                print(f"[DEBUG DIFF] Pipeline in existing_pipelines: {discovery_pipeline_name in existing_pipelines}")
+                
+                if discovery_pipeline_name in existing_pipelines:
+                    pipeline_data = existing_pipelines[discovery_pipeline_name]
+                    if 'pipeline' in pipeline_data:
+                        current_discovery_config = pipeline_data['pipeline']
+                        print(f"[DEBUG DIFF] Found existing discovery pipeline config, length: {len(current_discovery_config)}")
+                
+                if current_discovery_config:
+                    print(f"[DEBUG DIFF] Adding discovery pipeline deletion to diff")
+                    network_diff['discovery_pipeline'] = {
+                        'pipeline_name': discovery_pipeline_name,
+                        'current': current_discovery_config,
+                        'new': '',
+                        'action': 'delete'
+                    }
+                else:
+                    print(f"[DEBUG DIFF] No existing discovery pipeline found, skipping deletion")
             
             network_diffs.append(network_diff)
         
@@ -1252,7 +1539,7 @@ def CommitConfiguration(request):
         from datetime import datetime, timezone
         
         # Query all networks with their credentials
-        networks = Network.objects.select_related('credential', 'connection').all()
+        networks = Network.objects.select_related('credential', 'discovery_credential', 'connection').all()
         
         if not networks.exists():
             return JsonResponse({
@@ -1409,7 +1696,18 @@ def CommitConfiguration(request):
                                     "plugin": "snmptrap",
                                     "config": trap_input_config
                                 }],
-                                "filter": [],
+                                "filter": [
+                                    {
+                                        "id": "filter_mutate_trap_1",
+                                        "type": "filter",
+                                        "plugin": "mutate",
+                                        "config": {
+                                            "add_field": {
+                                                "[event][kind]": "traps"
+                                            }
+                                        }
+                                    }
+                                ],
                                 "output": _generate_output(input_data, network)
                             }
                             
@@ -1458,6 +1756,74 @@ def CommitConfiguration(request):
                             pass
                     except Exception as delete_e:
                         errors.append(f"Network '{network.name}' trap pipeline deletion: {str(delete_e)}")
+                
+                # Handle Discovery pipeline if discovery is enabled
+                if network.discovery_enabled:
+                    print(f"[DEBUG] Network '{network.name}' has discovery enabled")
+                    print(f"[DEBUG] Network discovery credential: {network.discovery_credential}")
+                    if not network.discovery_credential:
+                        errors.append(f"Network '{network.name}': Discovery enabled but no credential configured")
+                    else:
+                        try:
+                            # Generate discovery pipeline name
+                            discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                            print(f"[DEBUG] Creating discovery pipeline: {discovery_pipeline_name}")
+                            
+                            # Generate discovery pipeline components
+                            discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
+                            discovery_filter_components = _generate_discovery_filters(discovery_oid_mappings, network)
+                            
+                            discovery_components = {
+                                "input": discovery_input_components,
+                                "filter": discovery_filter_components,
+                                "output": _generate_output(input_data, network)
+                            }
+                            
+                            # Generate discovery pipeline configuration
+                            discovery_pipeline_content = ComponentToPipeline(discovery_components, test=False).components_to_logstash_config()
+                            
+                            # Create or update discovery pipeline
+                            discovery_success, discovery_is_new, discovery_error = _create_or_update_pipeline(
+                                es,
+                                discovery_pipeline_name,
+                                discovery_pipeline_content,
+                                description=f"[MANAGED] SNMP Discovery pipeline for network: {network.name}"
+                            )
+                            
+                            print(f"[DEBUG] Discovery pipeline result - Success: {discovery_success}, IsNew: {discovery_is_new}, Error: {discovery_error}")
+                            
+                            if discovery_success:
+                                if discovery_is_new:
+                                    pipelines_created += 1
+                                    print(f"[DEBUG] Discovery pipeline created successfully")
+                                else:
+                                    pipelines_updated += 1
+                                    print(f"[DEBUG] Discovery pipeline updated successfully")
+                            else:
+                                errors.append(f"Network '{network.name}' discovery pipeline: {discovery_error}")
+                                print(f"[DEBUG] Discovery pipeline failed: {discovery_error}")
+                        except Exception as discovery_e:
+                            import traceback
+                            traceback.print_exc()
+                            errors.append(f"Network '{network.name}' discovery pipeline: {str(discovery_e)}")
+                            print(f"[DEBUG] Discovery pipeline exception: {str(discovery_e)}")
+                else:
+                    # Discovery is disabled, check if discovery pipeline exists and delete it
+                    try:
+                        discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                        
+                        # Check if pipeline exists
+                        try:
+                            existing = es.logstash.get_pipeline(id=discovery_pipeline_name)
+                            if discovery_pipeline_name in existing:
+                                # Pipeline exists, delete it
+                                es.logstash.delete_pipeline(id=discovery_pipeline_name)
+                                pipelines_deleted += 1
+                        except Exception:
+                            # Pipeline doesn't exist, that's okay
+                            pass
+                    except Exception as delete_e:
+                        errors.append(f"Network '{network.name}' discovery pipeline deletion: {str(delete_e)}")
                     
             except Exception as e:
                 errors.append(f"Network '{network.name}': {str(e)}")
@@ -1475,6 +1841,9 @@ def CommitConfiguration(request):
                     # Add trap pipeline if traps are enabled
                     if network.traps_enabled:
                         expected_pipelines.add(f"snmp-{network.logstash_name}-traps")
+                    # Add discovery pipeline if discovery is enabled
+                    if network.discovery_enabled:
+                        expected_pipelines.add(f"snmp-{network.logstash_name}-discovery")
             
             # Get all pipelines from Elasticsearch for each connection
             connections_checked = set()

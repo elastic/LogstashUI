@@ -71,15 +71,34 @@
             </label>
             <div class="flex gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="discovery_enabled" value="true" class="radio radio-primary" checked>
+                <input type="radio" name="discovery_enabled" value="true" class="radio radio-primary" checked onchange="toggleDiscoveryCredential()">
                 <span class="text-gray-300">Enabled</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="discovery_enabled" value="false" class="radio radio-primary">
+                <input type="radio" name="discovery_enabled" value="false" class="radio radio-primary" onchange="toggleDiscoveryCredential()">
                 <span class="text-gray-300">Disabled</span>
               </label>
             </div>
             <p class="text-gray-400 text-xs mt-1">Enable automatic device discovery on this network</p>
+          </div>
+
+          <!-- Discovery Credential Selection (shown only when discovery enabled) -->
+          <div id="discoveryCredentialSection" class="mb-4">
+            <label for="discoveryCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              Discovery SNMP Credential <span class="text-red-500">*</span>
+            </label>
+            <div class="flex gap-2">
+              <select id="discoveryCredentialSelect" name="discovery_credential" class="select select-bordered w-full">
+                <option value="">Select a credential...</option>
+                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
+              </select>
+              <button type="button" onclick="refreshDiscoveryCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for device discovery</p>
           </div>
 
           <!-- SNMP Traps Toggle -->

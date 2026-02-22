@@ -47,12 +47,21 @@ class Network(models.Model):
         help_text="Enable SNMP traps for this network"
     )
     
+    discovery_credential = models.ForeignKey(
+        'Credential',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='discovery_networks',
+        help_text="SNMP credential to use for device discovery on this network"
+    )
+    
     credential = models.ForeignKey(
         'Credential',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='networks',
+        related_name='trap_networks',
         help_text="SNMP credential to use for trap reception on this network"
     )
     

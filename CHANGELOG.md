@@ -10,7 +10,7 @@
 - Pipelines are now tested every time plugins are added/changed/removed
 - Warning badge (!) appears on plugins with missing required fields
 - Copy button in simulation result tooltips to copy JSON data to clipboard
-- 
+- Discovery for SNMP
 
 ### Changed
 - Colorized the "after" json output to be more readable and clearly convey what was changed
