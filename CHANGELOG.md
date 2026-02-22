@@ -6,6 +6,7 @@
 - Popular plugins float to the top of the plugin selector page
 - Added fs_path type
 - Added file upload for simulate when a pipeline requires it
+- Comments are now supported!
 
 ### Changed
 - Colorized the "after" json output to be more readable and clearly convey what was changed

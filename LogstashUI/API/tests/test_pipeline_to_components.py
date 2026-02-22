@@ -1061,7 +1061,23 @@ output {
         r"""{
     "input": [
         {
-            "id": "input_beats_0",
+            "id": "input_comment_0",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "\n\"LogstashUI kitchen sink\" pipeline\nGoal: be extremely feature-rich while staying within known-valid plugin options.\n"
+            }
+        },
+        {
+            "id": "input_comment_1",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "Beats / Elastic Agent style shippers"
+            }
+        },
+        {
+            "id": "input_beats_2",
             "type": "input",
             "plugin": "beats",
             "config": {
@@ -1076,7 +1092,15 @@ output {
             }
         },
         {
-            "id": "input_tcp_2",
+            "id": "input_comment_4",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "JSON-over-TCP (common for app logs)"
+            }
+        },
+        {
+            "id": "input_tcp_5",
             "type": "input",
             "plugin": "tcp",
             "config": {
@@ -1095,7 +1119,15 @@ output {
             }
         },
         {
-            "id": "input_udp_4",
+            "id": "input_comment_7",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "Syslog-ish UDP"
+            }
+        },
+        {
+            "id": "input_udp_8",
             "type": "input",
             "plugin": "udp",
             "config": {
@@ -1113,7 +1145,15 @@ output {
             }
         },
         {
-            "id": "input_http_6",
+            "id": "input_comment_10",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "HTTP event intake (webhooks, apps posting JSON, etc.)"
+            }
+        },
+        {
+            "id": "input_http_11",
             "type": "input",
             "plugin": "http",
             "config": {
@@ -1131,7 +1171,15 @@ output {
             }
         },
         {
-            "id": "input_stdin_8",
+            "id": "input_comment_13",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "Local dev/testing input"
+            }
+        },
+        {
+            "id": "input_stdin_14",
             "type": "input",
             "plugin": "stdin",
             "config": {
@@ -1148,7 +1196,15 @@ output {
             }
         },
         {
-            "id": "input_generator_10",
+            "id": "input_comment_16",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "Synthetic test data (makes it easy to validate end-to-end quickly)"
+            }
+        },
+        {
+            "id": "input_generator_17",
             "type": "input",
             "plugin": "generator",
             "config": {
@@ -1170,7 +1226,15 @@ output {
     ],
     "filter": [
         {
-            "id": "filter_mutate_12",
+            "id": "filter_comment_19",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nNormalize a few shared fields\n"
+            }
+        },
+        {
+            "id": "filter_mutate_20",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -1182,14 +1246,22 @@ output {
             }
         },
         {
-            "id": "filter_if_14",
+            "id": "filter_comment_22",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Keep a canonical message field"
+            }
+        },
+        {
+            "id": "filter_if_23",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "![message] and [event][original]",
                 "plugins": [
                     {
-                        "id": "filter_mutate_15",
+                        "id": "filter_mutate_24",
                         "type": "filter",
                         "plugin": "mutate",
                         "config": {
@@ -1205,14 +1277,22 @@ output {
             }
         },
         {
-            "id": "filter_if_17",
+            "id": "filter_comment_26",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nTry to parse JSON *if* message looks like JSON (common when tcp/udp/plain feed JSON strings)\n"
+            }
+        },
+        {
+            "id": "filter_if_27",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[message] =~ \"^[[:space:]]*\\\\{\"",
                 "plugins": [
                     {
-                        "id": "filter_json_18",
+                        "id": "filter_json_28",
                         "type": "filter",
                         "plugin": "json",
                         "config": {
@@ -1225,14 +1305,22 @@ output {
                         }
                     },
                     {
-                        "id": "filter_if_20",
+                        "id": "filter_comment_30",
+                        "type": "filter",
+                        "plugin": "comment",
+                        "config": {
+                            "text": "If json parsed, promote a few expected keys (only if present)"
+                        }
+                    },
+                    {
+                        "id": "filter_if_31",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[json][@timestamp]",
                             "plugins": [
                                 {
-                                    "id": "filter_mutate_21",
+                                    "id": "filter_mutate_32",
                                     "type": "filter",
                                     "plugin": "mutate",
                                     "config": {
@@ -1248,14 +1336,14 @@ output {
                         }
                     },
                     {
-                        "id": "filter_if_23",
+                        "id": "filter_if_34",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[json][source_ip]",
                             "plugins": [
                                 {
-                                    "id": "filter_mutate_24",
+                                    "id": "filter_mutate_35",
                                     "type": "filter",
                                     "plugin": "mutate",
                                     "config": {
@@ -1271,14 +1359,14 @@ output {
                         }
                     },
                     {
-                        "id": "filter_if_26",
+                        "id": "filter_if_37",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[json][user_agent]",
                             "plugins": [
                                 {
-                                    "id": "filter_mutate_27",
+                                    "id": "filter_mutate_38",
                                     "type": "filter",
                                     "plugin": "mutate",
                                     "config": {
@@ -1299,14 +1387,30 @@ output {
             }
         },
         {
-            "id": "filter_if_29",
+            "id": "filter_comment_40",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nSyslog-ish parsing (UDP and some TCP)\n"
+            }
+        },
+        {
+            "id": "filter_if_41",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "\"from_udp\" in [tags] or \"from_tcp\" in [tags]",
                 "plugins": [
                     {
-                        "id": "filter_dissect_30",
+                        "id": "filter_comment_42",
+                        "type": "filter",
+                        "plugin": "comment",
+                        "config": {
+                            "text": "Try dissect first (fast) and fall back to grok"
+                        }
+                    },
+                    {
+                        "id": "filter_dissect_43",
                         "type": "filter",
                         "plugin": "dissect",
                         "config": {
@@ -1320,14 +1424,14 @@ output {
                         }
                     },
                     {
-                        "id": "filter_if_32",
+                        "id": "filter_if_45",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "\"_dissectfailure_syslogish\" in [tags]",
                             "plugins": [
                                 {
-                                    "id": "filter_grok_33",
+                                    "id": "filter_grok_46",
                                     "type": "filter",
                                     "plugin": "grok",
                                     "config": {
@@ -1348,14 +1452,22 @@ output {
                         }
                     },
                     {
-                        "id": "filter_if_35",
+                        "id": "filter_comment_48",
+                        "type": "filter",
+                        "plugin": "comment",
+                        "config": {
+                            "text": "If we extracted a syslog timestamp, use it"
+                        }
+                    },
+                    {
+                        "id": "filter_if_49",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[syslog_timestamp]",
                             "plugins": [
                                 {
-                                    "id": "filter_date_36",
+                                    "id": "filter_date_50",
                                     "type": "filter",
                                     "plugin": "date",
                                     "config": {
@@ -1381,14 +1493,22 @@ output {
             }
         },
         {
-            "id": "filter_if_38",
+            "id": "filter_comment_52",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nkey=value parsing for \u201cflat\u201d log lines\n"
+            }
+        },
+        {
+            "id": "filter_if_53",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[message] =~ \"([A-Za-z0-9_.-]+)=([^\\\"]\\\\S+|\\\"[^\\\"]*\\\")\"",
                 "plugins": [
                     {
-                        "id": "filter_kv_39",
+                        "id": "filter_kv_54",
                         "type": "filter",
                         "plugin": "kv",
                         "config": {
@@ -1409,7 +1529,15 @@ output {
             }
         },
         {
-            "id": "filter_mutate_41",
+            "id": "filter_comment_56",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nBasic typing / normalization\n"
+            }
+        },
+        {
+            "id": "filter_mutate_57",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -1426,14 +1554,22 @@ output {
             }
         },
         {
-            "id": "filter_if_43",
+            "id": "filter_comment_59",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nEnrichments: useragent, geoip, cidr, dns\n"
+            }
+        },
+        {
+            "id": "filter_if_60",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[user_agent]",
                 "plugins": [
                     {
-                        "id": "filter_useragent_44",
+                        "id": "filter_useragent_61",
                         "type": "filter",
                         "plugin": "useragent",
                         "config": {
@@ -1448,14 +1584,22 @@ output {
             }
         },
         {
-            "id": "filter_if_46",
+            "id": "filter_comment_63",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Canonicalize IP into source_ip if it exists elsewhere"
+            }
+        },
+        {
+            "id": "filter_if_64",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "![source_ip] and [source][ip]",
                 "plugins": [
                     {
-                        "id": "filter_mutate_47",
+                        "id": "filter_mutate_65",
                         "type": "filter",
                         "plugin": "mutate",
                         "config": {
@@ -1471,14 +1615,22 @@ output {
             }
         },
         {
-            "id": "filter_if_49",
+            "id": "filter_if_67",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[source_ip]",
                 "plugins": [
                     {
-                        "id": "filter_cidr_50",
+                        "id": "filter_comment_68",
+                        "type": "filter",
+                        "plugin": "comment",
+                        "config": {
+                            "text": "Tag private vs public"
+                        }
+                    },
+                    {
+                        "id": "filter_cidr_69",
                         "type": "filter",
                         "plugin": "cidr",
                         "config": {
@@ -1497,14 +1649,22 @@ output {
                         }
                     },
                     {
-                        "id": "filter_if_52",
+                        "id": "filter_comment_71",
+                        "type": "filter",
+                        "plugin": "comment",
+                        "config": {
+                            "text": "GeoIP typically only makes sense for public IPs, so do it only if not private-tagged"
+                        }
+                    },
+                    {
+                        "id": "filter_if_72",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "\"src_private\" not in [tags]",
                             "plugins": [
                                 {
-                                    "id": "filter_geoip_53",
+                                    "id": "filter_geoip_73",
                                     "type": "filter",
                                     "plugin": "geoip",
                                     "config": {
@@ -1519,7 +1679,15 @@ output {
                         }
                     },
                     {
-                        "id": "filter_dns_55",
+                        "id": "filter_comment_75",
+                        "type": "filter",
+                        "plugin": "comment",
+                        "config": {
+                            "text": "Reverse DNS lookup; replace source_ip with hostname when possible (or leave as-is)"
+                        }
+                    },
+                    {
+                        "id": "filter_dns_76",
                         "type": "filter",
                         "plugin": "dns",
                         "config": {
@@ -1536,7 +1704,15 @@ output {
             }
         },
         {
-            "id": "filter_translate_57",
+            "id": "filter_comment_78",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nTranslate severity/level into a normalized numeric\n"
+            }
+        },
+        {
+            "id": "filter_translate_79",
             "type": "filter",
             "plugin": "translate",
             "config": {
@@ -1555,7 +1731,7 @@ output {
             }
         },
         {
-            "id": "filter_mutate_59",
+            "id": "filter_mutate_81",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -1566,7 +1742,15 @@ output {
             }
         },
         {
-            "id": "filter_fingerprint_61",
+            "id": "filter_comment_83",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nStable fingerprint for dedup / correlation\n"
+            }
+        },
+        {
+            "id": "filter_fingerprint_84",
             "type": "filter",
             "plugin": "fingerprint",
             "config": {
@@ -1579,14 +1763,22 @@ output {
             }
         },
         {
-            "id": "filter_if_63",
+            "id": "filter_comment_86",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nExample branching: treat auth-ish messages specially\n"
+            }
+        },
+        {
+            "id": "filter_if_87",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[syslog_program] == \"sshd\" or [message] =~ \"(?i)failed password|authentication failure|invalid user\"",
                 "plugins": [
                     {
-                        "id": "filter_mutate_64",
+                        "id": "filter_mutate_88",
                         "type": "filter",
                         "plugin": "mutate",
                         "config": {
@@ -1605,7 +1797,7 @@ output {
                         "condition": "[message] =~ \"(?i)GET\\\\s+/health|/ready|/live\"",
                         "plugins": [
                             {
-                                "id": "filter_mutate_66",
+                                "id": "filter_mutate_90",
                                 "type": "filter",
                                 "plugin": "mutate",
                                 "config": {
@@ -1624,7 +1816,7 @@ output {
                 "else": {
                     "plugins": [
                         {
-                            "id": "filter_mutate_68",
+                            "id": "filter_mutate_92",
                             "type": "filter",
                             "plugin": "mutate",
                             "config": {
@@ -1639,7 +1831,15 @@ output {
             }
         },
         {
-            "id": "filter_prune_70",
+            "id": "filter_comment_94",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "\nPrune down noisy fields (keeps top-level essentials)\n"
+            }
+        },
+        {
+            "id": "filter_prune_95",
             "type": "filter",
             "plugin": "prune",
             "config": {
@@ -1664,7 +1864,15 @@ output {
     ],
     "output": [
         {
-            "id": "output_stdout_72",
+            "id": "output_comment_97",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "Always see something in console during dev"
+            }
+        },
+        {
+            "id": "output_stdout_98",
             "type": "output",
             "plugin": "stdout",
             "config": {
@@ -1677,7 +1885,15 @@ output {
             }
         },
         {
-            "id": "output_file_74",
+            "id": "output_comment_100",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "Write to disk (great for debugging replay)"
+            }
+        },
+        {
+            "id": "output_file_101",
             "type": "output",
             "plugin": "file",
             "config": {
@@ -1689,7 +1905,15 @@ output {
             }
         },
         {
-            "id": "output_elasticsearch_76",
+            "id": "output_comment_103",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "Elasticsearch (local default)"
+            }
+        },
+        {
+            "id": "output_elasticsearch_104",
             "type": "output",
             "plugin": "elasticsearch",
             "config": {
@@ -1702,7 +1926,15 @@ output {
             }
         },
         {
-            "id": "output_http_78",
+            "id": "output_comment_106",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "Webhook back to your UI/API (example)"
+            }
+        },
+        {
+            "id": "output_http_107",
             "type": "output",
             "plugin": "http",
             "config": {
@@ -1713,7 +1945,15 @@ output {
             }
         },
         {
-            "id": "output_kafka_80",
+            "id": "output_comment_109",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "Kafka (example)"
+            }
+        },
+        {
+            "id": "output_kafka_110",
             "type": "output",
             "plugin": "kafka",
             "config": {
@@ -1723,7 +1963,15 @@ output {
             }
         },
         {
-            "id": "output_pipeline_82",
+            "id": "output_comment_112",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "Pipeline-to-pipeline (requires another pipeline with pipeline input address => \"downstream\")"
+            }
+        },
+        {
+            "id": "output_pipeline_113",
             "type": "output",
             "plugin": "pipeline",
             "config": {

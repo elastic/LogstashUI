@@ -7,11 +7,13 @@ logger = logging.getLogger(__name__)
 
 ################################ Logstash config to component JSON ################################
 LOGSTASH_GRAMMAR = r"""
-?start: section+
+?start: [comment+] section+
 
 section: section_type "{" [statement+] "}"
 
-statement: plugin | conditional
+statement: plugin | conditional | comment
+
+comment: COMMENT
 
 conditional: "if" condition "{" [statement+] "}" (else_if_condition | else_condition)*
 condition: CMP_OPERATORS
@@ -61,8 +63,8 @@ MULTILINE_STRING.3: /"([^"\\]|\\.|\n)*"/s | /'([^'\\]|\\.|\n)*'/s
 %import common.NEWLINE
 
 UNQUOTED_STRING.2: /[a-zA-Z_][a-zA-Z0-9_-]*/
+COMMENT: /#[^\n]*/
 %ignore WS
-%ignore /#[^\n]*/
 """
 
 
@@ -114,6 +116,11 @@ class LogstashTransformer(Transformer):
 
     def condition(self, items):
         return items[0].strip()
+
+    def comment(self, items):
+        # Extract the comment text (remove the # prefix and any leading/trailing whitespace)
+        comment_text = str(items[0]).lstrip('#').strip()
+        return {"type": "comment", "text": comment_text}
 
     def statement(self, items):
         return items[0]
@@ -338,7 +345,19 @@ class LogstashTransformer(Transformer):
                 continue
 
             if isinstance(plugin, dict):
-                if 'name' in plugin:  # It's a regular plugin
+                if plugin.get('type') == 'comment':
+                    # It's a comment - convert to comment plugin format
+                    comment_plugin = {
+                        'id': f"{section_type}_comment_{component_count}",
+                        'type': section_type,
+                        'plugin': 'comment',
+                        'config': {
+                            'text': plugin.get('text', '')
+                        }
+                    }
+                    result.append(comment_plugin)
+                    component_count += 1
+                elif 'name' in plugin:  # It's a regular plugin
                     formatted_plugin, component_count = self._format_plugin(plugin, section_type, component_count)
                     result.append(formatted_plugin)
                     component_count += 1
@@ -523,7 +542,31 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
         if not isinstance(parsed, list):
             parsed = [parsed] if parsed else []
 
-        for section in parsed:
+        # Collect top-level comments (comments before any section)
+        top_level_comments = []
+        sections = []
+        
+        for item in parsed:
+            if isinstance(item, dict) and item.get('type') == 'comment':
+                top_level_comments.append(item)
+            else:
+                sections.append(item)
+        
+        # If there are top-level comments, add them to the input section
+        if top_level_comments:
+            comment_texts = [c.get('text', '') for c in top_level_comments]
+            top_comment_plugin = {
+                'id': f"input_comment_{component_count}",
+                'type': 'input',
+                'plugin': 'comment',
+                'config': {
+                    'text': '\n'.join(comment_texts)
+                }
+            }
+            data['input'].append(top_comment_plugin)
+            component_count += 1
+
+        for section in sections:
             # Defensive check: ensure section is a dict with 'type' key
             if not isinstance(section, dict):
                 logger.warning(f"Skipping non-dict section: {type(section)}")
@@ -541,15 +584,42 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
                 continue
             
             section_components = []
-
-            for stmt in section.get('statements', []):
+            
+            # Group consecutive comments together
+            statements = section.get('statements', [])
+            i = 0
+            while i < len(statements):
+                stmt = statements[i]
                 if not isinstance(stmt, dict):
+                    i += 1
                     continue
 
-                if 'name' in stmt:  # It's a regular plugin
+                if stmt.get('type') == 'comment':
+                    # Start collecting consecutive comments
+                    comment_texts = [stmt.get('text', '')]
+                    i += 1
+                    
+                    # Look ahead for more consecutive comments
+                    while i < len(statements) and isinstance(statements[i], dict) and statements[i].get('type') == 'comment':
+                        comment_texts.append(statements[i].get('text', ''))
+                        i += 1
+                    
+                    # Create a single comment component with all lines joined
+                    comment_plugin = {
+                        'id': f"{section_type}_comment_{component_count}",
+                        'type': section_type,
+                        'plugin': 'comment',
+                        'config': {
+                            'text': '\n'.join(comment_texts)
+                        }
+                    }
+                    section_components.append(comment_plugin)
+                    component_count += 1
+                elif 'name' in stmt:  # It's a regular plugin
                     component, component_count = transformer._format_plugin(stmt, section_type, component_count)
                     section_components.append(component)
                     component_count += 1
+                    i += 1
                 elif stmt.get('type') == 'conditional':
                     # Process conditional and get the updated component count
                     # Pass None as the data parameter to prevent auto-adding to the section
@@ -557,6 +627,9 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
                         stmt, section_type, None, component_count
                     )
                     section_components.extend(conditional_blocks)
+                    i += 1
+                else:
+                    i += 1
 
             # Add all components to the section
             data[section_type].extend(section_components)
@@ -602,6 +675,17 @@ class ComponentToPipeline:
         """
         if not isinstance(value, str):
             return value
+        
+        # For multiline strings (like Ruby code), prefer single quotes to avoid escaping issues
+        # Multiline strings with escaped quotes can cause parsing issues in Logstash
+        if '\n' in value and '"' in value:
+            # Multiline with double quotes - use single quotes if possible
+            if "'" not in value:
+                return f"'{value}'"
+            # Has both quotes - escape single quotes and use single quotes
+            # This is safer for multiline Ruby code than escaping double quotes
+            escaped_value = value.replace("'", "\\'")
+            return f"'{escaped_value}'"
         
         # If string contains double quotes but no single quotes, use single quotes
         if '"' in value and "'" not in value:
@@ -811,7 +895,13 @@ class ComponentToPipeline:
         # --- Start if ---
         config += f"if {condition['config']['condition']} {{\n"
         for plugin in condition['config']['plugins']:
-            if plugin['plugin'] == 'if':
+            if plugin['plugin'] == 'comment':
+                # Handle comment inside conditional
+                comment_text = plugin['config'].get('text', '')
+                comment_lines = comment_text.split('\n')
+                for line in comment_lines:
+                    config += f"\t#{line}\n"
+            elif plugin['plugin'] == 'if':
                 config += self._add_tab_level(self._extract_condition_values(plugin, section))
             else:
                 config += self._add_tab_level(self._extract_plugin_values(plugin, section))
@@ -822,7 +912,13 @@ class ComponentToPipeline:
             for plugin in condition['config']['else_ifs']:
                 config += f"else if {plugin['condition']} {{\n"
                 for nested_plugin in plugin['plugins']:
-                    if nested_plugin['plugin'] == 'if':
+                    if nested_plugin['plugin'] == 'comment':
+                        # Handle comment inside else if
+                        comment_text = nested_plugin['config'].get('text', '')
+                        comment_lines = comment_text.split('\n')
+                        for line in comment_lines:
+                            config += f"\t#{line}\n"
+                    elif nested_plugin['plugin'] == 'if':
                         config += self._add_tab_level(self._extract_condition_values(nested_plugin, section))
                     else:
                         config += self._add_tab_level(self._extract_plugin_values(nested_plugin, section))
@@ -833,7 +929,13 @@ class ComponentToPipeline:
             config += f"else {{\n"
 
             for plugin in condition['config']['else']['plugins']:
-                if plugin['plugin'] == 'if':
+                if plugin['plugin'] == 'comment':
+                    # Handle comment inside else
+                    comment_text = plugin['config'].get('text', '')
+                    comment_lines = comment_text.split('\n')
+                    for line in comment_lines:
+                        config += f"\t#{line}\n"
+                elif plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
                     config += self._add_tab_level(self._extract_plugin_values(plugin, section))
@@ -871,7 +973,14 @@ class ComponentToPipeline:
 
             # plugin_num used for running simulations
             for plugin in self.components[section]:
-                if plugin['plugin'] == 'if':
+                if plugin['plugin'] == 'comment':
+                    # Convert comment plugin back to comment lines
+                    comment_text = plugin['config'].get('text', '')
+                    # Split by newlines and prefix each line with #
+                    comment_lines = comment_text.split('\n')
+                    for line in comment_lines:
+                        config += f"\t#{line}\n"
+                elif plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
                     config += self._add_tab_level(self._extract_plugin_values(plugin, section))

@@ -677,10 +677,10 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         const configItems = [];
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
-                // Special handling for comment plugin - show full text with newlines
+                // Special handling for comment plugin - show full text with newlines (no field name prefix)
                 if (isComment && (key === 'string' || key === 'message' || key === 'text')) {
                     const fullText = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    configItems.push(`<div class="text-sm text-gray-300 whitespace-pre-wrap font-mono mt-2">${key}: ${fullText}</div>`);
+                    configItems.push(`<div class="text-sm text-gray-300 whitespace-pre-wrap font-mono mt-2">${fullText}</div>`);
                     continue;
                 }
                 

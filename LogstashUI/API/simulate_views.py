@@ -241,20 +241,16 @@ event.set("[simulation][conditional_branches][{conditional_id}]", "else")
 
                     # Check if this is a drop plugin - if so, add Ruby code to send event to API before drop
                     if plugin.get('plugin') == 'drop':
-                        # Send the event to StreamSimulate API before it gets dropped
-                        # This mimics what simulate_end.conf does
-                        # URL is determined in Python based on DEBUG mode and injected here
-                        # We need to set simulation.step and simulation.id BEFORE the drop happens
-                        # Use current_step + 1 for the final event (since drop is the last step)
-                        final_step = current_step + 1
+                        # Drop plugins are special - they need to send the event to the API before dropping
+                        # We don't use the normal timing instrumentation for drop plugins
+                        # Instead, we create a snapshot and send it directly via HTTP POST
                         drop_plugin_id = plugin['id']
                         pre_drop_code = f"""
 require "net/http"
 require "uri"
 require "json"
 
-# First, create a snapshot for the drop plugin itself (before it executes)
-# This ensures the frontend knows the drop plugin was reached
+# Create a snapshot for the drop plugin
 event.set("[simulation][step]", {current_step})
 event.set("[simulation][id]", "{drop_plugin_id}")
 
@@ -267,12 +263,7 @@ event.to_hash.each do |key, value|
 end
 event.set("[snapshots][{drop_plugin_id}]", snapshot)
 
-# Now set to final for the API call
-event.set("[simulation][step]", {final_step})
-event.set("[simulation][id]", "final")
-
 # Ensure run_id is set (should already be in the event from input)
-# But we'll set it explicitly to be safe
 if !event.get("run_id")
   event.set("run_id", "{run_id}")
 end
@@ -305,33 +296,36 @@ end
                             }
                         }
                         instrumented.append(pre_drop_plugin)
-
-                    # Add pre-plugin timing instrumentation
-                    # Use double-quoted Ruby strings for field refs to avoid ' chars
-                    # (single quotes in code get escaped to \' in LSCL, causing Ruby syntax errors)
-                    pre_instrumentation_code = f"""
+                        
+                        # Add the actual drop plugin
+                        instrumented.append(plugin)
+                        
+                        # Skip the normal timing instrumentation for drop plugins
+                        # The event is already sent to the API, and the drop will prevent any further processing
+                    else:
+                        # Regular plugin - add normal timing instrumentation
+                        # Add pre-plugin timing instrumentation
+                        pre_instrumentation_code = f"""
 # Capture start time in nanoseconds before plugin execution
 event.set("[simulation][timing][start_ns]", (Time.now.to_f * 1_000_000_000).to_i)
 """.strip()
 
-                    pre_instrumentation_plugin = {
-                        "id": f"pre_instrumentation_{current_step}",
-                        "type": "filter",
-                        "plugin": "ruby",
-                        "config": {
-                            "code": pre_instrumentation_code
+                        pre_instrumentation_plugin = {
+                            "id": f"pre_instrumentation_{current_step}",
+                            "type": "filter",
+                            "plugin": "ruby",
+                            "config": {
+                                "code": pre_instrumentation_code
+                            }
                         }
-                    }
 
-                    instrumented.append(pre_instrumentation_plugin)
+                        instrumented.append(pre_instrumentation_plugin)
 
-                    # Add the actual plugin
-                    instrumented.append(plugin)
+                        # Add the actual plugin
+                        instrumented.append(plugin)
 
-                    # Add Ruby instrumentation after this plugin
-                    # Note: run_id is NOT included here - it's added to the event data when sent to Logstash
-                    # This keeps the instrumentation static so the pipeline config hash is consistent
-                    instrumentation_code = f"""event.set("[simulation][step]", {current_step})
+                        # Add Ruby instrumentation after this plugin
+                        instrumentation_code = f"""event.set("[simulation][step]", {current_step})
 event.set("[simulation][id]", "{plugin['id']}")
 end_ns = (Time.now.to_f * 1_000_000_000).to_i
 start_ns = event.get("[simulation][timing][start_ns]")
@@ -351,16 +345,16 @@ end
 event.set("[snapshots][{plugin['id']}]", snapshot)
 """.strip()
 
-                    instrumentation_plugin = {
-                        "id": f"instrumentation_{current_step}",
-                        "type": "filter",
-                        "plugin": "ruby",
-                        "config": {
-                            "code": instrumentation_code
+                        instrumentation_plugin = {
+                            "id": f"instrumentation_{current_step}",
+                            "type": "filter",
+                            "plugin": "ruby",
+                            "config": {
+                                "code": instrumentation_code
+                            }
                         }
-                    }
 
-                    instrumented.append(instrumentation_plugin)
+                        instrumented.append(instrumentation_plugin)
 
             return instrumented
 
