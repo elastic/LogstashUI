@@ -18,7 +18,7 @@ condition: CMP_OPERATORS
 else_if_condition: "else" "if" condition "{" [statement+] "}"
 else_condition: "else" "{" [statement+] "}"
 
-CMP_OPERATORS: /[^\n{]+/  // Matches anything except newline and {
+CMP_OPERATORS: /(?:[^\n{"']|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+/  // Matches anything except newline and unquoted {, handles quoted strings
 section_type: "input" -> input_section
             | "filter" -> filter_section
             | "output" -> output_section
