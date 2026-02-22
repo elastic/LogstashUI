@@ -730,23 +730,39 @@ def GetRelatedLogs(request):
         pipeline_id = f"slot{slot_id}-filter1"
 
         # Get slot creation timestamp from LogstashAgent
+        import time
         min_timestamp = None
         try:
             slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
             slots_response.raise_for_status()
             slots_data = slots_response.json()
+            
+            logger.info(f"Slots data type: {type(slots_data)}, Keys: {list(slots_data.keys()) if isinstance(slots_data, dict) else 'N/A'}")
+            logger.info(f"Looking for slot_id: {slot_id} (type: {type(slot_id)})")
 
             # Find the slot and get its creation timestamp
-            slot_info = slots_data.get(str(slot_id))
+            # JSON converts int keys to strings, so try both
+            slot_info = slots_data.get(str(slot_id)) or slots_data.get(int(slot_id))
+            logger.info(f"Slot info found: {slot_info is not None}")
             if slot_info:
-                # Subtract 5 seconds to avoid race condition where logs are requested
-                # before pipelines have written any logs
+                # Use slot creation time as minimum timestamp to avoid showing logs
+                # from previous pipelines that used this slot
                 min_timestamp = slot_info.get('created_at_millis')
-                if min_timestamp:
-                    min_timestamp = min_timestamp - 5000  # 5 seconds buffer
-                logger.info(f"Retrieved slot {slot_id} creation timestamp: {min_timestamp}")
+                current_time_millis = int(time.time() * 1000)
+                time_diff_seconds = (current_time_millis - min_timestamp) / 1000 if min_timestamp else 0
+                logger.info(f"Slot {slot_id} - Current time: {current_time_millis}, Min timestamp: {min_timestamp}, Diff: {time_diff_seconds:.1f}s ago")
+            else:
+                # Slot not found - use recent time window as fallback (last 30 seconds)
+                current_time_millis = int(time.time() * 1000)
+                min_timestamp = current_time_millis - 30000  # 30 seconds ago
+                logger.warning(f"Slot {slot_id} not found in slots data. Available slots: {list(slots_data.keys())}")
+                logger.warning(f"Using fallback: filtering logs from last 30 seconds (min_timestamp: {min_timestamp})")
         except Exception as e:
+            # If anything fails, use fallback time window
+            current_time_millis = int(time.time() * 1000)
+            min_timestamp = current_time_millis - 30000  # 30 seconds ago
             logger.warning(f"Could not retrieve slot creation timestamp: {e}")
+            logger.warning(f"Using fallback: filtering logs from last 30 seconds (min_timestamp: {min_timestamp})")
 
         # Call LogstashAgent to get pipeline logs
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_id}/logs"
@@ -758,14 +774,30 @@ def GetRelatedLogs(request):
         # Add min_timestamp if available
         if min_timestamp:
             params["min_timestamp"] = min_timestamp
+            logger.info(f"Fetching logs with min_timestamp filter: {min_timestamp}")
+        else:
+            logger.warning(f"No min_timestamp available - will fetch ALL logs for {pipeline_id}")
 
         try:
+            logger.info(f"Requesting logs from {logstash_agent_url} with params: {params}")
             response = requests.get(logstash_agent_url, params=params, timeout=10, verify=False)
             response.raise_for_status()
 
             data = response.json()
 
-            logger.info(f"GetRelatedLogs: Retrieved {data.get('log_count', 0)} logs for slot {slot_id}")
+            log_count = data.get('log_count', 0)
+            logger.info(f"GetRelatedLogs: Retrieved {log_count} logs for slot {slot_id}")
+            
+            # Log timestamp range of returned logs for debugging
+            if log_count > 0 and 'logs' in data:
+                logs = data['logs']
+                timestamps = [log.get('timeMillis', 0) for log in logs if 'timeMillis' in log]
+                if timestamps:
+                    oldest = min(timestamps)
+                    newest = max(timestamps)
+                    logger.info(f"Log timestamp range - Oldest: {oldest}, Newest: {newest}, Min filter was: {min_timestamp}")
+                    if min_timestamp and oldest < min_timestamp:
+                        logger.error(f"FILTERING FAILED: Found log older ({oldest}) than min_timestamp ({min_timestamp})")
 
             return JsonResponse(data, status=200)
 

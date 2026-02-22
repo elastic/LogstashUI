@@ -346,7 +346,8 @@ def is_pipeline_running(pipeline_id: str, log_dir: str = LOG_DIR) -> bool:
 
 
 def get_pipeline_errors(pipeline_id: str, log_dir: str = LOG_DIR,
-                       max_entries: int = 50) -> List[Dict[str, Any]]:
+                       max_entries: int = 50,
+                       min_timestamp: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Get only ERROR and FATAL level logs for a specific pipeline.
 
@@ -354,6 +355,7 @@ def get_pipeline_errors(pipeline_id: str, log_dir: str = LOG_DIR,
         pipeline_id: The pipeline ID to search for
         log_dir: Directory containing log files
         max_entries: Maximum number of errors to return
+        min_timestamp: Optional minimum timestamp in milliseconds. Only logs at or after this time will be included.
 
     Returns:
         List of error log entries for the pipeline
@@ -362,12 +364,14 @@ def get_pipeline_errors(pipeline_id: str, log_dir: str = LOG_DIR,
         pipeline_id=pipeline_id,
         log_dir=log_dir,
         max_entries=max_entries,
-        min_level="ERROR"
+        min_level="ERROR",
+        min_timestamp=min_timestamp
     )
 
 
 def get_pipeline_warnings(pipeline_id: str, log_dir: str = LOG_DIR,
-                         max_entries: int = 50) -> List[Dict[str, Any]]:
+                         max_entries: int = 50,
+                         min_timestamp: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Get WARNING, ERROR, and FATAL level logs for a specific pipeline.
 
@@ -375,6 +379,7 @@ def get_pipeline_warnings(pipeline_id: str, log_dir: str = LOG_DIR,
         pipeline_id: The pipeline ID to search for
         log_dir: Directory containing log files
         max_entries: Maximum number of warnings to return
+        min_timestamp: Optional minimum timestamp in milliseconds. Only logs at or after this time will be included.
 
     Returns:
         List of warning/error log entries for the pipeline
@@ -383,5 +388,6 @@ def get_pipeline_warnings(pipeline_id: str, log_dir: str = LOG_DIR,
         pipeline_id=pipeline_id,
         log_dir=log_dir,
         max_entries=max_entries,
-        min_level="WARN"
+        min_level="WARN",
+        min_timestamp=min_timestamp
     )

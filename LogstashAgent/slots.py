@@ -75,7 +75,7 @@ def allocate_slot(pipeline_name: str, pipelines: List[Dict[str, Any]]) -> Option
         # Check if we already have a slot with this exact configuration
         for slot_id, slot_data in _slots.items():
             if slot_data.get('content_hash') == content_hash:
-                # Update timestamps to keep it fresh and reset log filtering
+                # Update timestamps to reset log filtering for each new simulation
                 now = datetime.now(timezone.utc)
                 slot_data['last_accessed'] = now.isoformat()
                 slot_data['created_at'] = now.isoformat()

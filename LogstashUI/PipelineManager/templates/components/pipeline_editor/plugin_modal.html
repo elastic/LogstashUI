@@ -296,6 +296,9 @@ const PluginModal = (function() {
                   window.PluginConfigModal.show(newPlugin, true); // Pass true to indicate it's a new component
                 }, 50);
               }
+              
+              // Note: Pipeline warming will be triggered when config modal is saved
+              // (handled in plugin_config_modal.js)
             } else {
               // This is a conditional block (for adding to if/else-if/else), dispatch an event with the plugin info
               const event = new CustomEvent('pluginSelected', {
@@ -391,6 +394,9 @@ const PluginModal = (function() {
             
             // Close the modal
             hide();
+            
+            // Note: Pipeline warming will be triggered when config modal is saved
+            // (handled in plugin_config_modal.js)
           }
         }
       }

@@ -277,7 +277,7 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -289,13 +289,16 @@ window.PluginConfigModal = (function () {
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addHashPair('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -323,20 +326,23 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addArrayItem('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -357,6 +363,15 @@ window.PluginConfigModal = (function () {
                       rows="10"
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
+          `;
+                } else if (component.plugin === 'comment' && (key === 'string' || key.toLowerCase() === 'message' || key.toLowerCase() === 'text')) {
+                    // Special handling for comment plugin - use textarea for multiline comments
+                    inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="5"
+                      class="${inputClasses} font-mono text-sm"
+                      style="resize: vertical; min-height: 100px;"
+                      placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
           `;
                 } else if (inputType === 'password') {
                     // Handle password input type with show/hide functionality
@@ -643,7 +658,7 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -655,13 +670,16 @@ window.PluginConfigModal = (function () {
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addHashPair('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -689,20 +707,23 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addArrayItem('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -723,6 +744,15 @@ window.PluginConfigModal = (function () {
                       rows="10"
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
+          `;
+                    } else if (component.plugin === 'comment' && (key === 'string' || key.toLowerCase() === 'message' || key.toLowerCase() === 'text')) {
+                        // Special handling for comment plugin - use textarea for multiline comments
+                        inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="5"
+                      class="${inputClasses} font-mono text-sm"
+                      style="resize: vertical; min-height: 100px;"
+                      placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
           `;
     } else if (inputType === 'password') {
         // Handle password input type with show/hide functionality
@@ -951,8 +981,11 @@ window.PluginConfigModal = (function () {
                      value="${escapeHtml(value)}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'value')">
               <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeHashPair('${container.id}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
                 Remove
               </button>
             `;
@@ -994,8 +1027,11 @@ window.PluginConfigModal = (function () {
                      value="${escapeHtml(value)}"
                      onchange="updateArrayItem('${container.id}', '${hiddenField.id}', this, ${index})">
               <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeArrayItem('${container.id}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
                 Remove
               </button>
             `;
@@ -1183,15 +1219,18 @@ window.PluginConfigModal = (function () {
         }
 
         // Update the component's configuration
+        console.log('[Save Flow] Starting save at:', new Date().toISOString());
         currentComponent.config = config;
 
         // Store the pending animation ID before updating (in case it gets cleared)
         const savedPendingId = typeof pendingAnimationPluginId !== 'undefined' ? pendingAnimationPluginId : null;
 
         // If there's a global update function, call it
+        console.log('[Save Flow] Calling window.updateComponent at:', new Date().toISOString());
         if (window.updateComponent) {
             window.updateComponent(currentComponent);
         }
+        console.log('[Save Flow] window.updateComponent completed at:', new Date().toISOString());
 
         // Restore the pending animation ID if it was cleared
         if (savedPendingId && typeof pendingAnimationPluginId !== 'undefined') {
@@ -1199,7 +1238,18 @@ window.PluginConfigModal = (function () {
         }
 
         // Hide the modal (this will trigger the animation)
+        console.log('[Save Flow] Hiding modal at:', new Date().toISOString());
         hide();
+        console.log('[Save Flow] Modal hidden at:', new Date().toISOString());
+        
+        // Trigger pipeline warming synchronously (same as delete behavior)
+        console.log('[Pipeline Warming] Triggering pipeline warming after config save at:', new Date().toISOString());
+        if (typeof triggerPipelineWarmingAndChecking === 'function') {
+            triggerPipelineWarmingAndChecking();
+            console.log('[Pipeline Warming] triggerPipelineWarmingAndChecking() called at:', new Date().toISOString());
+        } else {
+            console.error('[Pipeline Warming] triggerPipelineWarmingAndChecking function not found!');
+        }
     }
 
     // Validate required fields
@@ -1317,8 +1367,11 @@ window.addHashPair = function (containerId, fieldId) {
            placeholder="Value"
            onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
     <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeHashPair('${containerId}', this)">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
       Remove
     </button>
   `;
@@ -1385,8 +1438,11 @@ window.addArrayItem = function (containerId, fieldId) {
            placeholder="Value"
            onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${newIndex})">
     <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeArrayItem('${containerId}', this)">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
       Remove
     </button>
   `;

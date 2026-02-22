@@ -7,15 +7,23 @@
 - Added fs_path type
 - Added file upload for simulate when a pipeline requires it
 - Comments are now supported!
+- Pipelines are now tested every time plugins are added/changed/removed
+- Warning badge (!) appears on plugins with missing required fields
+- Copy button in simulation result tooltips to copy JSON data to clipboard
+- 
 
 ### Changed
 - Colorized the "after" json output to be more readable and clearly convey what was changed
 - Overhaul of plugin config modal to be more user friendly
+- View Full Event and Original Event in the editor during a simulate is more obviously clickable
+- Default condition is now 'if [message]'
 
 ### Fixed
 - Drops no longer time out in the simulation feature
 - Chevron icon when expanding advanced options in pipeline settings
 - Bug that caused null lists to be inserted into the list
+- Simulation no longer hangs when events don't match any conditions (shows proper message instead)
+- Logs showing up in the wrong pipeline's error logs because they shared the same slot
 
 ## [0.1.11-12] - 02/12/2026
 ### Added

@@ -768,11 +768,11 @@
       const lines = logInput.value.split('\n').filter(line => line.trim());
       const hasMultipleLines = lines.length > 1;
       
-      console.log('Text input mode, multiline checkbox:', isMultiline, ', lines:', lines.length);
+      // console.log('Text input mode, multiline checkbox:', isMultiline, ', lines:', lines.length);
       
       if (hasMultipleLines) {
         // Multiple document mode - treat each line as separate document
-        console.log('Multiple document mode - processing', lines.length, 'documents');
+        // console.log('Multiple document mode - processing', lines.length, 'documents');
         documents = lines.map(line => {
           try {
             return JSON.parse(line);
@@ -782,7 +782,7 @@
         });
       } else {
         // Single document
-        console.log('Single document mode');
+        // console.log('Single document mode');
         try {
           documents = [JSON.parse(logInput.value)];
         } catch {
@@ -861,7 +861,7 @@
     window.currentDocumentIndex = 0;
     window.simulationRunIds = [];
     
-    console.log('Submitting', documents.length, 'documents for simulation');
+    // console.log('Submitting', documents.length, 'documents for simulation');
     
     // Submit all documents simultaneously
     submitAllDocuments(documents);
@@ -869,7 +869,7 @@
   
   // Function to submit all documents for simulation simultaneously
   async function submitAllDocuments(documents) {
-    console.log('Submitting and polling', documents.length, 'documents simultaneously');
+    // console.log('Submitting and polling', documents.length, 'documents simultaneously');
     
     // Create a deep copy of components with file paths updated for simulation
     window.simulationComponents = createSimulationComponentsCopy();
@@ -891,7 +891,7 @@
     // Wait for all submissions to complete
     await Promise.all(submissions);
     
-    console.log('All documents submitted. Run IDs:', window.simulationRunIds);
+    // console.log('All documents submitted. Run IDs:', window.simulationRunIds);
   }
   
   // Function to create a deep copy of components with file paths updated for simulation only
@@ -931,7 +931,7 @@
         if (component && component.config) {
           // Update the config with the full path in the COPY only
           component.config[optionName] = fullPath;
-          console.log(`Simulation copy: Updated ${pluginType} component ${componentId}: ${optionName} = ${fullPath}`);
+          // console.log(`Simulation copy: Updated ${pluginType} component ${componentId}: ${optionName} = ${fullPath}`);
         }
       }
     });
@@ -941,12 +941,12 @@
   
   // Function to submit a single document, start polling, and return its run_id
   async function submitAndPollDocument(doc, index) {
-    console.log('submitAndPollDocument called for index', index);
+    // console.log('submitAndPollDocument called for index', index);
     
     // Use the simulation components copy (with file paths updated)
     // This was created in submitAllDocuments and stored in window.simulationComponents
     const componentsData = window.simulationComponents;
-    console.log('Using simulation components copy:', componentsData);
+    // console.log('Using simulation components copy:', componentsData);
     
     const formData = new FormData();
     formData.append('log_text', JSON.stringify(doc));
@@ -963,17 +963,17 @@
       });
       
       const html = await response.text();
-      console.log('Received response for document', index, ', length:', html.length);
+      // console.log('Received response for document', index, ', length:', html.length);
       
       // Extract run_id from response - matches initSimulationResults('run_id')
       const runIdMatch = html.match(/initSimulationResults\(['"]([^'"]+)['"]\)/);
       if (runIdMatch) {
         const runId = runIdMatch[1];
-        console.log('Document', index, 'extracted run_id:', runId);
+        // console.log('Document', index, 'extracted run_id:', runId);
         
         // Store run_id BEFORE doing anything else
         window.simulationRunIds[index] = runId;
-        console.log('Stored run_id at index', index, ', array now:', window.simulationRunIds);
+        // console.log('Stored run_id at index', index, ', array now:', window.simulationRunIds);
         
         // For first document, show overlay by executing the script
         if (index === 0) {
@@ -981,7 +981,7 @@
           const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
           if (scriptMatch) {
             const scriptContent = scriptMatch[1];
-            console.log('Executing overlay creation script for document 0');
+            // console.log('Executing overlay creation script for document 0');
             eval(scriptContent);
           } else {
             console.error('No script found in response for document 0');
@@ -989,7 +989,7 @@
         } else {
           // For other documents, just start polling in background
           if (typeof initSimulationResults === 'function') {
-            console.log('Starting background poller for document', index);
+            // console.log('Starting background poller for document', index);
             initSimulationResults(runId);
           }
         }

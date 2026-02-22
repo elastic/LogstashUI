@@ -7,6 +7,73 @@ let isSelectionMode = false;
 
 // Note: moveMode is now defined in move_mode.js as window.moveMode
 
+/**
+ * Trigger pipeline warming and checking after plugin changes
+ * This function reuses the existing slot preallocation mechanism
+ */
+function triggerPipelineWarmingAndChecking() {
+    // console.log('[Pipeline Warming] Function called at:', new Date().toISOString());
+    
+    // Check if there are any filter components
+    const hasFilters = components && components.filter && components.filter.length > 0;
+    // console.log('[Pipeline Warming] Has filters:', hasFilters, 'Filter count:', components?.filter?.length || 0);
+    
+    if (!hasFilters) {
+        // No filters, hide status banner
+        const statusBanner = document.getElementById('pipelineLoadStatus');
+        if (statusBanner) {
+            statusBanner.style.display = 'none';
+        }
+        // console.log('[Pipeline Warming] No filters, skipping warming');
+        return;
+    }
+    
+    // Show the status banner and immediately set to loading state
+    const statusBanner = document.getElementById('pipelineLoadStatus');
+    const statusIcon = document.getElementById('pipelineStatusIcon');
+    const statusMessage = document.getElementById('pipelineStatusMessage');
+    
+    if (statusBanner && statusIcon && statusMessage) {
+        statusBanner.style.display = 'flex';
+        statusBanner.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
+        
+        // Set loading spinner - statusIcon is already an SVG element
+        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
+        statusIcon.setAttribute('class', 'w-5 h-5 animate-spin text-gray-300');
+        statusIcon.setAttribute('fill', 'currentColor');
+        statusIcon.setAttribute('viewBox', '0 0 24 24');
+        
+        statusMessage.textContent = 'Allocating pipeline slot...';
+        statusMessage.className = 'text-sm font-medium text-gray-300';
+        
+        // console.log('[Pipeline Warming] Status banner updated to loading state at:', new Date().toISOString());
+    }
+    
+    // Trigger the slot preallocation using HTMX
+    const slotPreallocation = document.getElementById('slotPreallocation');
+    // console.log('[Pipeline Warming] slotPreallocation element:', slotPreallocation ? 'found' : 'NOT FOUND');
+    // console.log('[Pipeline Warming] htmx available:', typeof htmx !== 'undefined');
+    
+    if (slotPreallocation && typeof htmx !== 'undefined') {
+        // console.log('[Pipeline Warming] Sending HTMX request at:', new Date().toISOString());
+        // Use htmx.ajax to send the request with current components data
+        htmx.ajax('POST', '/API/SimulatePipeline/', {
+            target: '#slotPreallocationResult',
+            swap: 'innerHTML',
+            values: {
+                components: JSON.stringify(components),
+                log_text: ''
+            },
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+            }
+        });
+        // console.log('[Pipeline Warming] HTMX request initiated at:', new Date().toISOString());
+    } else {
+        console.error('[Pipeline Warming] Cannot trigger - missing element or htmx');
+    }
+}
+
 // Function to update the floating Simulate Subset button
 function updateSimulateSubsetButton() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
@@ -472,6 +539,7 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
 }
 
 function loadExistingComponents() {
+    // console.log('[loadExistingComponents] Starting at:', new Date().toISOString());
     // Check if we're in simulation mode before clearing
     const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
     const simulationNodes = wasInSimulationMode && window.simulationData ? window.simulationData.nodes : null;
@@ -536,6 +604,8 @@ function loadExistingComponents() {
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
         markExecutedPlugins(simulationNodes, originalEventData);
     }
+    
+    // console.log('[loadExistingComponents] Completed at:', new Date().toISOString());
 }
 
 // Function to trigger animation for pending plugin (called after config modal closes)
@@ -555,6 +625,78 @@ function isSensitiveField(fieldName) {
            lowerFieldName.includes('apikey') ||
            lowerFieldName === 'token' ||
            lowerFieldName.includes('secret');
+}
+
+/**
+ * Validate that all required fields for a plugin are present and have values
+ * @param {Object} component - The component to validate
+ * @returns {Object} - { isValid: boolean, missingFields: Array<string> }
+ */
+function validateRequiredFields(component) {
+    const result = {
+        isValid: true,
+        missingFields: []
+    };
+    
+    // Skip validation for comment plugins and conditionals
+    if (component.plugin === 'comment' || component.plugin === 'if') {
+        return result;
+    }
+    
+    // Get plugin definition from pluginData (check both global scope and window)
+    const pluginDataSource = typeof pluginData !== 'undefined' ? pluginData : window.pluginData;
+    const pluginDef = pluginDataSource?.[component.type]?.[component.plugin];
+    
+    if (!pluginDataSource) {
+        // console.log(`[Validation] pluginData not available yet`);
+        return result;
+    }
+    
+    if (!pluginDef) {
+        // console.log(`[Validation] No plugin definition for ${component.plugin}`);
+        return result;
+    }
+    
+    // The field definitions are in 'options', not 'fields'
+    if (!pluginDef.options) {
+        // console.log(`[Validation] No options property for ${component.plugin}`);
+        return result;
+    }
+    
+    // console.log(`[Validation] Checking ${component.type}/${component.plugin} with ${Object.keys(pluginDef.options).length} options`);
+    
+    // Check each field in the plugin definition
+    for (const [fieldName, fieldDef] of Object.entries(pluginDef.options)) {
+        // Check if field is required
+        if (fieldDef.required === 'Yes') {
+            const fieldValue = component.config[fieldName];
+            
+            // console.log(`[Validation] Field "${fieldName}" is required, value:`, fieldValue);
+            
+            // Check if field is missing or empty
+            if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+                result.isValid = false;
+                result.missingFields.push(fieldName);
+                // console.log(`[Validation] Field "${fieldName}" is MISSING or EMPTY`);
+            }
+            // Check for empty arrays
+            else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+                result.isValid = false;
+                result.missingFields.push(fieldName);
+                // console.log(`[Validation] Field "${fieldName}" is an EMPTY ARRAY`);
+            }
+            // Check for empty objects
+            else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue) && Object.keys(fieldValue).length === 0) {
+                result.isValid = false;
+                result.missingFields.push(fieldName);
+                // console.log(`[Validation] Field "${fieldName}" is an EMPTY OBJECT`);
+            }
+        }
+    }
+    
+    // console.log(`[Validation] Result for ${component.plugin}:`, result);
+    
+    return result;
 }
 
 // Helper function to format config values for display
@@ -657,10 +799,14 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         return createConditionalBlockElement(component, depth);
     }
 
+// Check if this is a comment plugin - apply special styling
+    const isComment = component.plugin === 'comment';
+
 // Alternate background colors based on depth
-    const bgColor = depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600';
+    const bgColor = isComment ? 'bg-gray-800' : (depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600');
     const el = document.createElement('div');
-    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item`;
+    const commentClass = isComment ? 'comment-plugin' : '';
+    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item ${commentClass}`;
     el.dataset.id = component.id;
 
 // Get plugin info for description and type
@@ -673,6 +819,13 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         const configItems = [];
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
+                // Special handling for comment plugin - show full text with newlines (no field name prefix)
+                if (isComment && (key === 'string' || key === 'message' || key === 'text')) {
+                    const fullText = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    configItems.push(`<div class="text-sm text-gray-300 whitespace-pre-wrap font-mono mt-2">${fullText}</div>`);
+                    continue;
+                }
+                
                 let displayValue = formatConfigValue(value, key);
                 
                 // Add eye icon for sensitive fields
@@ -711,6 +864,9 @@ function createComponentElement(component, depth = 0, isConditional = false, par
                 onerror="this.style.display='none';">`
         : '';
 
+    // Validate required fields
+    const validation = validateRequiredFields(component);
+    
     el.innerHTML = `
 <button class="move-handle" data-component-id="${component.id}" title="Click to move this component">
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -719,7 +875,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
 </button>
 <div class="flex justify-between items-start">
   <div class="flex-1">
-    <div class="flex items-center">
+    <div class="flex items-center ${isComment ? 'flex-wrap' : ''}">
       ${imageHtml}
       <span class="font-medium text-white">${component.plugin}</span>
       <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
@@ -727,13 +883,15 @@ function createComponentElement(component, depth = 0, isConditional = false, par
       </span>
       ${pluginInfo.deprecated ?
         '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+      ${isComment && pluginInfo.description ?
+        `<span class="ml-2 text-xs text-gray-400 italic">${pluginInfo.description}</span>` : ''}
     </div>
-    ${pluginInfo.description ?
+    ${!isComment && pluginInfo.description ?
         `<p class="text-xs text-gray-400 mt-1 line-clamp-2">${pluginInfo.description}</p>` : ''}
     ${configSummary}
   </div>
   <div class="flex space-x-1 ml-2">
-    ${component.type === 'filter' ? `
+    ${component.type === 'filter' && !isComment ? `
     <!-- Play button / Checkbox (toggles based on selection state) -->
     <button class="play-btn text-gray-400 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
             data-component-id="${component.id}"
@@ -763,6 +921,45 @@ function createComponentElement(component, depth = 0, isConditional = false, par
   </div>
 </div>
 `;
+
+    // Add warning badge and text if required fields are missing
+    if (!validation.isValid) {
+        const badge = document.createElement('div');
+        badge.className = 'required-fields-badge';
+        badge.innerHTML = '!';
+        badge.title = `MISSING REQUIRED FIELDS\n${validation.missingFields.join(', ')}`;
+        badge.style.cssText = `
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            background: #dc2626;
+            color: white;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            animation: badgePop 0.3s ease-out;
+        `;
+        el.appendChild(badge);
+        
+        // Add text indicator below the plugin
+        const warningText = document.createElement('div');
+        warningText.className = 'required-fields-warning';
+        warningText.innerHTML = `
+            <div style="margin-top: 8px; padding: 6px 8px; background: rgba(220, 38, 38, 0.1); border-left: 3px solid #dc2626; border-radius: 4px;">
+                <div style="font-size: 11px; font-weight: 600; color: #fca5a5; margin-bottom: 2px;">Missing Required Fields</div>
+                <div style="font-size: 10px; color: #fecaca;">${validation.missingFields.join(', ')}</div>
+            </div>
+        `;
+        el.appendChild(warningText);
+    }
 
     return el;
 }
@@ -1232,7 +1429,7 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
         type: type,
         plugin: 'if',
         config: {
-            condition: 'true',
+            condition: '[message]',
             plugins: []
         }
     };
@@ -1682,6 +1879,8 @@ function removeComponent(componentId) {
     // Refresh the entire UI to reflect the changes
     if (removed) {
         loadExistingComponents();
+        // Trigger pipeline warming and checking after removal
+        triggerPipelineWarmingAndChecking();
     }
 }
 
@@ -1779,7 +1978,7 @@ function addElseIfToConditional(componentId) {
 }
 
 function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
-    console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}`);
+    // console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}`);
 
 // Find the conditional component
     const component = findComponentById(componentId);
@@ -1807,7 +2006,7 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 // Add a one-time event listener for plugin selection
     const handlePluginSelect = function (event) {
         const {pluginName, pluginType} = event.detail;
-        console.log(`Plugin selected: ${pluginType}.${pluginName} for block type: ${blockType}`);
+        // console.log(`Plugin selected: ${pluginType}.${pluginName} for block type: ${blockType}`);
 
 // Make sure we have a valid context
         if (!modal.dataset.context) {
@@ -1910,11 +2109,11 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 }
 
 function addElseToConditional(componentId) {
-    console.log('addElseToConditional called with:', componentId);
+    // console.log('addElseToConditional called with:', componentId);
 
 // Find the conditional component
     const component = findComponentById(componentId);
-    console.log('Found component:', component);
+    // console.log('Found component:', component);
 
     if (!component || component.plugin !== 'if') {
         console.error('Component not found or not a conditional:', componentId);
@@ -2051,6 +2250,9 @@ function deleteElseIfBlock(componentId, elseIfIndex) {
 
     // Refresh the UI
     loadExistingComponents();
+    
+    // Trigger pipeline warming and checking after removal
+    triggerPipelineWarmingAndChecking();
 }
 
 // Function to delete an else block
@@ -2075,6 +2277,9 @@ function deleteElseBlock(componentId) {
 
     // Refresh the UI
     loadExistingComponents();
+    
+    // Trigger pipeline warming and checking after removal
+    triggerPipelineWarmingAndChecking();
 }
 
 // Function to toggle collapse/expand of conditional blocks

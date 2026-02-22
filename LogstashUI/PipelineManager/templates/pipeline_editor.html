@@ -698,13 +698,14 @@
 
 <!-- Slot preallocation - warm up a slot when page loads so simulations are fast -->
 <!-- Empty log_text means only allocate slot, don't run simulation -->
+<!-- Also triggers on pipelineChanged event when plugins are added/removed/changed -->
 <div id="slotPreallocation"
      hx-post="/API/SimulatePipeline/"
      hx-target="#slotPreallocationResult"
      hx-swap="innerHTML"
      hx-vals="js:{components: components, log_text: ''}"
      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-     hx-trigger="load"
+     hx-trigger="load, pipelineChanged"
      class="hidden">
 </div>
 <div id="slotPreallocationResult" class="hidden"></div>

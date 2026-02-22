@@ -105,7 +105,7 @@ function highlightJSON(jsonString, changes = null) {
         // Parse the JSON
         const obj = JSON.parse(jsonString);
         
-        console.log('highlightJSON called with changes:', JSON.stringify(changes, null, 2));
+        // console.log('highlightJSON called with changes:', JSON.stringify(changes, null, 2));
         
         // Add deleted fields to the object for display
         if (changes && changes.deleted) {
@@ -119,7 +119,7 @@ function highlightJSON(jsonString, changes = null) {
         // Annotate with change information
         const annotated = changes ? annotateWithChanges(obj, changes) : null;
         
-        console.log('Annotated object:', JSON.stringify(annotated, null, 2));
+        // console.log('Annotated object:', JSON.stringify(annotated, null, 2));
         
         // Format for display
         const formatted = JSON.stringify(obj, null, 2);
@@ -165,7 +165,7 @@ function highlightJSON(jsonString, changes = null) {
                     
                     if (annotated) {
                         const status = getStatus(annotated, fullPath);
-                        console.log('Path:', fullPath, 'pathStack:', JSON.stringify(pathStack), 'lastKey:', lastKey, 'Status:', status);
+                        // console.log('Path:', fullPath, 'pathStack:', JSON.stringify(pathStack), 'lastKey:', lastKey, 'Status:', status);
                         if (status === 'added') color = '#86efac'; // green
                         else if (status === 'modified') color = '#fbbf24'; // yellow
                         else if (status === 'deleted') color = '#ef4444'; // red
@@ -256,11 +256,11 @@ function checkForParsingFailures(event) {
     };
     
     if (!event) {
-        console.log('checkForParsingFailures: No event provided');
+        // console.log('checkForParsingFailures: No event provided');
         return result;
     }
     
-    console.log('checkForParsingFailures: Checking event for failures', event);
+    // console.log('checkForParsingFailures: Checking event for failures', event);
     
     // Common Logstash parsing failure tags
     const commonFailureTags = [
@@ -272,7 +272,7 @@ function checkForParsingFailures(event) {
     
     // Check if event has a tags field
     if (event.tags && Array.isArray(event.tags)) {
-        console.log('checkForParsingFailures: Event has tags:', event.tags);
+        // console.log('checkForParsingFailures: Event has tags:', event.tags);
         
         // Check for common failure tags (case-insensitive)
         const foundCommonFailures = event.tags.filter(tag => 
@@ -280,7 +280,7 @@ function checkForParsingFailures(event) {
         );
         
         if (foundCommonFailures.length > 0) {
-            console.log('checkForParsingFailures: Found common failure tags:', foundCommonFailures);
+            // console.log('checkForParsingFailures: Found common failure tags:', foundCommonFailures);
             result.hasFailure = true;
             result.failureTags.push(...foundCommonFailures);
         }
@@ -294,18 +294,18 @@ function checkForParsingFailures(event) {
         );
         
         if (customFailureTags.length > 0) {
-            console.log('checkForParsingFailures: Found custom failure tags:', customFailureTags);
+            // console.log('checkForParsingFailures: Found custom failure tags:', customFailureTags);
             result.hasFailure = true;
             result.failureTags.push(...customFailureTags);
         }
     } else {
-        console.log('checkForParsingFailures: Event has no tags field or tags is not an array');
+        // console.log('checkForParsingFailures: Event has no tags field or tags is not an array');
     }
     
     // Remove duplicates from failureTags
     result.failureTags = [...new Set(result.failureTags)];
     
-    console.log('checkForParsingFailures: Result:', result);
+    // console.log('checkForParsingFailures: Result:', result);
     
     return result;
 }
@@ -322,32 +322,32 @@ function filterMetadata(obj) {
     const toggle = document.getElementById('debugMetadataToggle');
     const showMetadata = toggle ? toggle.checked : false; // Default to hiding metadata
     
-    console.log('filterMetadata called:', {
-        toggleExists: !!toggle,
-        toggleChecked: toggle ? toggle.checked : 'N/A',
-        showMetadata: showMetadata,
-        hasSimulation: obj.hasOwnProperty('simulation'),
-        hasSlot: obj.hasOwnProperty('slot'),
-        hasRunId: obj.hasOwnProperty('run_id')
-    });
+    // console.log('filterMetadata called:', {
+    //     toggleExists: !!toggle,
+    //     toggleChecked: toggle ? toggle.checked : 'N/A',
+    //     showMetadata: showMetadata,
+    //     hasSimulation: obj.hasOwnProperty('simulation'),
+    //     hasSlot: obj.hasOwnProperty('slot'),
+    //     hasRunId: obj.hasOwnProperty('run_id')
+    // });
     
     if (showMetadata) {
-        console.log('Returning original object (metadata visible)');
+        // console.log('Returning original object (metadata visible)');
         return obj; // Return original if showing metadata
     }
     
     // Create copy and remove metadata fields
-    console.log('Creating filtered copy (removing metadata)');
+    // console.log('Creating filtered copy (removing metadata)');
     const copy = JSON.parse(JSON.stringify(obj));
     delete copy.simulation;
     delete copy.slot;
     delete copy.run_id;
     
-    console.log('Filtered copy created:', {
-        hasSimulation: copy.hasOwnProperty('simulation'),
-        hasSlot: copy.hasOwnProperty('slot'),
-        hasRunId: copy.hasOwnProperty('run_id')
-    });
+    // console.log('Filtered copy created:', {
+    //     hasSimulation: copy.hasOwnProperty('simulation'),
+    //     hasSlot: copy.hasOwnProperty('slot'),
+    //     hasRunId: copy.hasOwnProperty('run_id')
+    // });
     
     return copy;
 }
@@ -462,7 +462,7 @@ function markExecutedPlugins(nodes, originalEvent) {
                     badge.title = `PARSING FAILURE DETECTED\nFailed tags: ${failureTags.join(', ')}`;
                     badge.style.cssText = `
                         position: absolute;
-                        top: 8px;
+                        bottom: 8px;
                         right: 8px;
                         width: 20px;
                         height: 20px;
@@ -485,7 +485,7 @@ function markExecutedPlugins(nodes, originalEvent) {
                     badge.title = 'Executed in simulation';
                     badge.style.cssText = `
                         position: absolute;
-                        top: 8px;
+                        bottom: 8px;
                         right: 8px;
                         width: 24px;
                         height: 24px;
@@ -607,6 +607,13 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
             <path d="M2 12l10 5 10-5"/>
         </svg>
         <span>Original Event</span>
+        <svg class="hover-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+        </svg>
+        <svg class="click-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
+        </svg>
     `;
     
     dataFlow.style.cssText = `
@@ -623,12 +630,13 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     `;
     
     // Store the original event data (filter metadata if toggle unchecked)
-    console.log('addOriginalEventIndicator: About to filter original event');
+    // console.log('addOriginalEventIndicator: About to filter original event');
     const filtered = filterMetadata(originalEvent);
-    console.log('addOriginalEventIndicator: Filtered, now stringifying');
+    // console.log('addOriginalEventIndicator: Filtered, now stringifying');
     dataFlow.dataset.eventJson = JSON.stringify(filtered, null, 2);
     
     // Add click to show sticky tooltip
@@ -642,6 +650,11 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         this.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.2))';
         this.style.borderColor = 'rgba(16, 185, 129, 0.5)';
         this.style.transform = 'translateX(4px)';
+        this.style.boxShadow = '0 4px 6px rgba(16, 185, 129, 0.2)';
+        
+        // Make icons more visible on hover
+        const icons = this.querySelectorAll('.hover-icon, .click-icon');
+        icons.forEach(icon => icon.style.opacity = '1');
         
         // Show hover tooltip (non-sticky)
         showDataFlowTooltip(e, this.dataset.eventJson, false, null);
@@ -651,6 +664,11 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         this.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1))';
         this.style.borderColor = 'rgba(16, 185, 129, 0.3)';
         this.style.transform = 'translateX(0)';
+        this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+        
+        // Reset icon opacity
+        const icons = this.querySelectorAll('.hover-icon, .click-icon');
+        icons.forEach(icon => icon.style.opacity = '0.5');
         
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
@@ -678,6 +696,13 @@ function addDataFlowIndicator(componentElement, node) {
             <path d="M3 10h18"/>
         </svg>
         <span>View Full Event</span>
+        <svg class="hover-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+        </svg>
+        <svg class="click-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
+        </svg>
     `;
     
     dataFlow.style.cssText = `
@@ -694,6 +719,7 @@ function addDataFlowIndicator(componentElement, node) {
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     `;
     
     // Store the full event snapshot data for tooltip (from node's eventJson if available)
@@ -701,12 +727,12 @@ function addDataFlowIndicator(componentElement, node) {
     let changesData = null;
     if (node.eventJson) {
         // Parse, filter, and re-stringify
-        console.log('addDataFlowIndicator: About to parse and filter node eventJson');
+        // console.log('addDataFlowIndicator: About to parse and filter node eventJson');
         const parsed = JSON.parse(node.eventJson);
         const filtered = filterMetadata(parsed);
         eventData = JSON.stringify(filtered, null, 2);
         changesData = node.changes || null; // Store changes for highlighting
-        console.log('addDataFlowIndicator: Filtered and stringified');
+        // console.log('addDataFlowIndicator: Filtered and stringified');
     }
     dataFlow.dataset.eventJson = eventData;
     if (changesData) {
@@ -725,6 +751,11 @@ function addDataFlowIndicator(componentElement, node) {
         this.style.background = 'linear-gradient(90deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2))';
         this.style.borderColor = 'rgba(59, 130, 246, 0.5)';
         this.style.transform = 'translateX(4px)';
+        this.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.2)';
+        
+        // Make icons more visible on hover
+        const icons = this.querySelectorAll('.hover-icon, .click-icon');
+        icons.forEach(icon => icon.style.opacity = '1');
         
         // Show hover tooltip (non-sticky)
         const changes = this.dataset.changes ? JSON.parse(this.dataset.changes) : null;
@@ -735,6 +766,11 @@ function addDataFlowIndicator(componentElement, node) {
         this.style.background = 'linear-gradient(90deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1))';
         this.style.borderColor = 'rgba(59, 130, 246, 0.3)';
         this.style.transform = 'translateX(0)';
+        this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+        
+        // Reset icon opacity
+        const icons = this.querySelectorAll('.hover-icon, .click-icon');
+        icons.forEach(icon => icon.style.opacity = '0.5');
         
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
@@ -788,27 +824,60 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
         // Apply syntax highlighting with change context
         const highlightedJSON = highlightJSON(eventJson, changes);
         
-        // Update content with close button
+        // Store the raw JSON data for copying
+        tooltip.dataset.eventJson = eventJson;
+        
+        // Update content with close button and copy button
         tooltip.innerHTML = `
-            <button onclick="hideDataFlowTooltip()" 
-                    style="position: absolute; top: 8px; right: 8px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"
-                    onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">✕</button>
-            <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px; padding-right: 24px;">Event State at This Point:</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <div style="font-weight: 600; color: #60a5fa;">Event State at This Point:</div>
+                <div style="display: flex; gap: 4px;">
+                    <button onclick="copyTooltipData()" 
+                            id="copyTooltipBtn"
+                            style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif;"
+                            onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'"
+                            title="Copy JSON to clipboard">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        Copy
+                    </button>
+                    <button onclick="hideDataFlowTooltip()" 
+                            style="background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"
+                            onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'"
+                            title="Close">✕</button>
+                </div>
+            </div>
             <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
         
         // Make draggable only when sticky
         makeDraggable(tooltip);
     } else {
-        // Hover mode: non-interactive, no close button
-        tooltip.style.pointerEvents = 'none';
+        // Hover mode: semi-interactive (for copy button), no close button
+        tooltip.style.pointerEvents = 'auto';
         tooltip.style.cursor = 'default';
         
         // Apply syntax highlighting with change context
         const highlightedJSON = highlightJSON(eventJson, changes);
         
+        // Store the raw JSON data for copying
+        tooltip.dataset.eventJson = eventJson;
+        
         tooltip.innerHTML = `
-            <div style="font-weight: 600; color: #60a5fa; margin-bottom: 8px;">Event State at This Point:</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <div style="font-weight: 600; color: #60a5fa;">Event State at This Point:</div>
+                <button onclick="copyTooltipData()" 
+                        id="copyTooltipBtn"
+                        style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif;"
+                        onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'"
+                        title="Copy JSON to clipboard">
+                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                    Copy
+                </button>
+            </div>
             <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
     }
@@ -828,19 +897,29 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
 function makeDraggable(element) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     
+    // Remove any existing mousedown handler to avoid duplicates
+    element.onmousedown = null;
+    
     element.onmousedown = dragMouseDown;
     
     function dragMouseDown(e) {
-        // Don't drag if clicking on close button or scrollbar
-        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        // Don't drag if clicking on close button, copy button, or any interactive element
+        if (e.target.tagName === 'BUTTON' || 
+            e.target.closest('button') || 
+            e.target.tagName === 'SVG' || 
+            e.target.closest('svg')) {
             return;
         }
         
         e.preventDefault();
+        e.stopPropagation();
         pos3 = e.clientX;
         pos4 = e.clientY;
         document.onmouseup = closeDragElement;
         document.onmousemove = elementDrag;
+        
+        // Add visual feedback that dragging is active
+        element.style.cursor = 'grabbing';
     }
     
     function elementDrag(e) {
@@ -856,6 +935,70 @@ function makeDraggable(element) {
     function closeDragElement() {
         document.onmouseup = null;
         document.onmousemove = null;
+        // Restore cursor
+        element.style.cursor = 'move';
+    }
+}
+
+/**
+ * Copy tooltip JSON data to clipboard
+ */
+function copyTooltipData() {
+    const tooltip = document.getElementById('data-flow-tooltip');
+    if (!tooltip || !tooltip.dataset.eventJson) return;
+    
+    const jsonData = tooltip.dataset.eventJson;
+    
+    // Try to format the JSON nicely
+    try {
+        const parsed = JSON.parse(jsonData);
+        const formatted = JSON.stringify(parsed, null, 2);
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(formatted).then(() => {
+            // Visual feedback - change button text and color temporarily
+            const copyBtn = document.getElementById('copyTooltipBtn');
+            if (copyBtn) {
+                const originalHTML = copyBtn.innerHTML;
+                const originalBg = copyBtn.style.background;
+                
+                copyBtn.innerHTML = `
+                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Copied!
+                `;
+                copyBtn.style.background = '#10b981';
+                copyBtn.onmouseover = null;
+                copyBtn.onmouseout = null;
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHTML;
+                    copyBtn.style.background = originalBg;
+                    copyBtn.onmouseover = function() { this.style.background = '#2563eb'; };
+                    copyBtn.onmouseout = function() { this.style.background = '#3b82f6'; };
+                }, 2000);
+            }
+        }).catch(err => {
+            console.error('Failed to copy to clipboard:', err);
+            alert('Failed to copy to clipboard. Please try again.');
+        });
+    } catch (e) {
+        // If parsing fails, just copy the raw string
+        navigator.clipboard.writeText(jsonData).then(() => {
+            const copyBtn = document.getElementById('copyTooltipBtn');
+            if (copyBtn) {
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.innerHTML = 'Copied!';
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHTML;
+                }, 2000);
+            }
+        }).catch(err => {
+            console.error('Failed to copy to clipboard:', err);
+            alert('Failed to copy to clipboard. Please try again.');
+        });
     }
 }
 
@@ -918,18 +1061,18 @@ function createForceDirectedGraph(graphData) {
         .attr("fill", "#6b7280");
     
     // Set fixed positions for nodes - completely static, no simulation
-    console.log('Setting node positions:', {
-        nodeCount: graphData.nodes.length,
-        padding,
-        nodeSpacing,
-        height,
-        nodes: graphData.nodes.map(n => ({ id: n.id, step: n.step }))
-    });
+    // console.log('Setting node positions:', {
+    //     nodeCount: graphData.nodes.length,
+    //     padding,
+    //     nodeSpacing,
+    //     height,
+    //     nodes: graphData.nodes.map(n => ({ id: n.id, step: n.step }))
+    // });
     
     graphData.nodes.forEach((node, i) => {
         node.x = padding + (node.step * nodeSpacing); // Space nodes horizontally with proper spacing
         node.y = height / 2; // Center all nodes vertically for linear flow
-        console.log(`Node ${node.id}: step=${node.step}, x=${node.x}, y=${node.y}`);
+        // console.log(`Node ${node.id}: step=${node.step}, x=${node.x}, y=${node.y}`);
     });
     
     // Resolve link source/target to actual node objects
@@ -942,12 +1085,12 @@ function createForceDirectedGraph(graphData) {
         }
     });
     
-    console.log('Links resolved:', graphData.links.map(l => ({ 
-        source: l.source.id, 
-        target: l.target.id,
-        sourceX: l.source.x,
-        targetX: l.target.x
-    })));
+    // console.log('Links resolved:', graphData.links.map(l => ({ 
+    //     source: l.source.id, 
+    //     target: l.target.id,
+    //     sourceX: l.source.x,
+    //     targetX: l.target.x
+    // })));
     
     // Create links with hover interaction
     const linkGroup = container.append("g")
@@ -1191,11 +1334,11 @@ function createForceDirectedGraph(graphData) {
             
             if (nextPlugin) {
                 componentId = nextPlugin.id;
-                console.log(`Decision point clicked - focusing on first plugin in branch: ${componentId}`);
+                // console.log(`Decision point clicked - focusing on first plugin in branch: ${componentId}`);
             } else {
                 // Fallback to the condition block if no plugin found
                 componentId = d.conditionalId;
-                console.log(`No plugin found after decision point - focusing on condition block: ${componentId}`);
+                // console.log(`No plugin found after decision point - focusing on condition block: ${componentId}`);
             }
         }
         
@@ -1536,9 +1679,9 @@ window.nextDocument = function() {
 };
 
 function switchToDocument(index) {
-    console.log('=== Switching to document', index, '===');
-    console.log('simulationRunIds array:', window.simulationRunIds);
-    console.log('simulationDocuments array length:', window.simulationDocuments ? window.simulationDocuments.length : 0);
+    // console.log('=== Switching to document', index, '===');
+    // console.log('simulationRunIds array:', window.simulationRunIds);
+    // console.log('simulationDocuments array length:', window.simulationDocuments ? window.simulationDocuments.length : 0);
     
     // Check if we have a run_id for this document
     if (!window.simulationRunIds || !window.simulationRunIds[index]) {
@@ -1549,7 +1692,7 @@ function switchToDocument(index) {
     }
     
     const runId = window.simulationRunIds[index];
-    console.log('Switching to run_id:', runId);
+    // console.log('Switching to run_id:', runId);
     
     // Initialize results cache if needed
     if (!window.simulationResultsCache) {
@@ -1558,11 +1701,11 @@ function switchToDocument(index) {
     
     // Check if we have cached results for this run_id
     if (window.simulationResultsCache[runId]) {
-        console.log('Using cached results for run_id:', runId);
+        // console.log('Using cached results for run_id:', runId);
         renderCachedResults(runId, index);
     } else {
-        console.log('No cached results, starting poller for run_id:', runId);
-        console.log('Active pollers before switch:', window.activePollers ? Array.from(window.activePollers) : []);
+        // console.log('No cached results, starting poller for run_id:', runId);
+        // console.log('Active pollers before switch:', window.activePollers ? Array.from(window.activePollers) : []);
         
         // Clear existing simulation artifacts
         clearSimulationArtifacts();
@@ -1574,7 +1717,7 @@ function switchToDocument(index) {
         const loadingIndicator = document.getElementById('simulation-loading-indicator');
         if (loadingIndicator) {
             loadingIndicator.style.display = 'flex';
-            console.log('Loading indicator shown');
+            // console.log('Loading indicator shown');
         } else {
             console.error('Loading indicator not found');
         }
@@ -1777,6 +1920,53 @@ function initSimulationResults(runId) {
                         else if (event.simulation.id === 'final') {
                                 console.log('Found final event, processing snapshots in order');
                                 receivedFinal = true;
+                                
+                                // Check if no plugins were executed (empty or missing snapshots)
+                                const hasSnapshots = event.snapshots && Object.keys(event.snapshots).length > 0;
+                                
+                                if (!hasSnapshots) {
+                                    console.log('No plugins were executed - event did not match any conditions');
+                                    
+                                    // Hide loading indicator
+                                    const loadingIndicator = document.getElementById('simulation-loading-indicator');
+                                    if (loadingIndicator) {
+                                        loadingIndicator.style.display = 'none';
+                                    }
+                                    
+                                    // Show message that no plugins were executed
+                                    const resultsContainer = document.getElementById('results-container');
+                                    if (resultsContainer) {
+                                        resultsContainer.innerHTML = `
+                                            <div class="w-full p-4 bg-yellow-900/30 border-y border-yellow-600">
+                                                <div class="flex items-center gap-3">
+                                                    <svg class="w-6 h-6 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                                    </svg>
+                                                    <div>
+                                                        <h3 class="text-base font-semibold text-yellow-400">No Plugins Executed</h3>
+                                                        <p class="text-sm text-yellow-200">
+                                                            No plugins were triggered during this execution.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    
+                                    // Clear loading timeout
+                                    if (loadingTimeout) {
+                                        clearTimeout(loadingTimeout);
+                                    }
+                                    
+                                    // Remove from active pollers
+                                    if (window.activePollers) {
+                                        window.activePollers.delete(runId);
+                                        console.log('Polling complete for', runId, '(no plugins executed), active pollers:', Array.from(window.activePollers));
+                                    }
+                                    
+                                    return;
+                                }
+                                
                                 // Access the components variable from the page
                                 if (typeof components !== 'undefined' && components.filter && event.snapshots) {
                                     let previousSnapshot = originalEvent; // Start with original event as baseline
