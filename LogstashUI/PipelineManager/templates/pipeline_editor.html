@@ -262,6 +262,33 @@
         transform: translateY(-2px);
         box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
     }
+
+    /* Comment plugin special styling */
+    .comment-plugin {
+        border: 2px solid #4b5563 !important;
+        border-left: 4px solid #6b7280 !important;
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-style: italic;
+        opacity: 0.85;
+        transition: all 0.2s ease;
+    }
+
+    .comment-plugin:hover {
+        opacity: 1;
+        border-color: #6b7280 !important;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .comment-plugin .font-medium {
+        color: #9ca3af !important;
+        font-weight: 400 !important;
+    }
+
+    .comment-plugin .text-gray-400 {
+        color: #6b7280 !important;
+    }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
@@ -325,7 +352,7 @@
             </div>
         </div>
         <div class="flex space-x-4">
-            <form>
+            <form onsubmit="return false;">
                 {% csrf_token %}
                 <button type="button"
                         id="viewCode"

@@ -9106,6 +9106,23 @@
             },
             "bundled": "No"
         },
+        "comment": {
+            "name": "comment",
+            "link": "https://github.com/elastic/LogstashUI",
+            "description": "Add comments to your Logstash pipelines!",
+            "repo_link": "https://github.com/elastic/LogstashUI",
+            "options": {
+                "text": {
+                    "setting": "text",
+                    "input_type": "string",
+                    "required": "Yes",
+                    "setting_link": "https://github.com/elastic/LogstashUI",
+                    "important": "Yes"
+                }
+            },
+            "Bundled": "Yes",
+            "important": "Yes"
+        },
         "pipeline": {
             "name": "pipeline",
             "link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
@@ -16529,6 +16546,23 @@
             },
             "bundled": "No"
         },
+        "comment": {
+            "name": "comment",
+            "link": "https://github.com/elastic/LogstashUI",
+            "description": "Add comments to your Logstash pipelines!",
+            "repo_link": "https://github.com/elastic/LogstashUI",
+            "options": {
+                "text": {
+                    "setting": "text",
+                    "input_type": "string",
+                    "required": "Yes",
+                    "setting_link": "https://github.com/elastic/LogstashUI",
+                    "important": "Yes"
+                }
+            },
+            "Bundled": "Yes",
+            "important": "Yes"
+        },
         "pipeline": {
             "name": "pipeline",
             "link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
@@ -22789,6 +22823,24 @@
             },
             "bundled": "Yes",
             "memory_intensive": "Yes"
+        },
+        "comment": {
+            "name": "comment",
+            "link": "https://github.com/elastic/LogstashUI",
+            "description": "Add comments to your Logstash pipelines!",
+            "repo_link": "https://github.com/elastic/LogstashUI",
+            "options": {
+                "text": {
+                    "setting": "text",
+                    "input_type": "string",
+                    "required": "Yes",
+                    "setting_link": "https://github.com/elastic/LogstashUI",
+                    "important": "Yes"
+                }
+            },
+            "Bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         }
     },
     "codec": {

@@ -1,4 +1,3 @@
-
 # Django
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse, HttpResponseRedirect
@@ -9,7 +8,8 @@ from django.conf import settings
 
 ## Tables
 from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, get_elastic_connections_from_list
+from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, \
+    get_elastic_connections_from_list
 
 # Custom libraries
 from . import logstash_config_parse
@@ -54,7 +54,7 @@ def require_admin_role(view_func):
             response = HttpResponse('You must be logged in to perform this action', status=403)
             response['HX-Trigger'] = '{"showToastEvent": {"message": "You must be logged in to perform this action", "type": "error"}}'
             return response
-        
+
         # Check if user has admin role
         if hasattr(request.user, 'profile'):
             if request.user.profile.role != 'admin':
@@ -62,38 +62,38 @@ def require_admin_role(view_func):
                 response = HttpResponse('Access denied: Admin role required', status=403)
                 response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
                 return response
-        
+
         # User is admin, proceed with the view
         return view_func(request, *args, **kwargs)
-    
+
     return wrapper
 
 
 def validate_pipeline_name(pipeline_name):
     """
     Validate pipeline name according to Elasticsearch rules.
-    
+
     Pipeline ID must:
     - Begin with a letter or underscore
     - Contain only letters, underscores, dashes, hyphens, and numbers
-    
+
     Args:
         pipeline_name (str): The pipeline name to validate
-        
+
     Returns:
         tuple: (is_valid, error_message)
     """
     if not pipeline_name:
         return False, "Pipeline name cannot be empty"
-    
+
     # Check if starts with letter or underscore
     if not re.match(r'^[a-zA-Z_]', pipeline_name):
         return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
-    
+
     # Check if contains only valid characters
     if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\-]*$', pipeline_name):
         return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
-    
+
     return True, None
 
 
@@ -107,10 +107,10 @@ def SimulatePipeline(request):
     from django.conf import settings
     import hashlib
     import uuid
-    
+
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    
+
     try:
         # Get the components from the request
         components_json = request.POST.get('components')
@@ -118,30 +118,30 @@ def SimulatePipeline(request):
 
         if not components_json:
             return HttpResponse('<div class="text-red-400">Error: No pipeline components provided</div>')
-        
+
         # Parse components
         try:
             components = json.loads(components_json)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse components JSON: {e}")
             return HttpResponse(f'<div class="text-red-400">Error: Invalid components data</div>')
-        
+
         # Extract filter plugins from components
         filter_plugins = components.get('filter', [])
-        
+
         if not filter_plugins and not log_text:
             return HttpResponse('<div class="text-gray-400">No filters to simulate</div>')
-        
+
         if not filter_plugins:
             return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
-        
+
         # Generate unique run_id for this simulation
         run_id = str(uuid.uuid4())
         logger.info(f"Starting simulation with run_id: {run_id}")
-        
+
         # Get LogstashAgent URL early so we can use it in instrumentation
         logstash_agent_url = settings.LOGSTASH_AGENT_URL
-        
+
         # Determine LOGSTASH_URL for Ruby code based on DEBUG mode
         # DEBUG=True: http://host.docker.internal:8080
         # DEBUG=False: https://host.docker.internal
@@ -149,44 +149,45 @@ def SimulatePipeline(request):
             logstash_ui_url = "http://host.docker.internal:8080"
         else:
             logstash_ui_url = "https://host.docker.internal"
-        
+
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls
-        
+
         def instrument_plugins(plugins_list):
             """
             Recursively instrument plugins, handling conditional (if) plugins specially.
             For 'if' plugins, we instrument the nested plugins but not the condition itself.
             """
             instrumented = []
-            
+
             for plugin in plugins_list:
                 if plugin.get('plugin') == 'if':
                     # This is a conditional plugin - we need to instrument its nested plugins
                     conditional_plugin = plugin.copy()
                     conditional_plugin['config'] = plugin['config'].copy()
                     conditional_id = plugin['id']
-                    
+
                     # Instrument plugins in the main 'if' block
                     if 'plugins' in conditional_plugin['config']:
                         # Add branch tracking at the start of the if block
-                        # Escape single quotes in the condition for Ruby string
-                        if_condition = conditional_plugin['config'].get('condition', '').replace("'", "\\'")
+                        if_condition = conditional_plugin['config'].get('condition', '')
+                        # Escape only double quotes for embedding in Ruby string (not backslashes - that causes double-escaping)
+                        escaped_condition = if_condition.replace('"', '\\"')
                         branch_tracker = {
                             "id": f"{conditional_id}_if_tracker",
                             "type": "filter",
                             "plugin": "ruby",
                             "config": {
                                 "code": f"""
-event.set('[simulation][conditional_branches][{conditional_id}]', 'if')
-event.set('[simulation][conditional_conditions][{conditional_id}]', '{if_condition}')
+event.set("[simulation][conditional_branches][{conditional_id}]", "if")
+event.set("[simulation][conditional_conditions][{conditional_id}]", "{escaped_condition}")
 """.strip()
                             }
                         }
                         conditional_plugin['config']['plugins'] = [branch_tracker] + instrument_plugins(
                             conditional_plugin['config']['plugins']
                         )
-                    
+
                     # Instrument plugins in 'else_ifs' blocks
                     if 'else_ifs' in conditional_plugin['config']:
                         instrumented_else_ifs = []
@@ -194,23 +195,24 @@ event.set('[simulation][conditional_conditions][{conditional_id}]', '{if_conditi
                             else_if_copy = else_if.copy()
                             if 'plugins' in else_if_copy:
                                 # Add branch tracking at the start of the else_if block
-                                # Escape single quotes in the condition for Ruby string
-                                else_if_condition = else_if.get('condition', '').replace("'", "\\'")
+                                else_if_condition = else_if.get('condition', '')
+                                # Escape only double quotes for embedding in Ruby string (not backslashes - that causes double-escaping)
+                                escaped_else_if_condition = else_if_condition.replace('"', '\\"')
                                 branch_tracker = {
                                     "id": f"{conditional_id}_elseif{else_if_idx}_tracker",
                                     "type": "filter",
                                     "plugin": "ruby",
                                     "config": {
                                         "code": f"""
-event.set('[simulation][conditional_branches][{conditional_id}]', 'else_if_{else_if_idx}')
-event.set('[simulation][conditional_conditions][{conditional_id}]', '{else_if_condition}')
+event.set("[simulation][conditional_branches][{conditional_id}]", "else_if_{else_if_idx}")
+event.set("[simulation][conditional_conditions][{conditional_id}]", "{escaped_else_if_condition}")
 """.strip()
                                     }
                                 }
                                 else_if_copy['plugins'] = [branch_tracker] + instrument_plugins(else_if_copy['plugins'])
                             instrumented_else_ifs.append(else_if_copy)
                         conditional_plugin['config']['else_ifs'] = instrumented_else_ifs
-                    
+
                     # Instrument plugins in 'else' block
                     if 'else' in conditional_plugin['config'] and conditional_plugin['config']['else']:
                         else_block = conditional_plugin['config']['else'].copy()
@@ -222,13 +224,13 @@ event.set('[simulation][conditional_conditions][{conditional_id}]', '{else_if_co
                                 "plugin": "ruby",
                                 "config": {
                                     "code": f"""
-event.set('[simulation][conditional_branches][{conditional_id}]', 'else')
+event.set("[simulation][conditional_branches][{conditional_id}]", "else")
 """.strip()
                                 }
                             }
                             else_block['plugins'] = [branch_tracker] + instrument_plugins(else_block['plugins'])
                         conditional_plugin['config']['else'] = else_block
-                    
+
                     # Add the conditional plugin with instrumented nested plugins
                     instrumented.append(conditional_plugin)
                 else:
@@ -236,7 +238,7 @@ event.set('[simulation][conditional_branches][{conditional_id}]', 'else')
                     # Increment step counter
                     step_counter[0] += 1
                     current_step = step_counter[0]
-                    
+
                     # Check if this is a drop plugin - if so, add Ruby code to send event to API before drop
                     if plugin.get('plugin') == 'drop':
                         # Send the event to StreamSimulate API before it gets dropped
@@ -247,44 +249,44 @@ event.set('[simulation][conditional_branches][{conditional_id}]', 'else')
                         final_step = current_step + 1
                         drop_plugin_id = plugin['id']
                         pre_drop_code = f"""
-require 'net/http'
-require 'uri'
-require 'json'
+require "net/http"
+require "uri"
+require "json"
 
 # First, create a snapshot for the drop plugin itself (before it executes)
 # This ensures the frontend knows the drop plugin was reached
-event.set('[simulation][step]', {current_step})
-event.set('[simulation][id]', '{drop_plugin_id}')
+event.set("[simulation][step]", {current_step})
+event.set("[simulation][id]", "{drop_plugin_id}")
 
 # Create snapshot of current event state for the drop plugin
 snapshot = {{}}
 event.to_hash.each do |key, value|
   # Skip metadata and snapshots field itself to avoid recursion
-  next if key.start_with?('@metadata') || key == 'snapshots'
+  next if key.start_with?("@metadata") || key == "snapshots"
   snapshot[key] = value
 end
-event.set('[snapshots][{drop_plugin_id}]', snapshot)
+event.set("[snapshots][{drop_plugin_id}]", snapshot)
 
 # Now set to final for the API call
-event.set('[simulation][step]', {final_step})
-event.set('[simulation][id]', 'final')
+event.set("[simulation][step]", {final_step})
+event.set("[simulation][id]", "final")
 
 # Ensure run_id is set (should already be in the event from input)
 # But we'll set it explicitly to be safe
-if !event.get('run_id')
-  event.set('run_id', '{run_id}')
+if !event.get("run_id")
+  event.set("run_id", "{run_id}")
 end
 
 # Convert event to hash and send to API
 event_hash = event.to_hash
 
 # Send HTTP POST to StreamSimulate endpoint
-uri = URI.parse('{logstash_ui_url}/API/StreamSimulate/')
+uri = URI.parse("{logstash_ui_url}/API/StreamSimulate/")
 http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = (uri.scheme == 'https')
+http.use_ssl = (uri.scheme == "https")
 http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
 
-request = Net::HTTP::Post.new(uri.path, {{'Content-Type' => 'application/json'}})
+request = Net::HTTP::Post.new(uri.path, {{"Content-Type" => "application/json"}})
 request.body = event_hash.to_json
 
 begin
@@ -293,7 +295,7 @@ rescue => e
   # Log error but don't fail the pipeline
 end
 """.strip()
-                        
+
                         pre_drop_plugin = {
                             "id": f"pre_drop_api_call_{plugin['id']}",
                             "type": "filter",
@@ -303,11 +305,13 @@ end
                             }
                         }
                         instrumented.append(pre_drop_plugin)
-                    
+
                     # Add pre-plugin timing instrumentation
+                    # Use double-quoted Ruby strings for field refs to avoid ' chars
+                    # (single quotes in code get escaped to \' in LSCL, causing Ruby syntax errors)
                     pre_instrumentation_code = f"""
 # Capture start time in nanoseconds before plugin execution
-event.set('[simulation][timing][start_ns]', (Time.now.to_f * 1_000_000_000).to_i)
+event.set("[simulation][timing][start_ns]", (Time.now.to_f * 1_000_000_000).to_i)
 """.strip()
 
                     pre_instrumentation_plugin = {
@@ -327,30 +331,24 @@ event.set('[simulation][timing][start_ns]', (Time.now.to_f * 1_000_000_000).to_i
                     # Add Ruby instrumentation after this plugin
                     # Note: run_id is NOT included here - it's added to the event data when sent to Logstash
                     # This keeps the instrumentation static so the pipeline config hash is consistent
-                    instrumentation_code = f"""
-# Update step tracking
-event.set('[simulation][step]', {current_step})
-event.set('[simulation][id]', '{plugin['id']}')
-
-# Calculate execution time in nanoseconds
+                    instrumentation_code = f"""event.set("[simulation][step]", {current_step})
+event.set("[simulation][id]", "{plugin['id']}")
 end_ns = (Time.now.to_f * 1_000_000_000).to_i
-start_ns = event.get('[simulation][timing][start_ns]')
+start_ns = event.get("[simulation][timing][start_ns]")
 if start_ns
   execution_ns = end_ns - start_ns
-  event.set('[simulation][timing][execution_ns]', execution_ns)
-  event.set('[simulation][timing][end_ns]', end_ns)
+  event.set("[simulation][timing][execution_ns]", execution_ns)
+  event.set("[simulation][timing][end_ns]", end_ns)
 end
 
-# Create snapshot of current event state
 snapshot = {{}}
 event.to_hash.each do |key, value|
-  # Skip metadata and snapshots field itself to avoid recursion
-  next if key.start_with?('@metadata') || key == 'snapshots'
+  next if key.start_with?("@metadata") || key == "snapshots"
   snapshot[key] = value
 end
 
 # Store snapshot under the plugin ID
-event.set('[snapshots][{plugin['id']}]', snapshot)
+event.set("[snapshots][{plugin['id']}]", snapshot)
 """.strip()
 
                     instrumentation_plugin = {
@@ -426,8 +424,6 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
         output_lines = output_config.strip().split('\n')
         output_content = '\n'.join(output_lines[1:-1]) if len(output_lines) > 2 else ''
 
-
-
         # Prepare the pipeline data for slot allocation
         # The slots system will hash this to detect configuration changes
         pipeline_data = {
@@ -435,13 +431,13 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             "output_config": output_content,
             "index": 1
         }
-        
+
         # Allocate a slot - the LogstashAgent will detect if config changed
         slot_allocation_body = {
             "pipeline_name": request.GET.get('pipeline', 'simulation'),
             "pipelines": [pipeline_data]
         }
-        
+
         slot_id = None
         try:
             response = requests.post(
@@ -450,7 +446,7 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                 verify=False,
                 timeout=30  # Increased timeout for slot eviction + allocation when slots are full
             )
-            
+
             # Try to extract slot_id from response before checking status
             # This way we have it even if verification fails
             try:
@@ -459,29 +455,29 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                 reused = response_data.get('reused', False)
             except Exception:
                 pass
-            
+
             # Now check if the request was successful
             response.raise_for_status()
-            
+
             logger.info(f"Allocated slot {slot_id} (reused: {reused})")
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to allocate slot: {e}")
             logger.error(f"slot_id extracted before error: {slot_id}")
-            
+
             # If slot_id wasn't extracted from successful response, try to get it from error response
             if not slot_id and hasattr(e, 'response') and e.response is not None:
                 try:
                     logger.info(f"Error response status: {e.response.status_code}")
                     logger.info(f"Error response content: {e.response.text[:500]}")
-                    
+
                     error_data = e.response.json()
                     logger.info(f"Error response JSON: {error_data}")
-                    
+
                     # Check if detail is a dict with slot_id (new format)
                     detail = error_data.get('detail')
                     logger.info(f"Error detail type: {type(detail)}, value: {detail}")
-                    
+
                     if isinstance(detail, dict):
                         slot_id = detail.get('slot_id')
                         logger.info(f"Extracted slot_id {slot_id} from error response detail dict")
@@ -496,29 +492,29 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                     logger.error(f"Could not extract slot_id from error detail: {extract_error}")
                     import traceback
                     logger.error(traceback.format_exc())
-            
+
             # Build error response with slot_id if we have it
             slot_id_attr = f' data-slot-id="{slot_id}"' if slot_id else ""
             # Mark that the pipeline failed so JavaScript doesn't re-check status
             failed_attr = ' data-pipeline-failed="true"'
-            
+
             if slot_id:
                 logger.info(f"Including slot_id {slot_id} in error response for logs access")
             else:
                 logger.warning("No slot_id available for error response - logs will not be accessible")
-            
+
             error_html = f'<div class="text-red-400"{slot_id_attr}{failed_attr}>Error allocating slot: {str(e)}</div>'
             logger.info(f"Returning error HTML: {error_html}")
             return HttpResponse(error_html)
-        
+
         # Wait for Logstash to reload the pipeline (only if new slot)
         import time
         if not reused:
             time.sleep(2)
-        
+
         # Use the slot-based pipeline name
         pipeline_name = f"slot{slot_id}-filter1"
-        
+
         # If log_text is provided, send it through the pipeline
         if log_text:
             # Send the user's log input via LogstashAgent's simulate endpoint
@@ -531,12 +527,12 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
                 except json.JSONDecodeError:
                     # Not JSON, wrap it in a message field
                     log_data = {"message": log_text}
-                
+
                 # Add slot field for routing in simulate_start.conf
                 log_data["slot"] = slot_id
                 # Add run_id for tracking this specific simulation run
                 log_data["run_id"] = run_id
-                
+
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
@@ -548,7 +544,7 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to send simulation input: {e}")
                 return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
-        
+
         # If no log_text was provided, this was just a slot allocation - return simple success message
         if not log_text:
             result_html = f'''
@@ -558,7 +554,7 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             </div>
             '''
             return HttpResponse(result_html)
-        
+
         # Return success message - results will be streamed via StreamSimulate endpoint
         # Render the template with context
         template = get_template('components/pipeline_editor/simulation_results.html')
@@ -569,9 +565,9 @@ event.set('[snapshots][{plugin['id']}]', snapshot)
             'run_id': run_id
         }
         result_html = template.render(context, request)
-        
+
         return HttpResponse(result_html)
-        
+
     except Exception as e:
         logger.error(f"Error in SimulatePipeline: {e}")
         logger.error(traceback.format_exc())
@@ -586,21 +582,21 @@ def StreamSimulate(request):
     """
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    
+
     try:
         # Parse the incoming event data
         event_data = json.loads(request.body)
-        
+
         # Store the event in the global results queue
         with simulation_lock:
             simulation_results.append(event_data)
             queue_size = len(simulation_results)
-        
+
         logger.info(f"StreamSimulate: Received event, queue size now: {queue_size}")
         logger.debug(f"StreamSimulate: Event data keys: {list(event_data.keys())}")
-        
+
         return JsonResponse({"status": "ok"}, status=200)
-        
+
     except Exception as e:
         logger.error(f"Error in StreamSimulate: {e}")
         logger.error(traceback.format_exc())
@@ -614,35 +610,35 @@ def GetSimulationResults(request):
     """
     if request.method != 'GET':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    
+
     try:
         # Get run_id from query parameters
         run_id = request.GET.get('run_id')
-        
+
         if not run_id:
             return JsonResponse({"error": "Missing run_id parameter"}, status=400)
-        
+
         # Filter results by run_id and remove them from the queue
         with simulation_lock:
             matching_results = []
             remaining_results = deque(maxlen=1000)
-            
+
             for result in simulation_results:
                 if result.get('run_id') == run_id:
                     matching_results.append(result)
                 else:
                     remaining_results.append(result)
-            
+
             # Replace the queue with non-matching results
             simulation_results.clear()
             simulation_results.extend(remaining_results)
-        
+
         logger.info(f"GetSimulationResults: Returning {len(matching_results)} events for run_id {run_id}")
         if matching_results:
             logger.debug(f"GetSimulationResults: First event keys: {list(matching_results[0].keys())}")
-        
+
         return JsonResponse({"results": matching_results}, status=200)
-        
+
     except Exception as e:
         logger.error(f"Error in GetSimulationResults: {e}")
         logger.error(traceback.format_exc())
@@ -654,10 +650,10 @@ def CheckIfPipelineLoaded(request):
     """
     Check if a pipeline successfully loaded in the Logstash instance.
     Calls LogstashAgent's is_pipeline_running endpoint to verify pipeline status.
-    
+
     Expected GET parameters:
         - pipeline_name: The name of the pipeline to check
-    
+
     Returns:
         JSON response with:
         - is_running: Boolean indicating if pipeline is running
@@ -666,31 +662,31 @@ def CheckIfPipelineLoaded(request):
     """
     try:
         pipeline_name = request.GET.get('pipeline_name')
-        
+
         if not pipeline_name:
             return JsonResponse({
                 "error": "pipeline_name parameter is required"
             }, status=400)
-        
+
         # Call LogstashAgent to check pipeline status
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipelines/status"
-        
+
         try:
             response = requests.get(logstash_agent_url, timeout=5, verify=False)
             response.raise_for_status()
-            
+
             data = response.json()
             running_pipelines = data.get('running_pipelines', [])
             is_running = pipeline_name in running_pipelines
-            
+
             logger.info(f"CheckIfPipelineLoaded: Pipeline '{pipeline_name}' running status: {is_running}")
-            
+
             return JsonResponse({
                 "is_running": is_running,
                 "pipeline_name": pipeline_name,
                 "running_pipelines": running_pipelines
             }, status=200)
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to connect to LogstashAgent: {e}")
             return JsonResponse({
@@ -698,7 +694,7 @@ def CheckIfPipelineLoaded(request):
                 "is_running": False,
                 "pipeline_name": pipeline_name
             }, status=500)
-        
+
     except Exception as e:
         logger.error(f"Error in CheckIfPipelineLoaded: {e}")
         logger.error(traceback.format_exc())
@@ -713,12 +709,12 @@ def GetRelatedLogs(request):
     """
     Get log entries related to a specific slot pipeline.
     Calls LogstashAgent's pipeline logs endpoint to fetch related logs.
-    
+
     Expected GET parameters:
         - slot_id: The slot ID to get logs for
         - max_entries: Maximum number of log entries to return (default: 100, max: 500)
         - min_level: Minimum log level (default: INFO, options: DEBUG, INFO, WARN, ERROR)
-    
+
     Returns:
         JSON response with:
         - pipeline_id: The pipeline ID searched
@@ -730,22 +726,22 @@ def GetRelatedLogs(request):
         slot_id = request.GET.get('slot_id')
         max_entries = int(request.GET.get('max_entries', 100))
         min_level = request.GET.get('min_level', 'INFO').upper()
-        
+
         if not slot_id:
             return JsonResponse({
                 "error": "slot_id parameter is required"
             }, status=400)
-        
+
         # Construct the slot pipeline name
         pipeline_id = f"slot{slot_id}-filter1"
-        
+
         # Get slot creation timestamp from LogstashAgent
         min_timestamp = None
         try:
             slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
             slots_response.raise_for_status()
             slots_data = slots_response.json()
-            
+
             # Find the slot and get its creation timestamp
             slot_info = slots_data.get(str(slot_id))
             if slot_info:
@@ -757,28 +753,28 @@ def GetRelatedLogs(request):
                 logger.info(f"Retrieved slot {slot_id} creation timestamp: {min_timestamp}")
         except Exception as e:
             logger.warning(f"Could not retrieve slot creation timestamp: {e}")
-        
+
         # Call LogstashAgent to get pipeline logs
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_id}/logs"
         params = {
             "max_entries": min(max_entries, 500),
             "min_level": min_level
         }
-        
+
         # Add min_timestamp if available
         if min_timestamp:
             params["min_timestamp"] = min_timestamp
-        
+
         try:
             response = requests.get(logstash_agent_url, params=params, timeout=10, verify=False)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             logger.info(f"GetRelatedLogs: Retrieved {data.get('log_count', 0)} logs for slot {slot_id}")
-            
+
             return JsonResponse(data, status=200)
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch logs from LogstashAgent: {e}")
             return JsonResponse({
@@ -787,7 +783,7 @@ def GetRelatedLogs(request):
                 "log_count": 0,
                 "logs": []
             }, status=500)
-        
+
     except Exception as e:
         logger.error(f"Error in GetRelatedLogs: {e}")
         logger.error(traceback.format_exc())
@@ -806,30 +802,30 @@ def UploadFile(request):
     """
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    
+
     try:
         # Get the uploaded file and filename
         uploaded_file = request.FILES.get('file')
         filename = request.POST.get('filename')
-        
+
         if not uploaded_file:
             return JsonResponse({"error": "No file provided"}, status=400)
-        
+
         if not filename:
             return JsonResponse({"error": "No filename provided"}, status=400)
-        
+
         # Read file content
         file_content = uploaded_file.read()
         logger.info(f"Read {len(file_content)} bytes from uploaded file")
-        
+
         # Encode as base64 for transmission
         import base64
         encoded_content = base64.b64encode(file_content).decode('utf-8')
         logger.info(f"Encoded content length: {len(encoded_content)} characters")
-        
+
         # Send to LogstashAgent
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/write-file"
-        
+
         response = requests.post(
             logstash_agent_url,
             json={
@@ -839,17 +835,17 @@ def UploadFile(request):
             verify=False,
             timeout=10
         )
-        
+
         response.raise_for_status()
-        
+
         logger.info(f"File uploaded successfully: {filename}")
-        
+
         return JsonResponse({
             "status": "ok",
             "message": "File uploaded successfully",
             "filename": filename
         }, status=200)
-        
+
     except requests.exceptions.RequestException as e:
         logger.error(f"Error transmitting file to LogstashAgent: {e}")
         return JsonResponse({

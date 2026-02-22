@@ -175,7 +175,8 @@ class LogstashTransformer(Transformer):
         return {"type": "env_var", "value": v[0]}
 
     def array(self, items):
-        return list(items)
+        # Filter out None values that may come from parsing
+        return [item for item in items if item is not None]
 
     def hash(self, pairs):
         return dict(pairs)

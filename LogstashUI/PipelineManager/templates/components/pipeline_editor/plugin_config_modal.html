@@ -22,7 +22,7 @@
 
             <!-- Configuration Form -->
             <div class="p-4 overflow-y-auto flex-1">
-                <form id="configForm" class="space-y-4">
+                <form id="configForm" class="space-y-4" onsubmit="event.preventDefault(); PluginConfigModal.saveConfig(); return false;">
                     <!-- Dynamic content will be inserted here -->
                 </form>
             </div>

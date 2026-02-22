@@ -657,10 +657,14 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         return createConditionalBlockElement(component, depth);
     }
 
+// Check if this is a comment plugin - apply special styling
+    const isComment = component.plugin === 'comment';
+
 // Alternate background colors based on depth
-    const bgColor = depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600';
+    const bgColor = isComment ? 'bg-gray-800' : (depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600');
     const el = document.createElement('div');
-    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item`;
+    const commentClass = isComment ? 'comment-plugin' : '';
+    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item ${commentClass}`;
     el.dataset.id = component.id;
 
 // Get plugin info for description and type
@@ -673,6 +677,13 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         const configItems = [];
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
+                // Special handling for comment plugin - show full text with newlines
+                if (isComment && (key === 'string' || key === 'message' || key === 'text')) {
+                    const fullText = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    configItems.push(`<div class="text-sm text-gray-300 whitespace-pre-wrap font-mono mt-2">${key}: ${fullText}</div>`);
+                    continue;
+                }
+                
                 let displayValue = formatConfigValue(value, key);
                 
                 // Add eye icon for sensitive fields
@@ -719,7 +730,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
 </button>
 <div class="flex justify-between items-start">
   <div class="flex-1">
-    <div class="flex items-center">
+    <div class="flex items-center ${isComment ? 'flex-wrap' : ''}">
       ${imageHtml}
       <span class="font-medium text-white">${component.plugin}</span>
       <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
@@ -727,13 +738,15 @@ function createComponentElement(component, depth = 0, isConditional = false, par
       </span>
       ${pluginInfo.deprecated ?
         '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+      ${isComment && pluginInfo.description ?
+        `<span class="ml-2 text-xs text-gray-400 italic">${pluginInfo.description}</span>` : ''}
     </div>
-    ${pluginInfo.description ?
+    ${!isComment && pluginInfo.description ?
         `<p class="text-xs text-gray-400 mt-1 line-clamp-2">${pluginInfo.description}</p>` : ''}
     ${configSummary}
   </div>
   <div class="flex space-x-1 ml-2">
-    ${component.type === 'filter' ? `
+    ${component.type === 'filter' && !isComment ? `
     <!-- Play button / Checkbox (toggles based on selection state) -->
     <button class="play-btn text-gray-400 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
             data-component-id="${component.id}"

@@ -364,6 +364,15 @@ window.PluginConfigModal = (function () {
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
           `;
+                } else if (component.plugin === 'comment' && (key === 'string' || key.toLowerCase() === 'message' || key.toLowerCase() === 'text')) {
+                    // Special handling for comment plugin - use textarea for multiline comments
+                    inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="5"
+                      class="${inputClasses} font-mono text-sm"
+                      style="resize: vertical; min-height: 100px;"
+                      placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
+          `;
                 } else if (inputType === 'password') {
                     // Handle password input type with show/hide functionality
                     inputField = `
@@ -735,6 +744,15 @@ window.PluginConfigModal = (function () {
                       rows="10"
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
+          `;
+                    } else if (component.plugin === 'comment' && (key === 'string' || key.toLowerCase() === 'message' || key.toLowerCase() === 'text')) {
+                        // Special handling for comment plugin - use textarea for multiline comments
+                        inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="5"
+                      class="${inputClasses} font-mono text-sm"
+                      style="resize: vertical; min-height: 100px;"
+                      placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
           `;
     } else if (inputType === 'password') {
         // Handle password input type with show/hide functionality

@@ -271,7 +271,7 @@ function displayQuoteWarnings(warnings) {
                 <div class="flex-1">
                     <h4 class="text-yellow-400 font-semibold mb-2">Quote Mixing Warning</h4>
                     <p class="text-yellow-200 text-sm mb-3">
-                        The following fields contain both single (') and double (") quotes. Logstash cannot properly escape these values, which may cause parsing errors.
+                        The following fields contain both single (') and double (") quotes. Escaping them can be tricky, be sure to review.
                     </p>
                     <div class="space-y-3">
     `;
