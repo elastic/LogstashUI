@@ -24,8 +24,8 @@ function openDeviceModal(deviceData = null) {
   form.reset();
   document.getElementById('deviceErrorContainer').innerHTML = '';
   
-  if (deviceData) {
-    // Edit mode
+  if (deviceData && deviceData.id) {
+    // Edit mode - existing device
     modalTitle.textContent = 'Edit SNMP Device';
     document.getElementById('deviceId').value = deviceData.id;
     document.getElementById('deviceName').value = deviceData.name;
@@ -40,8 +40,25 @@ function openDeviceModal(deviceData = null) {
     } else {
       selectedProfiles = [];
     }
+  } else if (deviceData) {
+    // Add mode with pre-filled data (e.g., from discovered devices)
+    modalTitle.textContent = 'Add SNMP Device';
+    document.getElementById('deviceForm').reset();
+    document.getElementById('deviceId').value = '';
+    document.getElementById('deviceName').value = deviceData.name || '';
+    document.getElementById('deviceIpAddress').value = deviceData.ip_address || '';
+    document.getElementById('devicePort').value = deviceData.port || 161;
+    document.getElementById('deviceRetries').value = deviceData.retries !== undefined ? deviceData.retries : 2;
+    document.getElementById('deviceTimeout').value = deviceData.timeout || 1000;
+    
+    // Set selected profiles BEFORE loading dropdowns
+    if (deviceData.profiles && Array.isArray(deviceData.profiles)) {
+      selectedProfiles = [...deviceData.profiles];
+    } else {
+      selectedProfiles = ['system']; // Default to system profile
+    }
   } else {
-    // Add mode
+    // Add mode - completely new device
     modalTitle.textContent = 'Add SNMP Device';
     document.getElementById('deviceForm').reset();
     document.getElementById('devicePort').value = 161;

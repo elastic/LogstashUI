@@ -1,0 +1,102 @@
+<!-- Discovered Devices Modal -->
+<div id="discoveredDevicesModal" class="hidden fixed inset-0 overflow-hidden z-50">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDiscoveredDevicesModal()"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex justify-between items-center p-6 border-b border-gray-700">
+        <div>
+          <h2 class="text-xl font-bold text-white">Discovered Devices</h2>
+          <p class="text-sm text-gray-400 mt-1">Devices discovered via SNMP in the last 2 hours</p>
+        </div>
+        <button onclick="closeDiscoveredDevicesModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Loading State -->
+        <div id="discoveredDevicesLoading" class="text-center py-8">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <p class="text-gray-400 mt-2">Loading discovered devices...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="discoveredDevicesError" class="hidden">
+          <div class="bg-red-900/30 border border-red-700 rounded-lg p-4">
+            <div class="flex items-start">
+              <svg class="w-5 h-5 text-red-400 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <h4 class="font-semibold text-red-300 mb-1">Error Loading Devices</h4>
+                <p id="discoveredDevicesErrorMessage" class="text-gray-300 text-sm"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="discoveredDevicesEmpty" class="hidden text-center py-8">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-700/50 rounded-full mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white mb-2">No Devices Discovered</h3>
+          <p class="text-gray-400">No devices have been discovered in the last 2 hours. Make sure your discovery pipelines are running.</p>
+        </div>
+
+        <!-- Devices Table -->
+        <div id="discoveredDevicesTable" class="hidden">
+          <!-- Notification Banner -->
+          <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-3 mb-4">
+            <div class="flex items-start">
+              <svg class="w-5 h-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p class="text-sm text-blue-300">
+                  <span class="font-semibold">Remember:</span> Don't forget to commit your changes after adding discovered devices so the device will no longer be discovered.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="bg-gray-900/50 rounded-lg overflow-hidden border border-gray-700">
+            <table class="table w-full">
+              <thead>
+                <tr class="bg-gray-700 border-b border-gray-600">
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Host Name</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">IP or Hostname</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">OS</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Connection</th>
+                  <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Action</th>
+                </tr>
+              </thead>
+              <tbody id="discoveredDevicesTableBody" class="bg-gray-800 divide-y divide-gray-700">
+                <!-- Rows will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="border-t border-gray-700 p-6">
+        <div class="flex justify-between items-center">
+          <div class="text-sm text-gray-400">
+            <span id="discoveredDevicesCount">0</span> device(s) found
+          </div>
+          <button onclick="closeDiscoveredDevicesModal()" class="btn btn-secondary">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

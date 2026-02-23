@@ -1194,7 +1194,18 @@ def _generate_filters(oid_mappings, network):
     return filter_components
 
 
-def _generate_output(input_data, network_db_object):
+def _generate_output(input_data, network_db_object, snmp_type="polling"):
+    """
+    Generate Elasticsearch output configuration with data stream settings.
+    
+    Args:
+        input_data: Dict containing network and device information
+        network_db_object: Network model instance
+        snmp_type: Type of SNMP operation - "discovery", "traps", or "polling" (default)
+    
+    Returns:
+        List of output components
+    """
     output_components = []
     
     # Get the connection from the network
@@ -1203,11 +1214,22 @@ def _generate_output(input_data, network_db_object):
     if not connection:
         return output_components
     
+    # Configure data stream based on snmp_type
+    if snmp_type == "discovery":
+        data_stream_type = "logs"
+        data_stream_dataset = "snmp.discovery"
+    elif snmp_type == "traps":
+        data_stream_type = "logs"
+        data_stream_dataset = "snmp.traps"
+    else:  # polling (default)
+        data_stream_type = "metrics"
+        data_stream_dataset = "snmp.polling"
+    
     config = {
         "data_stream": True,
-        "data_stream_type": "metrics",
-        "data_stream_namespace": network_db_object.name.lower().replace(' ', '-'),
-        "data_stream_dataset": "snmp"
+        "data_stream_type": data_stream_type,
+        "data_stream_namespace": "default",
+        "data_stream_dataset": data_stream_dataset
     }
     
     # Add connection details based on what's available
@@ -1338,7 +1360,7 @@ def GetCommitDiff(request):
             components = {
                 "input": input_components,
                 "filter": filter_components,
-                "output": _generate_output(input_data, network)
+                "output": _generate_output(input_data, network, snmp_type="polling")
             }
             
             # Generate new pipeline configuration
@@ -1374,6 +1396,7 @@ def GetCommitDiff(request):
                     "host": "0.0.0.0",
                     "port": 1662,
                     "oid_map_field_values": False,
+                    "oid_mapping_format": "dotted_string",
                     "supported_versions": []
                 }
                 
@@ -1417,7 +1440,7 @@ def GetCommitDiff(request):
                             }
                         }
                     ],
-                    "output": _generate_output(input_data, network)
+                    "output": _generate_output(input_data, network, snmp_type="traps")
                 }
                 
                 # Generate new trap pipeline configuration
@@ -1474,7 +1497,7 @@ def GetCommitDiff(request):
                 discovery_components = {
                     "input": discovery_input_components,
                     "filter": discovery_filter_components,
-                    "output": _generate_output(input_data, network)
+                    "output": _generate_output(input_data, network, snmp_type="discovery")
                 }
                 
                 # Generate new discovery pipeline configuration
@@ -1602,7 +1625,7 @@ def CommitConfiguration(request):
                     components = {
                         "input": input_components,
                         "filter": filter_components,
-                        "output": _generate_output(input_data, network)
+                        "output": _generate_output(input_data, network, snmp_type="polling")
                     }
                     
                     # Generate pipeline configuration
@@ -1665,6 +1688,7 @@ def CommitConfiguration(request):
                                 "host": "0.0.0.0",
                                 "port": 1662,
                                 "oid_map_field_values": False,
+                                "oid_mapping_format": "dotted_string",
                                 "supported_versions": []
                             }
                             
@@ -1708,7 +1732,7 @@ def CommitConfiguration(request):
                                         }
                                     }
                                 ],
-                                "output": _generate_output(input_data, network)
+                                "output": _generate_output(input_data, network, snmp_type="traps")
                             }
                             
                             # Generate trap pipeline configuration
@@ -1776,7 +1800,7 @@ def CommitConfiguration(request):
                             discovery_components = {
                                 "input": discovery_input_components,
                                 "filter": discovery_filter_components,
-                                "output": _generate_output(input_data, network)
+                                "output": _generate_output(input_data, network, snmp_type="discovery")
                             }
                             
                             # Generate discovery pipeline configuration
@@ -1965,7 +1989,7 @@ def GenerateCommitConfiguration(request):
 
             # Generate inputs
             components["input"] = _generate_input(input_data)
-            components["output"] = _generate_output(input_data, network)
+            components["output"] = _generate_output(input_data, network, snmp_type="polling")
 
             print(components)
             logstash_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
@@ -2605,6 +2629,156 @@ def GetDeviceVisualization(request, device_id):
             'error': 'Device not found'
         }, status=404)
     except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@require_http_methods(["GET"])
+def GetDiscoveredDevices(request):
+    """
+    Query Elasticsearch for discovered devices from logs-snmp.discovery-* indices.
+    Aggregates by host.name and returns top hits from the last 2 hours.
+    """
+    try:
+        from Core.views import get_elastic_connection
+        from Core.models import Connection
+        from datetime import datetime, timedelta, timezone
+        
+        # Get all connections
+        connections = Connection.objects.all()
+        
+        if not connections.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'No Elasticsearch connections configured'
+            }, status=400)
+        
+        all_discovered_devices = []
+        errors = []
+        
+        # Calculate time range (last 2 hours)
+        now = datetime.now(timezone.utc)
+        two_hours_ago = now - timedelta(hours=2)
+        
+        # Query each connection for discovered devices
+        for connection in connections:
+            try:
+                es = get_elastic_connection(connection.id)
+                
+                # Build Elasticsearch query
+                query = {
+                    "size": 0,
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {
+                                    "range": {
+                                        "@timestamp": {
+                                            "gte": two_hours_ago.isoformat(),
+                                            "lte": now.isoformat()
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "aggs": {
+                        "devices_by_host": {
+                            "terms": {
+                                "field": "host.name",
+                                "size": 1000
+                            },
+                            "aggs": {
+                                "latest_doc": {
+                                    "top_hits": {
+                                        "size": 1,
+                                        "sort": [
+                                            {
+                                                "@timestamp": {
+                                                    "order": "desc"
+                                                }
+                                            }
+                                        ],
+                                        "_source": {
+                                            "includes": [
+                                                "host.name",
+                                                "host.hostname",
+                                                "host.os.full",
+                                                "host.ip",
+                                                "network.name",
+                                                "@timestamp"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                # Execute search
+                response = es.search(
+                    index="logs-snmp.discovery-*",
+                    body=query
+                )
+                
+                # Extract devices from aggregation results
+                if 'aggregations' in response and 'devices_by_host' in response['aggregations']:
+                    buckets = response['aggregations']['devices_by_host']['buckets']
+                    
+                    for bucket in buckets:
+                        if 'latest_doc' in bucket and 'hits' in bucket['latest_doc']:
+                            hits = bucket['latest_doc']['hits']['hits']
+                            if hits:
+                                source = hits[0]['_source']
+                                network_name = source.get('network', {}).get('name', '')
+                                
+                                # Query the Network model to get the discovery credential
+                                network_obj = None
+                                credential_id = None
+                                network_id = None
+                                
+                                if network_name:
+                                    try:
+                                        from SNMP.models import Network
+                                        network_obj = Network.objects.filter(name=network_name).first()
+                                        if network_obj:
+                                            network_id = network_obj.id
+                                            if network_obj.discovery_credential:
+                                                credential_id = network_obj.discovery_credential.id
+                                    except Exception as e:
+                                        logger.warning(f"Could not query network '{network_name}': {str(e)}")
+                                
+                                device = {
+                                    'host_name': source.get('host', {}).get('name', 'Unknown'),
+                                    'host_hostname': source.get('host', {}).get('hostname', ''),
+                                    'host_os_full': source.get('host', {}).get('os', {}).get('full', ''),
+                                    'host_ip': source.get('host', {}).get('ip', ''),
+                                    'network_name': network_name,
+                                    'network_id': network_id,
+                                    'credential_id': credential_id,
+                                    'timestamp': source.get('@timestamp', ''),
+                                    'connection_name': connection.name,
+                                    'connection_id': connection.id
+                                }
+                                all_discovered_devices.append(device)
+                
+            except Exception as e:
+                errors.append(f"Connection '{connection.name}': {str(e)}")
+                continue
+        
+        return JsonResponse({
+            'success': True,
+            'devices': all_discovered_devices,
+            'total': len(all_discovered_devices),
+            'errors': errors if errors else None
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'success': False,
             'error': str(e)

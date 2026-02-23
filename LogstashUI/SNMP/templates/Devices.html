@@ -43,6 +43,12 @@
           </svg>
           Commit Changes
         </button>
+        <button id="discoveredDevicesBtn" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Discovered Devices
+        </button>
         <button id="addDeviceBtn" class="btn btn-primary flex items-center gap-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -241,6 +247,9 @@
 <!-- SNMP Diff Modal -->
 {% include 'components/snmp_diff_modal.html' %}
 
+<!-- Discovered Devices Modal -->
+{% include 'components/discovered_devices_modal.html' %}
+
 <!-- Device Visual Preview Component -->
 {% include 'components/snmp_device_visual_preview.html' %}
 
@@ -251,6 +260,7 @@
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>
 <script src="{% static 'js/snmp_commit_modal.js' %}"></script>
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
+<script src="{% static 'js/discovered_devices.js' %}"></script>
 
 <script>
 // Setup Instructions Modal Functions
