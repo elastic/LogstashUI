@@ -23,7 +23,8 @@ function openNetworkModal(networkData = null) {
   // Load connections into dropdown
   loadConnections(networkData ? networkData.connection : null);
   
-  // Load credentials into dropdown
+  // Load credentials into dropdowns
+  loadDiscoveryCredentials(networkData ? networkData.discovery_credential : null);
   loadNetworkCredentials(networkData ? networkData.credential : null);
   
   if (networkData) {
@@ -42,7 +43,8 @@ function openNetworkModal(networkData = null) {
     const trapsValue = networkData.traps_enabled ? 'true' : 'false';
     document.querySelector(`input[name="traps_enabled"][value="${trapsValue}"]`).checked = true;
     
-    // Show/hide credential section based on traps enabled
+    // Show/hide credential sections based on enabled states
+    toggleDiscoveryCredential();
     toggleTrapsCredential();
   } else {
     // Add mode
@@ -51,7 +53,8 @@ function openNetworkModal(networkData = null) {
     document.querySelector('input[name="discovery_enabled"][value="true"]').checked = true;
     document.querySelector('input[name="traps_enabled"][value="false"]').checked = true;
     
-    // Hide credential section by default
+    // Show/hide credential sections by default
+    toggleDiscoveryCredential();
     toggleTrapsCredential();
   }
   
@@ -110,6 +113,20 @@ function refreshConnections() {
   loadConnections(currentValue);
 }
 
+// Toggle discovery credential section visibility
+function toggleDiscoveryCredential() {
+  const discoveryEnabled = document.querySelector('input[name="discovery_enabled"]:checked')?.value === 'true';
+  const credentialSection = document.getElementById('discoveryCredentialSection');
+  
+  if (credentialSection) {
+    if (discoveryEnabled) {
+      credentialSection.classList.remove('hidden');
+    } else {
+      credentialSection.classList.add('hidden');
+    }
+  }
+}
+
 // Toggle traps credential section visibility
 function toggleTrapsCredential() {
   const trapsEnabled = document.querySelector('input[name="traps_enabled"]:checked')?.value === 'true';
@@ -124,7 +141,41 @@ function toggleTrapsCredential() {
   }
 }
 
-// Load credentials into dropdown
+// Load discovery credentials into dropdown
+function loadDiscoveryCredentials(selectedCredentialId = null) {
+  const credentialSelect = document.getElementById('discoveryCredentialSelect');
+  
+  if (!credentialSelect) return;
+  
+  fetch('/API/SNMP/GetCredentials/')
+    .then(response => response.json())
+    .then(credentials => {
+      credentialSelect.innerHTML = '<option value="">Select a credential...</option>';
+      credentialSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Credential</option>';
+      
+      credentials.forEach(credential => {
+        const option = document.createElement('option');
+        option.value = credential.id;
+        option.textContent = `${credential.name} (${credential.version})`;
+        if (selectedCredentialId && credential.id == selectedCredentialId) {
+          option.selected = true;
+        }
+        credentialSelect.appendChild(option);
+      });
+    })
+    .catch(error => {
+      console.error('Error loading discovery credentials:', error);
+    });
+}
+
+// Refresh discovery credentials dropdown
+function refreshDiscoveryCredentials() {
+  const credentialSelect = document.getElementById('discoveryCredentialSelect');
+  const currentValue = credentialSelect ? credentialSelect.value : null;
+  loadDiscoveryCredentials(currentValue);
+}
+
+// Load credentials into dropdown (for traps)
 function loadNetworkCredentials(selectedCredentialId = null) {
   const credentialSelect = document.getElementById('networkCredentialSelect');
   
@@ -151,14 +202,24 @@ function loadNetworkCredentials(selectedCredentialId = null) {
     });
 }
 
-// Refresh credentials dropdown
+// Refresh credentials dropdown (for traps)
 function refreshNetworkCredentials() {
   const credentialSelect = document.getElementById('networkCredentialSelect');
   const currentValue = credentialSelect ? credentialSelect.value : null;
   loadNetworkCredentials(currentValue);
 }
 
-// Handle credential selection change
+// Handle discovery credential selection change
+function handleDiscoveryCredentialSelection(event) {
+  if (event.target.value === 'add_new') {
+    // Open credential modal
+    openCredentialModalFromNetwork();
+    // Reset selection to empty
+    event.target.value = '';
+  }
+}
+
+// Handle trap credential selection change
 function handleNetworkCredentialSelection(event) {
   if (event.target.value === 'add_new') {
     // Open credential modal
@@ -223,9 +284,10 @@ window.closeCredentialModal = function() {
     originalCloseCredentialModalForNetwork();
   }
   
-  // If network modal was open, reopen it and refresh credentials
+  // If network modal was open, reopen it and refresh both credential dropdowns
   if (wasNetworkModalOpen) {
     networkModal.classList.remove('hidden');
+    loadDiscoveryCredentials(window.lastCreatedCredentialIdForNetwork);
     loadNetworkCredentials(window.lastCreatedCredentialIdForNetwork);
     window.lastCreatedCredentialIdForNetwork = null;
   }
@@ -248,6 +310,16 @@ document.addEventListener('DOMContentLoaded', function() {
     connectionSelect.addEventListener('focus', function() {
       const currentValue = this.value;
       loadConnections(currentValue);
+    });
+  }
+  
+  const discoveryCredentialSelect = document.getElementById('discoveryCredentialSelect');
+  if (discoveryCredentialSelect) {
+    discoveryCredentialSelect.addEventListener('change', handleDiscoveryCredentialSelection);
+    // Refresh dropdown when clicked/focused, preserving current selection
+    discoveryCredentialSelect.addEventListener('focus', function() {
+      const currentValue = this.value;
+      loadDiscoveryCredentials(currentValue);
     });
   }
   
@@ -311,10 +383,26 @@ document.addEventListener('DOMContentLoaded', function() {
 document.getElementById('networkForm').addEventListener('submit', function(e) {
   e.preventDefault();
   
+  const errorContainer = document.getElementById('networkErrorContainer');
+  
+  // Validate that discovery credential is selected if discovery is enabled
+  const discoveryEnabled = document.querySelector('input[name="discovery_enabled"]:checked')?.value === 'true';
+  const discoveryCredentialSelect = document.getElementById('discoveryCredentialSelect');
+  
+  if (discoveryEnabled && (!discoveryCredentialSelect.value || discoveryCredentialSelect.value === 'add_new')) {
+    errorContainer.innerHTML = `
+      <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
+        <h3 class="font-bold mb-2">Validation Error</h3>
+        <p class="text-sm">Please select a credential for device discovery when discovery is enabled.</p>
+      </div>
+    `;
+    errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  
   // Validate that credential is selected if traps are enabled
   const trapsEnabled = document.querySelector('input[name="traps_enabled"]:checked')?.value === 'true';
   const credentialSelect = document.getElementById('networkCredentialSelect');
-  const errorContainer = document.getElementById('networkErrorContainer');
   
   if (trapsEnabled && (!credentialSelect.value || credentialSelect.value === 'add_new')) {
     errorContainer.innerHTML = `

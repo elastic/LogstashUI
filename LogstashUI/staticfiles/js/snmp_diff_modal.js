@@ -172,6 +172,7 @@ function displayNetworkDiffs(networks) {
     let html = '';
     let networksWithChanges = 0;
     let newPipelinesCount = 0;
+    let deletedPipelinesCount = 0;
 
     for (const network of networks) {
         // Skip main pipeline rendering if network has no devices (pipeline_name will be null)
@@ -384,6 +385,8 @@ function displayNetworkDiffs(networks) {
                     newPipelinesCount++;
                 } else if (trapPipeline.action === 'update') {
                     networksWithChanges++;
+                } else if (trapPipeline.action === 'delete') {
+                    deletedPipelinesCount++;
                 }
                 
                 let trapBadge = '';
@@ -532,10 +535,184 @@ function displayNetworkDiffs(networks) {
             `;
             }
         }
+        
+        // Handle discovery pipeline if it exists
+        if (network.discovery_pipeline) {
+            const discoveryPipeline = network.discovery_pipeline;
+            const discoveryCurrentLines = discoveryPipeline.current ? discoveryPipeline.current.split('\n') : [];
+            const discoveryNewLines = discoveryPipeline.new ? discoveryPipeline.new.split('\n') : [];
+            
+            // Check if there are actual changes in the discovery pipeline
+            let discoveryHasChanges = false;
+            if (discoveryPipeline.action === 'create' || discoveryPipeline.action === 'delete') {
+                discoveryHasChanges = true;
+            } else if (discoveryPipeline.action === 'update') {
+                // Compare current and new to see if there are actual differences
+                const discoveryLineDiff = computeLineDiff(discoveryCurrentLines, discoveryNewLines);
+                discoveryHasChanges = discoveryLineDiff.some(change => change.type !== 'equal');
+            }
+            
+            // Only render discovery pipeline if there are actual changes
+            if (discoveryHasChanges) {
+                // Count discovery pipeline in summary only if there are changes
+                if (discoveryPipeline.action === 'create') {
+                    newPipelinesCount++;
+                } else if (discoveryPipeline.action === 'update') {
+                    networksWithChanges++;
+                } else if (discoveryPipeline.action === 'delete') {
+                    deletedPipelinesCount++;
+                }
+                
+                let discoveryBadge = '';
+                let discoveryCurrentHtml = '';
+                let discoveryNewHtml = '';
+                let discoveryCurrentLineNum = 1;
+                let discoveryNewLineNum = 1;
+                
+                if (discoveryPipeline.action === 'create') {
+                    discoveryBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW DISCOVERY PIPELINE</span>';
+                    
+                    // Show new discovery pipeline
+                    for (let i = 0; i < discoveryNewLines.length; i++) {
+                        const line = escapeHtml(discoveryNewLines[i]);
+                        
+                        discoveryCurrentHtml += `<div class="flex bg-gray-800/50">
+                            <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                            <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                        </div>`;
+
+                        discoveryNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryNewLineNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                    }
+                } else if (discoveryPipeline.action === 'delete') {
+                    discoveryBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETING DISCOVERY PIPELINE</span>';
+                    
+                    // Show discovery pipeline being deleted
+                    for (let i = 0; i < discoveryCurrentLines.length; i++) {
+                        const line = escapeHtml(discoveryCurrentLines[i]);
+                        
+                        discoveryCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryCurrentLineNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+
+                        discoveryNewHtml += `<div class="flex bg-gray-800/50">
+                            <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                            <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                        </div>`;
+                    }
+                } else if (discoveryPipeline.action === 'update') {
+                    discoveryBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">UPDATING DISCOVERY PIPELINE</span>';
+                    
+                    // Compute diff for discovery pipeline
+                    const discoveryLineDiff = computeLineDiff(discoveryCurrentLines, discoveryNewLines);
+                    
+                    for (const change of discoveryLineDiff) {
+                        if (change.type === 'equal') {
+                            for (let i = 0; i < change.lines.length; i++) {
+                                const line = escapeHtml(change.lines[i]);
+                                discoveryCurrentHtml += `<div class="flex hover:bg-gray-700/30">
+                                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryCurrentLineNum++}</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                                </div>`;
+                                discoveryNewHtml += `<div class="flex hover:bg-gray-700/30">
+                                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryNewLineNum++}</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                                </div>`;
+                            }
+                        } else if (change.type === 'delete') {
+                            for (let i = 0; i < change.lines.length; i++) {
+                                const line = escapeHtml(change.lines[i]);
+                                discoveryCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryCurrentLineNum++}</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                                </div>`;
+                                discoveryNewHtml += `<div class="flex bg-gray-800/50">
+                                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                                </div>`;
+                            }
+                        } else if (change.type === 'insert') {
+                            for (let i = 0; i < change.lines.length; i++) {
+                                const line = escapeHtml(change.lines[i]);
+                                discoveryCurrentHtml += `<div class="flex bg-gray-800/50">
+                                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                                </div>`;
+                                discoveryNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryNewLineNum++}</span>
+                                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                                </div>`;
+                            }
+                        } else if (change.type === 'replace') {
+                            const maxLen = Math.max(change.oldLines.length, change.newLines.length);
+                            for (let i = 0; i < maxLen; i++) {
+                                if (i < change.oldLines.length) {
+                                    const oldLine = escapeHtml(change.oldLines[i]);
+                                    discoveryCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryCurrentLineNum++}</span>
+                                        <span style="white-space: pre; padding-left: 0.5rem;">${oldLine || ' '}</span>
+                                    </div>`;
+                                } else {
+                                    discoveryCurrentHtml += `<div class="flex bg-gray-800/50">
+                                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                        <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                                    </div>`;
+                                }
+                                if (i < change.newLines.length) {
+                                    const newLine = escapeHtml(change.newLines[i]);
+                                    discoveryNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryNewLineNum++}</span>
+                                        <span style="white-space: pre; padding-left: 0.5rem;">${newLine || ' '}</span>
+                                    </div>`;
+                                } else {
+                                    discoveryNewHtml += `<div class="flex bg-gray-800/50">
+                                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                        <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                                    </div>`;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Add discovery pipeline section
+                html += `
+                    <div class="border border-gray-600 rounded-lg overflow-hidden mt-4">
+                        <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
+                            <h4 class="text-white font-semibold">
+                                ${escapeHtml(network.network_name)} - Discovery Pipeline${discoveryBadge}
+                            </h4>
+                            <p class="text-sm text-gray-400">Pipeline: ${escapeHtml(discoveryPipeline.pipeline_name)}</p>
+                        </div>
+                        <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
+                            <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                                <div class="mb-2" style="flex-shrink: 0;">
+                                    <h5 class="text-sm font-semibold text-white">${discoveryPipeline.action === 'create' ? 'No Existing Discovery Pipeline' : 'Current Discovery Pipeline'}</h5>
+                                </div>
+                                <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                                    <div class="p-2 text-sm text-gray-300 font-mono">${discoveryCurrentHtml}</div>
+                                </div>
+                            </div>
+                            <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                                <div class="mb-2" style="flex-shrink: 0;">
+                                    <h5 class="text-sm font-semibold text-white">${discoveryPipeline.action === 'delete' ? 'Pipeline Will Be Deleted' : 'New Discovery Pipeline (After Commit)'}</h5>
+                                </div>
+                                <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                                    <div class="p-2 text-sm text-gray-300 font-mono">${discoveryNewHtml}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
     }
 
     // If no networks have changes, show a message
-    if (networksWithChanges === 0 && newPipelinesCount === 0) {
+    if (networksWithChanges === 0 && newPipelinesCount === 0 && deletedPipelinesCount === 0) {
         container.innerHTML = `
             <div class="text-center p-8">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-green-600/20 rounded-full mb-4">
@@ -573,6 +750,13 @@ function displayNetworkDiffs(networks) {
         statsHtml += `<div class="flex items-center gap-2">
             <span class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>
             <span class="text-gray-300">${networksWithChanges} modified pipeline${networksWithChanges !== 1 ? 's' : ''}</span>
+        </div>`;
+    }
+    
+    if (deletedPipelinesCount > 0) {
+        statsHtml += `<div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETED</span>
+            <span class="text-gray-300">${deletedPipelinesCount} deleted pipeline${deletedPipelinesCount !== 1 ? 's' : ''}</span>
         </div>`;
     }
     
