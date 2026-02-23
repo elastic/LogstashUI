@@ -1,0 +1,29 @@
+{
+  "name": "fibrechannel_switch_broadcom_brocade_extensions",
+  "description": "[Broadcom/Brocade] FabricOS vendor MIBs for FC port physical state + SFP optics telemetry",
+  "type": "Network",
+  "vendor": "Broadcom/Brocade",
+  "pinned": true,
+  "get": {},
+  "walk": {},
+  "table": {
+    "swFCPortTable": {
+      "columns": {
+        "swFCPortPhyState": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.3",
+        "swFCPortWwn": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.34",
+        "swFCPortSpeed": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.35",
+        "swFCPortName": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.36"
+      }
+    },
+    "swSfpTable": {
+      "columns": {
+        "swSfpTemperature": "1.3.6.1.4.1.1588.2.1.1.1.28.1.1.1",
+        "swSfpCurrent": "1.3.6.1.4.1.1588.2.1.1.1.28.1.1.3",
+        "swSfpRxPower": "1.3.6.1.4.1.1588.2.1.1.1.28.1.1.4",
+        "swSfpTxPower": "1.3.6.1.4.1.1588.2.1.1.1.28.1.1.5",
+        "swSfpPoweronHrs": "1.3.6.1.4.1.1588.2.1.1.1.28.1.1.6",
+        "swSfpUnitId": "1.3.6.1.4.1.1588.2.1.1.1.28.1.1.7"
+      }
+    }
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "name": "hpe_nimble_core",
+  "description": "[HPE Nimble] Core capacity + per-volume usage + I/O counters (reads/writes/bytes/time) + latency distribution + global stats",
+  "type": "Storage",
+  "vendor": "HPE Nimble",
+  "pinned": true,
+  "get": {
+    "sysDescr": "1.3.6.1.2.1.1.1.0",
+    "sysObjectID": "1.3.6.1.2.1.1.2.0",
+    "sysUpTime": "1.3.6.1.2.1.1.3.0",
+    "sysName": "1.3.6.1.2.1.1.5.0",
+
+    "statTimeEpochSeconds": "1.3.6.1.4.1.37447.1.3.1",
+    "ioReads": "1.3.6.1.4.1.37447.1.3.2",
+    "ioSeqReads": "1.3.6.1.4.1.37447.1.3.3",
+    "ioWrites": "1.3.6.1.4.1.37447.1.3.4",
+    "ioSeqWrites": "1.3.6.1.4.1.37447.1.3.5",
+    "ioReadTimeMicrosec": "1.3.6.1.4.1.37447.1.3.6",
+    "ioWriteTimeMicrosec": "1.3.6.1.4.1.37447.1.3.7",
+    "ioReadBytes": "1.3.6.1.4.1.37447.1.3.8",
+    "ioSeqReadBytes": "1.3.6.1.4.1.37447.1.3.9",
+    "ioWriteBytes": "1.3.6.1.4.1.37447.1.3.10",
+    "ioSeqWriteBytes": "1.3.6.1.4.1.37447.1.3.11",
+
+    "diskVolBytesUsedLow": "1.3.6.1.4.1.37447.1.3.12",
+    "diskVolBytesUsedHigh": "1.3.6.1.4.1.37447.1.3.13",
+    "diskSnapBytesUsedLow": "1.3.6.1.4.1.37447.1.3.14",
+    "diskSnapBytesUsedHigh": "1.3.6.1.4.1.37447.1.3.15",
+    "ioNonseqReadHits": "1.3.6.1.4.1.37447.1.3.16"
+  },
+  "walk": {},
+  "table": {
+    "nimbleVolumes": {
+      "columns": {
+        "volID": "1.3.6.1.4.1.37447.1.2.1.2",
+        "volName": "1.3.6.1.4.1.37447.1.2.1.3",
+        "volSizeLow": "1.3.6.1.4.1.37447.1.2.1.4",
+        "volSizeHigh": "1.3.6.1.4.1.37447.1.2.1.5",
+        "volUsageLow": "1.3.6.1.4.1.37447.1.2.1.6",
+        "volUsageHigh": "1.3.6.1.4.1.37447.1.2.1.7",
+        "volReserveLow": "1.3.6.1.4.1.37447.1.2.1.8",
+        "volReserveHigh": "1.3.6.1.4.1.37447.1.2.1.9",
+        "volNumConnections": "1.3.6.1.4.1.37447.1.2.1.11",
+        "volStatTimeEpochSeconds": "1.3.6.1.4.1.37447.1.2.1.12",
+
+        "volIoReads": "1.3.6.1.4.1.37447.1.2.1.13",
+        "volIoReadTimeMicrosec": "1.3.6.1.4.1.37447.1.2.1.14",
+        "volIoReadBytes": "1.3.6.1.4.1.37447.1.2.1.15",
+        "volIoSeqReads": "1.3.6.1.4.1.37447.1.2.1.16",
+        "volIoSeqReadBytes": "1.3.6.1.4.1.37447.1.2.1.17",
+
+        "volIoWrites": "1.3.6.1.4.1.37447.1.2.1.34",
+        "volIoWriteTimeMicrosec": "1.3.6.1.4.1.37447.1.2.1.35",
+        "volIoWriteBytes": "1.3.6.1.4.1.37447.1.2.1.36",
+        "volIoSeqWrites": "1.3.6.1.4.1.37447.1.2.1.37",
+        "volIoSeqWriteBytes": "1.3.6.1.4.1.37447.1.2.1.38",
+
+        "volDiskVolBytesUsedLow": "1.3.6.1.4.1.37447.1.2.1.52",
+        "volDiskVolBytesUsedHigh": "1.3.6.1.4.1.37447.1.2.1.53",
+        "volDiskSnapBytesUsedLow": "1.3.6.1.4.1.37447.1.2.1.54",
+        "volDiskSnapBytesUsedHigh": "1.3.6.1.4.1.37447.1.2.1.55",
+
+        "volIoReadLatency0uTo100u": "1.3.6.1.4.1.37447.1.2.1.21",
+        "volIoReadLatency100uTo200u": "1.3.6.1.4.1.37447.1.2.1.22",
+        "volIoReadLatency200uTo500u": "1.3.6.1.4.1.37447.1.2.1.23",
+        "volIoReadLatency500uTo1m": "1.3.6.1.4.1.37447.1.2.1.24",
+        "volIoReadLatency1mTo2m": "1.3.6.1.4.1.37447.1.2.1.25",
+        "volIoReadLatency2mTo5m": "1.3.6.1.4.1.37447.1.2.1.26",
+        "volIoReadLatency5mTo10m": "1.3.6.1.4.1.37447.1.2.1.27",
+        "volIoReadLatency10mTo20m": "1.3.6.1.4.1.37447.1.2.1.28",
+        "volIoReadLatency20mTo50m": "1.3.6.1.4.1.37447.1.2.1.29",
+        "volIoReadLatency50mTo100m": "1.3.6.1.4.1.37447.1.2.1.30",
+        "volIoReadLatency100mTo200m": "1.3.6.1.4.1.37447.1.2.1.31",
+        "volIoReadLatency200mTo500m": "1.3.6.1.4.1.37447.1.2.1.32",
+        "volIoReadLatency500mTomax": "1.3.6.1.4.1.37447.1.2.1.33",
+
+        "volIoWriteLatency0uTo100u": "1.3.6.1.4.1.37447.1.2.1.39",
+        "volIoWriteLatency100uTo200u": "1.3.6.1.4.1.37447.1.2.1.40",
+        "volIoWriteLatency200uTo500u": "1.3.6.1.4.1.37447.1.2.1.41",
+        "volIoWriteLatency500uTo1m": "1.3.6.1.4.1.37447.1.2.1.42",
+        "volIoWriteLatency1mTo2m": "1.3.6.1.4.1.37447.1.2.1.43",
+        "volIoWriteLatency2mTo5m": "1.3.6.1.4.1.37447.1.2.1.44",
+        "volIoWriteLatency5mTo10m": "1.3.6.1.4.1.37447.1.2.1.45",
+        "volIoWriteLatency10mTo20m": "1.3.6.1.4.1.37447.1.2.1.46",
+        "volIoWriteLatency20mTo50m": "1.3.6.1.4.1.37447.1.2.1.47",
+        "volIoWriteLatency50mTo100m": "1.3.6.1.4.1.37447.1.2.1.48",
+        "volIoWriteLatency100mTo200m": "1.3.6.1.4.1.37447.1.2.1.49",
+        "volIoWriteLatency200mTo500m": "1.3.6.1.4.1.37447.1.2.1.50",
+        "volIoWriteLatency500mTomax": "1.3.6.1.4.1.37447.1.2.1.51"
+      }
+    }
+  }
+}
