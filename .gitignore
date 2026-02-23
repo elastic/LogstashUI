@@ -60,7 +60,8 @@ cover/
 local_settings.py
 LogstashUI/data/db.sqlite3
 db.sqlite3-journal
-data/
+LogstashUI/LogstashUI/data/
+!LogstashUI/SNMP/data/
 
 # Flask stuff:
 instance/
