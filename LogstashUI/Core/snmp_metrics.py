@@ -4,6 +4,7 @@ from Core.views import get_elastic_connection
 def _get_device_interfaces(device, es_connection):
     results = es_connection.search(
         size=0,
+        index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query = {
             "bool": {
@@ -59,6 +60,7 @@ def _get_device_metrics(device, es_connection):
 
     results = es_connection.search(
         size=1000,
+        index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query = {
 
@@ -109,6 +111,7 @@ def _get_device_metrics(device, es_connection):
 def _get_device_fans(device, es_connection):
     results = es_connection.search(
         size=0,
+        index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query = {
             "bool": {
@@ -164,6 +167,7 @@ def _get_device_fans(device, es_connection):
 def _get_device_sensors(device, es_connection):
     results = es_connection.search(
         size=0,
+        index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query = {
 
@@ -223,7 +227,7 @@ def generate_visualizations(visualizations, device, es_connection):
     Generate visualization data based on the decided visualizations.
     """
     visualization_data = {}
-
+    print(visualizations, "HERE")
     if "metrics" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
     if "sensors" in visualizations:
@@ -382,7 +386,7 @@ def decide_visualizations(device, es):
     """
     try:
         results = es.search(
-            index="metrics-snmp-*",
+            index="metrics-snmp*",
             size=0,
             query={
                 "bool": {
