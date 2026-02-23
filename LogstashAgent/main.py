@@ -534,6 +534,7 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
             slots.release_slot(slot_id)
             raise HTTPException(status_code=500, detail=f"Failed to create slot pipelines: {str(e)}")
     
+    logger.info(f"Returning HTTP response for slot {slot_id}")
     return {
         "slot_id": slot_id,
         "reused": reused,
@@ -595,13 +596,16 @@ output {{
         await put_pipeline(pipeline_name, pipeline_body)
     
     # Verify all slot pipelines loaded successfully
-    # Fail fast to prevent failed pipelines from blocking other slot allocations
+    # Uses adaptive timing based on pipeline count (default: 20 retries, 2s delay)
+    import time
+    verify_start = time.time()
     verification_success = await slots.verify_slot_pipelines_loaded(
         slot_id, 
-        len(pipelines),
-        max_retries=1,  # Fail fast - only 2 retries
-        retry_delay=2.0
+        len(pipelines)
     )
+    verify_end = time.time()
+    logger.info(f"Verification completed in {verify_end - verify_start:.2f}s")
+    
     if not verification_success:
         # Delete the failed pipelines from Logstash to prevent log pollution
         logger.warning(f"Verification failed for slot {slot_id}, cleaning up pipelines")

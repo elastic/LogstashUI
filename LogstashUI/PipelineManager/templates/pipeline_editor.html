@@ -943,8 +943,8 @@
         statusMessage.className = 'text-sm font-medium text-gray-300';
         
         try {
-            // Wait for Logstash to process and initialize the pipeline
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // Backend already verifies pipelines are running before returning slot allocation
+            // No need to wait - check status immediately
             
             // Check pipeline status using the slot pipeline name
             const response = await fetch(`/API/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);

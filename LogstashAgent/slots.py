@@ -259,7 +259,7 @@ def evict_failed_slots() -> List[int]:
     return evicted_slots
 
 
-async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_retries: int = 5, retry_delay: float = 1.0) -> bool:
+async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_retries: int = 5, retry_delay: float = 2.0) -> bool:
     """
     Verify that all pipelines for a slot have been successfully loaded by Logstash.
     
@@ -269,17 +269,19 @@ async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_re
     Args:
         slot_id: Slot ID (1-10)
         expected_count: Number of pipelines expected for this slot
-        max_retries: Maximum number of times to check before giving up
-        retry_delay: Seconds to wait between retries
+        max_retries: Maximum number of times to check before giving up (default: 5 = ~12 seconds)
+        retry_delay: Seconds to wait between retries (default: 2.0 seconds)
         
     Returns:
         True if all slot pipelines are running, False otherwise
     """
     import asyncio
     
-    # Give pipelines an initial grace period to initialize before checking
-    logger.info(f"Waiting 3 seconds for slot {slot_id} pipelines to initialize...")
-    await asyncio.sleep(3.0)
+    # Adaptive initial grace period based on pipeline count
+    # Larger pipelines need more time to initialize
+    initial_wait = min(2.0 + (expected_count * 0.5), 5.0)
+    logger.info(f"Waiting {initial_wait:.1f} seconds for slot {slot_id} pipelines to initialize...")
+    await asyncio.sleep(initial_wait)
     
     for attempt in range(max_retries):
         try:
@@ -299,11 +301,12 @@ async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_re
             
             if not missing_pipelines:
                 logger.info(f"✓ All {expected_count} pipelines for slot {slot_id} are running")
+                # Return immediately on success - no need to wait
                 return True
             
             # Early failure detection: Check if any missing pipelines have FailedAction errors
             # This allows us to fail fast instead of waiting the full retry period
-            if attempt >= 3:  # Give pipelines at least 3 attempts (6+ seconds) before checking for failures
+            if attempt >= 2:  # Give pipelines at least 2 attempts before checking for failures
                 logs = log_analyzer._read_json_logs(max_lines=500, reverse=True)
                 failed_pipelines = set()
                 
