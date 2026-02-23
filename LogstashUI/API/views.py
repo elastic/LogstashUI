@@ -275,6 +275,7 @@ def SavePipeline(request):
                 "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
                 "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'],
                 "username": "LogstashUI",
+                "pipeline": current_pipeline_config[pipeline_name]['pipeline'],
                 "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings'],
                 "description": current_pipeline_config[pipeline_name]['description']
             }
@@ -282,6 +283,29 @@ def SavePipeline(request):
         
         logger.info(f"User '{request.user.username}' saved pipeline '{pipeline_name}' (Connection ID: {request.POST.get('es_id')})")
         return HttpResponse("Pipeline saved successfully!")
+
+def ComponentsToConfig(request):
+    """Convert components JSON to Logstash configuration text"""
+    if request.method == "POST":
+        try:
+            components_json = request.POST.get("components")
+            if not components_json:
+                return HttpResponse("No components provided", status=400)
+            
+            # Parse components
+            components = json.loads(components_json)
+            
+            # Convert to config using the same logic as SavePipeline
+            parser = logstash_config_parse.ComponentToPipeline(components, add_ids=False)
+            config = parser.components_to_logstash_config()
+            
+            # Return plain text config
+            return HttpResponse(config, content_type="text/plain")
+        except Exception as e:
+            logger.error(f"Error converting components to config: {str(e)}")
+            return HttpResponse(f"Error: {str(e)}", status=500)
+    
+    return HttpResponse("Method not allowed", status=405)
 
 def GetDiff(request):
     """Generate a unified diff between current and new pipeline configurations"""

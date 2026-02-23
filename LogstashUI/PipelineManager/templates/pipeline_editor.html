@@ -4,10 +4,12 @@
 {% block content %}
 
 {% load static %}
+<script src="{% static 'js/codemirror.min.js' %}"></script>
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
 <script src="{% static 'js/pipeline_settings.js' %}"></script>
 <script src="{% static 'js/move_mode.js' %}"></script>
 <script src="{% static 'js/simulation_results.js' %}"></script>
+<script src="{% static 'js/pipeline_text_editor.js' %}"></script>
 <link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
 <style>
     .insertion-point {
@@ -289,6 +291,34 @@
     .comment-plugin .text-gray-400 {
         color: #6b7280 !important;
     }
+
+    /* Toggle button flash animation */
+    @keyframes flash-sweep {
+        0% {
+            left: -100%;
+            opacity: 0;
+        }
+        50% {
+            opacity: 1;
+        }
+        100% {
+            left: 100%;
+            opacity: 0;
+        }
+    }
+
+    .toggle-flash::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.6), transparent);
+        animation: flash-sweep 0.6s ease-out;
+        z-index: 5;
+        pointer-events: none;
+    }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
@@ -335,23 +365,37 @@
     </div>
     {% endif %}
     
-    <div class="flex justify-between items-center mb-6">
-        <div class="flex items-center gap-4">
-            <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
-            <!-- Pipeline Load Validation Status -->
-            <div id="pipelineLoadStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700">
-                <svg id="pipelineStatusIcon" class="w-5 h-5 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span id="pipelineStatusMessage" class="text-sm font-medium text-gray-300">Allocating pipeline slot...</span>
-                <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
-                        class="ml-2 text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors underline">
-                    Logs
+    <div class="mb-6">
+        <div class="flex justify-between items-center">
+            <!-- Left: Title and Status -->
+            <div>
+                <h1 class="text-2xl font-bold text-white mb-2">Editing: {{ pipeline_name }}</h1>
+                <!-- Pipeline Load Validation Status -->
+                <div id="pipelineLoadStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700">
+                    <svg id="pipelineStatusIcon" class="w-5 h-5 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="pipelineStatusMessage" class="text-sm font-medium text-gray-300">Allocating pipeline slot...</span>
+                    <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
+                            class="ml-2 text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors underline">
+                        Logs
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Center: UI/Text Toggle -->
+            <div class="flex items-center gap-2 bg-gray-700 rounded-lg p-1 relative overflow-hidden">
+                <button id="uiModeBtn" class="px-4 py-2 rounded-md font-medium transition-colors bg-green-600 text-white relative z-10" onclick="switchToUIMode()">
+                    UI
+                </button>
+                <button id="textModeBtn" class="px-4 py-2 rounded-md font-medium transition-colors text-gray-300 hover:bg-gray-600 relative z-10" onclick="switchToTextMode()">
+                    Text
                 </button>
             </div>
-        </div>
-        <div class="flex space-x-4">
+            
+            <!-- Right: Action Buttons -->
+            <div class="flex space-x-4">
             <form onsubmit="return false;">
                 {% csrf_token %}
                 <button type="button"
@@ -380,6 +424,7 @@
                 </button>
                 <span id="saveStatus" class="ml-2"></span>
             </form>
+            </div>
         </div>
     </div>
 
@@ -544,7 +589,8 @@
     <div class="flex h-[calc(100vh-180px)] gap-4">
         <!-- Main Content Area -->
         <div class="flex-1">
-            <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+            <!-- UI Mode Container -->
+            <div id="uiModeContainer" class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
                 <div id="pipelineCanvas" class="min-h-full space-y-8">
                     <!-- Input Section -->
                     <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
@@ -657,6 +703,11 @@
                         </div>
                     </div>
                 </div>
+            </div>
+            
+            <!-- Text Mode Container (hidden by default) -->
+            <div id="textModeContainer" class="hidden flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+                {% include 'pipeline_text_editor.html' %}
             </div>
         </div>
     </div>

@@ -16,6 +16,7 @@ urlpatterns = [
     path("GetCurrentPipelineCode/", views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", views.GetDiff, name="GetDiff"),
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
+    path("ComponentsToConfig/", views.ComponentsToConfig, name="ComponentsToConfig"),
     path("SimulatePipeline/", simulate_views.SimulatePipeline, name="SimulatePipeline"),
     path("StreamSimulate/", simulate_views.StreamSimulate, name="StreamSimulate"),
     path("GetSimulationResults/", simulate_views.GetSimulationResults, name="GetSimulationResults"),
