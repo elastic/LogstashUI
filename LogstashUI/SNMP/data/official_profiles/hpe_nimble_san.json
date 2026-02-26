@@ -4,33 +4,10 @@
   "type": "Storage",
   "vendor": "HPE Nimble",
   "pinned": true,
-  "get": {
-    "sysDescr": "1.3.6.1.2.1.1.1.0",
-    "sysObjectID": "1.3.6.1.2.1.1.2.0",
-    "sysUpTime": "1.3.6.1.2.1.1.3.0",
-    "sysName": "1.3.6.1.2.1.1.5.0",
-
-    "statTimeEpochSeconds": "1.3.6.1.4.1.37447.1.3.1",
-    "ioReads": "1.3.6.1.4.1.37447.1.3.2",
-    "ioSeqReads": "1.3.6.1.4.1.37447.1.3.3",
-    "ioWrites": "1.3.6.1.4.1.37447.1.3.4",
-    "ioSeqWrites": "1.3.6.1.4.1.37447.1.3.5",
-    "ioReadTimeMicrosec": "1.3.6.1.4.1.37447.1.3.6",
-    "ioWriteTimeMicrosec": "1.3.6.1.4.1.37447.1.3.7",
-    "ioReadBytes": "1.3.6.1.4.1.37447.1.3.8",
-    "ioSeqReadBytes": "1.3.6.1.4.1.37447.1.3.9",
-    "ioWriteBytes": "1.3.6.1.4.1.37447.1.3.10",
-    "ioSeqWriteBytes": "1.3.6.1.4.1.37447.1.3.11",
-
-    "diskVolBytesUsedLow": "1.3.6.1.4.1.37447.1.3.12",
-    "diskVolBytesUsedHigh": "1.3.6.1.4.1.37447.1.3.13",
-    "diskSnapBytesUsedLow": "1.3.6.1.4.1.37447.1.3.14",
-    "diskSnapBytesUsedHigh": "1.3.6.1.4.1.37447.1.3.15",
-    "ioNonseqReadHits": "1.3.6.1.4.1.37447.1.3.16"
-  },
+  "get": {},
   "walk": {},
   "table": {
-    "nimbleVolumes": {
+    "volumes": {
       "columns": {
         "volID": "1.3.6.1.4.1.37447.1.2.1.2",
         "volName": "1.3.6.1.4.1.37447.1.2.1.3",
@@ -40,6 +17,7 @@
         "volUsageHigh": "1.3.6.1.4.1.37447.1.2.1.7",
         "volReserveLow": "1.3.6.1.4.1.37447.1.2.1.8",
         "volReserveHigh": "1.3.6.1.4.1.37447.1.2.1.9",
+        "volOnline": "1.3.6.1.4.1.37447.1.2.1.10",
         "volNumConnections": "1.3.6.1.4.1.37447.1.2.1.11",
         "volStatTimeEpochSeconds": "1.3.6.1.4.1.37447.1.2.1.12",
 

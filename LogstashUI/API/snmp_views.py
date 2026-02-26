@@ -1160,11 +1160,19 @@ def _generate_filters(oid_mappings, network):
             "config": {
                 "rename": {
                     "host": "[host][hostname]"
-                } | get_renames #| table_renames
+                }
             }
         },
         {
             "id": "filter_mutate_2",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "rename": get_renames
+            }
+        },
+        {
+            "id": "filter_mutate_3",
             "type": "filter",
             "plugin": "mutate",
             "config": {
