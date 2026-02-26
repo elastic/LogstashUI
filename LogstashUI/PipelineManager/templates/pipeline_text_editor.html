@@ -1,6 +1,9 @@
+
+{% load static %}
 <!-- CodeMirror CSS -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+<link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/monokai.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/show-hint.min.css' %}">
 
 <div class="flex flex-col" style="height: calc(100vh - 280px);">
     <div class="mb-4">
@@ -91,5 +94,243 @@ output {
         color: #ef4444 !important;
         background-color: rgba(239, 68, 68, 0.2);
         font-weight: bold;
+    }
+    
+    /* Selection highlight - dark blue background with white text */
+    .CodeMirror-selected {
+        background: #3b82f6 !important;
+    }
+    
+    .CodeMirror-focused .CodeMirror-selected {
+        background: #3b82f6 !important;
+    }
+    
+    /* Code folding styles */
+    .CodeMirror-foldgutter {
+        width: 12px;
+    }
+    
+    .CodeMirror-foldgutter-open,
+    .CodeMirror-foldgutter-folded {
+        cursor: pointer;
+        color: #9ca3af;
+    }
+    
+    .CodeMirror-foldgutter-open:after {
+        content: "▼";
+        font-size: 10px;
+    }
+    
+    .CodeMirror-foldgutter-folded:after {
+        content: "▶";
+        font-size: 10px;
+    }
+    
+    .CodeMirror-foldmarker {
+        color: #3b82f6;
+        background-color: rgba(59, 130, 246, 0.2);
+        border: 1px solid #3b82f6;
+        border-radius: 3px;
+        padding: 0 3px;
+        cursor: pointer;
+        font-family: monospace;
+        line-height: 1;
+        margin: 0 2px;
+    }
+    
+    .CodeMirror-foldmarker:hover {
+        background-color: rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Autocomplete hint styles */
+    .CodeMirror-hints {
+        position: absolute;
+        z-index: 10;
+        overflow-x: hidden;
+        overflow-y: auto;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        background: rgba(30, 41, 59, 0.95);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(59, 130, 246, 0.5);
+        border-radius: 6px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(59, 130, 246, 0.2);
+        max-height: 300px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 12px;
+        min-width: 550px;
+        max-width: 750px;
+    }
+    
+    /* Autocomplete header */
+    .CodeMirror-hints::before {
+        content: attr(data-header);
+        display: block;
+        padding: 8px 12px;
+        background: #0f172a;
+        border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+        color: #93c5fd;
+        font-weight: 700;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    
+    .CodeMirror-hints::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    .CodeMirror-hints::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.5);
+        border-radius: 5px;
+        margin: 4px;
+    }
+    
+    .CodeMirror-hints::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #475569 0%, #334155 100%);
+        border-radius: 5px;
+        border: 2px solid rgba(30, 41, 59, 0.3);
+    }
+    
+    .CodeMirror-hints::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+    }
+    
+    /* CodeMirror editor scrollbar */
+    .CodeMirror-scrollbar-filler {
+        background: #1e293b;
+    }
+    
+    .CodeMirror-vscrollbar::-webkit-scrollbar,
+    .CodeMirror-hscrollbar::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+    
+    .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+    .CodeMirror-hscrollbar::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.3);
+        border-radius: 6px;
+    }
+    
+    .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+    .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #475569 0%, #334155 100%);
+        border-radius: 6px;
+        border: 2px solid rgba(30, 41, 59, 0.5);
+    }
+    
+    .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
+    .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+    }
+    
+    .CodeMirror-hint {
+        margin: 1px;
+        padding: 6px 10px;
+        color: #e2e8f0;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.1s ease;
+        line-height: 1.3;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+    }
+    
+    .CodeMirror-hint:hover {
+        background: #334155;
+    }
+    
+    li.CodeMirror-hint-active {
+        background: rgba(148, 163, 184, 0.15);
+        color: inherit;
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.3);
+    }
+    
+    /* Type badge pills */
+    .hint-type-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-left: 8px;
+        letter-spacing: 0.5px;
+    }
+    
+    .hint-type-string { background: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .hint-type-number { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .hint-type-boolean { background: rgba(168, 85, 247, 0.2); color: #c4b5fd; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .hint-type-array { background: rgba(251, 146, 60, 0.2); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.3); }
+    .hint-type-hash { background: rgba(236, 72, 153, 0.2); color: #f9a8d4; border: 1px solid rgba(236, 72, 153, 0.3); }
+    .hint-type-codec { background: rgba(14, 165, 233, 0.2); color: #7dd3fc; border: 1px solid rgba(14, 165, 233, 0.3); }
+    .hint-type-path { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .hint-type-password { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .hint-type-default { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+    
+    /* Plugin/Option indicator badge */
+    .hint-indicator {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-right: 8px;
+        letter-spacing: 0.5px;
+    }
+    
+    .hint-indicator-plugin {
+        background: rgba(59, 130, 246, 0.3);
+        color: #93c5fd;
+        border: 1px solid rgba(59, 130, 246, 0.5);
+    }
+    
+    .hint-indicator-option {
+        background: rgba(168, 85, 247, 0.3);
+        color: #c4b5fd;
+        border: 1px solid rgba(168, 85, 247, 0.5);
+    }
+    
+    .hint-required {
+        color: #fca5a5;
+        font-size: 10px;
+        margin-left: 6px;
+        font-weight: 600;
+    }
+    
+    /* Documentation link icon */
+    .hint-doc-link {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 6px;
+        background: rgba(59, 130, 246, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        border-radius: 4px;
+        color: #93c5fd;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-decoration: none;
+    }
+    
+    .hint-doc-link:hover {
+        background: rgba(59, 130, 246, 0.4);
+        border-color: rgba(59, 130, 246, 0.6);
+        color: #bfdbfe;
+        transform: scale(1.05);
+    }
+    
+    li.CodeMirror-hint-active .hint-doc-link:hover {
+        background: rgba(59, 130, 246, 0.5);
+        border-color: rgba(59, 130, 246, 0.7);
     }
 </style>

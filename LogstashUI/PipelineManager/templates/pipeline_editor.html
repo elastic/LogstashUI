@@ -5,6 +5,7 @@
 
 {% load static %}
 <script src="{% static 'js/codemirror.min.js' %}"></script>
+<script src="{% static 'js/show-hint.min.js' %}"></script>
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
 <script src="{% static 'js/pipeline_settings.js' %}"></script>
 <script src="{% static 'js/move_mode.js' %}"></script>
@@ -764,6 +765,7 @@
 <script>
     const components = {{component_data | safe}};
     const pluginData = {{plugin_data | safe}};
+    window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
     const pipelineName = "{{ pipeline_name }}";
     let currentSlotId = null;  // Store slot_id for logs viewer
     
