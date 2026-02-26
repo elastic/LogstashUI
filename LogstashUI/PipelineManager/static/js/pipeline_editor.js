@@ -1881,6 +1881,8 @@ function removeComponent(componentId) {
         loadExistingComponents();
         // Trigger pipeline warming and checking after removal
         triggerPipelineWarmingAndChecking();
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentDeleted'));
     }
 }
 
@@ -1968,6 +1970,9 @@ function addElseIfToConditional(componentId) {
                 window.PluginConfigModal.show(newPlugin);
             }, 50);
         }
+        
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentAdded'));
 
         // Remove the event listener after handling the selection
         document.removeEventListener('pluginSelected', handlePluginSelect);
@@ -2085,6 +2090,9 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
                 window.PluginConfigModal.show(newPlugin);
             }, 50);
         }
+        
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentAdded'));
     };
 
 // Listen for the plugin selection event

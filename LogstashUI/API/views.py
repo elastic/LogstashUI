@@ -234,7 +234,6 @@ def GetCurrentPipelineCode(request, components={}):
 
 @require_admin_role
 def SavePipeline(request):
-    data = json.loads(request.POST.get("components"))
     if "save_pipeline" in request.POST:
         pipeline_name = request.POST.get("pipeline")
         
@@ -246,26 +245,43 @@ def SavePipeline(request):
                 status=400
             )
         
-        add_ids = request.POST.get("add_ids", "false").lower() == "true"
-        parser = logstash_config_parse.ComponentToPipeline(data, add_ids=add_ids)
-        config = parser.components_to_logstash_config()
+        # Check if we have raw pipeline config (from Text mode) or components (from UI mode)
+        pipeline_config = request.POST.get("pipeline_config")
         
-        # Validate that the generated config can be converted back to components
-        try:
-            logstash_config_parse.logstash_config_to_components(config)
-        except Exception as e:
-            # If conversion fails, return detailed error to user
-            error_message = str(e)
-            return HttpResponse(
-                f"""<div class="p-4 bg-red-900/20 border border-red-600 rounded-lg">
-                    <h3 class="text-lg font-semibold text-red-400 mb-2">We're sorry! Something went wrong in the conversion of your pipeline!</h3>
-                    <div class="bg-gray-900 p-4 rounded mt-2 text-sm text-gray-300 font-mono whitespace-pre-wrap overflow-auto max-h-96">
+        if pipeline_config:
+            # Use the raw pipeline config directly from Text mode
+            config = pipeline_config
+            logger.info(f"Saving pipeline from Text mode (raw config)")
+        else:
+            # Generate config from components (UI mode)
+            components_json = request.POST.get("components")
+            if not components_json:
+                return HttpResponse(
+                    f'<div class="p-4 bg-red-900/20 border border-red-600 rounded-lg"><p class="text-red-400">Missing pipeline configuration</p></div>',
+                    status=400
+                )
+            
+            data = json.loads(components_json)
+            add_ids = request.POST.get("add_ids", "false").lower() == "true"
+            parser = logstash_config_parse.ComponentToPipeline(data, add_ids=add_ids)
+            config = parser.components_to_logstash_config()
+            
+            # Validate that the generated config can be converted back to components
+            try:
+                logstash_config_parse.logstash_config_to_components(config)
+            except Exception as e:
+                # If conversion fails, return detailed error to user
+                error_message = str(e)
+                return HttpResponse(
+                    f"""<div class="p-4 bg-red-900/20 border border-red-600 rounded-lg">
+                        <h3 class="text-lg font-semibold text-red-400 mb-2">We're sorry! Something went wrong in the conversion of your pipeline!</h3>
+                        <div class="bg-gray-900 p-4 rounded mt-2 text-sm text-gray-300 font-mono whitespace-pre-wrap overflow-auto max-h-96">
 {error_message}
-                    </div>
-                    <p class="mt-4 text-gray-300">Please report this issue to us so we can fix it!!</p>
-                </div>""",
-                status=400
-            )
+                        </div>
+                        <p class="mt-4 text-gray-300">Please report this issue to us so we can fix it!!</p>
+                    </div>""",
+                    status=400
+                )
         
         es = get_elastic_connection(request.POST.get("es_id"))
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
@@ -275,7 +291,6 @@ def SavePipeline(request):
                 "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
                 "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'],
                 "username": "LogstashUI",
-                "pipeline": current_pipeline_config[pipeline_name]['pipeline'],
                 "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings'],
                 "description": current_pipeline_config[pipeline_name]['description']
             }
@@ -283,6 +298,8 @@ def SavePipeline(request):
         
         logger.info(f"User '{request.user.username}' saved pipeline '{pipeline_name}' (Connection ID: {request.POST.get('es_id')})")
         return HttpResponse("Pipeline saved successfully!")
+    
+    return HttpResponse("Invalid request", status=400)
 
 def ComponentsToConfig(request):
     """Convert components JSON to Logstash configuration text"""
@@ -307,25 +324,51 @@ def ComponentsToConfig(request):
     
     return HttpResponse("Method not allowed", status=405)
 
+def ConfigToComponents(request):
+    """Convert Logstash configuration text to components JSON"""
+    if request.method == "POST":
+        try:
+            config_text = request.POST.get("config_text")
+            if not config_text:
+                return JsonResponse({"error": "No config text provided"}, status=400)
+            
+            # Parse config text to components
+            components = logstash_config_parse.logstash_config_to_components(config_text)
+            
+            # Return components as JSON with safe=False to allow nested structures
+            return JsonResponse(components, safe=False)
+        except Exception as e:
+            logger.error(f"Error converting config to components: {str(e)}")
+            return JsonResponse({"error": str(e)}, status=500)
+    
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
 def GetDiff(request):
     """Generate a unified diff between current and new pipeline configurations"""
     if request.method == "POST":
         es_id = request.POST.get("es_id")
         pipeline_name = request.POST.get("pipeline")
+        pipeline_text = request.POST.get("pipeline_text")  # Raw text from Text mode
         components_json = request.POST.get("components")
         add_ids = request.POST.get("add_ids", "false").lower() == "true"
         
-        if not es_id or not pipeline_name or not components_json:
+        # Need either pipeline_text or components
+        if not es_id or not pipeline_name or (not pipeline_text and not components_json):
             return JsonResponse({"error": "Missing required parameters"}, status=400)
         
         try:
             # Get the current pipeline from Elasticsearch
             current_pipeline = get_logstash_pipeline(es_id, pipeline_name)['pipeline']
             
-            # Generate the new pipeline from components
-            components = json.loads(components_json)
-            parser = logstash_config_parse.ComponentToPipeline(components, add_ids=add_ids)
-            new_pipeline = parser.components_to_logstash_config()
+            # Generate the new pipeline - either from raw text or from components
+            if pipeline_text:
+                # Use the raw text directly from Text mode
+                new_pipeline = pipeline_text
+            else:
+                # Generate from components (UI mode)
+                components = json.loads(components_json)
+                parser = logstash_config_parse.ComponentToPipeline(components, add_ids=add_ids)
+                new_pipeline = parser.components_to_logstash_config()
             
             # Generate unified diff
             import difflib

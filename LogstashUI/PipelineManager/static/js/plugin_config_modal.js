@@ -1250,6 +1250,9 @@ window.PluginConfigModal = (function () {
         } else {
             console.error('[Pipeline Warming] triggerPipelineWarmingAndChecking function not found!');
         }
+        
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentModified'));
     }
 
     // Validate required fields

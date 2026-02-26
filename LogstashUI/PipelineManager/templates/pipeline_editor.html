@@ -326,7 +326,7 @@
     
     <!-- Parsing Error Alert -->
     {% if parsing_error %}
-    <div class="mb-6 p-6 bg-yellow-900/30 border-2 border-yellow-600 rounded-lg">
+    <div class="mb-6 p-6 bg-yellow-900/30 border-2 border-yellow-600 rounded-lg" id="parsingErrorBanner">
         <div class="flex items-start">
             <div class="flex-shrink-0">
                 <svg class="h-6 w-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -768,6 +768,49 @@
     window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
     const pipelineName = "{{ pipeline_name }}";
     let currentSlotId = null;  // Store slot_id for logs viewer
+    
+    // Store original pipeline text for Text mode
+    originalPipelineText = `{{ pipeline_text|escapejs }}`;
+    
+    // Set up change tracking for UI mode
+    // Track when components are added, modified, or deleted
+    function markUIAsChanged() {
+        if (!uiHasChanges) {
+            console.log('UI has been modified');
+            uiHasChanges = true;
+        }
+    }
+    
+    // Listen for component changes via HTMX events
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        // Check if the swap was related to component modifications
+        if (event.detail.target && (
+            event.detail.target.id === 'uiModeContainer' ||
+            event.detail.target.closest('#uiModeContainer')
+        )) {
+            markUIAsChanged();
+        }
+    });
+    
+    // Listen for component additions/deletions
+    document.body.addEventListener('componentAdded', markUIAsChanged);
+    document.body.addEventListener('componentDeleted', markUIAsChanged);
+    document.body.addEventListener('componentModified', markUIAsChanged);
+    
+    // Auto-switch to Text mode if parsing error is present
+    // Wait for all scripts to load before attempting to switch modes
+    window.addEventListener('load', function() {
+        const parsingErrorBanner = document.getElementById('parsingErrorBanner');
+        if (parsingErrorBanner) {
+            // Parsing error detected - automatically switch to Text mode
+            console.log('Parsing error detected, switching to Text mode');
+            if (typeof switchToTextMode === 'function') {
+                switchToTextMode();
+            } else {
+                console.error('switchToTextMode function not available');
+            }
+        }
+    });
     
     // Check if there are any filter components
     const hasFilters = components && components.filter && components.filter.length > 0;

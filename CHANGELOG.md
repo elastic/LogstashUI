@@ -12,6 +12,7 @@
 - Copy button in simulation result tooltips to copy JSON data to clipboard
 - Discovery for SNMP - Tested the end-to-end process of discovery and adding a device
 - Added initial implementation of the text editor
+- Added Favicon
 
 ### Changed
 - Colorized the "after" json output to be more readable and clearly convey what was changed
