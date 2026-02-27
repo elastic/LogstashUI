@@ -1,15 +1,15 @@
 # Django
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse, HttpResponseRedirect
-from functools import wraps
 from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
 from django.conf import settings
+
 
 ## Tables
 from Core.models import Connection as ConnectionTable
 from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, \
     get_elastic_connections_from_list
+from Core.decorators import require_admin_role
 
 # Custom libraries
 from . import logstash_config_parse
@@ -17,17 +17,11 @@ from Core import logstash_metrics
 
 # General libraries
 import json
-import os
-import subprocess
-import tempfile
-from deepdiff import DeepDiff
 from PipelineManager.forms import ConnectionForm
-from datetime import datetime, timezone
 
 from django.template.loader import get_template
 import traceback
 import re
-import html
 
 import logging
 from django.views.decorators.csrf import csrf_exempt
@@ -41,32 +35,6 @@ logger = logging.getLogger(__name__)
 simulation_results = deque(maxlen=1000)
 simulation_lock = Lock()
 
-
-def require_admin_role(view_func):
-    """
-    Decorator to check if user has admin role before allowing access to view.
-    Returns error toast message if user is readonly.
-    """
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        # Check if user is authenticated
-        if not request.user.is_authenticated:
-            response = HttpResponse('You must be logged in to perform this action', status=403)
-            response['HX-Trigger'] = '{"showToastEvent": {"message": "You must be logged in to perform this action", "type": "error"}}'
-            return response
-
-        # Check if user has admin role
-        if hasattr(request.user, 'profile'):
-            if request.user.profile.role != 'admin':
-                logger.warning(f"User '{request.user.username}' with role '{request.user.profile.role}' attempted to access admin-only function: {view_func.__name__}")
-                response = HttpResponse('Access denied: Admin role required', status=403)
-                response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
-                return response
-
-        # User is admin, proceed with the view
-        return view_func(request, *args, **kwargs)
-
-    return wrapper
 
 
 def validate_pipeline_name(pipeline_name):

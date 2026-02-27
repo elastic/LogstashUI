@@ -9,7 +9,7 @@ from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from .models import UserProfile
-from API.views import require_admin_role
+from Core.decorators import require_admin_role
 import logging
 import os
 

@@ -227,7 +227,6 @@ def generate_visualizations(visualizations, device, es_connection):
     Generate visualization data based on the decided visualizations.
     """
     visualization_data = {}
-    print(visualizations, "HERE")
     if "metrics" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
     if "sensors" in visualizations:

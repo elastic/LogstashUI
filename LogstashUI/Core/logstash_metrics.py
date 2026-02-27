@@ -304,10 +304,6 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
     }
 
     for connection in es_connections:
-
-        if connection_name:
-            if connection['name'] != connection_name:
-                continue
         if connection_name:
             if connection['name'] != connection_name:
                 continue
