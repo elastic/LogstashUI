@@ -137,11 +137,6 @@ def PipelineManager(request):
 
             return redirect('logstash')
 
-
-
-            return
-
-
     connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
     
     context['connections'] = connections

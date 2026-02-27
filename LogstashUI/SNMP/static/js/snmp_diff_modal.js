@@ -59,7 +59,7 @@ function computeLineDiff(oldLines, newLines) {
                 k++;
             }
             if (equalLines.length > 0) {
-                changes.push({type: 'equal', lines: equalLines});
+                changes.push({ type: 'equal', lines: equalLines });
             }
         } else {
             // Collect deletions and insertions
@@ -78,11 +78,11 @@ function computeLineDiff(oldLines, newLines) {
 
             // If we have both deletions and insertions, treat as replacement
             if (deletedLines.length > 0 && insertedLines.length > 0) {
-                changes.push({type: 'replace', oldLines: deletedLines, newLines: insertedLines});
+                changes.push({ type: 'replace', oldLines: deletedLines, newLines: insertedLines });
             } else if (deletedLines.length > 0) {
-                changes.push({type: 'delete', lines: deletedLines});
+                changes.push({ type: 'delete', lines: deletedLines });
             } else if (insertedLines.length > 0) {
-                changes.push({type: 'insert', lines: insertedLines});
+                changes.push({ type: 'insert', lines: insertedLines });
             }
         }
     }
@@ -141,7 +141,7 @@ async function prepareSnmpDiffModal() {
         // Display overall stats
         const totalNetworks = diffData.networks.length;
         const newNetworks = diffData.networks.filter(n => !n.current || n.current.trim() === '').length;
-        document.getElementById('snmpDiffStats').textContent = 
+        document.getElementById('snmpDiffStats').textContent =
             `${totalNetworks} network(s) • ${newNetworks} new pipeline(s)`;
 
     } catch (error) {
@@ -163,11 +163,6 @@ async function prepareSnmpDiffModal() {
  */
 function displayNetworkDiffs(networks) {
     const container = document.getElementById('snmpDiffContainer');
-    const escapeHtml = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
 
     let html = '';
     let networksWithChanges = 0;
@@ -177,26 +172,26 @@ function displayNetworkDiffs(networks) {
     for (const network of networks) {
         // Skip main pipeline rendering if network has no devices (pipeline_name will be null)
         const hasMainPipeline = network.pipeline_name !== null;
-        
+
         let currentLines = [];
         let newLines = [];
         let isNewPipeline = false;
         let hasChanges = false;
         let lineDiff = [];
-        
+
         if (hasMainPipeline) {
             currentLines = network.current ? network.current.split('\n') : [];
             newLines = network.new.split('\n');
-            
+
             // Check if this is a new pipeline (no current content)
             isNewPipeline = !network.current || network.current.trim() === '';
 
             // Compute diff
             lineDiff = computeLineDiff(currentLines, newLines);
-            
+
             // Check if there are any actual changes (additions or deletions)
             hasChanges = lineDiff.some(change => change.type !== 'equal');
-            
+
             // Track counts
             if (isNewPipeline) {
                 newPipelinesCount++;
@@ -204,12 +199,12 @@ function displayNetworkDiffs(networks) {
                 networksWithChanges++;
             }
         }
-        
+
         // Skip this network entirely if it has no main pipeline and no trap pipeline
         if (!hasMainPipeline && !network.trap_pipeline) {
             continue;
         }
-        
+
         // Skip main pipeline section if no changes and not new (but still show trap pipeline if exists)
         const shouldShowMainPipeline = hasMainPipeline && (isNewPipeline || hasChanges);
 
@@ -222,7 +217,7 @@ function displayNetworkDiffs(networks) {
             // For new pipelines, just show the new content on the right
             for (let i = 0; i < newLines.length; i++) {
                 const line = escapeHtml(newLines[i]);
-                
+
                 currentHtml += `<div class="flex bg-gray-800/50">
                     <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
                     <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
@@ -361,13 +356,13 @@ function displayNetworkDiffs(networks) {
                 </div>
             `;
         }
-        
+
         // Handle trap pipeline if it exists
         if (network.trap_pipeline) {
             const trapPipeline = network.trap_pipeline;
             const trapCurrentLines = trapPipeline.current ? trapPipeline.current.split('\n') : [];
             const trapNewLines = trapPipeline.new ? trapPipeline.new.split('\n') : [];
-            
+
             // Check if there are actual changes in the trap pipeline
             let trapHasChanges = false;
             if (trapPipeline.action === 'create' || trapPipeline.action === 'delete') {
@@ -377,7 +372,7 @@ function displayNetworkDiffs(networks) {
                 const trapLineDiff = computeLineDiff(trapCurrentLines, trapNewLines);
                 trapHasChanges = trapLineDiff.some(change => change.type !== 'equal');
             }
-            
+
             // Only render trap pipeline if there are actual changes
             if (trapHasChanges) {
                 // Count trap pipeline in summary only if there are changes
@@ -388,124 +383,124 @@ function displayNetworkDiffs(networks) {
                 } else if (trapPipeline.action === 'delete') {
                     deletedPipelinesCount++;
                 }
-                
+
                 let trapBadge = '';
                 let trapCurrentHtml = '';
                 let trapNewHtml = '';
                 let trapCurrentLineNum = 1;
                 let trapNewLineNum = 1;
-                
+
                 if (trapPipeline.action === 'create') {
-                trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW TRAP PIPELINE</span>';
-                
-                // Show new trap pipeline
-                for (let i = 0; i < trapNewLines.length; i++) {
-                    const line = escapeHtml(trapNewLines[i]);
-                    
-                    trapCurrentHtml += `<div class="flex bg-gray-800/50">
+                    trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW TRAP PIPELINE</span>';
+
+                    // Show new trap pipeline
+                    for (let i = 0; i < trapNewLines.length; i++) {
+                        const line = escapeHtml(trapNewLines[i]);
+
+                        trapCurrentHtml += `<div class="flex bg-gray-800/50">
                         <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
                         <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
                     </div>`;
 
-                    trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                        trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
                         <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
                         <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
                     </div>`;
-                }
-            } else if (trapPipeline.action === 'delete') {
-                trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETING TRAP PIPELINE</span>';
-                
-                // Show trap pipeline being deleted
-                for (let i = 0; i < trapCurrentLines.length; i++) {
-                    const line = escapeHtml(trapCurrentLines[i]);
-                    
-                    trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                    }
+                } else if (trapPipeline.action === 'delete') {
+                    trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETING TRAP PIPELINE</span>';
+
+                    // Show trap pipeline being deleted
+                    for (let i = 0; i < trapCurrentLines.length; i++) {
+                        const line = escapeHtml(trapCurrentLines[i]);
+
+                        trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
                         <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
                         <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
                     </div>`;
 
-                    trapNewHtml += `<div class="flex bg-gray-800/50">
+                        trapNewHtml += `<div class="flex bg-gray-800/50">
                         <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
                         <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
                     </div>`;
-                }
-            } else if (trapPipeline.action === 'update') {
-                trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">UPDATING TRAP PIPELINE</span>';
-                
-                // Compute diff for trap pipeline
-                const trapLineDiff = computeLineDiff(trapCurrentLines, trapNewLines);
-                
-                for (const change of trapLineDiff) {
-                    if (change.type === 'equal') {
-                        for (let i = 0; i < change.lines.length; i++) {
-                            const line = escapeHtml(change.lines[i]);
-                            trapCurrentHtml += `<div class="flex hover:bg-gray-700/30">
+                    }
+                } else if (trapPipeline.action === 'update') {
+                    trapBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">UPDATING TRAP PIPELINE</span>';
+
+                    // Compute diff for trap pipeline
+                    const trapLineDiff = computeLineDiff(trapCurrentLines, trapNewLines);
+
+                    for (const change of trapLineDiff) {
+                        if (change.type === 'equal') {
+                            for (let i = 0; i < change.lines.length; i++) {
+                                const line = escapeHtml(change.lines[i]);
+                                trapCurrentHtml += `<div class="flex hover:bg-gray-700/30">
                                 <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
                                 <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
                             </div>`;
-                            trapNewHtml += `<div class="flex hover:bg-gray-700/30">
+                                trapNewHtml += `<div class="flex hover:bg-gray-700/30">
                                 <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
                                 <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
                             </div>`;
-                        }
-                    } else if (change.type === 'delete') {
-                        for (let i = 0; i < change.lines.length; i++) {
-                            const line = escapeHtml(change.lines[i]);
-                            trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
-                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
-                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
-                            </div>`;
-                            trapNewHtml += `<div class="flex bg-gray-800/50">
-                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
-                                <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
-                            </div>`;
-                        }
-                    } else if (change.type === 'insert') {
-                        for (let i = 0; i < change.lines.length; i++) {
-                            const line = escapeHtml(change.lines[i]);
-                            trapCurrentHtml += `<div class="flex bg-gray-800/50">
-                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
-                                <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
-                            </div>`;
-                            trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
-                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
-                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
-                            </div>`;
-                        }
-                    } else if (change.type === 'replace') {
-                        const maxLen = Math.max(change.oldLines.length, change.newLines.length);
-                        for (let i = 0; i < maxLen; i++) {
-                            if (i < change.oldLines.length) {
-                                const oldLine = escapeHtml(change.oldLines[i]);
+                            }
+                        } else if (change.type === 'delete') {
+                            for (let i = 0; i < change.lines.length; i++) {
+                                const line = escapeHtml(change.lines[i]);
                                 trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                                trapNewHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                            </div>`;
+                            }
+                        } else if (change.type === 'insert') {
+                            for (let i = 0; i < change.lines.length; i++) {
+                                const line = escapeHtml(change.lines[i]);
+                                trapCurrentHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                            </div>`;
+                                trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                            }
+                        } else if (change.type === 'replace') {
+                            const maxLen = Math.max(change.oldLines.length, change.newLines.length);
+                            for (let i = 0; i < maxLen; i++) {
+                                if (i < change.oldLines.length) {
+                                    const oldLine = escapeHtml(change.oldLines[i]);
+                                    trapCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
                                     <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapCurrentLineNum++}</span>
                                     <span style="white-space: pre; padding-left: 0.5rem;">${oldLine || ' '}</span>
                                 </div>`;
-                            } else {
-                                trapCurrentHtml += `<div class="flex bg-gray-800/50">
+                                } else {
+                                    trapCurrentHtml += `<div class="flex bg-gray-800/50">
                                     <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
                                     <span style="white-space: pre; padding-left: 0.5rem;"></span>
                                 </div>`;
-                            }
-                            if (i < change.newLines.length) {
-                                const newLine = escapeHtml(change.newLines[i]);
-                                trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                }
+                                if (i < change.newLines.length) {
+                                    const newLine = escapeHtml(change.newLines[i]);
+                                    trapNewHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
                                     <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${trapNewLineNum++}</span>
                                     <span style="white-space: pre; padding-left: 0.5rem;">${newLine || ' '}</span>
                                 </div>`;
-                            } else {
-                                trapNewHtml += `<div class="flex bg-gray-800/50">
+                                } else {
+                                    trapNewHtml += `<div class="flex bg-gray-800/50">
                                     <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
                                     <span style="white-space: pre; padding-left: 0.5rem;"></span>
                                 </div>`;
+                                }
                             }
                         }
                     }
                 }
-            }
-            
-            // Add trap pipeline section
-            html += `
+
+                // Add trap pipeline section
+                html += `
                 <div class="border border-gray-600 rounded-lg overflow-hidden mt-4">
                     <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
                         <h4 class="text-white font-semibold">
@@ -535,13 +530,13 @@ function displayNetworkDiffs(networks) {
             `;
             }
         }
-        
+
         // Handle discovery pipeline if it exists
         if (network.discovery_pipeline) {
             const discoveryPipeline = network.discovery_pipeline;
             const discoveryCurrentLines = discoveryPipeline.current ? discoveryPipeline.current.split('\n') : [];
             const discoveryNewLines = discoveryPipeline.new ? discoveryPipeline.new.split('\n') : [];
-            
+
             // Check if there are actual changes in the discovery pipeline
             let discoveryHasChanges = false;
             if (discoveryPipeline.action === 'create' || discoveryPipeline.action === 'delete') {
@@ -551,7 +546,7 @@ function displayNetworkDiffs(networks) {
                 const discoveryLineDiff = computeLineDiff(discoveryCurrentLines, discoveryNewLines);
                 discoveryHasChanges = discoveryLineDiff.some(change => change.type !== 'equal');
             }
-            
+
             // Only render discovery pipeline if there are actual changes
             if (discoveryHasChanges) {
                 // Count discovery pipeline in summary only if there are changes
@@ -562,20 +557,20 @@ function displayNetworkDiffs(networks) {
                 } else if (discoveryPipeline.action === 'delete') {
                     deletedPipelinesCount++;
                 }
-                
+
                 let discoveryBadge = '';
                 let discoveryCurrentHtml = '';
                 let discoveryNewHtml = '';
                 let discoveryCurrentLineNum = 1;
                 let discoveryNewLineNum = 1;
-                
+
                 if (discoveryPipeline.action === 'create') {
                     discoveryBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW DISCOVERY PIPELINE</span>';
-                    
+
                     // Show new discovery pipeline
                     for (let i = 0; i < discoveryNewLines.length; i++) {
                         const line = escapeHtml(discoveryNewLines[i]);
-                        
+
                         discoveryCurrentHtml += `<div class="flex bg-gray-800/50">
                             <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
                             <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
@@ -588,11 +583,11 @@ function displayNetworkDiffs(networks) {
                     }
                 } else if (discoveryPipeline.action === 'delete') {
                     discoveryBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETING DISCOVERY PIPELINE</span>';
-                    
+
                     // Show discovery pipeline being deleted
                     for (let i = 0; i < discoveryCurrentLines.length; i++) {
                         const line = escapeHtml(discoveryCurrentLines[i]);
-                        
+
                         discoveryCurrentHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
                             <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${discoveryCurrentLineNum++}</span>
                             <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
@@ -605,10 +600,10 @@ function displayNetworkDiffs(networks) {
                     }
                 } else if (discoveryPipeline.action === 'update') {
                     discoveryBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">UPDATING DISCOVERY PIPELINE</span>';
-                    
+
                     // Compute diff for discovery pipeline
                     const discoveryLineDiff = computeLineDiff(discoveryCurrentLines, discoveryNewLines);
-                    
+
                     for (const change of discoveryLineDiff) {
                         if (change.type === 'equal') {
                             for (let i = 0; i < change.lines.length; i++) {
@@ -677,7 +672,7 @@ function displayNetworkDiffs(networks) {
                         }
                     }
                 }
-                
+
                 // Add discovery pipeline section
                 html += `
                     <div class="border border-gray-600 rounded-lg overflow-hidden mt-4">
@@ -724,7 +719,7 @@ function displayNetworkDiffs(networks) {
                 <p class="text-gray-400">All network pipelines are up to date. No changes need to be committed.</p>
             </div>
         `;
-        
+
         // Disable the commit button since there's nothing to commit
         const commitButton = document.getElementById('confirmCommitButton');
         if (commitButton) {
@@ -738,28 +733,28 @@ function displayNetworkDiffs(networks) {
     let statsHtml = '<div class="mb-4 p-4 bg-gray-700 rounded-lg border border-gray-600">';
     statsHtml += '<h3 class="text-white font-semibold mb-2">Changes Summary</h3>';
     statsHtml += '<div class="flex gap-4 text-sm">';
-    
+
     if (newPipelinesCount > 0) {
         statsHtml += `<div class="flex items-center gap-2">
             <span class="px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>
             <span class="text-gray-300">${newPipelinesCount} new pipeline${newPipelinesCount !== 1 ? 's' : ''}</span>
         </div>`;
     }
-    
+
     if (networksWithChanges > 0) {
         statsHtml += `<div class="flex items-center gap-2">
             <span class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>
             <span class="text-gray-300">${networksWithChanges} modified pipeline${networksWithChanges !== 1 ? 's' : ''}</span>
         </div>`;
     }
-    
+
     if (deletedPipelinesCount > 0) {
         statsHtml += `<div class="flex items-center gap-2">
             <span class="px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETED</span>
             <span class="text-gray-300">${deletedPipelinesCount} deleted pipeline${deletedPipelinesCount !== 1 ? 's' : ''}</span>
         </div>`;
     }
-    
+
     statsHtml += '</div></div>';
 
     container.innerHTML = statsHtml + html;
@@ -832,7 +827,7 @@ async function confirmCommitConfiguration() {
             // Show success toast
             let message = result.message || 'Configuration committed successfully!';
             showToast(message, 'success');
-            
+
             // Show warnings as separate toasts if any
             if (result.errors && result.errors.length > 0) {
                 result.errors.forEach(error => {

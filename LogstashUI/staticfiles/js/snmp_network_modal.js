@@ -3,7 +3,7 @@
 // Open modal for adding new network
 const addNetworkBtn = document.getElementById('addNetworkBtn');
 if (addNetworkBtn) {
-  addNetworkBtn.addEventListener('click', function() {
+  addNetworkBtn.addEventListener('click', function () {
     openNetworkModal();
   });
 }
@@ -13,20 +13,20 @@ function openNetworkModal(networkData = null) {
   const modal = document.getElementById('networkFormModal');
   const form = document.getElementById('networkForm');
   const modalTitle = document.getElementById('modalTitle');
-  
+
   networkModalIsOpen = true;
-  
+
   // Reset form
   form.reset();
   document.getElementById('networkErrorContainer').innerHTML = '';
-  
+
   // Load connections into dropdown
   loadConnections(networkData ? networkData.connection : null);
-  
+
   // Load credentials into dropdowns
   loadDiscoveryCredentials(networkData ? networkData.discovery_credential : null);
   loadNetworkCredentials(networkData ? networkData.credential : null);
-  
+
   if (networkData) {
     // Edit mode
     modalTitle.textContent = 'Edit SNMP Network';
@@ -34,15 +34,15 @@ function openNetworkModal(networkData = null) {
     document.getElementById('networkName').value = networkData.name;
     document.getElementById('networkRange').value = networkData.network_range;
     document.getElementById('logstashName').value = networkData.logstash_name || '';
-    
+
     // Set discovery enabled radio
     const discoveryValue = networkData.discovery_enabled ? 'true' : 'false';
     document.querySelector(`input[name="discovery_enabled"][value="${discoveryValue}"]`).checked = true;
-    
+
     // Set traps enabled radio
     const trapsValue = networkData.traps_enabled ? 'true' : 'false';
     document.querySelector(`input[name="traps_enabled"][value="${trapsValue}"]`).checked = true;
-    
+
     // Show/hide credential sections based on enabled states
     toggleDiscoveryCredential();
     toggleTrapsCredential();
@@ -52,25 +52,25 @@ function openNetworkModal(networkData = null) {
     document.getElementById('networkId').value = '';
     document.querySelector('input[name="discovery_enabled"][value="true"]').checked = true;
     document.querySelector('input[name="traps_enabled"][value="false"]').checked = true;
-    
+
     // Show/hide credential sections by default
     toggleDiscoveryCredential();
     toggleTrapsCredential();
   }
-  
+
   modal.classList.remove('hidden');
 }
 
 // Load connections into dropdown
 function loadConnections(selectedConnectionId = null) {
   const connectionSelect = document.getElementById('networkConnection');
-  
+
   fetch('/API/GetConnections/')
     .then(response => response.json())
     .then(connections => {
       connectionSelect.innerHTML = '<option value="">Select a connection...</option>';
       connectionSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Connection</option>';
-      
+
       connections.forEach(connection => {
         const option = document.createElement('option');
         option.value = connection.id;
@@ -117,7 +117,7 @@ function refreshConnections() {
 function toggleDiscoveryCredential() {
   const discoveryEnabled = document.querySelector('input[name="discovery_enabled"]:checked')?.value === 'true';
   const credentialSection = document.getElementById('discoveryCredentialSection');
-  
+
   if (credentialSection) {
     if (discoveryEnabled) {
       credentialSection.classList.remove('hidden');
@@ -131,7 +131,7 @@ function toggleDiscoveryCredential() {
 function toggleTrapsCredential() {
   const trapsEnabled = document.querySelector('input[name="traps_enabled"]:checked')?.value === 'true';
   const credentialSection = document.getElementById('trapsCredentialSection');
-  
+
   if (credentialSection) {
     if (trapsEnabled) {
       credentialSection.classList.remove('hidden');
@@ -144,15 +144,15 @@ function toggleTrapsCredential() {
 // Load discovery credentials into dropdown
 function loadDiscoveryCredentials(selectedCredentialId = null) {
   const credentialSelect = document.getElementById('discoveryCredentialSelect');
-  
+
   if (!credentialSelect) return;
-  
+
   fetch('/API/SNMP/GetCredentials/')
     .then(response => response.json())
     .then(credentials => {
       credentialSelect.innerHTML = '<option value="">Select a credential...</option>';
       credentialSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Credential</option>';
-      
+
       credentials.forEach(credential => {
         const option = document.createElement('option');
         option.value = credential.id;
@@ -178,15 +178,15 @@ function refreshDiscoveryCredentials() {
 // Load credentials into dropdown (for traps)
 function loadNetworkCredentials(selectedCredentialId = null) {
   const credentialSelect = document.getElementById('networkCredentialSelect');
-  
+
   if (!credentialSelect) return;
-  
+
   fetch('/API/SNMP/GetCredentials/')
     .then(response => response.json())
     .then(credentials => {
       credentialSelect.innerHTML = '<option value="">Select a credential...</option>';
       credentialSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Credential</option>';
-      
+
       credentials.forEach(credential => {
         const option = document.createElement('option');
         option.value = credential.id;
@@ -251,21 +251,21 @@ if (typeof closeFlyout !== 'undefined') {
   originalCloseFlyoutForNetwork = closeFlyout;
 }
 
-window.closeFlyout = function() {
+window.closeFlyout = function () {
   const connectionModal = document.getElementById('connectionFormFlyout');
   const networkModal = document.getElementById('networkFormModal');
   const wasNetworkModalOpen = networkModalIsOpen;
-  
+
   // Close connection modal
   if (connectionModal) {
     connectionModal.classList.add('hidden');
   }
-  
+
   // Call original close function if it exists
   if (originalCloseFlyoutForNetwork && typeof originalCloseFlyoutForNetwork === 'function') {
     originalCloseFlyoutForNetwork();
   }
-  
+
   // If network modal was open, reopen it and refresh connections
   if (wasNetworkModalOpen) {
     networkModal.classList.remove('hidden');
@@ -276,14 +276,14 @@ window.closeFlyout = function() {
 
 // Override closeCredentialModal to refresh credentials dropdown in network modal
 const originalCloseCredentialModalForNetwork = window.closeCredentialModal;
-window.closeCredentialModal = function() {
+window.closeCredentialModal = function () {
   const networkModal = document.getElementById('networkFormModal');
   const wasNetworkModalOpen = networkModal && !networkModal.classList.contains('hidden');
-  
+
   if (originalCloseCredentialModalForNetwork) {
     originalCloseCredentialModalForNetwork();
   }
-  
+
   // If network modal was open, reopen it and refresh both credential dropdowns
   if (wasNetworkModalOpen) {
     networkModal.classList.remove('hidden');
@@ -302,32 +302,32 @@ function closeNetworkModal() {
 }
 
 // Add event listeners for connection and credential selection
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   const connectionSelect = document.getElementById('networkConnection');
   if (connectionSelect) {
     connectionSelect.addEventListener('change', handleNetworkConnectionSelection);
     // Refresh dropdown when clicked/focused, preserving current selection
-    connectionSelect.addEventListener('focus', function() {
+    connectionSelect.addEventListener('focus', function () {
       const currentValue = this.value;
       loadConnections(currentValue);
     });
   }
-  
+
   const discoveryCredentialSelect = document.getElementById('discoveryCredentialSelect');
   if (discoveryCredentialSelect) {
     discoveryCredentialSelect.addEventListener('change', handleDiscoveryCredentialSelection);
     // Refresh dropdown when clicked/focused, preserving current selection
-    discoveryCredentialSelect.addEventListener('focus', function() {
+    discoveryCredentialSelect.addEventListener('focus', function () {
       const currentValue = this.value;
       loadDiscoveryCredentials(currentValue);
     });
   }
-  
+
   const credentialSelect = document.getElementById('networkCredentialSelect');
   if (credentialSelect) {
     credentialSelect.addEventListener('change', handleNetworkCredentialSelection);
     // Refresh dropdown when clicked/focused, preserving current selection
-    credentialSelect.addEventListener('focus', function() {
+    credentialSelect.addEventListener('focus', function () {
       const currentValue = this.value;
       loadNetworkCredentials(currentValue);
     });
@@ -338,18 +338,18 @@ document.addEventListener('DOMContentLoaded', function() {
 function validateNetworkSize() {
   const networkRange = document.getElementById('networkRange').value.trim();
   const errorContainer = document.getElementById('networkErrorContainer');
-  
+
   // Clear any existing warnings
   const existingWarning = errorContainer.querySelector('.warning-message');
   if (existingWarning) {
     existingWarning.remove();
   }
-  
+
   // Check if input matches CIDR format
   const cidrMatch = networkRange.match(/\/(\d+)$/);
   if (cidrMatch) {
     const prefix = parseInt(cidrMatch[1]);
-    
+
     // If prefix is less than 24, it's a large network
     if (prefix < 24) {
       const warningDiv = document.createElement('div');
@@ -371,7 +371,7 @@ function validateNetworkSize() {
 }
 
 // Add event listener for network range input
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   const networkRangeInput = document.getElementById('networkRange');
   if (networkRangeInput) {
     networkRangeInput.addEventListener('blur', validateNetworkSize);
@@ -380,15 +380,15 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Handle form submission
-document.getElementById('networkForm').addEventListener('submit', function(e) {
+document.getElementById('networkForm').addEventListener('submit', function (e) {
   e.preventDefault();
-  
+
   const errorContainer = document.getElementById('networkErrorContainer');
-  
+
   // Validate that discovery credential is selected if discovery is enabled
   const discoveryEnabled = document.querySelector('input[name="discovery_enabled"]:checked')?.value === 'true';
   const discoveryCredentialSelect = document.getElementById('discoveryCredentialSelect');
-  
+
   if (discoveryEnabled && (!discoveryCredentialSelect.value || discoveryCredentialSelect.value === 'add_new')) {
     errorContainer.innerHTML = `
       <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
@@ -399,11 +399,11 @@ document.getElementById('networkForm').addEventListener('submit', function(e) {
     errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
-  
+
   // Validate that credential is selected if traps are enabled
   const trapsEnabled = document.querySelector('input[name="traps_enabled"]:checked')?.value === 'true';
   const credentialSelect = document.getElementById('networkCredentialSelect');
-  
+
   if (trapsEnabled && (!credentialSelect.value || credentialSelect.value === 'add_new')) {
     errorContainer.innerHTML = `
       <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
@@ -414,14 +414,14 @@ document.getElementById('networkForm').addEventListener('submit', function(e) {
     errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
-  
+
   const formData = new FormData(this);
   const networkId = document.getElementById('networkId').value;
   const url = networkId ? `/API/SNMP/UpdateNetwork/${networkId}/` : '/API/SNMP/AddNetwork/';
-  
+
   // Get CSRF token
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-  
+
   fetch(url, {
     method: 'POST',
     headers: {
@@ -429,85 +429,48 @@ document.getElementById('networkForm').addEventListener('submit', function(e) {
     },
     body: formData
   })
-  .then(response => {
-    if (!response.ok) {
-      return response.text().then(text => {
-        throw new Error(text || 'Failed to save network');
-      });
-    }
-    return response.json();
-  })
-  .then(data => {
-    // Get the new network ID from response
-    const newNetworkId = data.id || data.network_id || null;
-    
-    showToast(networkId ? 'Network updated successfully!' : 'Network created successfully!', 'success');
-    
-    // Check if device modal is open (called from device modal)
-    const deviceModal = document.getElementById('deviceFormModal');
-    const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
-    
-    if (isCalledFromDeviceModal) {
-      // Store the new network ID for device modal to use (if we got one)
-      if (newNetworkId) {
-        window.lastCreatedNetworkId = newNetworkId;
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          throw new Error(text || 'Failed to save network');
+        });
       }
-      closeNetworkModal();
-      // Don't reload - let device modal handle the refresh
-    } else {
-      closeNetworkModal();
-      // Reload page to show updated networks
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-    }
-  })
-  .catch(error => {
-    const errorContainer = document.getElementById('networkErrorContainer');
-    errorContainer.innerHTML = `
+      return response.json();
+    })
+    .then(data => {
+      // Get the new network ID from response
+      const newNetworkId = data.id || data.network_id || null;
+
+      showToast(networkId ? 'Network updated successfully!' : 'Network created successfully!', 'success');
+
+      // Check if device modal is open (called from device modal)
+      const deviceModal = document.getElementById('deviceFormModal');
+      const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
+
+      if (isCalledFromDeviceModal) {
+        // Store the new network ID for device modal to use (if we got one)
+        if (newNetworkId) {
+          window.lastCreatedNetworkId = newNetworkId;
+        }
+        closeNetworkModal();
+        // Don't reload - let device modal handle the refresh
+      } else {
+        closeNetworkModal();
+        // Reload page to show updated networks
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      }
+    })
+    .catch(error => {
+      const errorContainer = document.getElementById('networkErrorContainer');
+      errorContainer.innerHTML = `
       <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
         <h3 class="font-bold mb-2">Error</h3>
         <p class="text-sm">${error.message}</p>
       </div>
     `;
-    errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
+      errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
 });
 
-// Toast notification function
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container') || createToastContainer();
-  const toast = document.createElement('div');
-  const colors = {
-    success: 'bg-green-500',
-    error: 'bg-red-500',
-    info: 'bg-blue-500',
-    warning: 'bg-yellow-500'
-  };
-
-  toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
-  toast.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
-  `;
-
-  container.appendChild(toast);
-
-  // Auto-remove after 5 seconds
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  }, 5000);
-}
-
-function createToastContainer() {
-  const container = document.createElement('div');
-  container.id = 'toast-container';
-  container.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
-  document.body.appendChild(container);
-  return container;
-}

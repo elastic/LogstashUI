@@ -5,24 +5,24 @@ function toggleDevicePreview(deviceId) {
   const previewRow = document.getElementById(`device-preview-${deviceId}`);
   const chevron = document.getElementById(`chevron-${deviceId}`);
   const contentDiv = document.getElementById(`device-preview-content-${deviceId}`);
-  
+
   if (previewRow.classList.contains('hidden')) {
     // Expand the row
     previewRow.classList.remove('hidden');
     chevron.classList.add('rotate-180');
-    
+
     // Check if content is already loaded
     if (contentDiv.innerHTML === '') {
       // Show loading indicator
       const indicator = previewRow.querySelector('.htmx-indicator');
       indicator.classList.remove('hidden');
-      
+
       // Fetch device visualization data
       fetch(`/API/SNMP/GetDeviceVisualization/${deviceId}/`)
         .then(response => response.json())
         .then(data => {
           indicator.classList.add('hidden');
-          
+
           if (data.success) {
             renderDevicePreview(deviceId, data.device, data.visualizations);
           } else {
@@ -53,20 +53,20 @@ function toggleDevicePreview(deviceId) {
 function renderDevicePreview(deviceId, device, visualizations) {
   const contentDiv = document.getElementById(`device-preview-content-${deviceId}`);
   const template = document.getElementById('device-preview-template');
-  
+
   if (!template) {
     console.error('Device preview template not found');
     return;
   }
-  
+
   // Clone the template
   const clone = template.content.cloneNode(true);
-  
+
   // Populate device configuration
   clone.querySelector('.device-port').textContent = device.port;
   clone.querySelector('.device-timeout').textContent = `${device.timeout}ms`;
   clone.querySelector('.device-retries').textContent = device.retries;
-  
+
   // Populate credential info
   if (device.credential) {
     clone.querySelector('.credential-name').textContent = device.credential.name;
@@ -75,7 +75,7 @@ function renderDevicePreview(deviceId, device, visualizations) {
     clone.querySelector('.credential-name').textContent = 'None';
     clone.querySelector('.credential-version').textContent = '-';
   }
-  
+
   // Populate profiles
   const profilesList = clone.querySelector('.device-profiles-list');
   if (device.profiles && device.profiles.length > 0) {
@@ -96,11 +96,11 @@ function renderDevicePreview(deviceId, device, visualizations) {
   } else {
     profilesList.innerHTML = '<span class="text-gray-400 italic">No profiles assigned</span>';
   }
-  
+
   // Populate metrics if available
   if (visualizations && visualizations.metrics) {
     const metrics = visualizations.metrics;
-    
+
     // Uptime - convert from hundredths of seconds to human-readable format
     if (metrics.Uptime !== undefined) {
       clone.querySelector('.metric-uptime').textContent = formatUptime(metrics.Uptime);
@@ -112,15 +112,15 @@ function renderDevicePreview(deviceId, device, visualizations) {
       metricsSection.style.display = 'none';
     }
   }
-  
+
   // Clear and append the populated template
   contentDiv.innerHTML = '';
   contentDiv.appendChild(clone);
-  
+
   // Render charts after DOM insertion (charts need to be in DOM to render)
   if (visualizations && visualizations.metrics) {
     const metrics = visualizations.metrics;
-    
+
     // Render CPU chart
     if (metrics.CPU && metrics.Time && metrics.CPU.length > 0) {
       renderMetricChart(
@@ -132,7 +132,7 @@ function renderDevicePreview(deviceId, device, visualizations) {
         'rgba(59, 130, 246, 0.1)'
       );
     }
-    
+
     // Render Memory chart
     if (metrics.Memory && metrics.Time && metrics.Memory.length > 0) {
       renderMetricChart(
@@ -145,81 +145,64 @@ function renderDevicePreview(deviceId, device, visualizations) {
       );
     }
   }
-  
+
   // Render sensors if available
   if (visualizations && visualizations.sensors) {
-    console.log('Sensors data found:', visualizations.sensors);
-    console.log('Sensors array:', visualizations.sensors.sensors);
     const sensorsSection = contentDiv.querySelector('.device-sensors-section');
     const sensorsContainer = contentDiv.querySelector('.sensors-container');
-    
-    console.log('Sensors section element:', sensorsSection);
-    console.log('Sensors container element:', sensorsContainer);
-    
     // The sensors data is nested in visualizations.sensors.sensors
     const sensorsArray = visualizations.sensors.sensors || [];
-    console.log('Actual sensors array:', sensorsArray);
-    
+
     if (sensorsArray.length > 0 && sensorsSection && sensorsContainer) {
-      console.log('Rendering', sensorsArray.length, 'sensors');
       sensorsSection.style.display = 'grid';
       sensorsContainer.innerHTML = '';
-      
+
       sensorsArray.forEach(sensor => {
-        console.log('Creating card for sensor:', sensor);
         const sensorCard = createSensorCard(sensor);
         sensorsContainer.appendChild(sensorCard);
       });
     } else {
-      console.log('Not rendering sensors. Array length:', sensorsArray.length, 'Section:', !!sensorsSection, 'Container:', !!sensorsContainer);
+      console.error('Not rendering sensors. Array length:', sensorsArray.length, 'Section:', !!sensorsSection, 'Container:', !!sensorsContainer);
     }
   }
-  
+
   // Render fans if available
   if (visualizations && visualizations.fans) {
-    console.log('Fans data found:', visualizations.fans);
     const sensorsSection = contentDiv.querySelector('.device-sensors-section');
     const fansContainer = contentDiv.querySelector('.fans-container');
-    
+
     const fansArray = visualizations.fans.fans || [];
-    console.log('Actual fans array:', fansArray);
-    
+
     if (fansArray.length > 0 && sensorsSection && fansContainer) {
-      console.log('Rendering', fansArray.length, 'fans');
       sensorsSection.style.display = 'grid';
       fansContainer.innerHTML = '';
-      
+
       fansArray.forEach(fan => {
-        console.log('Creating card for fan:', fan);
         const fanCard = createFanCard(fan);
         fansContainer.appendChild(fanCard);
       });
     }
   }
-  
+
   // Render interfaces if available
   if (visualizations && visualizations.interfaces) {
-    console.log('Interfaces data found:', visualizations.interfaces);
     const interfacesSection = contentDiv.querySelector('.device-interfaces-section');
     const interfacesContainer = contentDiv.querySelector('.interfaces-container');
-    
+
     const interfacesArray = visualizations.interfaces.interfaces || [];
-    console.log('Actual interfaces array:', interfacesArray);
-    
+
     if (interfacesArray.length > 0 && interfacesSection && interfacesContainer) {
-      console.log('Rendering', interfacesArray.length, 'interfaces');
       interfacesSection.style.display = 'block';
       interfacesContainer.innerHTML = '';
-      
+
       // Sort interfaces by index
       const sortedInterfaces = interfacesArray.sort((a, b) => {
         const indexA = parseInt(a.index) || parseInt(a.ifIndex) || 0;
         const indexB = parseInt(b.index) || parseInt(b.ifIndex) || 0;
         return indexA - indexB;
       });
-      
+
       sortedInterfaces.forEach(iface => {
-        console.log('Creating card for interface:', iface);
         const interfaceCard = createInterfaceCard(iface);
         interfacesContainer.appendChild(interfaceCard);
       });
@@ -230,18 +213,18 @@ function renderDevicePreview(deviceId, device, visualizations) {
 // Create an interface card with status indicators and hover details
 function createInterfaceCard(iface) {
   const card = document.createElement('div');
-  
+
   // Determine status colors based on admin and oper status
   const adminStatus = parseInt(iface.ifAdminStatus);
   const operStatus = parseInt(iface.ifOperStatus);
-  
+
   // Admin status: 1=Up, 2=Down, 3=Testing
   // Oper status: 1=Up, 2=Down, 3=Testing, 4=Unknown, 5=Dormant, 6=NotPresent, 7=LowerLayerDown
-  
+
   let borderClass = 'border-gray-600';
   let statusText = 'Unknown';
   let statusColor = 'bg-gray-500';
-  
+
   if (adminStatus === 2) {
     // Admin down - gray
     borderClass = 'border-gray-500';
@@ -268,18 +251,18 @@ function createInterfaceCard(iface) {
     statusText = 'Testing';
     statusColor = 'bg-blue-500';
   }
-  
+
   // Format speed
   const speedMbps = iface.ifHighSpeed || (iface.ifSpeed ? iface.ifSpeed / 1000000 : 0);
   const speedText = speedMbps >= 1000 ? `${speedMbps / 1000}G` : `${speedMbps}M`;
-  
+
   // Format MAC address
   const macAddress = iface.ifPhysAddress || 'N/A';
-  
+
   // Build detailed tooltip content with better formatting
   const adminStatusText = adminStatus === 1 ? '<span class="text-green-400">Up</span>' : adminStatus === 2 ? '<span class="text-gray-400">Down</span>' : '<span class="text-blue-400">Testing</span>';
   const operStatusHtml = operStatus === 1 ? '<span class="text-green-400">Up</span>' : operStatus === 2 ? '<span class="text-red-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
-  
+
   const tooltipContent = `
     <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(iface.ifDescr || iface.ifName)}</div>
     ${iface.ifAlias ? `<div class="text-xs text-gray-400 mb-2 italic">${escapeHtml(iface.ifAlias)}</div>` : ''}
@@ -303,7 +286,7 @@ function createInterfaceCard(iface) {
       </div>
     </div>
   `;
-  
+
   card.className = `relative bg-gray-800 rounded-lg p-1.5 border-2 ${borderClass} hover:shadow-lg transition-all cursor-pointer group`;
   card.innerHTML = `
     <div class="flex flex-col items-center justify-center h-12">
@@ -322,7 +305,7 @@ function createInterfaceCard(iface) {
       </div>
     </div>
   `;
-  
+
   return card;
 }
 
@@ -338,20 +321,20 @@ function formatBytes(bytes) {
 // Render a metric line chart
 function renderMetricChart(canvas, timeData, metricData, label, borderColor, backgroundColor) {
   if (!canvas || !timeData || !metricData) return;
-  
+
   // Parse ISO timestamp strings to Date objects and create paired data
   const pairedData = timeData.map((timestamp, index) => ({
     time: new Date(timestamp),
     value: metricData[index] * 100  // Convert to percentage
   }));
-  
+
   // Sort by time (chronological order)
   pairedData.sort((a, b) => a.time - b.time);
-  
+
   // Extract sorted arrays
   const sortedTimeData = pairedData.map(item => item.time);
   const sortedPercentageData = pairedData.map(item => item.value);
-  
+
   new Chart(canvas, {
     type: 'line',
     data: {
@@ -391,10 +374,10 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
           padding: 10,
           displayColors: false,
           callbacks: {
-            label: function(context) {
+            label: function (context) {
               return context.parsed.y.toFixed(2) + '%';
             },
-            title: function(context) {
+            title: function (context) {
               const date = new Date(context[0].label);
               return date.toLocaleString();
             }
@@ -407,7 +390,7 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
           max: 100,
           ticks: {
             color: '#9CA3AF',
-            callback: function(value) {
+            callback: function (value) {
               return value + '%';
             }
           },
@@ -431,7 +414,7 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
             maxRotation: 45,
             minRotation: 45,
             autoSkip: false,
-            callback: function(value, index, ticks) {
+            callback: function (value, index, ticks) {
               const date = new Date(value);
               const minutes = date.getMinutes();
               // Only show labels at :00 and :30
@@ -455,19 +438,19 @@ function renderMetricChart(canvas, timeData, metricData, label, borderColor, bac
 // Create a sensor card with temperature gauge
 function createSensorCard(sensor) {
   const card = document.createElement('div');
-  
+
   // Convert Celsius to Fahrenheit
-  const tempF = (sensor.temp_celsius * 9/5) + 32;
-  
+  const tempF = (sensor.temp_celsius * 9 / 5) + 32;
+
   // Determine state color and label
   const stateInfo = getSensorStateInfo(sensor.state);
-  
+
   // Calculate percentage for gauge (0 to threshold)
   const percentage = Math.min((sensor.temp_celsius / sensor.temp_threshold) * 100, 100);
-  
+
   // Calculate Fahrenheit threshold
-  const thresholdF = (sensor.temp_threshold * 9/5) + 32;
-  
+  const thresholdF = (sensor.temp_threshold * 9 / 5) + 32;
+
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
   card.innerHTML = `
     <div class="flex items-center justify-between mb-2">
@@ -493,20 +476,20 @@ function createSensorCard(sensor) {
       <div class="text-xs text-gray-400">Threshold: ${sensor.temp_threshold}°C</div>
     </div>
   `;
-  
+
   return card;
 }
 
 // Create a fan card with state display
 function createFanCard(fan) {
   const card = document.createElement('div');
-  
+
   // Determine state color and label
   const stateInfo = getSensorStateInfo(fan.state);
-  
+
   // Determine if fan should be spinning (normal or warning states)
   const isOperational = parseInt(fan.state) === 1 || parseInt(fan.state) === 2;
-  
+
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-h-[160px] flex flex-col ' + stateInfo.borderClass;
   card.innerHTML = `
     <div class="flex items-center justify-between mb-3">
@@ -524,13 +507,13 @@ function createFanCard(fan) {
       </div>
     </div>
   `;
-  
+
   return card;
 }
 
 // Get sensor/fan state information (color, label, etc.)
 function getSensorStateInfo(state) {
-  switch(parseInt(state)) {
+  switch (parseInt(state)) {
     case 1: // Normal
       return {
         label: 'Normal',
@@ -594,26 +577,17 @@ function getSensorStateInfo(state) {
 function formatUptime(hundredthsOfSeconds) {
   // Convert hundredths of seconds to total seconds
   const totalSeconds = Math.floor(hundredthsOfSeconds / 100);
-  
+
   // Calculate days, hours, minutes
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  
+
   // Build the formatted string
   const parts = [];
   if (days > 0) parts.push(`${days}d`);
   if (hours > 0) parts.push(`${hours}h`);
   if (minutes > 0) parts.push(`${minutes}m`);
-  
-  return parts.length > 0 ? parts.join(' ') : '0m';
-}
 
-// Helper function to escape HTML (if not already defined)
-if (typeof escapeHtml === 'undefined') {
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
+  return parts.length > 0 ? parts.join(' ') : '0m';
 }

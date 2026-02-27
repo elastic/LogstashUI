@@ -126,10 +126,6 @@ class Connection(models.Model):
         """Get decrypted password"""
         return decrypt_credential(self.password) if self.password else None
     
-    def get_ssh_key(self):
-        """Get decrypted SSH key"""
-        return decrypt_credential(self.ssh_key) if self.ssh_key else None
-    
     def get_api_key(self):
         """Get decrypted API key"""
         return decrypt_credential(self.api_key) if self.api_key else None

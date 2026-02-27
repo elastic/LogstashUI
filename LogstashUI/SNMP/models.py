@@ -94,23 +94,6 @@ class Network(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
-    
-    def get_network_info(self):
-        """
-        Get network information as a dictionary
-        """
-        try:
-            network = ipaddress.ip_network(self.network_range, strict=False)
-            return {
-                'network_address': str(network.network_address),
-                'broadcast_address': str(network.broadcast_address),
-                'netmask': str(network.netmask),
-                'num_addresses': network.num_addresses,
-                'hosts': network.num_addresses - 2 if network.num_addresses > 2 else 0
-            }
-        except ValueError:
-            return {}
-
 
 class Device(models.Model):
     """
@@ -430,32 +413,6 @@ class Credential(models.Model):
     def get_priv_pass(self):
         """Get decrypted priv password"""
         return decrypt_credential(self.priv_pass) if self.priv_pass else None
-    
-    def to_logstash_config(self):
-        """
-        Generate Logstash SNMP input configuration for this credential
-        Returns a dict of configuration parameters
-        """
-        config = {
-            'version': self.version
-        }
-        
-        if self.version in ['1', '2c']:
-            config['community'] = self.community
-        
-        elif self.version == '3':
-            config['security_name'] = self.security_name
-            config['security_level'] = self.security_level
-            
-            if self.security_level in ['authNoPriv', 'authPriv']:
-                config['auth_protocol'] = self.auth_protocol
-                config['auth_pass'] = self.auth_pass
-            
-            if self.security_level == 'authPriv':
-                config['priv_protocol'] = self.priv_protocol
-                config['priv_pass'] = self.priv_pass
-        
-        return config
 
 
 class Profile(models.Model):
@@ -522,18 +479,4 @@ class Profile(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
-    
-    def get_profile_json(self):
-        """
-        Get the profile data as a JSON string
-        """
-        return json.dumps(self.profile_data, indent=2)
-    
-    def set_profile_from_json(self, json_string):
-        """
-        Set profile data from a JSON string
-        """
-        try:
-            self.profile_data = json.loads(json_string)
-        except json.JSONDecodeError as e:
-            raise ValidationError(f'Invalid JSON: {str(e)}')
+

@@ -4,11 +4,193 @@ let currentEditorMode = 'ui'; // 'ui' or 'text'
 // CodeMirror editor instance
 let codeMirrorEditor = null;
 
+// Track if UI has been modified
+let uiHasChanges = false;
+
+// Store original pipeline text
+let originalPipelineText = '';
+
+// Track if Text mode has been modified
+let textHasChanges = false;
+
+// Store the initial text when entering Text mode
+let textModeInitialContent = '';
+
 /**
  * Switch to UI mode
  */
 function switchToUIMode() {
+    // Check if text has been modified
+    if (textHasChanges) {
+        // Show warning dialog
+        const confirmed = confirm(
+            'Switching to UI mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?'
+        );
+        
+        if (!confirmed) {
+            // User cancelled, don't switch modes
+            return;
+        }
+    }
+    
+    // If text has changes, convert it to components
+    if (textHasChanges && codeMirrorEditor) {
+        const configText = codeMirrorEditor.getValue();
+        
+        if (!configText) {
+            console.error('No config text to convert');
+            alert('No pipeline configuration to convert');
+            return;
+        }
+        
+        // Convert config text to components via API
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        const formData = new FormData();
+        formData.append('config_text', configText);
+        
+        console.log('=== TEXT BEING SENT TO API ===');
+        console.log(configText);
+        console.log('=== END TEXT ===');
+        
+        fetch('/API/ConfigToComponents/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to convert config to components');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Raw data from API:', data);
+            console.log('Type of data:', typeof data);
+            
+            // If data is a string, parse it
+            let parsedData = data;
+            if (typeof data === 'string') {
+                console.log('Data is string, parsing JSON...');
+                parsedData = JSON.parse(data);
+            }
+            
+            console.log('Parsed data:', parsedData);
+            console.log('Is array:', Array.isArray(parsedData));
+            
+            // The API returns the components structure directly
+            // If it's an array, it needs to be converted to the expected object format
+            let convertedComponents;
+            if (Array.isArray(parsedData)) {
+                // Data is an array [input, filter, output] - convert to object
+                convertedComponents = {
+                    input: parsedData[0] || [],
+                    filter: parsedData[1] || [],
+                    output: parsedData[2] || []
+                };
+            } else {
+                // Data is already an object
+                convertedComponents = parsedData;
+            }
+            
+            console.log('Converted components:', convertedComponents);
+            
+            // Update the global components variable
+            if (typeof components !== 'undefined') {
+                console.log('BEFORE update - components:', components);
+                console.log('BEFORE update - convertedComponents:', convertedComponents);
+                
+                // Clear existing arrays and push new items (preserves Proxy/reactive behavior)
+                components.input.length = 0;
+                components.filter.length = 0;
+                components.output.length = 0;
+                
+                console.log('Cleared arrays - components:', components);
+                
+                // Push converted components
+                console.log('Checking input:', convertedComponents.input, 'length:', convertedComponents.input?.length);
+                console.log('Checking filter:', convertedComponents.filter, 'length:', convertedComponents.filter?.length);
+                console.log('Checking output:', convertedComponents.output, 'length:', convertedComponents.output?.length);
+                
+                // Use Array.isArray and check length
+                if (Array.isArray(convertedComponents.input) && convertedComponents.input.length > 0) {
+                    console.log('Pushing to input:', convertedComponents.input);
+                    components.input.push(...convertedComponents.input);
+                    console.log('After push - components.input:', components.input);
+                }
+                if (Array.isArray(convertedComponents.filter) && convertedComponents.filter.length > 0) {
+                    console.log('Pushing to filter:', convertedComponents.filter);
+                    components.filter.push(...convertedComponents.filter);
+                    console.log('After push - components.filter:', components.filter);
+                }
+                if (Array.isArray(convertedComponents.output) && convertedComponents.output.length > 0) {
+                    console.log('Pushing to output:', convertedComponents.output);
+                    const pushResult = components.output.push(...convertedComponents.output);
+                    console.log('Push returned:', pushResult);
+                    console.log('After push - components.output:', components.output);
+                    console.log('After push - components.output.length:', components.output.length);
+                } else {
+                    console.log('Output check failed - isArray:', Array.isArray(convertedComponents.output), 'length:', convertedComponents.output?.length);
+                }
+                
+                console.log('AFTER update - components.input:', components.input);
+                console.log('AFTER update - components.filter:', components.filter);
+                console.log('AFTER update - components.output:', components.output);
+                
+                console.log('Global components updated:', {
+                    inputCount: components.input.length,
+                    filterCount: components.filter.length,
+                    outputCount: components.output.length
+                });
+            } else {
+                console.error('Global components variable is undefined!');
+            }
+            
+            // Switch to UI mode first
+            performUISwitch();
+            
+            // Use setTimeout to ensure UI container is visible before rendering
+            setTimeout(() => {
+                console.log('About to call loadExistingComponents');
+                console.log('Current components state:', components);
+                
+                // Reload the visual editor with the new components
+                if (typeof loadExistingComponents === 'function') {
+                    console.log('Calling loadExistingComponents with converted data');
+                    loadExistingComponents();
+                    console.log('loadExistingComponents completed');
+                } else {
+                    console.error('loadExistingComponents function not found!');
+                }
+                
+                // Mark UI as changed since we just loaded from text
+                // This ensures switching back to Text mode will convert components to config
+                uiHasChanges = true;
+                console.log('Marked UI as changed after Text-to-UI conversion');
+            }, 100);
+        })
+        .catch(error => {
+            console.error('Error converting config to components:', error);
+            alert('Failed to convert pipeline configuration: ' + error.message);
+        });
+    } else {
+        // No text changes, just switch modes
+        performUISwitch();
+    }
+}
+
+/**
+ * Perform the actual UI mode switch (internal helper)
+ */
+function performUISwitch() {
     currentEditorMode = 'ui';
+    
+    // Reset text change tracking
+    textHasChanges = false;
+    textModeInitialContent = '';
     
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
@@ -65,9 +247,26 @@ function switchToTextMode() {
     // Disable View Code and Simulate Pipeline buttons
     disableEditorButtons();
     
-    // Use fetch to convert components to config
+    const textEditor = document.getElementById('pipelineTextEditor');
+    
+    // If no changes were made in UI mode, use the original pipeline text
+    if (!uiHasChanges && originalPipelineText) {
+        console.log('No UI changes detected, using original pipeline text');
+        if (codeMirrorEditor) {
+            codeMirrorEditor.setValue(originalPipelineText);
+        } else if (textEditor) {
+            textEditor.value = originalPipelineText;
+        }
+        // Store initial content for change tracking
+        textModeInitialContent = originalPipelineText;
+        updateTextEditorStats();
+        initializeTextEditor();
+        return;
+    }
+    
+    // UI has changes, convert components to config
+    console.log('UI changes detected, converting components to config');
     if (typeof components !== 'undefined') {
-        const textEditor = document.getElementById('pipelineTextEditor');
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
         
         // Create form data
@@ -94,6 +293,8 @@ function switchToTextMode() {
             } else if (textEditor) {
                 textEditor.value = configText;
             }
+            // Store initial content for change tracking
+            textModeInitialContent = configText;
             updateTextEditorStats();
         })
         .catch(error => {
@@ -464,6 +665,63 @@ function getPluginSuggestions(section, filterText = '') {
     const suggestions = [];
     const filter = filterText.toLowerCase();
     
+    // Add conditional statements for filter section
+    if (section === 'filter') {
+        const conditionals = [
+            { name: 'if', description: 'Conditional statement - executes block if condition is true' },
+            { name: 'else if', description: 'Alternative conditional - executes if previous conditions are false and this is true' },
+            { name: 'else', description: 'Default block - executes if all previous conditions are false' }
+        ];
+        
+        for (const conditional of conditionals) {
+            if (filter && !conditional.name.toLowerCase().includes(filter)) {
+                continue;
+            }
+            
+            suggestions.push({
+                text: conditional.name,
+                displayText: conditional.name + ' - ' + conditional.description,
+                isConditional: true,
+                render: function(element, self, data) {
+                    element.innerHTML = '<span style="font-weight: bold; color: #a78bfa;">' + data.text + '</span>' +
+                                      '<span style="color: #9ca3af; margin-left: 8px;"> - ' + conditional.description + '</span>';
+                    element.title = data.text + ' - ' + conditional.description;
+                },
+                hint: function(cm, self, data) {
+                    const cursor = cm.getCursor();
+                    const line = cm.getLine(cursor.line);
+                    const properIndent = calculateIndentation(cm, cursor);
+                    
+                    let conditionalBlock = '';
+                    if (data.text === 'if' || data.text === 'else if') {
+                        conditionalBlock = data.text + ' [condition] {\n' + properIndent + '  \n' + properIndent + '}';
+                    } else {
+                        // else doesn't need a condition
+                        conditionalBlock = data.text + ' {\n' + properIndent + '  \n' + properIndent + '}';
+                    }
+                    
+                    cm.replaceRange(
+                        properIndent + conditionalBlock,
+                        { line: cursor.line, ch: 0 },
+                        { line: cursor.line, ch: line.length }
+                    );
+                    
+                    // Position cursor inside the condition brackets for if/else if
+                    if (data.text === 'if' || data.text === 'else if') {
+                        const conditionStart = properIndent.length + data.text.length + ' ['.length;
+                        cm.setSelection(
+                            { line: cursor.line, ch: conditionStart },
+                            { line: cursor.line, ch: conditionStart + 'condition'.length }
+                        );
+                    } else {
+                        // For else, position cursor inside the braces
+                        cm.setCursor({ line: cursor.line + 1, ch: properIndent.length + 2 });
+                    }
+                }
+            });
+        }
+    }
+    
     for (const pluginName in plugins) {
         const plugin = plugins[pluginName];
         
@@ -482,8 +740,14 @@ function getPluginSuggestions(section, filterText = '') {
             displayText: pluginName + (plugin.description ? ' - ' + plugin.description : ''),
             plugin: plugin,
             render: function(element, self, data) {
-                element.innerHTML = '<span style="font-weight: bold;">' + data.text + '</span>' +
-                                  (data.plugin.description ? '<span style="color: #9ca3af; margin-left: 8px;"> - ' + data.plugin.description + '</span>' : '');
+                const docLink = data.plugin.link || '';
+                const description = data.plugin.description || '';
+                element.innerHTML = (docLink ? '<a href="' + docLink + '" target="_blank" class="hint-doc-link" onclick="event.stopPropagation();" style="margin-right: 8px;">ⓘ</a>' : '') +
+                                  '<span style="font-weight: bold; color: #60a5fa;">' + data.text + '</span>' +
+                                  (description ? '<span style="color: #9ca3af; margin-left: 8px;"> - ' + description + '</span>' : '');
+                if (description) {
+                    element.title = data.text + ' - ' + description;
+                }
             },
             hint: function(cm, self, data) {
                 const cursor = cm.getCursor();
@@ -540,7 +804,8 @@ function getPluginSuggestions(section, filterText = '') {
                         { line: lineWithOption, ch: placeholderStart + placeholder.length }
                     );
                 } else {
-                    cm.setCursor({ line: cursor.line + 1, ch: properIndent.length + 2 });
+                    // No required options - position cursor inside the empty braces on the indented line
+                    cm.setCursor({ line: cursor.line + 1, ch: (properIndent + '  ').length });
                 }
             }
         });
@@ -550,6 +815,23 @@ function getPluginSuggestions(section, filterText = '') {
     suggestions.sort((a, b) => a.text.localeCompare(b.text));
     
     return suggestions;
+}
+
+/**
+ * Get CSS class for type badge based on input type
+ */
+function getTypeBadgeClass(inputType) {
+    if (!inputType) return 'hint-type-default';
+    const type = inputType.toLowerCase();
+    if (type.includes('string')) return 'hint-type-string';
+    if (type.includes('number')) return 'hint-type-number';
+    if (type.includes('boolean')) return 'hint-type-boolean';
+    if (type.includes('array')) return 'hint-type-array';
+    if (type.includes('hash')) return 'hint-type-hash';
+    if (type.includes('codec')) return 'hint-type-codec';
+    if (type.includes('path')) return 'hint-type-path';
+    if (type.includes('password')) return 'hint-type-password';
+    return 'hint-type-default';
 }
 
 /**
@@ -582,6 +864,28 @@ function showOptionAutocomplete(cm, plugin) {
                 displayText: optionName + ' => ' + (option.input_type || '') + 
                            (option.required && option.required.toLowerCase().includes('yes') ? ' (required)' : ''),
                 option: option,
+                render: function(element, self, data) {
+                    const isRequired = data.option.required && data.option.required.toLowerCase().includes('yes');
+                    const typeBadgeClass = getTypeBadgeClass(data.option.input_type);
+                    const typeDisplay = data.option.input_type || 'any';
+                    const docLink = data.option.link || '';
+                    const description = data.option.description || '';
+                    
+                    element.innerHTML = (docLink ? '<a href="' + docLink + '" target="_blank" class="hint-doc-link" onclick="event.stopPropagation();" style="margin-right: 8px;">ⓘ</a>' : '') +
+                                      '<span style="font-weight: bold; color: #c4b5fd;">' + data.text + '</span>' +
+                                      '<span class="hint-type-badge ' + typeBadgeClass + '">' + typeDisplay + '</span>' +
+                                      (isRequired ? '<span class="hint-required">● REQUIRED</span>' : '');
+                    
+                    // Add tooltip with full description
+                    let tooltip = data.text + ' (' + typeDisplay + ')';
+                    if (description) {
+                        tooltip += ' - ' + description;
+                    }
+                    if (isRequired) {
+                        tooltip += ' [REQUIRED]';
+                    }
+                    element.title = tooltip;
+                },
                 hint: function(cm, self, data) {
                     const cursor = cm.getCursor();
                     const line = cm.getLine(cursor.line);
@@ -619,8 +923,17 @@ function showOptionAutocomplete(cm, plugin) {
         };
     }, {
         completeSingle: false,
-        closeOnUnfocus: false
+        closeOnUnfocus: false,
+        container: null
     });
+    
+    // Add header to hints container
+    setTimeout(() => {
+        const hintsContainer = document.querySelector('.CodeMirror-hints');
+        if (hintsContainer) {
+            hintsContainer.setAttribute('data-header', '⚙️ Plugin Options');
+        }
+    }, 0);
 }
 
 /**
@@ -744,6 +1057,15 @@ function showPluginAutocomplete(cm) {
         completeSingle: false,
         closeOnUnfocus: false
     });
+    
+    // Add header to hints container
+    setTimeout(() => {
+        const hintsContainer = document.querySelector('.CodeMirror-hints');
+        if (hintsContainer) {
+            hintsContainer.setAttribute('data-header', '📦 Available Plugins');
+        }
+    }, 0);
+    
     console.log('CodeMirror.showHint called');
 }
 
@@ -1035,9 +1357,20 @@ function initializeTextEditor() {
         }
     });
     
-    // Update stats on change
-    codeMirrorEditor.on('change', function() {
+    // Update stats on change and track modifications
+    codeMirrorEditor.on('change', function(cm, changeObj) {
         updateTextEditorStats();
+        
+        // Track if text has been modified (ignore setValue operations)
+        if (changeObj.origin !== 'setValue' && textModeInitialContent) {
+            const currentContent = cm.getValue();
+            if (currentContent !== textModeInitialContent) {
+                textHasChanges = true;
+                console.log('Text mode changes detected');
+            } else {
+                textHasChanges = false;
+            }
+        }
     });
     
     // Bracket matching on cursor activity

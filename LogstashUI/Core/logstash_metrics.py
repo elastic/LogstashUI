@@ -58,36 +58,6 @@ def check_for_monitoring_indices(es_connections):
     return monitoring_indices
 
 
-def get_instances_centralized(es):
-    instances = es.search(
-        size=0,
-        index="metrics-logstash*,logs-logstash*",
-        query={
-            "bool": {
-                "filter": {
-                    "range": {
-                        "@timestamp": {
-                            "gte": "now-2h"
-                        }
-                    }
-                }
-            }
-
-        },
-        aggs={
-            "logstash_nodes": {
-                "terms": {
-                    "field": "host.hostname"
-                }
-            }
-        }
-    )
-
-    if 'aggregations' not in instances:
-        return []
-
-    return [bucket['key'] for bucket in instances['aggregations']['logstash_nodes']['buckets']]
-
 
 def get_logs(es, logstash_node="", pipeline_name=""):
     if not logstash_node and not pipeline_name:

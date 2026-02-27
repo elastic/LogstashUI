@@ -64,7 +64,7 @@ function computeLineDiff(oldLines, newLines) {
                 k++;
             }
             if (equalLines.length > 0) {
-                changes.push({type: 'equal', lines: equalLines});
+                changes.push({ type: 'equal', lines: equalLines });
             }
         } else {
             // Collect deletions and insertions
@@ -83,11 +83,11 @@ function computeLineDiff(oldLines, newLines) {
 
             // If we have both deletions and insertions, treat as replacement
             if (deletedLines.length > 0 && insertedLines.length > 0) {
-                changes.push({type: 'replace', oldLines: deletedLines, newLines: insertedLines});
+                changes.push({ type: 'replace', oldLines: deletedLines, newLines: insertedLines });
             } else if (deletedLines.length > 0) {
-                changes.push({type: 'delete', lines: deletedLines});
+                changes.push({ type: 'delete', lines: deletedLines });
             } else if (insertedLines.length > 0) {
-                changes.push({type: 'insert', lines: insertedLines});
+                changes.push({ type: 'insert', lines: insertedLines });
             }
         }
     }
@@ -95,81 +95,6 @@ function computeLineDiff(oldLines, newLines) {
     return changes;
 }
 
-/**
- * Compute character-level inline diff for two strings
- */
-function computeInlineDiff(oldStr, newStr) {
-    const oldChars = oldStr.split('');
-    const newChars = newStr.split('');
-    const lcs = computeLCS(oldChars, newChars);
-
-    const changes = [];
-    let i = 0, j = 0, k = 0;
-
-    while (i < oldChars.length || j < newChars.length) {
-        if (k < lcs.length && i < oldChars.length && j < newChars.length &&
-            oldChars[i] === lcs[k] && newChars[j] === lcs[k]) {
-            // Equal character
-            const equalChars = [];
-            while (k < lcs.length && i < oldChars.length && j < newChars.length &&
-                oldChars[i] === lcs[k] && newChars[j] === lcs[k]) {
-                equalChars.push(oldChars[i]);
-                i++;
-                j++;
-                k++;
-            }
-            if (equalChars.length > 0) {
-                changes.push({type: 'equal', text: equalChars.join('')});
-            }
-        } else {
-            const deletedChars = [];
-            const insertedChars = [];
-
-            while (i < oldChars.length && (k >= lcs.length || oldChars[i] !== lcs[k])) {
-                deletedChars.push(oldChars[i]);
-                i++;
-            }
-
-            while (j < newChars.length && (k >= lcs.length || newChars[j] !== lcs[k])) {
-                insertedChars.push(newChars[j]);
-                j++;
-            }
-
-            if (deletedChars.length > 0) {
-                changes.push({type: 'delete', text: deletedChars.join('')});
-            }
-            if (insertedChars.length > 0) {
-                changes.push({type: 'insert', text: insertedChars.join('')});
-            }
-        }
-    }
-
-    return changes;
-}
-
-/**
- * Render inline diff with highlighting for a specific side
- */
-function renderInlineDiff(changes, side) {
-    const escapeHtml = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
-
-    let html = '';
-    for (const change of changes) {
-        if (change.type === 'equal') {
-            html += escapeHtml(change.text);
-        } else if (change.type === 'delete' && side === 'old') {
-            html += `<span class="bg-red-500/50 font-bold">${escapeHtml(change.text)}</span>`;
-        } else if (change.type === 'insert' && side === 'new') {
-            html += `<span class="bg-green-500/50 font-bold">${escapeHtml(change.text)}</span>`;
-        }
-        // Don't render delete on new side or insert on old side
-    }
-    return html || ' ';
-}
 
 // ===== END DIFF ALGORITHMS =====
 
@@ -181,7 +106,7 @@ function renderInlineDiff(changes, side) {
  */
 function validateQuoteMixing(components) {
     const warnings = [];
-    
+
     function checkValue(value, path) {
         if (typeof value === 'string') {
             // Check if string contains both single and double quotes
@@ -195,17 +120,17 @@ function validateQuoteMixing(components) {
         }
         return null;
     }
-    
+
     function scanObject(obj, basePath) {
         const issues = [];
-        
+
         if (typeof obj !== 'object' || obj === null) {
             return issues;
         }
-        
+
         for (const [key, value] of Object.entries(obj)) {
             const currentPath = basePath ? `${basePath}.${key}` : key;
-            
+
             if (typeof value === 'string') {
                 const issue = checkValue(value, currentPath);
                 if (issue) {
@@ -215,22 +140,22 @@ function validateQuoteMixing(components) {
                 issues.push(...scanObject(value, currentPath));
             }
         }
-        
+
         return issues;
     }
-    
+
     // Scan all sections
     for (const section of ['input', 'filter', 'output']) {
         if (!components[section]) continue;
-        
+
         for (let i = 0; i < components[section].length; i++) {
             const component = components[section][i];
             const pluginName = component.plugin || 'unknown';
             const pluginId = component.id || `${section}_${i}`;
-            
+
             // Scan the config object for quote mixing
             const issues = scanObject(component.config, 'config');
-            
+
             if (issues.length > 0) {
                 warnings.push({
                     section: section,
@@ -241,7 +166,7 @@ function validateQuoteMixing(components) {
             }
         }
     }
-    
+
     return warnings;
 }
 
@@ -250,18 +175,18 @@ function validateQuoteMixing(components) {
  */
 function displayQuoteWarnings(warnings) {
     const warningContainer = document.getElementById('quoteWarningContainer');
-    
+
     if (warnings.length === 0) {
         warningContainer.classList.add('hidden');
         return;
     }
-    
+
     const escapeHtml = (text) => {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     };
-    
+
     let warningHtml = `
         <div class="bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded">
             <div class="flex items-start">
@@ -275,7 +200,7 @@ function displayQuoteWarnings(warnings) {
                     </p>
                     <div class="space-y-3">
     `;
-    
+
     for (const warning of warnings) {
         warningHtml += `
             <div class="bg-gray-800/50 p-3 rounded text-sm">
@@ -283,7 +208,7 @@ function displayQuoteWarnings(warnings) {
                     ${escapeHtml(warning.section)} → ${escapeHtml(warning.plugin)} <span class="text-gray-400">(${escapeHtml(warning.id)})</span>
                 </div>
         `;
-        
+
         for (const issue of warning.issues) {
             warningHtml += `
                 <div class="ml-4 mt-2 text-gray-300">
@@ -292,10 +217,10 @@ function displayQuoteWarnings(warnings) {
                 </div>
             `;
         }
-        
+
         warningHtml += `</div>`;
     }
-    
+
     warningHtml += `
                     </div>
                     <p class="text-yellow-200 text-sm mt-3">
@@ -305,7 +230,7 @@ function displayQuoteWarnings(warnings) {
             </div>
         </div>
     `;
-    
+
     warningContainer.innerHTML = warningHtml;
     warningContainer.classList.remove('hidden');
 }
@@ -462,7 +387,7 @@ function copyDiffCodeToClipboard() {
 function handleAddIdsChange() {
     const checkbox = document.getElementById('addIdsCheckbox');
     currentAddIdsState = checkbox.checked;
-    
+
     // Only reload if we're in save mode (diff comparison)
     if (currentDiffMode === 'save') {
         loadDiffContent();
@@ -498,12 +423,12 @@ async function prepareDiffModal() {
     document.getElementById('confirmSaveButton').classList.remove('hidden');
     document.getElementById('copyCodeButton').classList.add('hidden');
     document.getElementById('addIdsContainer').classList.remove('hidden');
-    
+
     // Reset checkbox state
     const checkbox = document.getElementById('addIdsCheckbox');
     checkbox.checked = false;
     currentAddIdsState = false;
-    
+
     // Show the modal first
     showDiffModal();
 
@@ -520,7 +445,7 @@ async function loadDiffContent() {
     // Re-validate and display warnings (in case components changed)
     quoteValidationWarnings = validateQuoteMixing(components);
     displayQuoteWarnings(quoteValidationWarnings);
-    
+
     // Show loading state
     document.getElementById('diffLoading').classList.remove('hidden');
     document.getElementById('diffContainer').classList.add('hidden');
@@ -530,7 +455,7 @@ async function loadDiffContent() {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
-        console.log('Fetching diff for:', {esId, pipelineName, addIds: currentAddIdsState});
+        console.log('Fetching diff for:', { esId, pipelineName, addIds: currentAddIdsState });
 
         // Fetch diff from the server
         const formData = new FormData();
@@ -753,7 +678,7 @@ async function confirmSavePipeline() {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
-        console.log('Saving pipeline:', {esId, pipelineName});
+        console.log('Saving pipeline:', { esId, pipelineName });
 
         const formData = new FormData();
         formData.append('save_pipeline', 'true');
@@ -773,7 +698,7 @@ async function confirmSavePipeline() {
         console.log('Save response status:', saveResponse.status);
 
         const responseText = await saveResponse.text();
-        
+
         // Check if response is 403 (permission denied)
         if (saveResponse.status === 403) {
             console.log('Permission denied (403)');
@@ -785,18 +710,18 @@ async function confirmSavePipeline() {
             hideDiffModal();
             return;
         }
-        
+
         if (!saveResponse.ok) {
             console.error('Save error:', responseText);
-            
+
             // Display the error HTML in the modal
             document.getElementById('diffLoading').classList.add('hidden');
             document.getElementById('diffContainer').innerHTML = responseText;
             document.getElementById('diffContainer').classList.remove('hidden');
-            
+
             // Hide the save button since we can't proceed
             confirmButton.classList.add('hidden');
-            
+
             return; // Don't proceed with success flow
         }
 

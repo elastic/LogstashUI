@@ -1,15 +1,3 @@
-// Helper function to escape HTML (used by populate functions)
-function escapeHtml(unsafe) {
-    if (unsafe === undefined || unsafe === null) return '';
-    return unsafe
-        .toString()
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 // Plugin Configuration Modal Controller
 window.PluginConfigModal = (function () {
     let currentComponent = null;
@@ -53,7 +41,7 @@ window.PluginConfigModal = (function () {
           ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
         </span>
         ${pluginInfo.deprecated ?
-            '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+                '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
       </div>
     `;
 
@@ -82,7 +70,7 @@ window.PluginConfigModal = (function () {
                 const isRequired = option.required === 'Yes';
                 const isImportant = option.important === 'Yes';
                 const isExplicitlyNotImportant = option.important === 'No';
-                
+
                 // A field is "advanced" only if it's explicitly marked as not important AND not required
                 // If the important field is missing (undefined), treat it as important by default
                 if (isRequired || isImportant || !isExplicitlyNotImportant) {
@@ -184,7 +172,7 @@ window.PluginConfigModal = (function () {
                     const containerId = `array-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     const hashOptions = option.options || {};
                     const optionsJson = escapeHtml(JSON.stringify(hashOptions));
-                    
+
                     inputField = `
             <div id="${containerId}" class="space-y-3" data-hash-options='${optionsJson}'>
               <div class="p-3 bg-gray-900/50 border border-gray-600 rounded">
@@ -205,7 +193,7 @@ window.PluginConfigModal = (function () {
                         if (typeof value === 'string' && value.trim() !== '') {
                             keyListHashValue = JSON.parse(value);
                         } else if (typeof value === 'object' && value !== null) {
-                            keyListHashValue = {...value};
+                            keyListHashValue = { ...value };
                         }
                     } catch (e) {
                         console.error('Error parsing key_list_hash value:', e);
@@ -213,7 +201,7 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `key-list-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    
+
                     inputField = `
             <div id="${containerId}" class="space-y-2">
               <div class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3" data-section-id="${sectionId}">
@@ -269,7 +257,7 @@ window.PluginConfigModal = (function () {
                         if (typeof value === 'string' && value.trim() !== '') {
                             hashValue = JSON.parse(value);
                         } else if (typeof value === 'object' && value !== null) {
-                            hashValue = {...value};
+                            hashValue = { ...value };
                         }
                     } catch (e) {
                         console.error('Error parsing hash value:', e);
@@ -445,7 +433,7 @@ window.PluginConfigModal = (function () {
           ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
           ${inputField}
           ${option.default_value !== undefined ?
-                    `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+                        `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
         `;
 
                 configForm.appendChild(fieldGroup);
@@ -455,28 +443,28 @@ window.PluginConfigModal = (function () {
             if (advancedOptions.length > 0) {
                 const advancedSection = document.createElement('div');
                 advancedSection.className = 'mt-6 border-t border-gray-700 pt-4';
-                
+
                 const advancedHeader = document.createElement('div');
                 advancedHeader.className = 'flex items-center justify-between cursor-pointer mb-4';
-                advancedHeader.onclick = function() {
+                advancedHeader.onclick = function () {
                     const content = advancedSection.querySelector('.advanced-content');
                     const icon = advancedSection.querySelector('.toggle-icon');
                     content.classList.toggle('hidden');
                     icon.classList.toggle('rotate-180');
                 };
-                
+
                 advancedHeader.innerHTML = `
                     <h4 class="text-sm font-semibold text-gray-300">Advanced Settings</h4>
                     <svg class="toggle-icon w-5 h-5 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 `;
-                
+
                 advancedSection.appendChild(advancedHeader);
-                
+
                 const advancedContent = document.createElement('div');
                 advancedContent.className = 'advanced-content hidden space-y-4';
-                
+
                 // Render advanced fields
                 advancedOptions.forEach(([key, option]) => {
                     const fieldId = `config-${key}`;
@@ -565,7 +553,7 @@ window.PluginConfigModal = (function () {
                         const containerId = `array-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         const hashOptions = option.options || {};
                         const optionsJson = escapeHtml(JSON.stringify(hashOptions));
-                        
+
                         inputField = `
             <div id="${containerId}" class="space-y-3" data-hash-options='${optionsJson}'>
               <div class="p-3 bg-gray-900/50 border border-gray-600 rounded">
@@ -586,7 +574,7 @@ window.PluginConfigModal = (function () {
                             if (typeof value === 'string' && value.trim() !== '') {
                                 keyListHashValue = JSON.parse(value);
                             } else if (typeof value === 'object' && value !== null) {
-                                keyListHashValue = {...value};
+                                keyListHashValue = { ...value };
                             }
                         } catch (e) {
                             console.error('Error parsing key_list_hash value:', e);
@@ -594,7 +582,7 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `key-list-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                        
+
                         inputField = `
             <div id="${containerId}" class="space-y-2">
               <div class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3" data-section-id="${sectionId}">
@@ -650,7 +638,7 @@ window.PluginConfigModal = (function () {
                             if (typeof value === 'string' && value.trim() !== '') {
                                 hashValue = JSON.parse(value);
                             } else if (typeof value === 'object' && value !== null) {
-                                hashValue = {...value};
+                                hashValue = { ...value };
                             }
                         } catch (e) {
                             console.error('Error parsing hash value:', e);
@@ -754,9 +742,9 @@ window.PluginConfigModal = (function () {
                       style="resize: vertical; min-height: 100px;"
                       placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
           `;
-    } else if (inputType === 'password') {
-        // Handle password input type with show/hide functionality
-        inputField = `
+                    } else if (inputType === 'password') {
+                        // Handle password input type with show/hide functionality
+                        inputField = `
             <div class="relative">
               <input type="password" id="${fieldId}" name="${key}"
                      value="${escapeHtml(value)}"
@@ -772,9 +760,9 @@ window.PluginConfigModal = (function () {
               </button>
             </div>
           `;
-    } else if (inputType === 'fs_path') {
-        // Handle filesystem path input type with file picker button
-        inputField = `
+                    } else if (inputType === 'fs_path') {
+                        // Handle filesystem path input type with file picker button
+                        inputField = `
             <div class="flex items-center space-x-2">
               <input type="text" id="${fieldId}" name="${key}"
                      value="${escapeHtml(value)}"
@@ -826,12 +814,12 @@ window.PluginConfigModal = (function () {
           ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
           ${inputField}
           ${option.default_value !== undefined ?
-                        `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+                            `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
         `;
 
                     advancedContent.appendChild(fieldGroup);
                 });
-                
+
                 advancedSection.appendChild(advancedContent);
                 configForm.appendChild(advancedSection);
             }
@@ -850,28 +838,28 @@ window.PluginConfigModal = (function () {
         const eventDataBefore = document.getElementById('eventDataBefore');
         const eventDataAfter = document.getElementById('eventDataAfter');
         const modalContainer = document.getElementById('configModalContainer');
-        
+
         // Check if simulation mode is active by looking for simulation badges
         const isSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
-        
+
         if (isSimulationMode && eventDataPanel && eventDataBefore && eventDataAfter) {
             // Find the component element for this plugin
             const componentElement = document.querySelector(`[data-id="${component.id}"]`);
-            
+
             if (componentElement) {
                 // Find all "Original Event" or "View Full Event" elements
                 const allDataFlows = document.querySelectorAll('.simulation-data-flow');
-                
+
                 // Find the data flow elements that come BEFORE and AFTER this component in the DOM
                 let beforeDataFlow = null;
                 let afterDataFlow = null;
-                
+
                 for (let i = 0; i < allDataFlows.length; i++) {
                     const dataFlow = allDataFlows[i];
-                    
+
                     // Check if this data flow comes before the component element in the DOM
                     const position = componentElement.compareDocumentPosition(dataFlow);
-                    
+
                     // If dataFlow comes before componentElement (position & 2 means PRECEDING)
                     if (position & Node.DOCUMENT_POSITION_PRECEDING) {
                         beforeDataFlow = dataFlow;
@@ -882,7 +870,7 @@ window.PluginConfigModal = (function () {
                         }
                     }
                 }
-                
+
                 // Populate before section
                 if (beforeDataFlow && beforeDataFlow.dataset.eventJson) {
                     // Use highlightJSON if available (from simulation_results.js)
@@ -895,7 +883,7 @@ window.PluginConfigModal = (function () {
                 } else {
                     eventDataBefore.textContent = 'No event data available';
                 }
-                
+
                 // Populate after section
                 if (afterDataFlow && afterDataFlow.dataset.eventJson) {
                     // Use highlightJSON if available (from simulation_results.js)
@@ -908,7 +896,7 @@ window.PluginConfigModal = (function () {
                 } else {
                     eventDataAfter.textContent = 'No event data available (plugin may be last in pipeline)';
                 }
-                
+
                 // Show the panel
                 eventDataPanel.classList.remove('hidden');
                 modalContainer.style.maxWidth = '1400px';
@@ -1158,7 +1146,7 @@ window.PluginConfigModal = (function () {
             firstEmptyField.focus();
             return;
         }
-        
+
         const formData = new FormData(form);
         const config = {};
 
@@ -1241,7 +1229,7 @@ window.PluginConfigModal = (function () {
         console.log('[Save Flow] Hiding modal at:', new Date().toISOString());
         hide();
         console.log('[Save Flow] Modal hidden at:', new Date().toISOString());
-        
+
         // Trigger pipeline warming synchronously (same as delete behavior)
         console.log('[Pipeline Warming] Triggering pipeline warming after config save at:', new Date().toISOString());
         if (typeof triggerPipelineWarmingAndChecking === 'function') {
@@ -1250,22 +1238,25 @@ window.PluginConfigModal = (function () {
         } else {
             console.error('[Pipeline Warming] triggerPipelineWarmingAndChecking function not found!');
         }
+
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentModified'));
     }
 
     // Validate required fields
     function validateRequiredFields() {
         const form = document.getElementById('configForm');
         const requiredFields = form.querySelectorAll('[data-required="true"]');
-        
+
         for (const fieldGroup of requiredFields) {
             const fieldName = fieldGroup.dataset.fieldName;
             const fieldType = fieldGroup.dataset.fieldType;
             const input = fieldGroup.querySelector('input:not([type="hidden"]), select, textarea');
-            
+
             if (!input) continue;
-            
+
             let isEmpty = false;
-            
+
             // Check based on field type
             if (fieldType === 'codec') {
                 const hiddenInput = fieldGroup.querySelector('input[type="hidden"]');
@@ -1301,13 +1292,13 @@ window.PluginConfigModal = (function () {
                 // Regular input field
                 isEmpty = !input.value || input.value.trim() === '';
             }
-            
+
             if (isEmpty) {
                 // Return the first visible input to focus
                 return input;
             }
         }
-        
+
         return null;
     }
 
@@ -1328,11 +1319,11 @@ window.PluginConfigModal = (function () {
     // Helper function to check if a field is sensitive (password/api_key)
     function isSensitiveField(fieldName) {
         const lowerFieldName = fieldName.toLowerCase();
-        return lowerFieldName.includes('password') || 
-               lowerFieldName.includes('api_key') || 
-               lowerFieldName.includes('apikey') ||
-               lowerFieldName === 'token' ||
-               lowerFieldName.includes('secret');
+        return lowerFieldName.includes('password') ||
+            lowerFieldName.includes('api_key') ||
+            lowerFieldName.includes('apikey') ||
+            lowerFieldName === 'token' ||
+            lowerFieldName.includes('secret');
     }
 
     // Public API
@@ -1518,7 +1509,7 @@ window.addArrayOfHashesItem = function (containerId, fieldId) {
 
     // Create unique ID for this hash entry
     const entryId = `hash-entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Build the hash entry with fields based on options
     const entryDiv = document.createElement('div');
     entryDiv.className = 'p-3 bg-gray-900/50 border border-gray-600 rounded space-y-2';
@@ -1528,7 +1519,7 @@ window.addArrayOfHashesItem = function (containerId, fieldId) {
     for (const [optKey, optInfo] of Object.entries(hashOptions)) {
         const optType = (optInfo.type || 'string').toLowerCase();
         const inputClass = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
-        
+
         let inputHtml = '';
         if (optType === 'number') {
             inputHtml = `<input type="number" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" onchange="updateArrayOfHashesField('${containerId}', '${fieldId}')">`;
@@ -1563,7 +1554,7 @@ window.addArrayOfHashesItem = function (containerId, fieldId) {
 
     // Insert before the add button
     addButton.parentNode.insertBefore(entryDiv, addButton);
-    
+
     // Update the hidden field
     updateArrayOfHashesField(containerId, fieldId);
 };
@@ -1575,7 +1566,7 @@ window.removeArrayOfHashesItem = function (containerId, fieldId, button) {
     const entryDiv = button.closest('[data-entry-id]');
     if (entryDiv) {
         entryDiv.remove();
-        
+
         // Check if there are any entries left
         const remainingEntries = container.querySelectorAll('[data-entry-id]');
         if (remainingEntries.length === 0) {
@@ -1588,7 +1579,7 @@ window.removeArrayOfHashesItem = function (containerId, fieldId, button) {
                 addButton.parentNode.insertBefore(placeholder, addButton);
             }
         }
-        
+
         // Update the hidden field
         updateArrayOfHashesField(containerId, fieldId);
     }
@@ -1605,18 +1596,18 @@ window.updateArrayOfHashesField = function (containerId, fieldId) {
     entries.forEach(entry => {
         const hashObj = {};
         const inputs = entry.querySelectorAll('[data-field]');
-        
+
         inputs.forEach(input => {
             const fieldName = input.dataset.field;
             let value = input.value.trim();
-            
+
             if (value !== '') {
                 // Convert boolean strings to actual booleans
                 if (value === 'true') value = true;
                 else if (value === 'false') value = false;
                 // Convert numbers
                 else if (input.type === 'number' && !isNaN(value)) value = Number(value);
-                
+
                 hashObj[fieldName] = value;
             }
         });
@@ -1675,7 +1666,7 @@ function populateArrayOfHashesValues(component) {
                         const optType = (optInfo.type || 'string').toLowerCase();
                         const inputClass = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
                         const existingValue = hashObj[optKey] || '';
-                        
+
                         let inputHtml = '';
                         if (optType === 'number') {
                             inputHtml = `<input type="number" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" value="${existingValue}" onchange="updateArrayOfHashesField('${container.id}', '${hiddenField.id}')">`;
@@ -1728,11 +1719,11 @@ window.addKeyListHashSection = function (containerId, fieldId) {
 
     // Create unique ID for this section
     const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const sectionDiv = document.createElement('div');
     sectionDiv.className = 'p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3';
     sectionDiv.dataset.sectionId = sectionId;
-    
+
     sectionDiv.innerHTML = `
         <div class="flex items-center gap-2">
             <input type="text"
@@ -1771,7 +1762,7 @@ window.addKeyListHashSection = function (containerId, fieldId) {
             + Add Value
         </button>
     `;
-    
+
     addButton.parentNode.insertBefore(sectionDiv, addButton);
     updateKeyListHashField(containerId, fieldId);
 };
@@ -1784,7 +1775,7 @@ window.removeKeyListHashSection = function (containerId, fieldId, button) {
     if (sectionDiv) {
         // Check if there are any sections left
         const remainingSections = container.querySelectorAll('[data-section-id]');
-        
+
         // Only remove if there's more than one section (keep at least one)
         if (remainingSections.length > 1) {
             sectionDiv.remove();
@@ -1793,10 +1784,10 @@ window.removeKeyListHashSection = function (containerId, fieldId, button) {
             // Clear the inputs instead of removing the last section
             const keyInput = sectionDiv.querySelector('.section-key');
             const valueInputs = sectionDiv.querySelectorAll('.section-values input[type="text"]');
-            
+
             if (keyInput) keyInput.value = '';
             valueInputs.forEach(input => input.value = '');
-            
+
             updateKeyListHashField(containerId, fieldId);
         }
     }
@@ -1826,7 +1817,7 @@ window.addKeyListHashValue = function (containerId, fieldId, button) {
             Remove
         </button>
     `;
-    
+
     valuesContainer.appendChild(newValue);
     updateKeyListHashField(containerId, fieldId);
 };
@@ -1856,7 +1847,7 @@ window.updateKeyListHashField = function (containerId, fieldId) {
 
         const valueInputs = section.querySelectorAll('.section-values input[type="text"]');
         const values = [];
-        
+
         valueInputs.forEach(input => {
             const value = input.value.trim();
             if (value) {
@@ -1899,16 +1890,16 @@ function populateKeyListHashValues(component) {
                 }
 
                 const addButton = container.querySelector('button[onclick*="addKeyListHashSection"]');
-                
+
                 entries.forEach(([key, value]) => {
                     const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     const sectionDiv = document.createElement('div');
                     sectionDiv.className = 'p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3';
                     sectionDiv.dataset.sectionId = sectionId;
-                    
+
                     // Normalize value to array
                     const values = Array.isArray(value) ? value : [value];
-                    
+
                     let valuesHtml = '';
                     values.forEach(val => {
                         valuesHtml += `
@@ -1930,7 +1921,7 @@ function populateKeyListHashValues(component) {
                             </div>
                         `;
                     });
-                    
+
                     sectionDiv.innerHTML = `
                         <div class="flex items-center gap-2">
                             <input type="text"
@@ -1956,7 +1947,7 @@ function populateKeyListHashValues(component) {
                             + Add Value
                         </button>
                     `;
-                    
+
                     addButton.parentNode.insertBefore(sectionDiv, addButton);
                 });
             }
@@ -1991,7 +1982,7 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
 
     if (!codecInfo || !codecInfo.options) {
         // Codec has no options, just store the codec name with empty config
-        hiddenField.value = JSON.stringify({[codecName]: {}});
+        hiddenField.value = JSON.stringify({ [codecName]: {} });
         return;
     }
 
@@ -2072,7 +2063,7 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
     });
 
     // Initialize with empty config for the selected codec
-    const currentValue = {[codecName]: existingConfig};
+    const currentValue = { [codecName]: existingConfig };
     hiddenField.value = JSON.stringify(currentValue);
 };
 
@@ -2123,10 +2114,10 @@ window.showConfigModal = function (component) {
 };
 
 // Toggle password visibility function
-window.togglePasswordVisibility = function(fieldId, button) {
+window.togglePasswordVisibility = function (fieldId, button) {
     const input = document.getElementById(fieldId);
     if (!input) return;
-    
+
     if (input.type === 'password') {
         input.type = 'text';
         // Change icon to eye-slash (hidden)
@@ -2148,17 +2139,17 @@ window.togglePasswordVisibility = function(fieldId, button) {
 };
 
 // Browse file path function for fs_path input type
-window.browseFilePath = function(fieldId) {
+window.browseFilePath = function (fieldId) {
     const targetInput = document.getElementById(fieldId);
     if (!targetInput) return;
-    
+
     // Create a hidden file input element
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.style.display = 'none';
-    
+
     // Handle file selection
-    fileInput.addEventListener('change', function(e) {
+    fileInput.addEventListener('change', function (e) {
         if (e.target.files && e.target.files.length > 0) {
             const file = e.target.files[0];
             // Get the file path (webkitRelativePath or name)
@@ -2170,7 +2161,7 @@ window.browseFilePath = function(fieldId) {
         // Clean up the temporary file input
         document.body.removeChild(fileInput);
     });
-    
+
     // Add to DOM and trigger click
     document.body.appendChild(fileInput);
     fileInput.click();

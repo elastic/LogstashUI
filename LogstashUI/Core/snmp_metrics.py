@@ -238,42 +238,6 @@ def generate_visualizations(visualizations, device, es_connection):
 
     return visualization_data
 
-def get_device_online(device):
-    """
-    Check if a single device is online (has sent data in last 15 minutes).
-    Note: For checking multiple devices, use get_devices_online_batch() for better performance.
-    """
-    if not device.network or not device.network.connection:
-        return False
-    
-    connection_id = device.network.connection.id
-    es = get_elastic_connection(connection_id)
-
-    results = es.search(
-        query={
-            "bool": {
-                "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": "now-15m"
-                            }
-                        }
-                    },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    }
-                ]
-            }
-        }
-    )
-
-    if results['hits']['total']['value'] > 0:
-        return True
-    else:
-        return False
 
 def get_devices_online_batch(devices):
     """

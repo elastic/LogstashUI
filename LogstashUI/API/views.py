@@ -1,35 +1,31 @@
-
-# Django
 from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.template.loader import get_template
+from django.views.decorators.http import require_http_methods
+from django.conf import settings
 
-## Tables
+from Core import logstash_metrics
+from Core.decorators import require_admin_role
 from Core.models import Connection as ConnectionTable
 from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, \
     get_elastic_connections_from_list, get_elasticsearch_indices, get_elasticsearch_field_mappings, \
     query_elasticsearch_documents
 from Core.validators import validate_pipeline_name
-# Custom libraries
-from . import logstash_config_parse
-from Core import logstash_metrics
-from Core.decorators import require_admin_role
 
-# General libraries
-import json
 from PipelineManager.forms import ConnectionForm
 
-from django.template.loader import get_template
-import traceback
-from django.views.decorators.http import require_http_methods
+from . import logstash_config_parse
+
+
 from datetime import datetime, timezone
+import json
+import traceback
 import html
 import difflib
-
 import logging
 import requests
-import json
-from django.conf import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -463,12 +459,6 @@ def UpdatePipelineSettings(request):
             # Get Elasticsearch connection and update pipeline settings
             es = get_elastic_connection(es_id)
             es.logstash.put_pipeline(id=pipeline_name, body=settings_body)
-            # Note: The actual API call depends on your Elasticsearch/Logstash setup
-            # This is a placeholder - adjust based on your actual API structure
-            response = es.logstash.put_pipeline(
-                id=pipeline_name,
-                body=settings_body
-            )
             
             logger.info(f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' (Connection ID: {es_id})")
             # Return empty response - toast notification handled by JavaScript
@@ -645,15 +635,6 @@ def ClonePipeline(request):
             logger.error(f"Error cloning pipeline: {str(e)}")
             return HttpResponse(f"Error cloning pipeline: {str(e)}", status=500)
 
-
-def GetLogstashPipeline(request):
-    if request.method == "POST":
-        es_id = request.POST.get("es_id")
-        pipeline_name = request.POST.get("pipeline")
-
-        pipeline_doc = es.logstash.get_pipeline(id=pipeline_name)
-
-        return HttpResponse(pipeline_doc)
 
 def GetPipeline(request):
     if request.method == "GET":
