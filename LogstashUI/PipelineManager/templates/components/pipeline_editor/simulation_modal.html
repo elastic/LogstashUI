@@ -708,7 +708,7 @@
       formData.append(key, requestData[key]);
     }
     
-    fetch('/API/PreviewElasticsearchData/', {
+    fetch('/API/QueryElasticsearchDocuments/', {
       method: 'POST',
       body: formData,
       headers: {

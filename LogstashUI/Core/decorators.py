@@ -1,4 +1,8 @@
 from functools import wraps
+from django.http import HttpResponse
+import logging
+
+logger = logging.getLogger(__name__)
 
 def require_admin_role(view_func):
     """

@@ -1,33 +1,28 @@
 # Django
-from django.shortcuts import render, HttpResponse
-from django.http import JsonResponse, HttpResponseRedirect
+from django.shortcuts import HttpResponse
+from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-from django.conf import settings
 
 
 ## Tables
-from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, \
-    get_elastic_connections_from_list
 from Core.decorators import require_admin_role
 
 # Custom libraries
 from . import logstash_config_parse
-from Core import logstash_metrics
 
 # General libraries
 import json
-from PipelineManager.forms import ConnectionForm
 
 from django.template.loader import get_template
 import traceback
-import re
 
 import logging
 from django.views.decorators.csrf import csrf_exempt
 from collections import deque
 from threading import Lock
 import requests
+from django.conf import settings
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -36,45 +31,12 @@ simulation_results = deque(maxlen=1000)
 simulation_lock = Lock()
 
 
-
-def validate_pipeline_name(pipeline_name):
-    """
-    Validate pipeline name according to Elasticsearch rules.
-
-    Pipeline ID must:
-    - Begin with a letter or underscore
-    - Contain only letters, underscores, dashes, hyphens, and numbers
-
-    Args:
-        pipeline_name (str): The pipeline name to validate
-
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-    if not pipeline_name:
-        return False, "Pipeline name cannot be empty"
-
-    # Check if starts with letter or underscore
-    if not re.match(r'^[a-zA-Z_]', pipeline_name):
-        return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
-
-    # Check if contains only valid characters
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\-]*$', pipeline_name):
-        return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
-
-    return True, None
-
-
 @require_admin_role
 def SimulatePipeline(request):
     """
     Simulate a pipeline by building a single pipeline with Ruby instrumentation
     injected after each filter plugin to capture step-by-step event state.
     """
-    import requests
-    from django.conf import settings
-    import hashlib
-    import uuid
 
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)

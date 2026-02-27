@@ -1,6 +1,5 @@
-from django.urls import path, include
+from django.urls import path
 from . import views
-from . import snmp_views
 from . import simulate_views
 from . import snmp_views
 
@@ -72,13 +71,10 @@ urlpatterns = [
     path("SNMP/AddProfile/", snmp_views.AddProfile, name="AddSNMPProfile"),
     path("SNMP/UpdateProfile/<str:profile_name>/", snmp_views.UpdateProfile, name="UpdateSNMPProfile"),
     path("SNMP/DeleteProfile/<str:profile_name>/", snmp_views.DeleteProfile, name="DeleteSNMPProfile"),
-    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport"),
 
     # Elasticsearch simulation endpoints
     path("GetElasticsearchConnections/", views.GetElasticsearchConnections, name="GetElasticsearchConnections"),
     path("GetElasticsearchIndices/", views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
     path("GetElasticsearchFields/", views.GetElasticsearchFields, name="GetElasticsearchFields"),
-    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
-    path("PreviewElasticsearchData/", views.PreviewElasticsearchData, name="PreviewElasticsearchData"),
-    path("GetPipelineHealthReport", views.GetPipelineHealthReport, name="GetPipelineHealthReport")
+    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments")
 ]

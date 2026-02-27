@@ -1,14 +1,15 @@
 
 # Django
 from django.shortcuts import render, HttpResponse
-from django.http import JsonResponse, HttpResponseRedirect
+from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
 
 ## Tables
 from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, get_elastic_connections_from_list
-
+from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, \
+    get_elastic_connections_from_list, get_elasticsearch_indices, get_elasticsearch_field_mappings, \
+    query_elasticsearch_documents
+from Core.validators import validate_pipeline_name
 # Custom libraries
 from . import logstash_config_parse
 from Core import logstash_metrics
@@ -17,45 +18,21 @@ from Core.decorators import require_admin_role
 # General libraries
 import json
 from PipelineManager.forms import ConnectionForm
-from datetime import datetime, timezone
 
 from django.template.loader import get_template
 import traceback
 from django.views.decorators.http import require_http_methods
-import re
+from datetime import datetime, timezone
 import html
+import difflib
 
 import logging
+import requests
+import json
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-
-def validate_pipeline_name(pipeline_name):
-    """
-    Validate pipeline name according to Elasticsearch rules.
-    
-    Pipeline ID must:
-    - Begin with a letter or underscore
-    - Contain only letters, underscores, dashes, hyphens, and numbers
-    
-    Args:
-        pipeline_name (str): The pipeline name to validate
-        
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-    if not pipeline_name:
-        return False, "Pipeline name cannot be empty"
-    
-    # Check if starts with letter or underscore
-    if not re.match(r'^[a-zA-Z_]', pipeline_name):
-        return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
-    
-    # Check if contains only valid characters
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\-]*$', pipeline_name):
-        return False, f"Invalid pipeline [{pipeline_name}] ID received. Pipeline ID must begin with a letter or underscore and can contain only letters, underscores, dashes, hyphens, and numbers"
-    
-    return True, None
 
 
 def TestConnectivity(request=None, connection_id=None):
@@ -339,7 +316,6 @@ def GetDiff(request):
                 new_pipeline = parser.components_to_logstash_config()
             
             # Generate unified diff
-            import difflib
             diff = difflib.unified_diff(
                 current_pipeline.splitlines(keepends=True),
                 new_pipeline.splitlines(keepends=True),
@@ -389,7 +365,6 @@ def GetPipelines(request, connection_id):
                 formatted_date = ""
                 if last_modified_str:
                     try:
-                        from datetime import datetime
                         # Parse ISO 8601 format: 2025-11-23T05:30:52.421Z
                         dt = datetime.fromisoformat(last_modified_str.replace('Z', '+00:00'))
                         # Format as "Tuesday, January 14th 2025"
@@ -518,8 +493,6 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
         pipeline_name: Pipeline name (used when called directly for simulation)
         pipeline_config: Pipeline config string (used when called directly for simulation)
     """
-    import requests
-    from django.conf import settings
     
     if request.method == "POST" or simulate:
         # Get parameters from POST or function arguments
@@ -774,7 +747,6 @@ def GetNodeMetrics(request):
     response = render(request, 'components/node_metrics.html', context=metrics_data)
     
     # Add available hosts to response header for JavaScript to populate dropdown
-    import json
     response['X-Available-Hosts'] = json.dumps(metrics_data.get('nodes', []))
     
     return response
@@ -936,7 +908,7 @@ def GetElasticsearchIndices(request):
     """
     Get Elasticsearch indices with typeahead support
     """
-    from Core.views import get_elasticsearch_indices
+
     
     connection_id = request.GET.get("connection_id")
     pattern = request.GET.get("pattern", "*")
@@ -957,7 +929,7 @@ def GetElasticsearchFields(request):
     """
     Get field mappings from an Elasticsearch index
     """
-    from Core.views import get_elasticsearch_field_mappings
+
     
     connection_id = request.GET.get("connection_id")
     index = request.GET.get("index")
@@ -978,7 +950,6 @@ def QueryElasticsearchDocuments(request):
     """
     Query Elasticsearch documents for simulation
     """
-    from Core.views import query_elasticsearch_documents
     
     connection_id = request.POST.get("connection_id")
     index = request.POST.get("index")
@@ -1014,48 +985,4 @@ def QueryElasticsearchDocuments(request):
         return JsonResponse({"documents": documents})
     except Exception as e:
         logger.error(f"Error querying Elasticsearch documents: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@login_required
-def PreviewElasticsearchData(request):
-    """
-    Preview Elasticsearch data before running simulation
-    """
-    from Core.views import query_elasticsearch_documents
-    
-    connection_id = request.POST.get("connection_id")
-    index = request.POST.get("index")
-    query_method = request.POST.get("query_method")
-    
-    if not connection_id or not index:
-        return JsonResponse({"error": "connection_id and index are required"}, status=400)
-    
-    try:
-        if query_method == "docid":
-            doc_ids = request.POST.get("doc_ids", "").strip().split("\n")
-            doc_ids = [d.strip() for d in doc_ids if d.strip()]
-            documents = query_elasticsearch_documents(connection_id, index, doc_ids=doc_ids)
-        elif query_method == "entire":
-            # Entire document - fetch with all fields
-            size = int(request.POST.get("size", 10))
-            query = request.POST.get("query", "")
-            documents = query_elasticsearch_documents(
-                connection_id, index, field=None, size=size, query_string=query
-            )
-        else:  # field method
-            field = request.POST.get("field")
-            size = int(request.POST.get("size", 10))
-            query = request.POST.get("query", "")
-            
-            if not field:
-                return JsonResponse({"error": "field is required for field-based queries"}, status=400)
-            
-            documents = query_elasticsearch_documents(
-                connection_id, index, field=field, size=size, query_string=query
-            )
-        
-        return JsonResponse({"documents": documents})
-    except Exception as e:
-        logger.error(f"Error previewing Elasticsearch data: {e}")
         return JsonResponse({"error": str(e)}, status=500)
