@@ -12,6 +12,9 @@ import json
 import os
 import re
 import ipaddress
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_pipeline_name_component(name):
@@ -840,11 +843,9 @@ def _get_discovery_ip_addresses(network):
         
         # Get all IP addresses in the range (excluding network and broadcast)
         all_ips = set(str(ip) for ip in network_obj.hosts())
-        print(f"[DEBUG] Network {network.name} ({network.network_range}): Generated {len(all_ips)} total IPs")
         
         # Get existing devices in this network
         existing_devices = Device.objects.filter(network=network).values_list('ip_address', flat=True)
-        print(f"[DEBUG] Network {network.name}: Found {len(existing_devices)} existing devices")
         
         # Filter out IPs that are already devices (only if they're valid IP addresses)
         for device_ip in existing_devices:
@@ -859,13 +860,10 @@ def _get_discovery_ip_addresses(network):
                 continue
         
         result = sorted(list(all_ips))
-        print(f"[DEBUG] Network {network.name}: Returning {len(result)} IPs for discovery")
+        logger.debug(f"Network {network.name}: Generated {len(result)} discovery IPs")
         return result
     except Exception as e:
-        # If there's any error, return empty list
-        print(f"[DEBUG] Error in _get_discovery_ip_addresses for network {network.name}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error generating discovery IPs for network {network.name}: {str(e)}", exc_info=True)
         return []
 
 
@@ -1472,30 +1470,21 @@ def GetCommitDiff(request):
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap', f"snmp-{network.logstash_name}-traps")
                 current_trap_config = ""
                 
-                print(f"[DEBUG DIFF] Network '{network.name}': Traps disabled/no credential, checking for existing trap pipeline '{trap_pipeline_name}'")
-                print(f"[DEBUG DIFF] Pipeline in existing_pipelines: {trap_pipeline_name in existing_pipelines}")
-                
                 if trap_pipeline_name in existing_pipelines:
                     pipeline_data = existing_pipelines[trap_pipeline_name]
                     if 'pipeline' in pipeline_data:
                         current_trap_config = pipeline_data['pipeline']
-                        print(f"[DEBUG DIFF] Found existing trap pipeline config, length: {len(current_trap_config)}")
                 
                 if current_trap_config:
-                    print(f"[DEBUG DIFF] Adding trap pipeline deletion to diff")
                     network_diff['trap_pipeline'] = {
                         'pipeline_name': trap_pipeline_name,
                         'current': current_trap_config,
                         'new': '',
                         'action': 'delete'
                     }
-                else:
-                    print(f"[DEBUG DIFF] No existing trap pipeline found, skipping deletion")
             
             # Handle discovery pipeline if discovery is enabled
-            print(f"[DEBUG DIFF] Network '{network.name}': discovery_enabled={network.discovery_enabled}, discovery_credential={network.discovery_credential}")
             if network.discovery_enabled and network.discovery_credential:
-                print(f"[DEBUG DIFF] Generating discovery pipeline for network '{network.name}'")
                 discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery', f"snmp-{network.logstash_name}-discovery")
                 
                 # Generate discovery pipeline components
@@ -1529,25 +1518,18 @@ def GetCommitDiff(request):
                 discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery', f"snmp-{network.logstash_name}-discovery")
                 current_discovery_config = ""
                 
-                print(f"[DEBUG DIFF] Network '{network.name}': Discovery disabled/no credential, checking for existing discovery pipeline '{discovery_pipeline_name}'")
-                print(f"[DEBUG DIFF] Pipeline in existing_pipelines: {discovery_pipeline_name in existing_pipelines}")
-                
                 if discovery_pipeline_name in existing_pipelines:
                     pipeline_data = existing_pipelines[discovery_pipeline_name]
                     if 'pipeline' in pipeline_data:
                         current_discovery_config = pipeline_data['pipeline']
-                        print(f"[DEBUG DIFF] Found existing discovery pipeline config, length: {len(current_discovery_config)}")
                 
                 if current_discovery_config:
-                    print(f"[DEBUG DIFF] Adding discovery pipeline deletion to diff")
                     network_diff['discovery_pipeline'] = {
                         'pipeline_name': discovery_pipeline_name,
                         'current': current_discovery_config,
                         'new': '',
                         'action': 'delete'
                     }
-                else:
-                    print(f"[DEBUG DIFF] No existing discovery pipeline found, skipping deletion")
             
             network_diffs.append(network_diff)
         
@@ -1557,8 +1539,7 @@ def GetCommitDiff(request):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error in GetCommitDiff: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
@@ -1648,16 +1629,11 @@ def CommitConfiguration(request):
                         description=f"[MANAGED] SNMP pipeline for network: {network.name}"
                     )
                     
-                    print(f"[DEBUG] Network '{network.name}' main pipeline: {pipeline_name}")
-                    print(f"[DEBUG] Result - Success: {success}, IsNew: {is_new}, Error: {error}")
-                    
                     if success:
                         if is_new:
                             pipelines_created += 1
-                            print(f"[DEBUG] Main pipeline created")
                         else:
                             pipelines_updated += 1
-                            print(f"[DEBUG] Main pipeline updated")
                     else:
                         errors.append(f"Network '{network.name}': {error}")
                         continue
@@ -1671,7 +1647,6 @@ def CommitConfiguration(request):
                                 # Pipeline exists, delete it
                                 es.logstash.delete_pipeline(id=pipeline_name)
                                 pipelines_deleted += 1
-                                print(f"[DEBUG] Deleted main pipeline for network with no devices: {pipeline_name}")
                         except Exception:
                             # Pipeline doesn't exist, that's okay
                             pass
@@ -1680,15 +1655,12 @@ def CommitConfiguration(request):
                 
                 # Handle SNMP Trap pipeline if traps are enabled
                 if network.traps_enabled:
-                    print(f"[DEBUG] Network '{network.name}' has traps enabled")
-                    print(f"[DEBUG] Network credential: {network.credential}")
                     if not network.credential:
                         errors.append(f"Network '{network.name}': Traps enabled but no credential configured")
                     else:
                         try:
                             # Generate trap pipeline name
                             trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
-                            print(f"[DEBUG] Creating trap pipeline: {trap_pipeline_name}")
                             
                             # Build trap input configuration
                             credential = network.credential
@@ -1754,23 +1726,16 @@ def CommitConfiguration(request):
                                 description=f"[MANAGED] SNMP Trap pipeline for network: {network.name}"
                             )
                             
-                            print(f"[DEBUG] Trap pipeline result - Success: {trap_success}, IsNew: {trap_is_new}, Error: {trap_error}")
-                            
                             if trap_success:
                                 if trap_is_new:
                                     pipelines_created += 1
-                                    print(f"[DEBUG] Trap pipeline created successfully")
                                 else:
                                     pipelines_updated += 1
-                                    print(f"[DEBUG] Trap pipeline updated successfully")
                             else:
                                 errors.append(f"Network '{network.name}' trap pipeline: {trap_error}")
-                                print(f"[DEBUG] Trap pipeline failed: {trap_error}")
                         except Exception as trap_e:
-                            import traceback
-                            traceback.print_exc()
+                            logger.error(f"Network '{network.name}' trap pipeline error: {str(trap_e)}", exc_info=True)
                             errors.append(f"Network '{network.name}' trap pipeline: {str(trap_e)}")
-                            print(f"[DEBUG] Trap pipeline exception: {str(trap_e)}")
                 else:
                     # Traps are disabled, check if trap pipeline exists and delete it
                     try:
@@ -1791,15 +1756,12 @@ def CommitConfiguration(request):
                 
                 # Handle Discovery pipeline if discovery is enabled
                 if network.discovery_enabled:
-                    print(f"[DEBUG] Network '{network.name}' has discovery enabled")
-                    print(f"[DEBUG] Network discovery credential: {network.discovery_credential}")
                     if not network.discovery_credential:
                         errors.append(f"Network '{network.name}': Discovery enabled but no credential configured")
                     else:
                         try:
                             # Generate discovery pipeline name
                             discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
-                            print(f"[DEBUG] Creating discovery pipeline: {discovery_pipeline_name}")
                             
                             # Generate discovery pipeline components
                             discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
@@ -1822,23 +1784,16 @@ def CommitConfiguration(request):
                                 description=f"[MANAGED] SNMP Discovery pipeline for network: {network.name}"
                             )
                             
-                            print(f"[DEBUG] Discovery pipeline result - Success: {discovery_success}, IsNew: {discovery_is_new}, Error: {discovery_error}")
-                            
                             if discovery_success:
                                 if discovery_is_new:
                                     pipelines_created += 1
-                                    print(f"[DEBUG] Discovery pipeline created successfully")
                                 else:
                                     pipelines_updated += 1
-                                    print(f"[DEBUG] Discovery pipeline updated successfully")
                             else:
                                 errors.append(f"Network '{network.name}' discovery pipeline: {discovery_error}")
-                                print(f"[DEBUG] Discovery pipeline failed: {discovery_error}")
                         except Exception as discovery_e:
-                            import traceback
-                            traceback.print_exc()
+                            logger.error(f"Network '{network.name}' discovery pipeline error: {str(discovery_e)}", exc_info=True)
                             errors.append(f"Network '{network.name}' discovery pipeline: {str(discovery_e)}")
-                            print(f"[DEBUG] Discovery pipeline exception: {str(discovery_e)}")
                 else:
                     # Discovery is disabled, check if discovery pipeline exists and delete it
                     try:
@@ -1899,7 +1854,7 @@ def CommitConfiguration(request):
                                     try:
                                         es.logstash.delete_pipeline(id=pipeline_name)
                                         pipelines_deleted += 1
-                                        print(f"[DEBUG] Deleted orphaned pipeline: {pipeline_name}")
+                                        logger.info(f"Deleted orphaned pipeline: {pipeline_name}")
                                     except Exception as delete_err:
                                         errors.append(f"Failed to delete orphaned pipeline '{pipeline_name}': {str(delete_err)}")
                     except Exception as conn_err:
@@ -1944,8 +1899,7 @@ def CommitConfiguration(request):
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Unexpected error in CommitConfiguration: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': f'Unexpected error: {str(e)}'
@@ -1965,8 +1919,6 @@ def GenerateCommitConfiguration(request):
         
         # Iterate through each network and build pipeline configuration
         for network in networks:
-            print(f"\nNetwork: {network.name}")
-
             # Initialize pipeline data structure for this network
             input_data = {
                 "network": network,
@@ -1982,7 +1934,6 @@ def GenerateCommitConfiguration(request):
 
             for device in devices:
                 if not device.credential:
-                    print(f"  WARNING: Device '{device.name}' has no credential assigned, skipping")
                     continue
                 
                 credential = device.credential
@@ -1999,9 +1950,7 @@ def GenerateCommitConfiguration(request):
             components["input"] = _generate_input(input_data)
             components["output"] = _generate_output(input_data, network, snmp_type="polling")
 
-            print(components)
             logstash_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
-            print(logstash_config)
 
 
 
