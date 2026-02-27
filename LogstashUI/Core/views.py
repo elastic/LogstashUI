@@ -1,19 +1,17 @@
 
 # Django
 from django.shortcuts import render
-
+from django.http import JsonResponse
 
 ## Tables
 from Core.models import Connection as ConnectionTable
+from Core import logstash_metrics
 
-## General libraries
 from elasticsearch import Elasticsearch
 import json
-
-
-## Project
-from Core import logstash_metrics
 import logging
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,7 +96,6 @@ def health_check(request):
     Health check endpoint for monitoring and container orchestration.
     Returns 200 OK if the application is running.
     """
-    from django.http import JsonResponse
     return JsonResponse({
         'status': 'healthy',
         'service': 'LogstashUI'

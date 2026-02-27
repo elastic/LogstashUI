@@ -1,7 +1,6 @@
 from django.db import models
-from django.core.validators import MinLengthValidator
 from .encryption import encrypt_credential, decrypt_credential
-
+from django.core.exceptions import ValidationError
 
 class Connection(models.Model):
     """
@@ -89,7 +88,6 @@ class Connection(models.Model):
         """
         Validate that the required fields are provided based on the connection type.
         """
-        from django.core.exceptions import ValidationError
         if self.connection_type == self.ConnectionType.SSH:
             if not self.host:
                 raise ValidationError("Host is required for SSH connections")

@@ -1,18 +1,27 @@
-from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from SNMP.models import Credential, Network, Profile, Device
-from .logstash_config_parse import ComponentToPipeline
 from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.db.models import Prefetch
+from django.db.models import Q
+
+from .logstash_config_parse import ComponentToPipeline
+
 from Core.encryption import decrypt_credential
 from Core import snmp_metrics
+from Core.views import get_elastic_connection
+from Core.models import Connection
+
+from SNMP.models import Credential, Network, Profile, Device
+
+from datetime import datetime, timedelta, timezone
+
 import json
 import os
 import re
 import ipaddress
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +65,7 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
     Returns:
         tuple: (success: bool, is_new: bool, error: str or None)
     """
-    from datetime import datetime, timezone
+
     
     try:
         # Check if pipeline already exists
@@ -446,7 +455,7 @@ def GetNetwork(request, network_id):
 def DeleteNetwork(request, network_id):
     """Delete a network and its underlying Logstash pipeline"""
     try:
-        from Core.views import get_elastic_connection
+
         
         network = Network.objects.get(pk=network_id)
         pipeline_name = _get_pipeline_name(network)
@@ -553,10 +562,6 @@ def _get_device_profiles(device, profile_cache=None):
         device: Device object with prefetched profiles
         profile_cache: Optional dict to cache loaded profile data
     """
-    from SNMP.models import Profile
-    from django.conf import settings
-    import os
-    import json
     
     if profile_cache is None:
         profile_cache = _OFFICIAL_PROFILE_CACHE
@@ -1193,10 +1198,7 @@ def _generate_filters(oid_mappings, network):
     for mapping in oid_mappings['get']:
         pass
 
-
     filter_components.extend(_get_special_case_filters(oid_mappings))
-
-    #print(filter_components)
     return filter_components
 
 
@@ -1267,7 +1269,7 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
 def GetCommitDiff(request):
     """Get diff for all network pipeline configurations"""
     try:
-        from django.db.models import Prefetch
+
         
         # Prefetch all related data in one go to avoid N+1 queries
         networks = Network.objects.select_related('connection', 'credential', 'discovery_credential').prefetch_related(
@@ -1305,7 +1307,6 @@ def GetCommitDiff(request):
         existing_pipelines = {}
         for conn_id, pipeline_names in pipeline_names_by_connection.items():
             try:
-                from Core.views import get_elastic_connection
                 es_client = get_elastic_connection(conn_id)
                 
                 # Fetch all pipelines for this connection in one call
@@ -1547,9 +1548,6 @@ def GetCommitDiff(request):
 def CommitConfiguration(request):
     """Commit SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
     try:
-        from Core.views import get_elastic_connection
-        from datetime import datetime, timezone
-        
         # Query all networks with their credentials
         networks = Network.objects.select_related('credential', 'discovery_credential', 'connection').all()
         
@@ -1973,10 +1971,6 @@ def GenerateCommitConfiguration(request):
 def GetDevices(request):
     """Get paginated SNMP devices with search, filter, and sort"""
     try:
-        from SNMP.models import Device
-        from django.db.models import Q
-        from django.core.paginator import Paginator
-        
         # Get query parameters
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 25))
@@ -2068,8 +2062,6 @@ def GetDevices(request):
 def AddDevice(request):
     """Add a new SNMP device"""
     try:
-        from SNMP.models import Device, Profile
-        
         # Extract form data
         name = request.POST.get('name')
         ip_address = request.POST.get('ip_address')
@@ -2138,8 +2130,6 @@ def AddDevice(request):
 def UpdateDevice(request, device_id):
     """Update an existing SNMP device"""
     try:
-        from SNMP.models import Device, Profile
-        
         device = Device.objects.get(pk=device_id)
         
         # Update fields
@@ -2216,8 +2206,6 @@ def UpdateDevice(request, device_id):
 def GetDevice(request, device_id):
     """Get a single device"""
     try:
-        from SNMP.models import Device
-        
         device = Device.objects.get(pk=device_id)
         
         # Strip .json extension from profile names for display
@@ -2253,8 +2241,6 @@ def GetDevice(request, device_id):
 def DeleteDevice(request, device_id):
     """Delete a device"""
     try:
-        from SNMP.models import Device
-        
         device = Device.objects.get(pk=device_id)
         device.delete()
         
@@ -2599,9 +2585,6 @@ def GetDiscoveredDevices(request):
     Aggregates by host.name and returns top hits from the last 2 hours.
     """
     try:
-        from Core.views import get_elastic_connection
-        from Core.models import Connection
-        from datetime import datetime, timedelta, timezone
         
         # Get all connections
         connections = Connection.objects.all()
@@ -2699,7 +2682,6 @@ def GetDiscoveredDevices(request):
                                 
                                 if network_name:
                                     try:
-                                        from SNMP.models import Network
                                         network_obj = Network.objects.filter(name=network_name).first()
                                         if network_obj:
                                             network_id = network_obj.id
@@ -2734,7 +2716,6 @@ def GetDiscoveredDevices(request):
         })
         
     except Exception as e:
-        import traceback
         traceback.print_exc()
         return JsonResponse({
             'success': False,

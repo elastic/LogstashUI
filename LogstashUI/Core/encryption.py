@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from cryptography.fernet import Fernet
-
+import secrets
 
 def get_encryption_key():
     """
@@ -11,7 +11,6 @@ def get_encryption_key():
     1. Environment variable CREDENTIAL_KEY
     2. Key file in data/.secret_key
     3. Generate new key and save to data/.secret_key
-    
     Returns:
         bytes: The encryption key
     """
@@ -108,7 +107,7 @@ def get_django_secret_key():
             return f.read().strip()
     
     # Generate new key (same method Django uses)
-    import secrets
+
     chars = 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)'
     key = ''.join(secrets.choice(chars) for _ in range(50))
     

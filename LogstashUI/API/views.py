@@ -123,7 +123,7 @@ def AddConnection(request):
                 return response
             
             # Connection test succeeded, return JSON response
-            print(f"Returning success response with connection ID: {new_connection.id}")
+            logger.info(f"Returning success response with connection ID: {new_connection.id}")
             return JsonResponse({
                 'success': True,
                 'connection_id': new_connection.id,

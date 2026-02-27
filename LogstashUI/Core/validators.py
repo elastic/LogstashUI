@@ -1,3 +1,5 @@
+import re
+
 def validate_pipeline_name(pipeline_name):
     """
     Validate pipeline name according to Elasticsearch rules.
@@ -12,7 +14,6 @@ def validate_pipeline_name(pipeline_name):
     Returns:
         tuple: (is_valid, error_message)
     """
-    print("AYAYAY")
     if not pipeline_name:
         return False, "Pipeline name cannot be empty"
 

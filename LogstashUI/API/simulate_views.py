@@ -1,28 +1,25 @@
-# Django
 from django.shortcuts import HttpResponse
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-
-
-## Tables
-from Core.decorators import require_admin_role
-
-# Custom libraries
+from django.template.loader import get_template
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 from . import logstash_config_parse
 
-# General libraries
-import json
+from Core.decorators import require_admin_role
 
-from django.template.loader import get_template
-import traceback
-
-import logging
-from django.views.decorators.csrf import csrf_exempt
 from collections import deque
 from threading import Lock
+
+import json
+import traceback
+import logging
 import requests
-from django.conf import settings
 import uuid
+import base64
+import time
+import re
+
 
 logger = logging.getLogger(__name__)
 
@@ -407,14 +404,12 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
                         logger.info(f"Extracted slot_id {slot_id} from error response detail dict")
                     elif isinstance(detail, str) and 'Slot' in detail:
                         # Fallback: try to extract from string
-                        import re
                         match = re.search(r'Slot (\d+)', detail)
                         if match:
                             slot_id = int(match.group(1))
                             logger.info(f"Extracted slot_id {slot_id} from error detail string")
                 except Exception as extract_error:
                     logger.error(f"Could not extract slot_id from error detail: {extract_error}")
-                    import traceback
                     logger.error(traceback.format_exc())
 
             # Build error response with slot_id if we have it
@@ -432,7 +427,6 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
             return HttpResponse(error_html)
 
         # Wait for Logstash to reload the pipeline (only if new slot)
-        import time
         if not reused:
             time.sleep(2)
 
@@ -660,7 +654,6 @@ def GetRelatedLogs(request):
         pipeline_id = f"slot{slot_id}-filter1"
 
         # Get slot creation timestamp from LogstashAgent
-        import time
         min_timestamp = None
         try:
             slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
@@ -775,7 +768,6 @@ def UploadFile(request):
         logger.info(f"Read {len(file_content)} bytes from uploaded file")
 
         # Encode as base64 for transmission
-        import base64
         encoded_content = base64.b64encode(file_content).decode('utf-8')
         logger.info(f"Encoded content length: {len(encoded_content)} characters")
 
