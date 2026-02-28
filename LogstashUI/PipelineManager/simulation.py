@@ -803,3 +803,6 @@ def UploadFile(request):
         logger.error(f"Error in UploadFile: {e}")
         logger.error(traceback.format_exc())
         return JsonResponse({"error": str(e)}, status=500)
+
+
+

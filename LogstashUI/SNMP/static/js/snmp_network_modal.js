@@ -65,7 +65,7 @@ function openNetworkModal(networkData = null) {
 function loadConnections(selectedConnectionId = null) {
   const connectionSelect = document.getElementById('networkConnection');
 
-  fetch('/API/GetConnections/')
+  fetch('/ConnectionManager/GetConnections/')
     .then(response => response.json())
     .then(connections => {
       connectionSelect.innerHTML = '<option value="">Select a connection...</option>';
@@ -147,7 +147,7 @@ function loadDiscoveryCredentials(selectedCredentialId = null) {
 
   if (!credentialSelect) return;
 
-  fetch('/API/SNMP/GetCredentials/')
+  fetch('/SNMP/GetCredentials/')
     .then(response => response.json())
     .then(credentials => {
       credentialSelect.innerHTML = '<option value="">Select a credential...</option>';
@@ -181,7 +181,7 @@ function loadNetworkCredentials(selectedCredentialId = null) {
 
   if (!credentialSelect) return;
 
-  fetch('/API/SNMP/GetCredentials/')
+  fetch('/SNMP/GetCredentials/')
     .then(response => response.json())
     .then(credentials => {
       credentialSelect.innerHTML = '<option value="">Select a credential...</option>';
@@ -417,7 +417,7 @@ document.getElementById('networkForm').addEventListener('submit', function (e) {
 
   const formData = new FormData(this);
   const networkId = document.getElementById('networkId').value;
-  const url = networkId ? `/API/SNMP/UpdateNetwork/${networkId}/` : '/API/SNMP/AddNetwork/';
+  const url = networkId ? `/SNMP/UpdateNetwork/${networkId}/` : '/SNMP/AddNetwork/';
 
   // Get CSRF token
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;

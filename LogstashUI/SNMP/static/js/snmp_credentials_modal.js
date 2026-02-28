@@ -128,7 +128,7 @@ document.getElementById('credentialForm').addEventListener('submit', function (e
 
   const formData = new FormData(this);
   const credentialId = document.getElementById('credentialId').value;
-  const url = credentialId ? `/API/SNMP/UpdateCredential/${credentialId}/` : '/API/SNMP/AddCredential/';
+  const url = credentialId ? `/SNMP/UpdateCredential/${credentialId}/` : '/SNMP/AddCredential/';
 
   // Get CSRF token
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;

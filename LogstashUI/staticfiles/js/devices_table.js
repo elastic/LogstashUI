@@ -32,7 +32,7 @@ function loadDevices() {
   }
   
   // Fetch devices
-  fetch(`/API/SNMP/GetDevices/?${params.toString()}`)
+  fetch(`/SNMP/GetDevices/?${params.toString()}`)
     .then(response => response.json())
     .then(data => {
       loadingState.classList.add('hidden');
@@ -94,28 +94,36 @@ function loadDevices() {
 
 // Asynchronously check device statuses without blocking page rendering
 function checkDeviceStatuses(devices) {
-  devices.forEach(device => {
-    // Use setTimeout to make each request truly async and non-blocking
-    setTimeout(() => {
-      fetch(`/API/SNMP/GetDeviceStatus/${device.id}/`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.success && data.is_online) {
-            const statusCircle = document.getElementById(`status-circle-${device.id}`);
+  if (!devices || devices.length === 0) {
+    return;
+  }
+  
+  // Build comma-separated list of device IDs
+  const deviceIds = devices.map(d => d.id).join(',');
+  
+  // Single batch request for all devices
+  fetch(`/SNMP/GetDevicesStatus/?device_ids=${deviceIds}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.statuses) {
+        // Update status circles for all devices
+        Object.entries(data.statuses).forEach(([deviceId, status]) => {
+          if (status.is_online) {
+            const statusCircle = document.getElementById(`status-circle-${deviceId}`);
             if (statusCircle) {
               statusCircle.classList.remove('bg-gray-500');
               statusCircle.classList.add('bg-green-500');
               statusCircle.title = 'Device online (data received in last 15 minutes)';
             }
           }
-          // If not online or error, leave the circle gray (default state)
-        })
-        .catch(error => {
-          // Silently fail - leave status circle gray
-          console.debug(`Could not check status for device ${device.id}:`, error);
+          // If not online, leave the circle gray (default state)
         });
-    }, 0);
-  });
+      }
+    })
+    .catch(error => {
+      // Silently fail - leave status circles gray
+      console.debug('Could not check device statuses:', error);
+    });
 }
 
 // Render devices in table
@@ -231,9 +239,9 @@ function renderDevices(devices) {
 // Update pagination controls
 function updatePaginationControls(data) {
   const showingStart = (data.page - 1) * data.page_size + 1;
-  const showingEnd = Math.min(data.page * data.page_size, data.total);
+  const showingEnd = showingStart + data.devices.length - 1;
   
-  document.getElementById('showingStart').textContent = data.total > 0 ? showingStart : 0;
+  document.getElementById('showingStart').textContent = data.devices.length > 0 ? showingStart : 0;
   document.getElementById('showingEnd').textContent = showingEnd;
   document.getElementById('totalDevices').textContent = data.total;
   document.getElementById('pageInfo').textContent = `Page ${data.page} of ${data.total_pages}`;
@@ -288,7 +296,7 @@ function deleteDevice(deviceId, deviceName) {
   
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
   
-  fetch(`/API/SNMP/DeleteDevice/${deviceId}/`, {
+  fetch(`/SNMP/DeleteDevice/${deviceId}/`, {
     method: 'POST',
     headers: {
       'X-CSRFToken': csrfToken
@@ -309,7 +317,7 @@ function deleteDevice(deviceId, deviceName) {
 
 // Edit device (defined in snmp_devices_modal.js)
 function editDevice(deviceId) {
-  fetch(`/API/SNMP/GetDevice/${deviceId}/`)
+  fetch(`/SNMP/GetDevice/${deviceId}/`)
     .then(response => response.json())
     .then(data => {
       openDeviceModal(data);
@@ -321,7 +329,7 @@ function editDevice(deviceId) {
 
 // Load networks for filter dropdown
 function loadNetworkFilter() {
-  fetch('/API/SNMP/GetNetworks/')
+  fetch('/SNMP/GetNetworks/')
     .then(response => response.json())
     .then(networks => {
       const filterSelect = document.getElementById('networkFilter');
@@ -416,7 +424,7 @@ window.reloadDevicesTable = function() {
 // Copy pipeline name to clipboard
 function copyPipelineName(networkId, networkName) {
   // Fetch pipeline name from API
-  fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+  fetch(`/SNMP/GetNetworkPipelineName/${networkId}/`)
     .then(response => response.json())
     .then(data => {
       if (data.success) {

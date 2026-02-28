@@ -32,7 +32,7 @@ function loadDevices() {
   }
   
   // Fetch devices
-  fetch(`/API/SNMP/GetDevices/?${params.toString()}`)
+  fetch(`/SNMP/GetDevices/?${params.toString()}`)
     .then(response => response.json())
     .then(data => {
       loadingState.classList.add('hidden');
@@ -102,7 +102,7 @@ function checkDeviceStatuses(devices) {
   const deviceIds = devices.map(d => d.id).join(',');
   
   // Single batch request for all devices
-  fetch(`/API/SNMP/GetDevicesStatus/?device_ids=${deviceIds}`)
+  fetch(`/SNMP/GetDevicesStatus/?device_ids=${deviceIds}`)
     .then(response => response.json())
     .then(data => {
       if (data.success && data.statuses) {
@@ -296,7 +296,7 @@ function deleteDevice(deviceId, deviceName) {
   
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
   
-  fetch(`/API/SNMP/DeleteDevice/${deviceId}/`, {
+  fetch(`/SNMP/DeleteDevice/${deviceId}/`, {
     method: 'POST',
     headers: {
       'X-CSRFToken': csrfToken
@@ -317,7 +317,7 @@ function deleteDevice(deviceId, deviceName) {
 
 // Edit device (defined in snmp_devices_modal.js)
 function editDevice(deviceId) {
-  fetch(`/API/SNMP/GetDevice/${deviceId}/`)
+  fetch(`/SNMP/GetDevice/${deviceId}/`)
     .then(response => response.json())
     .then(data => {
       openDeviceModal(data);
@@ -329,7 +329,7 @@ function editDevice(deviceId) {
 
 // Load networks for filter dropdown
 function loadNetworkFilter() {
-  fetch('/API/SNMP/GetNetworks/')
+  fetch('/SNMP/GetNetworks/')
     .then(response => response.json())
     .then(networks => {
       const filterSelect = document.getElementById('networkFilter');
@@ -424,7 +424,7 @@ window.reloadDevicesTable = function() {
 // Copy pipeline name to clipboard
 function copyPipelineName(networkId, networkName) {
   // Fetch pipeline name from API
-  fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+  fetch(`/SNMP/GetNetworkPipelineName/${networkId}/`)
     .then(response => response.json())
     .then(data => {
       if (data.success) {

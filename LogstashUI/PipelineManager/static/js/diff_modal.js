@@ -310,7 +310,7 @@ async function viewGeneratedCode() {
         const formData = new FormData();
         formData.append('components', JSON.stringify(components));
 
-        const response = await fetch('/API/GetCurrentPipelineCode/', {
+        const response = await fetch('/ConnectionManager/GetCurrentPipelineCode/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -514,7 +514,7 @@ async function loadDiffContent() {
             formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
         }
 
-        const diffResponse = await fetch('/API/GetDiff/', {
+        const diffResponse = await fetch('/ConnectionManager/GetDiff/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -750,7 +750,7 @@ async function confirmSavePipeline() {
             console.log('Using components from UI mode');
         }
 
-        const saveResponse = await fetch('/API/SavePipeline/', {
+        const saveResponse = await fetch('/ConnectionManager/SavePipeline/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value

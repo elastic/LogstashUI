@@ -23,7 +23,7 @@ function loadDiscoveredDevices() {
     document.getElementById('discoveredDevicesTable').classList.add('hidden');
     
     // Fetch discovered devices from API
-    fetch('/API/snmp/discovered-devices/', {
+    fetch('/SNMP/DiscoveredDevices/', {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',

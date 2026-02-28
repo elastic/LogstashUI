@@ -672,7 +672,7 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
-        if (tooltip && tooltip.style.pointerEvents !== 'auto') {
+        if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
             hideDataFlowTooltip();
         }
     });
@@ -774,7 +774,7 @@ function addDataFlowIndicator(componentElement, node) {
         
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
-        if (tooltip && tooltip.style.pointerEvents !== 'auto') {
+        if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
             hideDataFlowTooltip();
         }
     });
@@ -854,7 +854,7 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
         // Make draggable only when sticky
         makeDraggable(tooltip);
     } else {
-        // Hover mode: semi-interactive (for copy button), no close button
+        // Hover mode: allow copy button clicks but prevent other interactions
         tooltip.style.pointerEvents = 'auto';
         tooltip.style.cursor = 'default';
         
@@ -869,7 +869,7 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
                 <div style="font-weight: 600; color: #60a5fa;">Event State at This Point:</div>
                 <button onclick="copyTooltipData()" 
                         id="copyTooltipBtn"
-                        style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif;"
+                        style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif; pointer-events: auto;"
                         onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'"
                         title="Copy JSON to clipboard">
                     <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1009,6 +1009,9 @@ function hideDataFlowTooltip() {
     const tooltip = document.getElementById('data-flow-tooltip');
     if (tooltip) {
         tooltip.style.display = 'none';
+        // Reset pointer events to default for next use
+        tooltip.style.pointerEvents = 'none';
+        tooltip.style.cursor = 'default';
     }
 }
 
@@ -1129,11 +1132,8 @@ function createForceDirectedGraph(graphData) {
                 .attr("stroke", "#6b7280")
                 .attr("stroke-width", 2);
             
-            // Hide hover tooltip (only if not sticky)
-            const tooltip = d3.select('.d3-link-tooltip');
-            if (tooltip.style('pointer-events') === 'none') {
-                hideLinkTooltip();
-            }
+            // Hide hover tooltip immediately
+            hideLinkTooltip();
         });
     
     // Create node groups (no drag behavior since positions are fixed)
@@ -1420,7 +1420,9 @@ function createForceDirectedGraph(graphData) {
     }
     
     function hideLinkTooltip() {
-        linkTooltip.style("visibility", "hidden");
+        linkTooltip.style("visibility", "hidden")
+            .style("pointer-events", "none")
+            .style("cursor", "default");
     }
     
     // Create tooltip container for nodes
@@ -2382,4 +2384,19 @@ window.viewSimulationLogs = function() {
             logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
         });
 };
+
+// Global cleanup for tooltips - hide any open tooltips when clicking outside
+document.addEventListener('click', function(e) {
+    // Only hide if click is outside tooltip and not on a trigger
+    const tooltip = document.getElementById('data-flow-tooltip');
+    if (tooltip && !tooltip.contains(e.target) && !e.target.closest('.simulation-data-flow')) {
+        hideDataFlowTooltip();
+    }
+    
+    // Also clean up any D3 link tooltips
+    const linkTooltip = document.querySelector('.d3-link-tooltip');
+    if (linkTooltip && !linkTooltip.contains(e.target)) {
+        linkTooltip.remove();
+    }
+});
 

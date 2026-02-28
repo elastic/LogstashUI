@@ -16,7 +16,7 @@
           <div id="connectionErrorContainer"></div>
           
           <form id="connectionForm"
-              hx-post="/API/AddConnection"
+              hx-post="/ConnectionManager/AddConnection"
               hx-swap="none"
               hx-indicator=".loading"
               hx-on::before-request="document.getElementById('connectionErrorContainer').innerHTML = '';"

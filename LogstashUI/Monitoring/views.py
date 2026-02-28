@@ -1,11 +1,10 @@
 from django.shortcuts import render
-
+from django.http import JsonResponse
 from PipelineManager.models import Connection as ConnectionTable
 
-from Common.elastic_utils import get_elastic_connections_from_list
+from Common.elastic_utils import get_elastic_connections_from_list, get_elastic_connection
 
-
-
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -421,3 +420,224 @@ def get_pipeline_health_report(es, pipeline_name=""):
         return {}
 
 
+def _format_uptime(milliseconds):
+    """Format uptime from milliseconds to human-readable string"""
+    seconds = milliseconds // 1000
+    minutes = seconds // 60
+    hours = minutes // 60
+    days = hours // 24
+
+    if days > 0:
+        return f"{days}d {hours % 24}h"
+    elif hours > 0:
+        return f"{hours}h {minutes % 60}m"
+    elif minutes > 0:
+        return f"{minutes}m {seconds % 60}s"
+    else:
+        return f"{seconds}s"
+
+
+def GetNodeMetrics(request):
+    connection_name = request.GET.get("connection", "")
+    logstash_host = request.GET.get("host", "")
+    pipeline = request.GET.get("pipeline", "")
+
+    # Get the metrics data
+    metrics_data = get_node_metrics(
+        get_elastic_connections_from_list(),
+        connection_name,
+        logstash_host,
+        pipeline
+    )
+
+    # Pre-process node_buckets to extract nested data
+    processed_buckets = []
+    for bucket in metrics_data.get('node_buckets', []):
+        try:
+            node_data = bucket['last_hit']['hits']['hits'][0]['_source']['logstash']['node']['stats']
+            logstash_info = node_data.get('logstash', {})
+
+            node_name = bucket['key']
+            status = logstash_info.get('status', 'unknown')
+            version = logstash_info.get('version', 'N/A')
+            uptime_ms = node_data.get('jvm', {}).get('uptime_in_millis', 0)
+            uptime = _format_uptime(uptime_ms)
+
+            # Try to get CPU from os.cpu.percent, fallback to process.cpu.percent
+            cpu_percent = node_data.get('os', {}).get('cpu', {}).get('percent') or \
+                          node_data.get('process', {}).get('cpu', {}).get('percent', 0)
+
+            heap_percent = node_data.get('jvm', {}).get('mem', {}).get('heap_used_percent', 0)
+            events_in = node_data.get('events', {}).get('in', 0)
+            events_out = node_data.get('events', {}).get('out', 0)
+            queued = node_data.get('queue', {}).get('events_count', 0)
+            reload_success = node_data.get('reloads', {}).get('successes', 0)
+            reload_failures = node_data.get('reloads', {}).get('failures', 0)
+
+            conn_id = bucket.get('connection_id')
+            conn_name = bucket.get('connection_name')
+
+            processed_buckets.append({
+                'node_name': node_name,
+                'connection_id': conn_id,
+                'connection_name': conn_name,
+                'status': status,
+                'version': version,
+                'uptime': uptime,
+                'cpu_percent': cpu_percent,
+                'heap_percent': heap_percent,
+                'events_in': events_in,
+                'events_out': events_out,
+                'queued': queued,
+                'reload_success': reload_success,
+                'reload_failures': reload_failures,
+            })
+        except (KeyError, IndexError) as e:
+            logger.error(f"Error processing node bucket: {e}")
+            continue
+
+    metrics_data['processed_node_buckets'] = processed_buckets
+
+    # Render as HTML template instead of JSON
+    response = render(request, 'components/node_metrics.html', context=metrics_data)
+
+    # Add available hosts to response header for JavaScript to populate dropdown
+    response['X-Available-Hosts'] = json.dumps(metrics_data.get('nodes', []))
+
+    return response
+
+
+def _safe_extract_value(data, default=0):
+    """
+    Safely extract a value from pipeline data.
+    Returns default if value is None, empty list, or invalid.
+    """
+    if data is None:
+        return default
+    if isinstance(data, list):
+        # If it's an empty list or list with no valid values, return default
+        if not data or all(v is None or v == '' for v in data):
+            return default
+        # If it's a list with values, return the first non-null value
+        for v in data:
+            if v is not None and v != '':
+                return v
+        return default
+    return data
+
+
+def GetPipelineHealthReport(request):
+    connection_id = request.GET.get("connection_id", "")
+    pipeline = request.GET.get("pipeline", "")
+
+    # Get the health report data
+    health_report_data = get_pipeline_health_report(
+        get_elastic_connection(connection_id),
+        pipeline
+    )
+
+    return JsonResponse(health_report_data)
+
+
+def GetPipelineMetrics(request):
+    connection_name = request.GET.get("connection", "")
+    logstash_host = request.GET.get("host", "")
+    pipeline = request.GET.get("pipeline", "")
+
+    # Get the metrics data
+    metrics_data = get_pipeline_metrics(
+        get_elastic_connections_from_list(),
+        connection_name,
+        logstash_host,
+        pipeline
+    )
+
+    # Pre-process pipeline_buckets to extract nested data (Django can't access _source)
+    processed_buckets = []
+    for bucket in metrics_data.get('pipeline_buckets', []):
+        try:
+            pipeline_data = bucket['last_hit']['hits']['hits'][0]['_source']['logstash']['pipeline']
+            pipeline_name = bucket['key']
+
+            # Track if pipeline has issues
+            has_issues = False
+            missing_fields = []
+
+            conn_id = bucket.get('connection_id')
+            conn_name = bucket.get('connection_name')
+
+            # Debug output
+            if not conn_id:
+                logger.warning(f"WARNING: No connection_id for pipeline {pipeline_name}. Bucket keys: {bucket.keys()}")
+
+            results = {
+                'pipeline_name': pipeline_name,
+                'connection_id': conn_id,
+                'connection_name': conn_name,
+                'host_name': _safe_extract_value(pipeline_data.get('host', {}).get('name'), 'Unknown'),
+                'events_in': _safe_extract_value(pipeline_data.get('total', {}).get('events', {}).get('in')),
+                'events_out': _safe_extract_value(pipeline_data.get('total', {}).get('events', {}).get('out')),
+                'events_filtered': _safe_extract_value(
+                    pipeline_data.get('total', {}).get('events', {}).get('filtered')),
+                'duration_ms': _safe_extract_value(
+                    pipeline_data.get('total', {}).get('time', {}).get('duration', {}).get('ms')),
+                'reload_success': _safe_extract_value(
+                    pipeline_data.get('total', {}).get('reloads', {}).get('successes')),
+                'reload_failures': _safe_extract_value(
+                    pipeline_data.get('total', {}).get('reloads', {}).get('failures')),
+            }
+
+            # Handle info field (workers and batch_size)
+            info = pipeline_data.get('info', {})
+
+            # Check if info is an empty list or dict
+            if isinstance(info, list) or not info:
+                has_issues = True
+                missing_fields.extend(['workers', 'batch_size'])
+                results['workers'] = 0
+                results['batch_size'] = 0
+            else:
+                workers = _safe_extract_value(info.get('workers'))
+                batch_size = _safe_extract_value(info.get('batch_size'))
+
+                results['workers'] = workers
+                results['batch_size'] = batch_size
+
+                if workers == 0:
+                    has_issues = True
+                    missing_fields.append('workers')
+                if batch_size == 0:
+                    has_issues = True
+                    missing_fields.append('batch_size')
+
+            # Flag pipeline if it has issues
+            results['has_issues'] = has_issues
+            results['missing_fields'] = missing_fields
+
+            processed_buckets.append(results)
+        except (KeyError, IndexError) as e:
+            logger.error(f"Error processing pipeline bucket: {e}")
+            continue
+
+    metrics_data['processed_pipeline_buckets'] = processed_buckets
+
+    # Render as HTML template instead of JSON
+    return render(request, 'components/pipeline_metrics.html', context=metrics_data)
+
+
+def GetLogs(request):
+    logstash_node = request.GET.get("logstash_node", "")
+    pipeline_name = request.GET.get("pipeline_name", "")
+    connection_id = request.GET.get("connection_id", "")
+
+    # Require connection_id to be provided
+    if not connection_id:
+        return JsonResponse({"error": "connection_id is required"}, status=400)
+
+    try:
+        es = get_elastic_connection(connection_id)
+        all_logs = get_logs(es, logstash_node, pipeline_name)
+        return JsonResponse(all_logs, safe=False)
+    except Exception as e:
+        logger.error(f"Error fetching logs for connection {connection_id}: {e}")
+        return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)

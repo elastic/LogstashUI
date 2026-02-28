@@ -121,7 +121,7 @@ async function prepareSnmpDiffModal() {
 
     try {
         // Fetch diff data from the server
-        const response = await fetch('/API/SNMP/GetCommitDiff/', {
+        const response = await fetch('/SNMP/GetCommitDiff/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -813,7 +813,7 @@ async function confirmCommitConfiguration() {
     confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
 
     try {
-        const response = await fetch('/API/SNMP/CommitConfiguration/', {
+        const response = await fetch('/SNMP/CommitConfiguration/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,

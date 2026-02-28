@@ -375,51 +375,58 @@
             </div>
         `;
 
-        // Add symptom if exists
-        if (pipeline.symptom) {
-            html += `
-                <div class="mt-4 bg-yellow-900/20 border border-yellow-600/50 rounded-lg p-4">
-                    <p class="text-sm font-semibold text-yellow-400 mb-1">Symptom</p>
-                    <p class="text-sm text-gray-300">${pipeline.symptom}</p>
-                </div>
-            `;
-        }
-
-        // Add diagnosis if exists
-        if (pipeline.diagnosis) {
-            const diagnosis = pipeline.diagnosis;
-            html += `
-                <div class="mt-4 bg-red-900/20 border border-red-600/50 rounded-lg p-4">
-                    <p class="text-sm font-semibold text-red-400 mb-2">Diagnosis</p>
-                    <div class="space-y-2 text-sm">
-                        ${diagnosis.cause ? `<p><span class="text-gray-400">Cause:</span> <span class="text-gray-300">${diagnosis.cause}</span></p>` : ''}
-                        ${diagnosis.action ? `<p><span class="text-gray-400">Action:</span> <span class="text-gray-300">${diagnosis.action}</span></p>` : ''}
-                        ${diagnosis.help_url ? `<p><a href="${diagnosis.help_url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">View Documentation →</a></p>` : ''}
-                    </div>
-                </div>
-            `;
-        }
-
-        // Add impacts if exists
-        if (pipeline.impacts) {
-            const impacts = pipeline.impacts;
-            const severityColors = {
-                1: 'text-red-400',
-                2: 'text-yellow-400',
-                3: 'text-blue-400'
-            };
-            const severityColor = severityColors[impacts.severity] || 'text-gray-400';
+        // Add symptom, diagnosis, and impact in a single row if any exist
+        if (pipeline.symptom || pipeline.diagnosis || pipeline.impacts) {
+            html += `<div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">`;
             
-            html += `
-                <div class="mt-4 bg-orange-900/20 border border-orange-600/50 rounded-lg p-4">
-                    <p class="text-sm font-semibold text-orange-400 mb-2">Impact</p>
-                    <div class="space-y-2 text-sm">
-                        <p><span class="text-gray-400">Severity:</span> <span class="${severityColor} font-semibold">${impacts.severity}</span></p>
-                        ${impacts.description ? `<p><span class="text-gray-400">Description:</span> <span class="text-gray-300">${impacts.description}</span></p>` : ''}
-                        ${impacts.impact_areas ? `<p><span class="text-gray-400">Areas:</span> <span class="text-gray-300">${impacts.impact_areas.join(', ')}</span></p>` : ''}
+            // Add symptom if exists
+            if (pipeline.symptom) {
+                html += `
+                    <div class="bg-yellow-900/20 border border-yellow-600/50 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-yellow-400 mb-1">Symptom</p>
+                        <p class="text-sm text-gray-300">${pipeline.symptom}</p>
                     </div>
-                </div>
-            `;
+                `;
+            }
+
+            // Add diagnosis if exists
+            if (pipeline.diagnosis) {
+                const diagnosis = pipeline.diagnosis;
+                html += `
+                    <div class="bg-red-900/20 border border-red-600/50 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-red-400 mb-2">Diagnosis</p>
+                        <div class="space-y-2 text-sm">
+                            ${diagnosis.cause ? `<p><span class="text-gray-400">Cause:</span> <span class="text-gray-300">${diagnosis.cause}</span></p>` : ''}
+                            ${diagnosis.action ? `<p><span class="text-gray-400">Action:</span> <span class="text-gray-300">${diagnosis.action}</span></p>` : ''}
+                            ${diagnosis.help_url ? `<p><a href="${diagnosis.help_url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">View Documentation →</a></p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Add impacts if exists
+            if (pipeline.impacts) {
+                const impacts = pipeline.impacts;
+                const severityColors = {
+                    1: 'text-red-400',
+                    2: 'text-yellow-400',
+                    3: 'text-blue-400'
+                };
+                const severityColor = severityColors[impacts.severity] || 'text-gray-400';
+                
+                html += `
+                    <div class="bg-orange-900/20 border border-orange-600/50 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-orange-400 mb-2">Impact</p>
+                        <div class="space-y-2 text-sm">
+                            <p><span class="text-gray-400">Severity:</span> <span class="${severityColor} font-semibold">${impacts.severity}</span></p>
+                            ${impacts.description ? `<p><span class="text-gray-400">Description:</span> <span class="text-gray-300">${impacts.description}</span></p>` : ''}
+                            ${impacts.impact_areas ? `<p><span class="text-gray-400">Areas:</span> <span class="text-gray-300">${impacts.impact_areas.join(', ')}</span></p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
         }
 
         // Add worker utilization if exists

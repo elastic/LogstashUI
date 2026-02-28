@@ -34,10 +34,10 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     
     // Disable fields for official profiles or view mode
     const isReadOnly = isOfficial || viewMode;
-    document.getElementById('profileName').disabled = isReadOnly;
-    document.getElementById('profileDescription').disabled = isReadOnly;
+    document.getElementById('profileName').readOnly = isReadOnly;
+    document.getElementById('profileDescription').readOnly = isReadOnly;
     document.getElementById('profileType').disabled = isReadOnly;
-    document.getElementById('profileVendor').disabled = isReadOnly;
+    document.getElementById('profileVendor').readOnly = isReadOnly;
     
     // Hide/disable save button for official profiles or view mode
     if (isReadOnly) {
@@ -53,15 +53,22 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
       btn.style.display = isReadOnly ? 'none' : '';
     });
     
+    // Hide Add Table button for official profiles or view mode
+    const addTableBtn = modal.querySelector('button[onclick="addTable()"]');
+    if (addTableBtn) {
+      addTableBtn.disabled = isReadOnly;
+      addTableBtn.style.display = isReadOnly ? 'none' : '';
+    }
+    
     // Load profile data
     loadProfileData(profileName, isOfficial, isReadOnly);
   } else {
     // New profile
     modalTitle.textContent = 'Add SNMP Profile';
-    document.getElementById('profileName').disabled = false;
-    document.getElementById('profileDescription').disabled = false;
+    document.getElementById('profileName').readOnly = false;
+    document.getElementById('profileDescription').readOnly = false;
     document.getElementById('profileType').disabled = false;
-    document.getElementById('profileVendor').disabled = false;
+    document.getElementById('profileVendor').readOnly = false;
     saveBtn.style.display = '';
     
     // Enable add buttons
@@ -70,6 +77,13 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
       btn.disabled = false;
       btn.style.display = '';
     });
+    
+    // Show Add Table button
+    const addTableBtn = modal.querySelector('button[onclick="addTable()"]');
+    if (addTableBtn) {
+      addTableBtn.disabled = false;
+      addTableBtn.style.display = '';
+    }
   }
   
   modal.classList.remove('hidden');
@@ -85,8 +99,8 @@ function closeProfileModal() {
 // Load profile data from server
 function loadProfileData(profileName, isOfficial, isReadOnly) {
   const endpoint = isOfficial 
-    ? `/API/SNMP/GetOfficialProfile/${profileName}/`
-    : `/API/SNMP/GetProfile/${profileName}/`;
+    ? `/SNMP/GetOfficialProfile/${profileName}/`
+    : `/SNMP/GetProfile/${profileName}/`;
   
   fetch(endpoint)
     .then(response => response.json())
@@ -151,14 +165,14 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
              class="input input-bordered input-sm w-full kv-key" 
              placeholder="Field name (e.g., sysName)" 
              value="${key}"
-             ${isReadOnly ? 'disabled' : ''}>
+             ${isReadOnly ? 'readonly' : ''}>
     </div>
     <div class="flex-1">
       <input type="text" 
              class="input input-bordered input-sm w-full font-mono kv-value" 
              placeholder="OID (e.g., 1.3.6.1.2.1.1.5.0)" 
              value="${value}"
-             ${isReadOnly ? 'disabled' : ''}>
+             ${isReadOnly ? 'readonly' : ''}>
     </div>
     <button type="button" 
             onclick="removeKVPair(this, '${section}')" 
@@ -275,7 +289,7 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
              class="input input-bordered input-sm w-64 table-name" 
              placeholder="Table name (e.g., ifTable)" 
              value="${tableName}"
-             ${isReadOnly ? 'disabled' : ''}>
+             ${isReadOnly ? 'readonly' : ''}>
       <button type="button" 
               onclick="removeTable(this)" 
               class="btn btn-ghost btn-sm text-red-400 hover:bg-red-900/20"
@@ -286,7 +300,7 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
         Remove Table
       </button>
     </div>
-    <div class="ml-4" style="display: block; min-height: 50px;">
+    <div class="ml-4">
       <div class="flex justify-between items-center mb-2">
         <label class="text-xs text-gray-400">Columns (Field Name → OID)</label>
         <button type="button" 
@@ -299,7 +313,7 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
           Add Column
         </button>
       </div>
-      <div class="table-columns space-y-2 min-h-[40px]" style="display: block; min-height: 50px;">
+      <div class="table-columns space-y-2">
         <!-- Columns will be added here -->
       </div>
     </div>
@@ -307,26 +321,19 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
   
   container.appendChild(tableElement);
   
-  console.log('Table element appended to container');
-  
   // Add existing columns if provided
   if (columns && Object.keys(columns).length > 0) {
-    console.log('Adding existing columns:', columns);
     const columnsContainer = tableElement.querySelector('.table-columns');
-    console.log('Columns container found:', columnsContainer);
     Object.entries(columns).forEach(([columnName, oid]) => {
       addTableColumnToContainer(columnsContainer, columnName, oid, isReadOnly);
     });
   } else {
-    console.log('No existing columns, adding empty column or message');
     // Show empty message for read-only tables with no columns
     const columnsContainer = tableElement.querySelector('.table-columns');
-    console.log('Columns container for new table:', columnsContainer);
     if (isReadOnly) {
       columnsContainer.innerHTML = '<p class="text-gray-500 text-sm text-center py-2">No columns defined</p>';
     } else {
       // Add one empty column for new tables
-      console.log('Adding one empty column to new table');
       addTableColumnToContainer(columnsContainer, '', '', false);
     }
   }
@@ -334,11 +341,8 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
 
 // Add a column to a table
 function addTableColumn(button) {
-  console.log('addTableColumn called with button:', button);
   const tableElement = button.closest('.table-group');
-  console.log('Found table element:', tableElement);
   const columnsContainer = tableElement.querySelector('.table-columns');
-  console.log('Found columns container:', columnsContainer);
   
   // Remove empty message if it exists
   const emptyMessage = columnsContainer.querySelector('p');
@@ -349,14 +353,13 @@ function addTableColumn(button) {
   addTableColumnToContainer(columnsContainer, '', '', false);
 }
 
-
 // Add a column to a specific container
 function addTableColumnToContainer(container, columnName = '', oid = '', isReadOnly = false) {
-  console.log('addTableColumnToContainer called - container:', container, 'columnName:', columnName, 'oid:', oid);
-  
   // Create wrapper div
   const column = document.createElement('div');
   column.className = 'flex gap-2 items-start table-column';
+  column.style.display = 'flex';
+  column.style.visibility = 'visible';
   
   // Create first input wrapper
   const wrapper1 = document.createElement('div');
@@ -364,9 +367,9 @@ function addTableColumnToContainer(container, columnName = '', oid = '', isReadO
   const input1 = document.createElement('input');
   input1.type = 'text';
   input1.className = 'input input-bordered input-sm w-full column-name';
-  input1.placeholder = 'Field name';
+  input1.placeholder = 'Column name (e.g., ifIndex)';
   input1.value = columnName;
-  if (isReadOnly) input1.disabled = true;
+  if (isReadOnly) input1.readOnly = true;
   wrapper1.appendChild(input1);
   
   // Create second input wrapper
@@ -375,9 +378,9 @@ function addTableColumnToContainer(container, columnName = '', oid = '', isReadO
   const input2 = document.createElement('input');
   input2.type = 'text';
   input2.className = 'input input-bordered input-sm w-full font-mono column-oid';
-  input2.placeholder = 'OID';
+  input2.placeholder = 'OID (e.g., 1.3.6.1.2.1.2.2.1.1)';
   input2.value = oid;
-  if (isReadOnly) input2.disabled = true;
+  if (isReadOnly) input2.readOnly = true;
   wrapper2.appendChild(input2);
   
   // Create remove button
@@ -397,7 +400,6 @@ function addTableColumnToContainer(container, columnName = '', oid = '', isReadO
   column.appendChild(button);
   
   container.appendChild(column);
-  console.log('Column appended. Container children count:', container.children.length);
 }
 
 // Remove a table column
@@ -523,8 +525,8 @@ document.addEventListener('DOMContentLoaded', function() {
       // Determine endpoint
       const isEdit = originalName && originalName !== '';
       const endpoint = isEdit 
-        ? `/API/SNMP/UpdateProfile/${originalName}/`
-        : '/API/SNMP/AddProfile/';
+        ? `/SNMP/UpdateProfile/${originalName}/`
+        : '/SNMP/AddProfile/';
       
       // Submit profile
       fetch(endpoint, {

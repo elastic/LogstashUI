@@ -205,7 +205,7 @@
   // Edit network function
   function editNetwork(networkId) {
     // Load network data and open modal in edit mode
-    fetch(`/API/SNMP/GetNetwork/${networkId}/`)
+    fetch(`/SNMP/GetNetwork/${networkId}/`)
       .then(response => response.json())
       .then(data => {
         openNetworkModal(data);
@@ -218,7 +218,7 @@
   // Delete network function with pipeline warning
   function deleteNetwork(networkId, networkName) {
     // First, fetch the pipeline name
-    fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+    fetch(`/SNMP/GetNetworkPipelineName/${networkId}/`)
       .then(response => response.json())
       .then(data => {
         if (data.success) {
@@ -236,7 +236,7 @@
             const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
             
             // Proceed with deletion
-            fetch(`/API/SNMP/DeleteNetwork/${networkId}/`, {
+            fetch(`/SNMP/DeleteNetwork/${networkId}/`, {
               method: 'POST',
               headers: {
                 'X-CSRFToken': csrfToken
@@ -267,7 +267,7 @@
           if (confirmed) {
             const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
             
-            fetch(`/API/SNMP/DeleteNetwork/${networkId}/`, {
+            fetch(`/SNMP/DeleteNetwork/${networkId}/`, {
               method: 'POST',
               headers: {
                 'X-CSRFToken': csrfToken
@@ -298,7 +298,7 @@
   // Copy pipeline name to clipboard
   function copyPipelineName(networkId, networkName) {
     // Fetch pipeline name from API
-    fetch(`/API/SNMP/GetNetworkPipelineName/${networkId}/`)
+    fetch(`/SNMP/GetNetworkPipelineName/${networkId}/`)
       .then(response => response.json())
       .then(data => {
         if (data.success) {

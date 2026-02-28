@@ -52,7 +52,7 @@ function switchToUIMode() {
         console.log(configText);
         console.log('=== END TEXT ===');
         
-        fetch('/API/ConfigToComponents/', {
+        fetch('/ConnectionManager/ConfigToComponents/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': csrfToken
@@ -273,7 +273,7 @@ function switchToTextMode() {
         const formData = new FormData();
         formData.append('components', JSON.stringify(components));
         
-        fetch('/API/ComponentsToConfig/', {
+        fetch('/ConnectionManager/ComponentsToConfig/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': csrfToken

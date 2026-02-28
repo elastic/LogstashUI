@@ -99,8 +99,8 @@ function closeProfileModal() {
 // Load profile data from server
 function loadProfileData(profileName, isOfficial, isReadOnly) {
   const endpoint = isOfficial 
-    ? `/API/SNMP/GetOfficialProfile/${profileName}/`
-    : `/API/SNMP/GetProfile/${profileName}/`;
+    ? `/SNMP/GetOfficialProfile/${profileName}/`
+    : `/SNMP/GetProfile/${profileName}/`;
   
   fetch(endpoint)
     .then(response => response.json())
@@ -525,8 +525,8 @@ document.addEventListener('DOMContentLoaded', function() {
       // Determine endpoint
       const isEdit = originalName && originalName !== '';
       const endpoint = isEdit 
-        ? `/API/SNMP/UpdateProfile/${originalName}/`
-        : '/API/SNMP/AddProfile/';
+        ? `/SNMP/UpdateProfile/${originalName}/`
+        : '/SNMP/AddProfile/';
       
       // Submit profile
       fetch(endpoint, {

@@ -18,7 +18,7 @@ function toggleDevicePreview(deviceId) {
       indicator.classList.remove('hidden');
 
       // Fetch device visualization data
-      fetch(`/API/SNMP/GetDeviceVisualization/${deviceId}/`)
+      fetch(`/SNMP/GetDeviceVisualization/${deviceId}/`)
         .then(response => response.json())
         .then(data => {
           indicator.classList.add('hidden');

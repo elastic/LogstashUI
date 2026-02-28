@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const formData = new FormData(form);
 
                 // Send request
-                const response = await fetch('/API/UpdatePipelineSettings/', {
+                const response = await fetch('/ConnectionManager/UpdatePipelineSettings/', {
                     method: 'POST',
                     body: formData
                 });

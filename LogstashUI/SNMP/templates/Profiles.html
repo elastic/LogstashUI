@@ -188,7 +188,7 @@
 
   function deleteProfile(profileName) {
     if (confirm(`Are you sure you want to delete the profile "${profileName}"?`)) {
-      fetch(`/API/SNMP/DeleteProfile/${profileName}/`, {
+      fetch(`/SNMP/DeleteProfile/${profileName}/`, {
         method: 'POST',
         headers: {
           'X-CSRFToken': '{{ csrf_token }}'

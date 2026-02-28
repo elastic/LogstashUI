@@ -34,7 +34,7 @@ function showCodeModal() {
   modal.classList.remove('hidden');
   
   // Fetch the pipeline code
-  fetch('/API/GetCurrentPipelineCode')
+  fetch('/ConnectionManager/GetCurrentPipelineCode')
     .then(response => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

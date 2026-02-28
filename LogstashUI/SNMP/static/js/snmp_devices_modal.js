@@ -90,7 +90,7 @@ function closeDeviceModal() {
 function loadCredentialsForDevice(selectedCredentialId = null) {
   const credentialSelect = document.getElementById('deviceCredentialSelect');
 
-  fetch('/API/SNMP/GetCredentials/')
+  fetch('/SNMP/GetCredentials/')
     .then(response => response.json())
     .then(credentials => {
       // Clear existing options except the first two (placeholder and "Add Credential")
@@ -119,7 +119,7 @@ function loadCredentialsForDevice(selectedCredentialId = null) {
 function loadNetworksForDevice(selectedNetworkId = null) {
   const networkSelect = document.getElementById('deviceNetworkSelect');
 
-  fetch('/API/SNMP/GetNetworks/')
+  fetch('/SNMP/GetNetworks/')
     .then(response => response.json())
     .then(networks => {
       // Clear existing options except the first two (placeholder and "Add Network")
@@ -205,7 +205,7 @@ let selectedProfiles = [];
 function loadProfilesForDevice() {
   const profileSelect = document.getElementById('deviceProfilesSelect');
 
-  fetch('/API/SNMP/GetAllProfiles/')
+  fetch('/SNMP/GetAllProfiles/')
     .then(response => response.json())
     .then(data => {
       // Clear existing options
@@ -363,7 +363,7 @@ if (deviceForm) {
 
     const formData = new FormData(this);
     const deviceId = document.getElementById('deviceId').value;
-    const url = deviceId ? `/API/SNMP/UpdateDevice/${deviceId}/` : '/API/SNMP/AddDevice/';
+    const url = deviceId ? `/SNMP/UpdateDevice/${deviceId}/` : '/SNMP/AddDevice/';
 
     // Add selected profiles to form data
     selectedProfiles.forEach(profile => {

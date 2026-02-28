@@ -507,7 +507,7 @@
   // Load Elasticsearch connections
   function loadElasticsearchConnections() {
     const select = document.getElementById('esConnection');
-    fetch('/API/GetElasticsearchConnections/')
+    fetch('/ConnectionManager/GetElasticsearchConnections/')
       .then(response => response.json())
       .then(data => {
         select.innerHTML = '<option value="">Select a connection...</option>';
@@ -571,7 +571,7 @@
   function fetchIndices(connectionId, pattern) {
     const dropdown = document.getElementById('esIndexDropdown');
     
-    fetch(`/API/GetElasticsearchIndices/?connection_id=${connectionId}&pattern=${encodeURIComponent(pattern)}`)
+    fetch(`/ConnectionManager/GetElasticsearchIndices/?connection_id=${connectionId}&pattern=${encodeURIComponent(pattern)}`)
       .then(response => response.json())
       .then(data => {
         if (data.indices && data.indices.length > 0) {
@@ -609,7 +609,7 @@
     const connectionId = document.getElementById('esConnection').value;
     const fieldSelect = document.getElementById('esField');
     
-    fetch(`/API/GetElasticsearchFields/?connection_id=${connectionId}&index=${encodeURIComponent(indexName)}`)
+    fetch(`/ConnectionManager/GetElasticsearchFields/?connection_id=${connectionId}&index=${encodeURIComponent(indexName)}`)
       .then(response => response.json())
       .then(data => {
         fieldSelect.innerHTML = '<option value="">Select a field...</option>';
@@ -708,7 +708,7 @@
       formData.append(key, requestData[key]);
     }
     
-    fetch('/API/QueryElasticsearchDocuments/', {
+    fetch('/ConnectionManager/QueryElasticsearchDocuments/', {
       method: 'POST',
       body: formData,
       headers: {
@@ -831,7 +831,7 @@
       }
       
       try {
-        const response = await fetch('/API/QueryElasticsearchDocuments/', {
+        const response = await fetch('/ConnectionManager/QueryElasticsearchDocuments/', {
           method: 'POST',
           body: formData,
           headers: {

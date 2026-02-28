@@ -10,7 +10,7 @@ let totalNetworksCount = 0;
 // Fetch all networks from the API
 async function fetchNetworks() {
   try {
-    const response = await fetch('/API/SNMP/GetNetworks/');
+    const response = await fetch('/SNMP/GetNetworks/');
     const networks = await response.json();
     allNetworks = networks;
     totalNetworksCount = networks.length;

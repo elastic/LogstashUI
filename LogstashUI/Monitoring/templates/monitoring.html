@@ -3,7 +3,7 @@
 {% block content %}
 
 {% load static %}
-<script src="{% static 'js/home.js' %}"></script>
+<script src="{% static 'js/monitoring.js' %}"></script>
 
 <style>
     /* Custom scrollbar styling for log viewer */
@@ -155,12 +155,12 @@
                            class="block text-sm font-medium text-gray-300 mb-2">Connection</label>
                     <select id="connectionSelect"
                             name="connection"
-                            hx-get="/API/GetNodeMetrics"
+                            hx-get="/Monitoring/GetNodeMetrics"
                             hx-target="#nodeMetricsContainer"
                             hx-include="[name='connection'],[name='host']"
                             hx-trigger="change"
                             class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            onchange="document.getElementById('hostSelect').value=''; htmx.ajax('GET', '/API/GetPipelineMetrics?connection=' + this.value + '&host=', {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
+                            onchange="document.getElementById('hostSelect').value=''; htmx.ajax('GET', '/Monitoring/GetPipelineMetrics?connection=' + this.value + '&host=', {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
                         <option value="">All Connections</option>
                         {% for connection in Connections %}
                         <option value="{{ connection.name }}">{{ connection.name }}</option>
@@ -173,12 +173,12 @@
                     <label for="hostSelect" class="block text-sm font-medium text-gray-300 mb-2">Logstash Host</label>
                     <select id="hostSelect"
                             name="host"
-                            hx-get="/API/GetNodeMetrics"
+                            hx-get="/Monitoring/GetNodeMetrics"
                             hx-target="#nodeMetricsContainer"
                             hx-include="[name='connection'],[name='host']"
                             hx-trigger="change"
                             class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            onchange="htmx.ajax('GET', '/API/GetPipelineMetrics?connection=' + document.getElementById('connectionSelect').value + '&host=' + this.value, {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
+                            onchange="htmx.ajax('GET', '/Monitoring/GetPipelineMetrics?connection=' + document.getElementById('connectionSelect').value + '&host=' + this.value, {target: '#pipelineMetricsContainer', swap: 'innerHTML'});">
                         <option value="">All Hosts</option>
                         <!-- Options will be populated by JavaScript after node metrics load -->
                     </select>
@@ -204,7 +204,7 @@
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-white mb-4">Node Metrics Summary</h2>
         <div id="nodeMetricsContainer" 
-             hx-get="/API/GetNodeMetrics"
+             hx-get="/Monitoring/GetNodeMetrics"
              hx-include="[name='connection'],[name='host']"
              hx-trigger="load, refreshMetrics from:body"
              hx-swap="innerHTML">
@@ -234,7 +234,7 @@
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-white mb-4">Pipeline Metrics</h2>
         <div id="pipelineMetricsContainer" 
-             hx-get="/API/GetPipelineMetrics"
+             hx-get="/Monitoring/GetPipelineMetrics"
              hx-include="[name='connection'],[name='host']"
              hx-trigger="load, refreshMetrics from:body, htmx:trigger"
              hx-swap="innerHTML">
