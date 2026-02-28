@@ -143,17 +143,7 @@ function addDiscoveredDevice(deviceIndex) {
     }
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.toString().replace(/[&<>"']/g, m => map[m]);
-}
+
 
 // Attach event listener to discovered devices button
 document.addEventListener('DOMContentLoaded', function() {

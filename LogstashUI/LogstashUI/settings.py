@@ -48,7 +48,6 @@ INSTALLED_APPS = [
 
     # Apps of LogstashUI
     'PipelineManager',
-    'API',
     'Management',
     'Utilities',
     'SNMP',
@@ -182,6 +181,7 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/Management/Login/",
     "/Management/Logout/",
     "/static/",
+    "/health/",
     "/ConnectionManager/StreamSimulate/",
     "/ConnectionManager/StreamSimulate"
 ]

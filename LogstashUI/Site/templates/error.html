@@ -1,12 +1,5 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ error_code }} - {{ error_title }} | LogstashUI</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="h-full bg-gray-900 text-gray-100">
+{% extends 'base.html' %}
+{% block content %}
     <div class="min-h-full flex items-center justify-center px-4">
         <div class="max-w-md w-full text-center">
             <!-- Error Code -->
@@ -37,6 +30,9 @@
             </div>
             {% endif %}
 
+            <!-- Please report -->
+            <p class="text-gray-400 mb-8">Please report this issue to the LogstashUI GitHub</p>
+
             <!-- Action Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 justify-center">
                 <a href="/"
@@ -44,9 +40,9 @@
                     Go to Home
                 </a>
                 
-                <a href="https://github.com/elastic/LogstashUI/issues"
+                <a href="https://github.com/elastic/LogstashUI/issues/new?template=issue.md"
                    target="_blank"
-                   class="inline-flex items-center justify-center px-6 py-3 border border-gray-600 text-gray-300 hover:bg-gray-800 font-medium rounded-md transition-colors">
+                   class="nav-highlight inline-flex items-center justify-center px-6 py-3 border border-gray-600 text-gray-300 hover:bg-gray-800 font-medium rounded-md transition-colors">
                     Report Issue
                 </a>
             </div>
@@ -59,5 +55,5 @@
             </p>
         </div>
     </div>
-</body>
-</html>
+
+{% endblock %}

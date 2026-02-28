@@ -347,13 +347,6 @@ function loadNetworkFilter() {
     });
 }
 
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
   // Load initial data

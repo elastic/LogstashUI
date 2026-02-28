@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
     <style>
         @keyframes fan-spin {
             from {
@@ -83,8 +82,8 @@
             </svg>
             CPU (6h)
           </h3>
-          <div class="h-40">
-            <canvas class="metric-cpu-chart"></canvas>
+          <div class="h-40 relative">
+            <div class="metric-cpu-chart"></div>
           </div>
         </div>
 
@@ -96,8 +95,8 @@
             </svg>
             Memory (6h)
           </h3>
-          <div class="h-40">
-            <canvas class="metric-memory-chart"></canvas>
+          <div class="h-40 relative">
+            <div class="metric-memory-chart"></div>
           </div>
         </div>
 

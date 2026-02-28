@@ -1,7 +1,3 @@
-"""
-Custom error handlers for LogstashUI
-All errors use a single template with different context
-"""
 import sys
 import traceback
 from django.shortcuts import render
@@ -46,7 +42,7 @@ def handler500(request):
     return render(request, 'error.html', {
         'error_code': '500',
         'error_title': 'Server Error',
-        'error_message': 'Something went wrong on our end. Please try again later.',
+        'error_message': 'Something went wrong on our end!',
         'exception': str(exc_value) if exc_value else None,
         'stack_trace': stack_trace,
     }, status=500)

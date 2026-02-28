@@ -10,7 +10,7 @@
     {% htmx_script %}
     {% tailwind_css %}
     {% load static %}
-    <script src="{% static 'js/d3.v7.js' %}"></script>
+<script src="{% static 'js/d3.v7.js' %}"></script>
     <script src="{% static 'js/base.js' %}"></script>
     <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
 
@@ -30,43 +30,6 @@
     </main>
   </div>
   <div id="toast-container" class="toast toast-end toast-bottom z-50"></div>
-  
-  <script>
-    // Global toast function
-    function showToast(message, type = 'success') {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      const colors = {
-        success: 'bg-green-500',
-        error: 'bg-red-500',
-        info: 'bg-blue-500',
-        warning: 'bg-yellow-500'
-      };
 
-      toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
-      toast.innerHTML = `
-        <span>${message}</span>
-        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      `;
-
-      container.appendChild(toast);
-
-      // Auto-remove after 5 seconds
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-      }, 5000);
-    }
-    
-    // Listen for custom HTMX trigger events to show toasts
-    document.body.addEventListener('showToastEvent', function(event) {
-      const detail = event.detail.value || event.detail;
-      showToast(detail.message, detail.type);
-    });
-  </script>
 </body>
 </html>

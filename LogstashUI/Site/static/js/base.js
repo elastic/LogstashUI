@@ -10,7 +10,7 @@ function showToast(message, type = 'success') {
   };
   toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
   toast.innerHTML = `
-    <span>${message}</span>
+    <span>${escapeHtml(message)}</span>
     <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

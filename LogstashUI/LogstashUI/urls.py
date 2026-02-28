@@ -26,15 +26,19 @@ handler403 = 'Common.error_handlers.handler403'
 handler404 = 'Common.error_handlers.handler404'
 handler500 = 'Common.error_handlers.handler500'
 
+def crash(request):
+    raise Exception("Test Exception")
+
 urlpatterns = [
     path('ConnectionManager/', include('PipelineManager.urls')),
-    path('API/', include('API.urls')),
     path('Management/', include('Management.urls')),
     path('Utilities/', include('Utilities.urls')),
     path('SNMP/', include('SNMP.urls')),
     path('Monitoring/', include('Monitoring.urls')),
     path('', include('Site.urls')),
+    #path('Crash', crash)
 ]
+
 
 
 

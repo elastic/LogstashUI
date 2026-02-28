@@ -293,12 +293,7 @@ function previousPage() {
   }
 }
 
-// Helper function to escape HTML
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
