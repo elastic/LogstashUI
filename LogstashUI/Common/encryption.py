@@ -222,6 +222,16 @@ def get_django_secret_key():
             logger.error(f"Error creating data directory: {e}")
             raise RuntimeError(f"Cannot create data directory: {e}")
         
+        # Set file permissions before writing
+        try:
+            key_file.touch(mode=0o600, exist_ok=True)
+        except PermissionError:
+            logger.error(f"Permission denied creating Django secret key file: {key_file}")
+            raise RuntimeError(f"Cannot create Django secret key file: Permission denied")
+        except Exception as e:
+            logger.error(f"Error creating Django secret key file: {e}")
+            raise RuntimeError(f"Cannot create Django secret key file: {e}")
+        
         # Save key to file
         try:
             with open(key_file, 'w') as f:

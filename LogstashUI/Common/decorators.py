@@ -18,12 +18,12 @@ def require_admin_role(view_func):
             return response
 
         # Check if user has admin role
-        if hasattr(request.user, 'profile'):
-            if request.user.profile.role != 'admin':
-                logger.warning(f"User '{request.user.username}' with role '{request.user.profile.role}' attempted to access admin-only function: {view_func.__name__}")
-                response = HttpResponse('Access denied: Admin role required', status=403)
-                response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
-                return response
+        if not hasattr(request.user, 'profile') or request.user.profile.role != 'admin':
+            role_info = f"'{request.user.profile.role}'" if hasattr(request.user, 'profile') else 'no profile'
+            logger.warning(f"User '{request.user.username}' with {role_info} attempted to access admin-only function: {view_func.__name__}")
+            response = HttpResponse('Access denied: Admin role required', status=403)
+            response['HX-Trigger'] = '{"showToastEvent": {"message": "Access denied: Admin role required", "type": "error"}}'
+            return response
 
         # User is admin, proceed with the view
         return view_func(request, *args, **kwargs)

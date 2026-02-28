@@ -38,6 +38,7 @@ def _get_creds(connection_id):
     if connection.api_key:
         connection_data['api_key'] = connection.get_api_key()
     else:
+        # This is how we allow user to use a username/password instead of an API key
         connection_data['http_auth'] = (connection.username, connection.get_password())
 
     return connection_data
