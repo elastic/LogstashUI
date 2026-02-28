@@ -4,24 +4,7 @@
   "type": "Storage",
   "vendor": "HPE Nimble",
   "pinned": true,
-  "get": {
-    "nimble.global.statTimeEpochSeconds": "1.3.6.1.4.1.37447.1.3.1",
-    "nimble.global.ioReads": "1.3.6.1.4.1.37447.1.3.2",
-    "nimble.global.ioSeqReads": "1.3.6.1.4.1.37447.1.3.3",
-    "nimble.global.ioWrites": "1.3.6.1.4.1.37447.1.3.4",
-    "nimble.global.ioSeqWrites": "1.3.6.1.4.1.37447.1.3.5",
-    "nimble.global.ioReadTimeMicrosec": "1.3.6.1.4.1.37447.1.3.6",
-    "nimble.global.ioWriteTimeMicrosec": "1.3.6.1.4.1.37447.1.3.7",
-    "nimble.global.ioReadBytes": "1.3.6.1.4.1.37447.1.3.8",
-    "nimble.global.ioSeqReadBytes": "1.3.6.1.4.1.37447.1.3.9",
-    "nimble.global.ioWriteBytes": "1.3.6.1.4.1.37447.1.3.10",
-    "nimble.global.ioSeqWriteBytes": "1.3.6.1.4.1.37447.1.3.11",
-    "nimble.global.diskVolBytesUsedLow": "1.3.6.1.4.1.37447.1.3.12",
-    "nimble.global.diskVolBytesUsedHigh": "1.3.6.1.4.1.37447.1.3.13",
-    "nimble.global.diskSnapBytesUsedLow": "1.3.6.1.4.1.37447.1.3.14",
-    "nimble.global.diskSnapBytesUsedHigh": "1.3.6.1.4.1.37447.1.3.15",
-    "nimble.global.ioNonseqReadHits": "1.3.6.1.4.1.37447.1.3.16"
-  },
+  "get": {},
   "walk": {},
   "table": {
     "volumes": {

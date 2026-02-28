@@ -54,7 +54,7 @@ def _get_pipeline_name(network):
 def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, description=""):
     """
     Helper function to create or update a Logstash pipeline in Elasticsearch.
-    Uses the same logic as CreatePipeline in views.py.
+    Only updates if the pipeline content has actually changed.
     
     Args:
         es_connection: Elasticsearch connection object
@@ -72,6 +72,7 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
         pipeline_exists = False
         existing_settings = None
         existing_metadata = None
+        existing_pipeline_content = None
         
         try:
             existing = es_connection.logstash.get_pipeline(id=pipeline_name)
@@ -79,8 +80,24 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
                 pipeline_exists = True
                 existing_settings = existing[pipeline_name].get('pipeline_settings', {})
                 existing_metadata = existing[pipeline_name].get('pipeline_metadata', {})
+                existing_pipeline_content = existing[pipeline_name].get('pipeline', '')
         except:
             pipeline_exists = False
+        
+        # If pipeline exists and content is identical, skip the update
+        if pipeline_exists:
+            content_match = existing_pipeline_content == pipeline_content
+            logger.info(f"Pipeline {pipeline_name} comparison: existing_len={len(existing_pipeline_content)}, new_len={len(pipeline_content)}, match={content_match}")
+            
+            if content_match:
+                # No changes needed - return success=True, is_new=False, error=None, was_updated=False
+                logger.info(f"Pipeline {pipeline_name} unchanged - skipping update")
+                return (True, False, None, False)
+            else:
+                logger.info(f"Pipeline {pipeline_name} has changes - updating")
+                # Log first 500 chars of each to see the difference
+                logger.info(f"Existing (first 500): {existing_pipeline_content[:500]}")
+                logger.info(f"New (first 500): {pipeline_content[:500]}")
         
         # Prepare pipeline body
         pipeline_body = {
@@ -114,10 +131,10 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
         # Create or update the pipeline
         es_connection.logstash.put_pipeline(id=pipeline_name, body=pipeline_body)
         
-        return (True, not pipeline_exists, None)
+        return (True, not pipeline_exists, None, True)
         
     except Exception as e:
-        return (False, False, str(e))
+        return (False, False, str(e), False)
 
 
 @require_http_methods(["GET"])
@@ -339,6 +356,7 @@ def AddNetwork(request):
         discovery_credential_id = request.POST.get('discovery_credential')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
+        interval = int(request.POST.get('interval', 30))
         
         # Create network object
         network = Network(
@@ -346,7 +364,8 @@ def AddNetwork(request):
             network_range=network_range,
             logstash_name=logstash_name,
             discovery_enabled=discovery_enabled,
-            traps_enabled=traps_enabled
+            traps_enabled=traps_enabled,
+            interval=interval
         )
         
         # Set connection if provided
@@ -387,6 +406,11 @@ def UpdateNetwork(request, network_id):
         network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
+        
+        # Update interval (convert to int)
+        interval = request.POST.get('interval')
+        if interval:
+            network.interval = int(interval)
         
         # Update connection
         connection_id = request.POST.get('connection')
@@ -441,6 +465,7 @@ def GetNetwork(request, network_id):
             'credential': network.credential_id if network.credential else None,
             'discovery_enabled': network.discovery_enabled,
             'traps_enabled': network.traps_enabled,
+            'interval': network.interval,
         }
         
         return JsonResponse(data)
@@ -692,13 +717,17 @@ def _generate_input(input_data, profile_cache=None):
                 hosts.append({
                     "host": f"udp:{device.ip_address}/{device.port}",
                     "community": credential.get_community(),
-                    "version": credential.version
+                    "version": credential.version,
+                    "timeout": device.timeout,
+                    "retries": device.retries
                 })
             
             if hosts:
+                interval_value = getattr(input_data['network'], 'interval', 30) or 30
+                logger.info(f"Network {input_data['network'].name} interval: {interval_value} (type: {type(interval_value)})")
                 config = {
-                    "hosts": hosts
-
+                    "hosts": hosts,
+                    "interval": interval_value
                 } | global_input_config
                 
                 # Add OIDs from merged profiles
@@ -759,14 +788,19 @@ def _generate_input(input_data, profile_cache=None):
             for device in group_data['devices']:
                 hosts.append({
                     "host": f"udp:{device.ip_address}/{device.port}",
-                    "version": device.credential.version
+                    "version": device.credential.version,
+                    "timeout": device.timeout,
+                    "retries": device.retries
                 })
             
             if hosts:
                 credential = group_data['credential']
+                interval_value = getattr(input_data['network'], 'interval', 30) or 30
+                logger.info(f"Network {input_data['network'].name} (v3) interval: {interval_value} (type: {type(interval_value)})")
                 
                 config = {
                     "hosts": hosts,
+                    "interval": interval_value,
                     "security_name": credential.security_name,
                     "security_level": credential.security_level
                 } | global_input_config
@@ -1269,7 +1303,10 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
 def GetCommitDiff(request):
     """Get diff for all network pipeline configurations"""
     try:
-
+        # Clear the official profile cache to ensure we load fresh data from disk
+        # This is important when profile JSON files have been edited
+        global _OFFICIAL_PROFILE_CACHE
+        _OFFICIAL_PROFILE_CACHE.clear()
         
         # Prefetch all related data in one go to avoid N+1 queries
         networks = Network.objects.select_related('connection', 'credential', 'discovery_credential').prefetch_related(
@@ -1548,6 +1585,11 @@ def GetCommitDiff(request):
 def CommitConfiguration(request):
     """Commit SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
     try:
+        # Clear the official profile cache to ensure we load fresh data from disk
+        # This is important when profile JSON files have been edited
+        global _OFFICIAL_PROFILE_CACHE
+        _OFFICIAL_PROFILE_CACHE.clear()
+        
         # Query all networks with their credentials
         networks = Network.objects.select_related('credential', 'discovery_credential', 'connection').all()
         
@@ -1620,7 +1662,7 @@ def CommitConfiguration(request):
                     pipeline_name = _get_pipeline_name(network)
                     
                     # Use helper function to create or update the pipeline
-                    success, is_new, error = _create_or_update_pipeline(
+                    success, is_new, error, was_updated = _create_or_update_pipeline(
                         es,
                         pipeline_name,
                         pipeline_content,
@@ -1630,10 +1672,15 @@ def CommitConfiguration(request):
                     if success:
                         if is_new:
                             pipelines_created += 1
-                        else:
+                            logger.info(f"Created new pipeline: {pipeline_name}")
+                        elif was_updated:
                             pipelines_updated += 1
+                            logger.info(f"Updated pipeline: {pipeline_name}")
+                        else:
+                            logger.info(f"Pipeline {pipeline_name} unchanged - skipped")
                     else:
                         errors.append(f"Network '{network.name}': {error}")
+                        logger.error(f"Failed to create/update pipeline {pipeline_name}: {error}")
                         continue
                 else:
                     # Network has no devices - delete main pipeline if it exists
@@ -1717,7 +1764,7 @@ def CommitConfiguration(request):
                             trap_pipeline_content = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
                             
                             # Create or update trap pipeline
-                            trap_success, trap_is_new, trap_error = _create_or_update_pipeline(
+                            trap_success, trap_is_new, trap_error, trap_was_updated = _create_or_update_pipeline(
                                 es,
                                 trap_pipeline_name,
                                 trap_pipeline_content,
@@ -1727,8 +1774,9 @@ def CommitConfiguration(request):
                             if trap_success:
                                 if trap_is_new:
                                     pipelines_created += 1
-                                else:
+                                elif trap_was_updated:
                                     pipelines_updated += 1
+                                # If not new and not updated, it means no changes - don't count it
                             else:
                                 errors.append(f"Network '{network.name}' trap pipeline: {trap_error}")
                         except Exception as trap_e:
@@ -1775,7 +1823,7 @@ def CommitConfiguration(request):
                             discovery_pipeline_content = ComponentToPipeline(discovery_components, test=False).components_to_logstash_config()
                             
                             # Create or update discovery pipeline
-                            discovery_success, discovery_is_new, discovery_error = _create_or_update_pipeline(
+                            discovery_success, discovery_is_new, discovery_error, discovery_was_updated = _create_or_update_pipeline(
                                 es,
                                 discovery_pipeline_name,
                                 discovery_pipeline_content,
@@ -1785,8 +1833,9 @@ def CommitConfiguration(request):
                             if discovery_success:
                                 if discovery_is_new:
                                     pipelines_created += 1
-                                else:
+                                elif discovery_was_updated:
                                     pipelines_updated += 1
+                                # If not new and not updated, it means no changes - don't count it
                             else:
                                 errors.append(f"Network '{network.name}' discovery pipeline: {discovery_error}")
                         except Exception as discovery_e:
@@ -1862,17 +1911,22 @@ def CommitConfiguration(request):
             errors.append(f"Pipeline cleanup error: {str(cleanup_err)}")
         
         # Build response message
-        if pipelines_created == 0 and pipelines_updated == 0:
+        if pipelines_created == 0 and pipelines_updated == 0 and pipelines_deleted == 0:
             if errors:
                 return JsonResponse({
                     'success': False,
                     'error': 'Failed to commit any pipelines. Errors: ' + '; '.join(errors)
                 }, status=500)
             else:
+                # No changes needed - all pipelines are already up to date
                 return JsonResponse({
-                    'success': False,
-                    'error': 'No pipelines to commit (no networks with devices found)'
-                }, status=400)
+                    'success': True,
+                    'message': 'All pipelines are already up to date - no changes needed',
+                    'pipelines_created': 0,
+                    'pipelines_updated': 0,
+                    'pipelines_deleted': 0,
+                    'errors': None
+                })
         
         message_parts = []
         if pipelines_created > 0:
