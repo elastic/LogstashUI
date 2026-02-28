@@ -96,14 +96,22 @@ def _get_device_metrics(device, es_connection):
     }
 
     for result in results['hits']['hits']:
-        visualization_data['CPU'].append(result['_source']['system']['cpu']['total']['norm']['pct'])
-        visualization_data['Memory'].append(result['_source']['system']['memory']['actual']['used']['pct'])
-        visualization_data['Time'].append(result['_source']['@timestamp'])
+        try:
+            cpu = result['_source']['system']['cpu']['total']['norm']['pct']
+            memory = result['_source']['system']['memory']['actual']['used']['pct']
+            timestamp = result['_source']['@timestamp']
+            
+            visualization_data['CPU'].append(cpu)
+            visualization_data['Memory'].append(memory)
+            visualization_data['Time'].append(timestamp)
+        except (KeyError, TypeError):
+            # Skip documents that don't have the required CPU/Memory fields
+            continue
 
 
     try:
         visualization_data['Uptime'] = results['hits']['hits'][0]['_source']['host']['uptime']
-    except:
+    except (KeyError, TypeError, IndexError):
         visualization_data['Uptime'] = 0
 
     return visualization_data

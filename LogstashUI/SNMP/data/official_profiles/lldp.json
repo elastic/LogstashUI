@@ -1,0 +1,59 @@
+{
+  "name": "lldp_mib_vendor_neutral",
+  "description": "[Standards] LLDP-MIB local system + local ports + remote neighbors + remote mgmt addresses",
+  "type": "Network",
+  "vendor": "Generic",
+  "pinned": true,
+  "get": {
+    "lldpLocChassisIdSubtype": "1.0.8802.1.1.2.1.3.1.0",
+    "lldpLocChassisId": "1.0.8802.1.1.2.1.3.2.0",
+    "lldpLocSysName": "1.0.8802.1.1.2.1.3.3.0",
+    "lldpLocSysDesc": "1.0.8802.1.1.2.1.3.4.0",
+    "lldpLocSysCapSupported": "1.0.8802.1.1.2.1.3.5.0",
+    "lldpLocSysCapEnabled": "1.0.8802.1.1.2.1.3.6.0",
+
+    "lldpStatsRemTablesLastChangeTime": "1.0.8802.1.1.2.1.2.1.0",
+    "lldpStatsRemTablesInserts": "1.0.8802.1.1.2.1.2.2.0",
+    "lldpStatsRemTablesDeletes": "1.0.8802.1.1.2.1.2.3.0",
+    "lldpStatsRemTablesDrops": "1.0.8802.1.1.2.1.2.4.0",
+    "lldpStatsRemTablesAgeouts": "1.0.8802.1.1.2.1.2.5.0"
+  },
+  "walk": {},
+  "table": {
+    "lldpLocPortTable": {
+      "columns": {
+        "lldpLocPortNum": "1.0.8802.1.1.2.1.3.7.1.1",
+        "lldpLocPortIdSubtype": "1.0.8802.1.1.2.1.3.7.1.2",
+        "lldpLocPortId": "1.0.8802.1.1.2.1.3.7.1.3",
+        "lldpLocPortDesc": "1.0.8802.1.1.2.1.3.7.1.4"
+      }
+    },
+
+    "lldpRemTable": {
+      "columns": {
+        "lldpRemTimeMark": "1.0.8802.1.1.2.1.4.1.1.1",
+        "lldpRemLocalPortNum": "1.0.8802.1.1.2.1.4.1.1.2",
+        "lldpRemIndex": "1.0.8802.1.1.2.1.4.1.1.3",
+        "lldpRemChassisIdSubtype": "1.0.8802.1.1.2.1.4.1.1.4",
+        "lldpRemChassisId": "1.0.8802.1.1.2.1.4.1.1.5",
+        "lldpRemPortIdSubtype": "1.0.8802.1.1.2.1.4.1.1.6",
+        "lldpRemPortId": "1.0.8802.1.1.2.1.4.1.1.7",
+        "lldpRemPortDesc": "1.0.8802.1.1.2.1.4.1.1.8",
+        "lldpRemSysName": "1.0.8802.1.1.2.1.4.1.1.9",
+        "lldpRemSysDesc": "1.0.8802.1.1.2.1.4.1.1.10",
+        "lldpRemSysCapSupported": "1.0.8802.1.1.2.1.4.1.1.11",
+        "lldpRemSysCapEnabled": "1.0.8802.1.1.2.1.4.1.1.12"
+      }
+    },
+
+    "lldpRemManAddrTable": {
+      "columns": {
+        "lldpRemManAddrSubtype": "1.0.8802.1.1.2.1.4.2.1.1",
+        "lldpRemManAddr": "1.0.8802.1.1.2.1.4.2.1.2",
+        "lldpRemManAddrIfSubtype": "1.0.8802.1.1.2.1.4.2.1.3",
+        "lldpRemManAddrIfId": "1.0.8802.1.1.2.1.4.2.1.4",
+        "lldpRemManAddrOID": "1.0.8802.1.1.2.1.4.2.1.5"
+      }
+    }
+  }
+}

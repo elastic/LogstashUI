@@ -64,6 +64,11 @@ class Network(models.Model):
         help_text="SNMP credential to use for trap reception on this network"
     )
     
+    interval = models.PositiveIntegerField(
+        default=30,
+        help_text="Polling interval in seconds"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

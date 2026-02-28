@@ -122,27 +122,37 @@ function renderDevicePreview(deviceId, device, visualizations) {
     const metrics = visualizations.metrics;
 
     // Render CPU chart
+    const cpuChartCanvas = contentDiv.querySelector('.metric-cpu-chart');
     if (metrics.CPU && metrics.Time && metrics.CPU.length > 0) {
       renderMetricChart(
-        contentDiv.querySelector('.metric-cpu-chart'),
+        cpuChartCanvas,
         metrics.Time,
         metrics.CPU,
         'CPU Usage (%)',
         'rgba(59, 130, 246, 1)', // Blue
         'rgba(59, 130, 246, 0.1)'
       );
+    } else if (cpuChartCanvas) {
+      // Show message when CPU data is not available
+      const chartContainer = cpuChartCanvas.parentElement;
+      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">Could not find system.cpu.total.norm.pct</div>';
     }
 
     // Render Memory chart
+    const memoryChartCanvas = contentDiv.querySelector('.metric-memory-chart');
     if (metrics.Memory && metrics.Time && metrics.Memory.length > 0) {
       renderMetricChart(
-        contentDiv.querySelector('.metric-memory-chart'),
+        memoryChartCanvas,
         metrics.Time,
         metrics.Memory,
         'Memory Usage (%)',
         'rgba(16, 185, 129, 1)', // Green
         'rgba(16, 185, 129, 0.1)'
       );
+    } else if (memoryChartCanvas) {
+      // Show message when Memory data is not available
+      const chartContainer = memoryChartCanvas.parentElement;
+      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">Could not find system.memory.actual.used.pct</div>';
     }
   }
 
@@ -296,15 +306,43 @@ function createInterfaceCard(iface) {
     </div>
     
     <!-- Tooltip -->
-    <div class="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-80 pointer-events-none">
+    <div class="interface-tooltip absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-80 pointer-events-none">
       <div class="bg-gray-900 text-white rounded-lg p-3 shadow-2xl border-2 border-gray-600">
         ${tooltipContent}
-        <div class="absolute top-full left-6 -mt-0.5">
+        <div class="tooltip-arrow absolute top-full left-6 -mt-0.5">
           <div class="border-8 border-transparent border-t-gray-600"></div>
         </div>
       </div>
     </div>
   `;
+
+  // Add hover event to dynamically position tooltip
+  card.addEventListener('mouseenter', function() {
+    const tooltip = this.querySelector('.interface-tooltip');
+    const arrow = this.querySelector('.tooltip-arrow');
+    if (tooltip) {
+      // Small delay to ensure tooltip is rendered
+      setTimeout(() => {
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        
+        // Check if tooltip goes off the right edge
+        if (tooltipRect.right > viewportWidth) {
+          // Switch to right-aligned
+          tooltip.classList.remove('left-0');
+          tooltip.classList.add('right-0');
+          arrow.classList.remove('left-6');
+          arrow.classList.add('right-6');
+        } else {
+          // Keep left-aligned
+          tooltip.classList.remove('right-0');
+          tooltip.classList.add('left-0');
+          arrow.classList.remove('right-6');
+          arrow.classList.add('left-6');
+        }
+      }, 10);
+    }
+  });
 
   return card;
 }
