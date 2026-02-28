@@ -353,18 +353,20 @@
     </div>
 
     <script>
-        // Password visibility toggle
+        // Password visibility toggle (only exists on login form, not registration)
         const togglePassword = document.getElementById('togglePassword');
         const passwordInput = document.getElementById('id_password');
         const eyeIcon = document.getElementById('eyeIcon');
         const eyeOffIcon = document.getElementById('eyeOffIcon');
 
-        togglePassword.addEventListener('click', function() {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            eyeIcon.classList.toggle('hidden');
-            eyeOffIcon.classList.toggle('hidden');
-        });
+        if (togglePassword && passwordInput && eyeIcon && eyeOffIcon) {
+            togglePassword.addEventListener('click', function() {
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                eyeIcon.classList.toggle('hidden');
+                eyeOffIcon.classList.toggle('hidden');
+            });
+        }
 
         // Form submission animation
         const loginForm = document.getElementById('loginForm');
@@ -373,26 +375,34 @@
         const btnIcon = document.getElementById('btnIcon');
         const btnSpinner = document.getElementById('btnSpinner');
 
-        loginForm.addEventListener('submit', function() {
-            submitBtn.disabled = true;
-            btnText.textContent = 'Signing In...';
-            btnIcon.classList.add('hidden');
-            btnSpinner.classList.remove('hidden');
-            submitBtn.classList.add('opacity-80', 'cursor-not-allowed');
-        });
+        if (loginForm && submitBtn && btnText && btnIcon && btnSpinner) {
+            loginForm.addEventListener('submit', function() {
+                submitBtn.disabled = true;
+                btnText.textContent = 'Signing In...';
+                btnIcon.classList.add('hidden');
+                btnSpinner.classList.remove('hidden');
+                submitBtn.classList.add('opacity-80', 'cursor-not-allowed');
+            });
+        }
 
         // Auto-focus username field on load
         window.addEventListener('load', function() {
-            document.getElementById('id_username').focus();
-        });
-
-        // Add enter key support
-        document.getElementById('id_username').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('id_password').focus();
+            const usernameField = document.getElementById('id_username');
+            if (usernameField) {
+                usernameField.focus();
             }
         });
+
+        // Add enter key support (only for login form with id_password)
+        const usernameField = document.getElementById('id_username');
+        if (usernameField && passwordInput) {
+            usernameField.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    passwordInput.focus();
+                }
+            });
+        }
     </script>
 </body>
 </html>

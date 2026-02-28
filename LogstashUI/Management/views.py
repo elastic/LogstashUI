@@ -6,9 +6,14 @@ from django.contrib.auth import login
 from django.http import HttpResponse, FileResponse
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.template.loader import render_to_string
+from django.conf import settings
+from django.db import transaction
 from .models import UserProfile
 import logging
 import os
+from html import escape
+from Common.decorators import require_admin_role
 
 logger = logging.getLogger(__name__)
 
@@ -39,68 +44,60 @@ class BootstrapLoginView(auth_views.LoginView):
         """
         Handle POST — if no users exist, create the first user and log them in.
         Otherwise, fall back to normal login behavior.
+        Uses atomic transaction to prevent race condition.
         """
-        if not User.objects.exists():
-            user = form.save()
-            user.is_superuser = True
-            user.is_staff = True
-            user.save()
-            # Ensure the first user is always Admin
-            if hasattr(user, 'profile'):
-                user.profile.role = 'admin'
-                user.profile.save()
-            logger.info(f"First user '{user.username}' created during initial setup as Admin")
-            login(self.request, user)
-            return redirect("/")  # redirect wherever your dashboard/home is
+        # Check if this is first-run (no users exist)
+        if isinstance(form, UserCreationForm):
+            # First-run registration flow
+            with transaction.atomic():
+                # Lock the User table and re-check if users exist
+                # This prevents TOCTOU race condition
+                if not User.objects.select_for_update().exists():
+                    user = form.save()
+                    user.is_superuser = True
+                    user.is_staff = True
+                    user.save()
+                    # Ensure the first user is always Admin
+                    if hasattr(user, 'profile'):
+                        user.profile.role = 'admin'
+                        user.profile.save()
+                    logger.info(f"First user '{user.username}' created during initial setup as Admin")
+                    login(self.request, user)
+                    return redirect("/")
+                else:
+                    # Race condition: another request created a user concurrently
+                    # We have a UserCreationForm but need to login instead
+                    # Redirect to login page with a message
+                    logger.warning(f"Race condition detected: user creation attempted but users already exist")
+                    from django.contrib import messages
+                    messages.info(self.request, "A user was just created. Please log in with your credentials.")
+                    return redirect(self.request.path)
         else:
+            # Normal login flow - delegate to parent LoginView
             return super().form_valid(form)
 
 def Management(request):
     return render(request, 'management.html')
 
-def _generate_user_table_rows(users):
-    """Helper function to generate user table rows HTML"""
-    html = ''
-    for u in users:
-        role_badge = ''
-        if hasattr(u, 'profile'):
-            if u.profile.role == 'admin':
-                role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">Admin</span>'
-            else:
-                role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">Readonly</span>'
-        else:
-            role_badge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">Unknown</span>'
-        
-        html += f'''
-        <tr class="hover:bg-gray-700/50 transition-colors">
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-            {u.username}
-          </td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm">
-            {role_badge}
-          </td>
-          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-            <div class="flex justify-end space-x-2">
-              <button onclick="openEditModal('{u.id}', '{u.username}', '{u.profile.role if hasattr(u, 'profile') else 'admin'}')" 
-                      class="text-blue-400 hover:text-blue-300 mr-3">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
-              <button hx-post="/Management/Users/" 
-                      hx-vals='{{"action": "delete", "user_id": "{u.id}"}}'
-                      hx-target="#userTableBody"
-                      hx-confirm="Are you sure you want to delete this user?"
-                      class="text-red-400 hover:text-red-300">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          </td>
-        </tr>
-        '''
-    return html
+def _set_django_permissions(user, role):
+    """Set Django is_superuser and is_staff flags based on role"""
+    if role == 'admin':
+        user.is_superuser = True
+        user.is_staff = True
+    else:
+        user.is_superuser = False
+        user.is_staff = False
+    user.save()
+
+def _generate_user_table_rows(users, request):
+    """Helper function to generate user table rows HTML using template partial"""
+    rows_html = ''
+    for user in users:
+        rows_html += render_to_string('components/user_row.html', {
+            'user': user,
+            'csrf_token': request.META.get('CSRF_COOKIE', '')
+        }, request=request)
+    return rows_html
 
 def Users(request):
     if request.method == 'POST':
@@ -119,6 +116,10 @@ def Users(request):
             email = request.POST.get('email', '')
             role = request.POST.get('role', 'admin')
             
+            # Validate role
+            if role not in ['admin', 'readonly']:
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Invalid role. Must be "admin" or "readonly".</div>')
+            
             # Validate username
             if User.objects.filter(username=username).exists():
                 return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Username already exists</div>')
@@ -135,9 +136,9 @@ def Users(request):
                 
                 # If validation passes, create the user
                 user = User.objects.create_user(username=username, password=password, email=email)
-                user.is_superuser = True
-                user.is_staff = True
-                user.save()
+                
+                # Set Django permissions based on role
+                _set_django_permissions(user, role)
                 
                 # Set the role
                 if hasattr(user, 'profile'):
@@ -183,6 +184,10 @@ def Users(request):
         elif action == 'update_role':
             user_id = request.POST.get('user_id')
             role = request.POST.get('role', 'admin')
+            
+            # Validate role
+            if role not in ['admin', 'readonly']:
+                return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">Invalid role. Must be "admin" or "readonly".</div>')
 
             try:
                 user = User.objects.get(id=user_id)
@@ -192,12 +197,20 @@ def Users(request):
                     if user.profile.role != role:
                         user.profile.role = role
                         user.profile.save()
+                        
+                        # Sync Django permissions with role
+                        _set_django_permissions(user, role)
+                        
                         logger.info(f"User '{request.user.username}' updated role for user '{user.username}' to '{role}'")
                         return HttpResponse('<script>window.location.reload();</script>')
                     else:
-                        return HttpResponse('<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-300 text-sm">No changes made</div>')
+                        return HttpResponse('<div class="p-4 mb-4 bg-blue-500/10 border border-blue-500/50 rounded-lg text-blue-300 text-sm">No changes made</div>')
                 else:
                     UserProfile.objects.create(user=user, role=role)
+                    
+                    # Sync Django permissions with role
+                    _set_django_permissions(user, role)
+                    
                     logger.info(f"User '{request.user.username}' created profile and set role for user '{user.username}' to '{role}'")
                     return HttpResponse('<script>window.location.reload();</script>')
             except User.DoesNotExist:
@@ -211,7 +224,7 @@ def Users(request):
                 if User.objects.count() <= 1:
                     # Return the current table body unchanged + show toast
                     users = User.objects.all().order_by('username')
-                    html = _generate_user_table_rows(users)
+                    html = _generate_user_table_rows(users, request)
                     html += '''
                         <script>
                             showToast('Cannot delete the last user in the system', 'error');
@@ -223,7 +236,7 @@ def Users(request):
                 if user == request.user:
                     # Return the current table body unchanged + show toast
                     users = User.objects.all().order_by('username')
-                    html = _generate_user_table_rows(users)
+                    html = _generate_user_table_rows(users, request)
                     html += '''
                         <script>
                             showToast('You cannot delete your own account', 'error');
@@ -236,7 +249,7 @@ def Users(request):
                     logger.warning(f"User '{request.user.username}' deleted user '{deleted_username}'")
                     # Return updated user list
                     users = User.objects.all().order_by('username')
-                    html = _generate_user_table_rows(users)
+                    html = _generate_user_table_rows(users, request)
                     return HttpResponse(html)
             except User.DoesNotExist:
                 return HttpResponse('''
@@ -273,27 +286,30 @@ def _read_log_file(log_path, user_filter=None):
         return []
 
 def Logs(request):
-    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_path = os.path.join(settings.LOGS_DIR, 'logstashui.log')
     log_lines = _read_log_file(log_path)
     return render(request, 'logs.html', {'log_lines': log_lines})
 
 def LogsFilter(request):
     user_filter = request.GET.get('user_filter', '').strip()
-    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_path = os.path.join(settings.LOGS_DIR, 'logstashui.log')
     log_lines = _read_log_file(log_path, user_filter if user_filter else None)
     
     html = '<div class="font-mono text-sm space-y-1">'
     if log_lines:
         for line in log_lines:
-            css_class = 'text-gray-300 hover:bg-gray-700/50 px-2 py-1 rounded'
+            # Determine color class based on log level (mutually exclusive)
             if 'ERROR' in line or 'CRITICAL' in line:
-                css_class += ' text-red-400'
+                color_class = 'text-red-400'
             elif 'WARNING' in line:
-                css_class += ' text-yellow-400'
+                color_class = 'text-yellow-400'
             elif 'INFO' in line:
-                css_class += ' text-blue-400'
+                color_class = 'text-blue-400'
+            else:
+                color_class = 'text-gray-300'
             
-            html += f'<div class="{css_class}">{line}</div>'
+            css_class = f'{color_class} hover:bg-gray-700/50 px-2 py-1 rounded'
+            html += f'<div class="{css_class}">{escape(line)}</div>'
     else:
         html += '<div class="text-gray-500 text-center py-8">No log entries found.</div>'
     
@@ -301,7 +317,7 @@ def LogsFilter(request):
     return HttpResponse(html)
 
 def LogsDownload(request):
-    log_path = os.path.join('data', 'logs', 'logstashui.log')
+    log_path = os.path.join(settings.LOGS_DIR, 'logstashui.log')
     
     if not os.path.exists(log_path):
         return HttpResponse('Log file not found', status=404)
