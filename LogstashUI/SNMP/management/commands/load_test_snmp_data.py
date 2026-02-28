@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 import random
 import ipaddress
 from SNMP.models import Network, Device, Credential, Profile
-from Core.models import Connection
+from PipelineManager.models import Connection
 
 
 class Command(BaseCommand):

@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os, platform
-from Core.encryption import get_django_secret_key
+from Common.encryption import get_django_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'Management',
     'Utilities',
     'SNMP',
+    'Monitoring',
+    'Site',
 
     # Frameworks
     'django_htmx',
@@ -92,8 +94,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'Core.context_processors.version_update_info',
-                'Core.context_processors.navigation_highlight',
+                'Common.context_processors.version_update_info',
+                'Common.context_processors.navigation_highlight',
             ],
         },
     },
@@ -157,7 +159,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_DIRS = [
-    BASE_DIR / "Core/static"
+    BASE_DIR / "Sites/static"
 ]
 
 if platform.system() == "Windows":

@@ -7,10 +7,10 @@ from django.db.models import Q
 
 from .logstash_config_parse import ComponentToPipeline
 
-from Core.encryption import decrypt_credential
+from Common.encryption import decrypt_credential
 from Core import snmp_metrics
-from Core.views import get_elastic_connection
-from Core.models import Connection
+from Common.elastic_utils import get_elastic_connection
+from PipelineManager.models import Connection
 
 from SNMP.models import Credential, Network, Profile, Device
 
@@ -151,6 +151,7 @@ def GetNetworks(request):
         return JsonResponse(networks_data, safe=False, status=200)
     except Exception as e:
         return HttpResponse(f"Error fetching networks: {str(e)}", status=500)
+
 
 
 @require_http_methods(["POST"])

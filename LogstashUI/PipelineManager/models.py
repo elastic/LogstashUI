@@ -1,6 +1,7 @@
 from django.db import models
-from .encryption import encrypt_credential, decrypt_credential
+from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
+
 
 class Connection(models.Model):
     """
@@ -107,7 +108,7 @@ class Connection(models.Model):
 
     def save(self, *args, **kwargs):
         self.full_clean()
-        
+
         # Encrypt sensitive fields before saving
         if self.password and not self._is_encrypted(self.password):
             self.password = encrypt_credential(self.password)
@@ -115,17 +116,17 @@ class Connection(models.Model):
             self.ssh_key = encrypt_credential(self.ssh_key)
         if self.api_key and not self._is_encrypted(self.api_key):
             self.api_key = encrypt_credential(self.api_key)
-        
+
         super().save(*args, **kwargs)
-    
+
     def _is_encrypted(self, value):
         """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
         return value and value.startswith('gAAAAA')
-    
+
     def get_password(self):
         """Get decrypted password"""
         return decrypt_credential(self.password) if self.password else None
-    
+
     def get_api_key(self):
         """Get decrypted API key"""
         return decrypt_credential(self.api_key) if self.api_key else None

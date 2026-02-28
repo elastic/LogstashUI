@@ -1,5 +1,5 @@
-from .version_checker import check_for_update
-from .models import Connection
+from Site.views import check_for_update
+from PipelineManager.models import Connection
 from SNMP.models import Device
 
 

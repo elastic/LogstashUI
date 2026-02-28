@@ -1,9 +1,8 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from Core.encryption import encrypt_credential, decrypt_credential
-from Core.models import Connection
+from Common.encryption import encrypt_credential, decrypt_credential
+from PipelineManager.models import Connection
 import ipaddress
-import json
 
 
 class Network(models.Model):

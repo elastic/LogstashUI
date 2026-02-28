@@ -1,7 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
-from Core.models import Connection
+from PipelineManager.models import Connection
 
 
 class ConnectionForm(ModelForm):

@@ -7,8 +7,9 @@ from django.http import HttpResponse
 from .forms import ConnectionForm # Lives here because UI will only be here
 
 ## Tables
-from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, get_logstash_pipeline
+from PipelineManager.models import Connection as ConnectionTable
+from Common.logstash_utils import get_logstash_pipeline
+from Common.elastic_utils import get_elastic_connection
 
 from API import logstash_config_parse
 import json

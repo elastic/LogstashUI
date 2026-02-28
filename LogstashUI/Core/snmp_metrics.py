@@ -1,4 +1,4 @@
-from Core.views import get_elastic_connection
+from Common.elastic_utils import get_elastic_connection
 
 
 def _get_device_interfaces(device, es_connection):
@@ -238,7 +238,6 @@ def generate_visualizations(visualizations, device, es_connection):
 
     return visualization_data
 
-
 def get_devices_online_batch(devices):
     """
     Check online status for multiple devices in batch.
@@ -339,7 +338,6 @@ def get_visualizations(device):
     # Decide what visualizations to show and fetch the data
     visualizations = decide_visualizations(device, es)
     return generate_visualizations(visualizations['results'], device, es)
-
 
 def decide_visualizations(device, es):
     """

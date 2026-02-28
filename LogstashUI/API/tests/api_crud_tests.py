@@ -1,7 +1,7 @@
 import pytest
 from django.test import Client
 from django.contrib.auth.models import User
-from Core.models import Connection
+from PipelineManager.models import Connection
 from unittest.mock import Mock, patch, MagicMock
 import json
 

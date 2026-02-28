@@ -5,13 +5,13 @@ from django.template.loader import get_template
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 
-from Core import logstash_metrics
-from Core.decorators import require_admin_role
-from Core.models import Connection as ConnectionTable
-from Core.views import get_elastic_connection, test_elastic_connectivity, get_logstash_pipeline, \
-    get_elastic_connections_from_list, get_elasticsearch_indices, get_elasticsearch_field_mappings, \
-    query_elasticsearch_documents
-from Core.validators import validate_pipeline_name
+import Monitoring.views as logstash_metrics
+from PipelineManager.models import Connection as ConnectionTable
+from Common.decorators import require_admin_role
+from Common.validators import validate_pipeline_name
+from Common.elastic_utils import test_elastic_connectivity, get_elastic_connection, get_elastic_connections_from_list, \
+    get_elasticsearch_indices, get_elasticsearch_field_mappings, query_elasticsearch_documents
+from Common.logstash_utils import get_logstash_pipeline
 
 from PipelineManager.forms import ConnectionForm
 

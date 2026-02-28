@@ -1,7 +1,34 @@
-from Core.models import Connection as ConnectionTable
+from django.shortcuts import render
+
+from PipelineManager.models import Connection as ConnectionTable
+
+from Common.elastic_utils import get_elastic_connections_from_list
+
+
 
 import logging
+
 logger = logging.getLogger(__name__)
+
+def Monitoring(request):
+    """Monitoring page showing Logstash metrics and health"""
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+
+    context = {
+        "Connections": connections,
+        "has_connections": len(connections) > 0
+    }
+
+    try:
+        context['monitoring_indices'] = check_for_monitoring_indices(
+            get_elastic_connections_from_list()
+        )
+    except Exception as e:
+        logger.error(f"Couldn't connect!, {e}")
+
+    return render(request, "monitoring.html", context=context)
+
+
 
 def _safe_get_numeric(data, default=0):
     """
@@ -11,13 +38,13 @@ def _safe_get_numeric(data, default=0):
     """
     if data is None:
         return default
-    
+
     # If it's a list, try to get the first element
     if isinstance(data, list):
         if len(data) == 0:
             return default
         data = data[0]
-    
+
     # Try to convert to the appropriate numeric type
     try:
         if isinstance(data, (int, float)):
@@ -56,7 +83,6 @@ def check_for_monitoring_indices(es_connections):
             monitoring_indices[connection['name']]['has_none'] = True
 
     return monitoring_indices
-
 
 
 def get_logs(es, logstash_node="", pipeline_name=""):
@@ -107,7 +133,8 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
     - host: Filter by host name (optional)
     - pipeline: Filter by pipeline name (optional)
     """
-    logger.info(f"get_node_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
+    logger.info(
+        f"get_node_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     meta_agg_stats = {
         "nodes": [],
         "node_buckets": [],
@@ -152,7 +179,6 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                     }
                 })
 
-
             node_stats = es.search(
                 index="metrics-logstash.node-*",
                 query=query,
@@ -184,7 +210,6 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                 size=0
             )
 
-
             if 'aggregations' not in node_stats:
                 continue
             else:
@@ -204,13 +229,20 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                         continue
 
                     # Use safe numeric extraction to handle lists and missing values
-                    meta_agg_stats['reloads']['successes'] += _safe_get_numeric(last_hit_doc['node']['stats']['reloads'].get('successes'))
-                    meta_agg_stats['reloads']['failures'] += _safe_get_numeric(last_hit_doc['node']['stats']['reloads'].get('failures'))
-                    meta_agg_stats['events']['in'] += _safe_get_numeric(last_hit_doc['node']['stats']['events'].get('in'))
-                    meta_agg_stats['events']['out'] += _safe_get_numeric(last_hit_doc['node']['stats']['events'].get('out'))
-                    meta_agg_stats['events']['queued'] += _safe_get_numeric(last_hit_doc['node']['stats'].get('queue', {}).get('events_count'))
-                    meta_agg_stats['cpu'] += _safe_get_numeric(last_hit_doc['node']['stats'].get('os', {}).get('cpu', {}).get('percent'))
-                    meta_agg_stats['heap_memory'] += _safe_get_numeric(last_hit_doc['node']['stats'].get('jvm', {}).get('mem', {}).get('heap_used_percent'))
+                    meta_agg_stats['reloads']['successes'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats']['reloads'].get('successes'))
+                    meta_agg_stats['reloads']['failures'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats']['reloads'].get('failures'))
+                    meta_agg_stats['events']['in'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats']['events'].get('in'))
+                    meta_agg_stats['events']['out'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats']['events'].get('out'))
+                    meta_agg_stats['events']['queued'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats'].get('queue', {}).get('events_count'))
+                    meta_agg_stats['cpu'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats'].get('os', {}).get('cpu', {}).get('percent'))
+                    meta_agg_stats['heap_memory'] += _safe_get_numeric(
+                        last_hit_doc['node']['stats'].get('jvm', {}).get('mem', {}).get('heap_used_percent'))
 
     if meta_agg_stats['cpu']:
         meta_agg_stats['cpu'] = round(meta_agg_stats['cpu'] / len(meta_agg_stats['nodes']), 2)
@@ -221,7 +253,8 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
 
 
 def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", pipeline=""):
-    logger.info(f"Getting pipeline metrics for connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
+    logger.info(
+        f"Getting pipeline metrics for connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     aggs = {
         "hosts": {
             "terms": {
@@ -306,7 +339,6 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                 size=0
             )
 
-
             if 'aggregations' not in pipeline_stats:
                 logger.warning(f"No aggregations found for {connection['name']}")
                 continue
@@ -321,7 +353,8 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                             'reason': 'No pipeline metrics found in the last 30 minutes'
                         })
                     else:
-                        logger.warning(f"No data for {connection['name']} (filtered by connection_name='{connection_name}' or host='{logstash_host}')")
+                        logger.warning(
+                            f"No data for {connection['name']} (filtered by connection_name='{connection_name}' or host='{logstash_host}')")
 
                 for bucket in host_buckets:
 
@@ -334,7 +367,8 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                         pipeline_bucket['connection_id'] = conn_id
                         pipeline_bucket['connection_name'] = connection.get('name')
                         if not conn_id:
-                            logger.warning(f"No connection ID found for {connection.get('name')}. Available keys: {connection.keys()}")
+                            logger.warning(
+                                f"No connection ID found for {connection.get('name')}. Available keys: {connection.keys()}")
                         meta_agg_stats['pipeline_buckets'].append(pipeline_bucket)
 
                         try:
@@ -345,12 +379,17 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
 
                         # Use safe numeric extraction to handle lists and missing values
                         pipeline_total = last_hit_doc['pipeline']['total']
-                        meta_agg_stats['reloads']['successes'] += _safe_get_numeric(pipeline_total.get('reloads', {}).get('successes'))
-                        meta_agg_stats['reloads']['failures'] += _safe_get_numeric(pipeline_total.get('reloads', {}).get('failures'))
+                        meta_agg_stats['reloads']['successes'] += _safe_get_numeric(
+                            pipeline_total.get('reloads', {}).get('successes'))
+                        meta_agg_stats['reloads']['failures'] += _safe_get_numeric(
+                            pipeline_total.get('reloads', {}).get('failures'))
                         meta_agg_stats['events']['in'] += _safe_get_numeric(pipeline_total.get('events', {}).get('in'))
-                        meta_agg_stats['events']['out'] += _safe_get_numeric(pipeline_total.get('events', {}).get('out'))
-                        meta_agg_stats['events']['queued'] += _safe_get_numeric(pipeline_total.get('queue', {}).get('events_count'))
-                        meta_agg_stats['duration'] += _safe_get_numeric(pipeline_total.get('time', {}).get('duration', {}).get('ms'))
+                        meta_agg_stats['events']['out'] += _safe_get_numeric(
+                            pipeline_total.get('events', {}).get('out'))
+                        meta_agg_stats['events']['queued'] += _safe_get_numeric(
+                            pipeline_total.get('queue', {}).get('events_count'))
+                        meta_agg_stats['duration'] += _safe_get_numeric(
+                            pipeline_total.get('time', {}).get('duration', {}).get('ms'))
 
     if meta_agg_stats['duration']:
         meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
@@ -358,9 +397,7 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
     return meta_agg_stats
 
 
-
 def get_pipeline_health_report(es, pipeline_name=""):
-
     index = "metrics-logstash.health_report-*"
     query = {
         "bool": {
@@ -377,7 +414,6 @@ def get_pipeline_health_report(es, pipeline_name=""):
         index=index,
         size=1
     )
-
 
     if results['hits']['hits']:
         return results['hits']['hits'][0]['_source']

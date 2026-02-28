@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from . import logstash_config_parse
 
-from Core.decorators import require_admin_role
+from Common.decorators import require_admin_role
 
 from collections import deque
 from threading import Lock

@@ -21,19 +21,21 @@ from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 
 # Custom error handlers
-handler400 = 'Core.error_handlers.handler400'
-handler403 = 'Core.error_handlers.handler403'
-handler404 = 'Core.error_handlers.handler404'
-handler500 = 'Core.error_handlers.handler500'
+handler400 = 'Common.error_handlers.handler400'
+handler403 = 'Common.error_handlers.handler403'
+handler404 = 'Common.error_handlers.handler404'
+handler500 = 'Common.error_handlers.handler500'
 
 urlpatterns = [
 
-    path('', include('Core.urls')),
+    #path('', include('Core.urls')),
     path('ConnectionManager/', include('PipelineManager.urls')),
     path('API/', include('API.urls')),
     path('Management/', include('Management.urls')),
     path('Utilities/', include('Utilities.urls')),
     path('SNMP/', include('SNMP.urls')),
+    path('Monitoring/', include('Monitoring.urls')),
+    path('', include('Site.urls')),
 ]
 
 
