@@ -1,9 +1,13 @@
 from django.shortcuts import render
+from django.conf import settings
+
 from .models import Credential, Network, Device, Profile
 from PipelineManager.forms import ConnectionForm
+from Common.elastic_utils import get_elastic_connection
+
 import os
 import json
-from django.conf import settings
+
 
 # Create your views here.
 def Networks(request):
@@ -81,3 +85,6 @@ def Profiles(request):
 def Credentials(request):
     credentials = Credential.objects.all()
     return render(request, 'Credentials.html', {'credentials': credentials})
+
+
+

@@ -27,8 +27,6 @@ handler404 = 'Common.error_handlers.handler404'
 handler500 = 'Common.error_handlers.handler500'
 
 urlpatterns = [
-
-    #path('', include('Core.urls')),
     path('ConnectionManager/', include('PipelineManager.urls')),
     path('API/', include('API.urls')),
     path('Management/', include('Management.urls')),

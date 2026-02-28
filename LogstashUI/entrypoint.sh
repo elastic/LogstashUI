@@ -5,7 +5,6 @@ set -e
 mkdir -p /app/LogstashUI/data
 
 # Run migrations
-python manage.py makemigrations
 python manage.py migrate --noinput
 
 # Display welcome message

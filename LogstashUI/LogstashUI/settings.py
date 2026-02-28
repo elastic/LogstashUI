@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     # Apps of LogstashUI
     'PipelineManager',
     'API',
-    'Core',
     'Management',
     'Utilities',
     'SNMP',
