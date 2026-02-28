@@ -954,7 +954,7 @@
     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
     
     try {
-      const response = await fetch('/API/SimulatePipeline/', {
+      const response = await fetch('/ConnectionManager/SimulatePipeline/', {
         method: 'POST',
         body: formData,
         headers: {

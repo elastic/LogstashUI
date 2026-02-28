@@ -1,4 +1,4 @@
-from API.logstash_config_parse import ComponentToPipeline
+from Common.logstash_config_parse import ComponentToPipeline
 import pytest
 import json
 

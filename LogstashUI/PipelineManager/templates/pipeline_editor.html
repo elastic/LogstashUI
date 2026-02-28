@@ -752,7 +752,7 @@
 <!-- Empty log_text means only allocate slot, don't run simulation -->
 <!-- Also triggers on pipelineChanged event when plugins are added/removed/changed -->
 <div id="slotPreallocation"
-     hx-post="/API/SimulatePipeline/"
+     hx-post="/ConnectionManager/SimulatePipeline/"
      hx-target="#slotPreallocationResult"
      hx-swap="innerHTML"
      hx-vals="js:{components: components, log_text: ''}"
@@ -869,7 +869,7 @@
         
         // Fetch logs from API
         try {
-            const response = await fetch(`/API/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
             const data = await response.json();
             
             const logsContent = document.getElementById('pipeline-logs-content');
@@ -992,7 +992,7 @@
             // No need to wait - check status immediately
             
             // Check pipeline status using the slot pipeline name
-            const response = await fetch(`/API/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
             
             if (!response.ok) {
                 throw new Error('Failed to fetch pipeline status');

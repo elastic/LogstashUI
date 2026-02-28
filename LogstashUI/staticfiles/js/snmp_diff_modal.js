@@ -111,7 +111,13 @@ async function prepareSnmpDiffModal() {
     // Show loading state
     document.getElementById('snmpDiffLoading').classList.remove('hidden');
     document.getElementById('snmpDiffContainer').classList.add('hidden');
-    document.getElementById('confirmCommitButton').classList.remove('hidden');
+    
+    // Reset the commit button to enabled state (in case it was disabled from a previous commit)
+    const confirmButton = document.getElementById('confirmCommitButton');
+    confirmButton.classList.remove('hidden');
+    confirmButton.disabled = false;
+    confirmButton.textContent = 'Confirm & Commit Changes';
+    confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
 
     try {
         // Fetch diff data from the server

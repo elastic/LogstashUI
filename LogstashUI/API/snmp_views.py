@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Prefetch
 from django.db.models import Q
 
-from .logstash_config_parse import ComponentToPipeline
+from Common.logstash_config_parse import ComponentToPipeline
 
 from Common.encryption import decrypt_credential
 from Common.elastic_utils import get_elastic_connection

@@ -57,7 +57,7 @@ function triggerPipelineWarmingAndChecking() {
     if (slotPreallocation && typeof htmx !== 'undefined') {
         // console.log('[Pipeline Warming] Sending HTMX request at:', new Date().toISOString());
         // Use htmx.ajax to send the request with current components data
-        htmx.ajax('POST', '/API/SimulatePipeline/', {
+        htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
             target: '#slotPreallocationResult',
             swap: 'innerHTML',
             values: {
@@ -2626,7 +2626,7 @@ window.browseFilePathForSimulation = function(inputId) {
                 formData.append('file', file);
                 formData.append('filename', generatedFilename);
                 
-                const response = await fetch('/API/UploadFile/', {
+                const response = await fetch('/ConnectionManager/UploadFile/', {
                     method: 'POST',
                     body: formData,
                     headers: {

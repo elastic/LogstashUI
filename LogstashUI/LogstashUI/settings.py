@@ -182,8 +182,8 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/Management/Login/",
     "/Management/Logout/",
     "/static/",
-    "/API/StreamSimulate/",
-    "/API/StreamSimulate"
+    "/ConnectionManager/StreamSimulate/",
+    "/ConnectionManager/StreamSimulate"
 ]
 
 # Session Configuration

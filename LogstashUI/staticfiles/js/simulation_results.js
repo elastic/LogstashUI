@@ -1901,7 +1901,7 @@ function initSimulationResults(runId) {
             return;
         }
         
-        fetch(`/API/GetSimulationResults/?run_id=${encodeURIComponent(runId)}`)
+        fetch(`/ConnectionManager/GetSimulationResults/?run_id=${encodeURIComponent(runId)}`)
             .then(response => response.json())
             .then(data => {
                 console.log('Poll response:', data);
@@ -2333,7 +2333,7 @@ window.viewSimulationLogs = function() {
     document.body.appendChild(modal);
     
     // Fetch logs from Django API endpoint
-    fetch(`/API/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`)
+    fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`)
         .then(response => response.json())
         .then(data => {
             const logsContent = document.getElementById('logs-content');

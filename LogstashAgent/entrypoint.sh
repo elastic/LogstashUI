@@ -11,8 +11,8 @@ echo "Using LOGSTASH_URL: $LOGSTASH_URL"
 
 # Update simulate_end.conf with the correct URL
 echo "Updating simulate_end.conf with LOGSTASH_URL..."
-sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/API/StreamSimulate/\"|url => \"${LOGSTASH_URL}/API/StreamSimulate/\"|g" /etc/logstash/config/simulate_end.conf
-sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/API/StreamSimulate/\"|url => \"${LOGSTASH_URL}/API/StreamSimulate/\"|g" /etc/logstash/config/simulate_start.conf
+sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/ConnectionManager/StreamSimulate/\"|url => \"${LOGSTASH_URL}/ConnectionManager/StreamSimulate/\"|g" /etc/logstash/config/simulate_end.conf
+sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/ConnectionManager/StreamSimulate/\"|url => \"${LOGSTASH_URL}/ConnectionManager/StreamSimulate/\"|g" /etc/logstash/config/simulate_start.conf
 
 # Ensure log directory exists and has proper permissions
 echo "Setting up log directory..."

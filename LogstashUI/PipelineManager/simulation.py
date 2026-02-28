@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.template.loader import get_template
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from . import logstash_config_parse
+from Common import logstash_config_parse
 
 from Common.decorators import require_admin_role
 
@@ -199,7 +199,7 @@ end
 event_hash = event.to_hash
 
 # Send HTTP POST to StreamSimulate endpoint
-uri = URI.parse("{logstash_ui_url}/API/StreamSimulate/")
+uri = URI.parse("{logstash_ui_url}/ConnectionManager/StreamSimulate/")
 http = Net::HTTP.new(uri.host, uri.port)
 http.use_ssl = (uri.scheme == "https")
 http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
@@ -321,7 +321,7 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
                 "type": "output",
                 "plugin": "http",
                 "config": {
-                    "url": f"{logstash_agent_url}/API/StreamSimulate/",
+                    "url": f"{logstash_agent_url}/ConnectionManager/StreamSimulate/",
                     "http_method": "post",
                     "format": "json",
                     "content_type": "application/json"

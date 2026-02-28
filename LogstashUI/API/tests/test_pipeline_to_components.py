@@ -1,7 +1,5 @@
-from API.logstash_config_parse import logstash_config_to_components
+from Common.logstash_config_parse import logstash_config_to_components
 import pytest
-import json
-
 
 test_cases = [
     (

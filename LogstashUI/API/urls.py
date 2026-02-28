@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from . import simulate_views
+from PipelineManager import simulation
 from . import snmp_views
 
 urlpatterns = [
@@ -17,12 +17,6 @@ urlpatterns = [
     path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
     path("ComponentsToConfig/", views.ComponentsToConfig, name="ComponentsToConfig"),
     path("ConfigToComponents/", views.ConfigToComponents, name="ConfigToComponents"),
-    path("SimulatePipeline/", simulate_views.SimulatePipeline, name="SimulatePipeline"),
-    path("StreamSimulate/", simulate_views.StreamSimulate, name="StreamSimulate"),
-    path("GetSimulationResults/", simulate_views.GetSimulationResults, name="GetSimulationResults"),
-    path("CheckIfPipelineLoaded/", simulate_views.CheckIfPipelineLoaded, name="CheckIfPipelineLoaded"),
-    path("GetRelatedLogs/", simulate_views.GetRelatedLogs, name="GetRelatedLogs"),
-    path("UploadFile/", simulate_views.UploadFile, name="UploadFile"),
 
     path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
     path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),

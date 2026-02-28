@@ -89,8 +89,6 @@ window.getPipelineSettings = function () {
 
 // Initialize pipeline settings on page load
 document.addEventListener('DOMContentLoaded', function () {
-    loadPipelineSettings();
-
     // Populate hidden fields with URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const pipelineId = urlParams.get('pipeline');

@@ -15,8 +15,7 @@ from Common.logstash_utils import get_logstash_pipeline
 
 from PipelineManager.forms import ConnectionForm
 
-from . import logstash_config_parse
-
+from Common import logstash_config_parse
 
 from datetime import datetime, timezone
 import json
