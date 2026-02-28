@@ -360,7 +360,6 @@ class LogstashTransformer(Transformer):
                 elif 'name' in plugin:  # It's a regular plugin
                     formatted_plugin, component_count = self._format_plugin(plugin, section_type, component_count)
                     result.append(formatted_plugin)
-                    component_count += 1
                 elif plugin.get('type') == 'conditional':
                     # For conditionals, just process them and add to result
                     conditional_blocks, component_count = self._process_conditional(
@@ -435,32 +434,32 @@ class LogstashTransformer(Transformer):
 
 def _extract_error_context(config_text: str, line: int, column: int, context_lines: int = 3) -> str:
     """Extract the code context around an error location.
-    
+
     Args:
         config_text: The full config text
         line: Line number where error occurred (1-indexed)
         column: Column number where error occurred (1-indexed)
         context_lines: Number of lines to show before and after the error
-    
+
     Returns:
         Formatted string showing the error context with a pointer
     """
     lines = config_text.split('\n')
-    
+
     # Calculate the range of lines to show
     start_line = max(0, line - context_lines - 1)
     end_line = min(len(lines), line + context_lines)
-    
+
     # Build the context string
     context_parts = []
     context_parts.append("\n" + "="*60)
     context_parts.append("PROBLEMATIC CODE:")
     context_parts.append("="*60)
-    
+
     for i in range(start_line, end_line):
         line_num = i + 1
         line_content = lines[i]
-        
+
         # Mark the error line with an arrow
         if line_num == line:
             context_parts.append(f">>> {line_num:4d} | {line_content}")
@@ -470,7 +469,7 @@ def _extract_error_context(config_text: str, line: int, column: int, context_lin
                 context_parts.append(pointer)
         else:
             context_parts.append(f"    {line_num:4d} | {line_content}")
-    
+
     context_parts.append("="*60)
     return "\n".join(context_parts)
 
@@ -484,31 +483,31 @@ def parse_logstash_config(config_text: str) -> List[Dict[str, Any]]:
         # Extract detailed error information
         error_line = e.line
         error_column = e.column
-        
+
         # Get the code context
         context = _extract_error_context(config_text, error_line, error_column)
-        
+
         # Build a detailed error message
         error_msg = f"Failed to parse Logstash config at line {error_line}, column {error_column}\n"
         error_msg += f"Unexpected token: {e.token}\n"
         error_msg += f"Expected one of: {', '.join(e.expected)}\n"
         error_msg += context
-        
+
         raise ValueError(error_msg)
     except UnexpectedCharacters as e:
         # Extract detailed error information
         error_line = e.line
         error_column = e.column
-        
+
         # Get the code context
         context = _extract_error_context(config_text, error_line, error_column)
-        
+
         # Build a detailed error message
         error_msg = f"Failed to parse Logstash config at line {error_line}, column {error_column}\n"
         error_msg += f"Unexpected character(s): {config_text[e.pos_in_stream:e.pos_in_stream+10]}\n"
         error_msg += f"Expected one of: {', '.join(e.allowed)}\n"
         error_msg += context
-        
+
         raise ValueError(error_msg)
     except Exception as e:
         # Fallback for other errors
@@ -527,7 +526,7 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
     """
     try:
         parsed = parse_logstash_config(config_text)
-        
+
         # Initialize data with all three sections (even if not in input)
         data = {
             "input": [],
@@ -545,13 +544,13 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
         # Collect top-level comments (comments before any section)
         top_level_comments = []
         sections = []
-        
+
         for item in parsed:
             if isinstance(item, dict) and item.get('type') == 'comment':
                 top_level_comments.append(item)
             else:
                 sections.append(item)
-        
+
         # If there are top-level comments, add them to the input section
         if top_level_comments:
             comment_texts = [c.get('text', '') for c in top_level_comments]
@@ -571,20 +570,20 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
             if not isinstance(section, dict):
                 logger.warning(f"Skipping non-dict section: {type(section)}")
                 continue
-            
+
             if 'type' not in section:
                 logger.warning(f"Section missing 'type' key: {section}")
                 continue
-            
+
             section_type = section['type']
-            
+
             # Validate section_type is one of the expected values
             if section_type not in ['input', 'filter', 'output']:
                 logger.warning(f"Warning: Unknown section type '{section_type}', skipping")
                 continue
-            
+
             section_components = []
-            
+
             # Group consecutive comments together
             statements = section.get('statements', [])
             i = 0
@@ -598,12 +597,12 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
                     # Start collecting consecutive comments
                     comment_texts = [stmt.get('text', '')]
                     i += 1
-                    
+
                     # Look ahead for more consecutive comments
                     while i < len(statements) and isinstance(statements[i], dict) and statements[i].get('type') == 'comment':
                         comment_texts.append(statements[i].get('text', ''))
                         i += 1
-                    
+
                     # Create a single comment component with all lines joined
                     comment_plugin = {
                         'id': f"{section_type}_comment_{component_count}",
@@ -618,7 +617,6 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
                 elif 'name' in stmt:  # It's a regular plugin
                     component, component_count = transformer._format_plugin(stmt, section_type, component_count)
                     section_components.append(component)
-                    component_count += 1
                     i += 1
                 elif stmt.get('type') == 'conditional':
                     # Process conditional and get the updated component count
@@ -696,12 +694,24 @@ class ComponentToPipeline:
             return f'"{value}"'
         
         # If string contains both or neither, use double quotes and escape double quotes
-        # Also handle backslashes properly
+        # Also handle backslashes and special characters properly
         result = []
         i = 0
         while i < len(value):
             if value[i] == '"':
                 result.append('\\"')
+                i += 1
+            elif value[i] == '\n':
+                # Escape actual newline character as \n
+                result.append('\\n')
+                i += 1
+            elif value[i] == '\t':
+                # Escape actual tab character as \t
+                result.append('\\t')
+                i += 1
+            elif value[i] == '\r':
+                # Escape actual carriage return as \r
+                result.append('\\r')
                 i += 1
             elif value[i] == '\\' and i + 1 < len(value):
                 next_char = value[i + 1]
@@ -1009,63 +1019,6 @@ output {
 }
 ''')
     logger.debug(condition_output_no_filter)
-
-#     z = ComponentToPipeline({
-#     "input": [
-#         {
-#             "id": "input_stdin_0",
-#             "type": "input",
-#             "plugin": "stdin",
-#             "config": {}
-#         }
-#     ],
-#     "filter": [
-#         {
-#             "id": "filter_grok_2",
-#             "type": "filter",
-#             "plugin": "grok",
-#             "config": {
-#                 "match": {
-#                     "\"message\"": "%{COMBINEDAPACHELOG}"
-#                 }
-#             }
-#         },
-#         {
-#             "id": "filter_date_4",
-#             "type": "filter",
-#             "plugin": "date",
-#             "config": {
-#                 "match": [
-#                     "timestamp",
-#                     "dd/MMM/yyyy:HH:mm:ss Z"
-#                 ]
-#             }
-#         }
-#     ],
-#     "output": [
-#         {
-#             "id": "output_elasticsearch_6",
-#             "type": "output",
-#             "plugin": "elasticsearch",
-#             "config": {
-#                 "hosts": [
-#                     "localhost:9200"
-#                 ]
-#             }
-#         },
-#         {
-#             "id": "output_stdout_8",
-#             "type": "output",
-#             "plugin": "stdout",
-#             "config": {
-#                 "codec": {
-#                     "rubydebug": {}
-#                 }
-#             }
-#         }
-#     ]
-# },test=False)
-#     logger.debug(z.components_to_logstash_config())
 
 
 

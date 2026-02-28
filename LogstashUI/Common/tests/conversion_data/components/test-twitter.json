@@ -1,0 +1,84 @@
+{
+    "input": [
+        {
+            "id": "input_comment_0",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "This is the sample pipeline whose screenshots are used in\nthe Pipeline Viewer documentation (../pipeline-viewer.asciidoc)\n\nWhenever the Pipeline Viewer UI changes, run this pipeline and\nopen in the new UI to take updated screenshots.\n\nNote: you will have to setup the environment variables used\nbelow. Refer to the Twitter Logstash Input plugin documentation\nfor their expected values"
+            }
+        },
+        {
+            "id": "input_twitter_1",
+            "type": "input",
+            "plugin": "twitter",
+            "config": {
+                "id": "tweet harvester",
+                "consumer_key": "${TWITTER_API_CONSUMER_KEY}",
+                "consumer_secret": "${TWITTER_API_CONSUMER_SECRET}",
+                "keywords": [
+                    "rain",
+                    "monsoon",
+                    "shower",
+                    "drizzle"
+                ],
+                "oauth_token": "${TWITTER_API_OAUTH_TOKEN}",
+                "oauth_token_secret": "${TWITTER_API_OAUTH_TOKEN_SECRET}"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_2",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "message": "%{WORD:is_rt}"
+                }
+            }
+        },
+        {
+            "id": "filter_if_3",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[is_rt] == \"RT\"",
+                "plugins": [
+                    {
+                        "id": "filter_drop_4",
+                        "type": "filter",
+                        "plugin": "drop",
+                        "config": {
+                            "id": "drop_all_RTs"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_stdout_5",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "dots": {}
+                }
+            }
+        },
+        {
+            "id": "output_elasticsearch_6",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "user": "elastic",
+                "password": "changeme",
+                "index": "tweets"
+            }
+        }
+    ]
+}

@@ -1,0 +1,201 @@
+{
+    "input": [
+        {
+            "id": "input_snmp_0",
+            "type": "input",
+            "plugin": "snmp",
+            "config": {
+                "hosts": [
+                    {
+                        "host": "udp:1.2.3.4/161",
+                        "version": "3",
+                        "timeout": 1000,
+                        "retries": 2
+                    }
+                ],
+                "interval": "30",
+                "security_name": "test",
+                "security_level": "authPriv",
+                "ecs_compatibility": "disabled",
+                "oid_mapping_format": "dotted_string",
+                "auth_protocol": "sha",
+                "auth_pass": "test",
+                "priv_protocol": "aes",
+                "priv_pass": "test",
+                "get": [
+                    "1.3.6.1.4.1.9.2.1.57.0",
+                    "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
+                    "1.3.6.1.4.1.9.9.48.1.1.1.6.1",
+                    "1.3.6.1.2.1.1.1.0",
+                    "1.3.6.1.2.1.1.5.0",
+                    "1.3.6.1.2.1.1.2.0",
+                    "1.3.6.1.2.1.1.3.0"
+                ],
+                "tables": [
+                    {
+                        "name": "cdpCacheTable",
+                        "columns": [
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.1",
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.6",
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.7",
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.8",
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.9",
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.5",
+                            "1.3.6.1.4.1.9.9.23.1.2.1.1.4"
+                        ]
+                    },
+                    {
+                        "name": "sensors",
+                        "columns": [
+                            "1.3.6.1.4.1.9.9.13.1.3.1.2",
+                            "1.3.6.1.4.1.9.9.13.1.3.1.3",
+                            "1.3.6.1.4.1.9.9.13.1.3.1.4",
+                            "1.3.6.1.4.1.9.9.13.1.3.1.5",
+                            "1.3.6.1.4.1.9.9.13.1.3.1.6"
+                        ]
+                    },
+                    {
+                        "name": "fans",
+                        "columns": [
+                            "1.3.6.1.4.1.9.9.13.1.4.1.2",
+                            "1.3.6.1.4.1.9.9.13.1.4.1.3"
+                        ]
+                    },
+                    {
+                        "name": "interfaces",
+                        "columns": [
+                            "1.3.6.1.2.1.2.2.1.1",
+                            "1.3.6.1.2.1.2.2.1.2",
+                            "1.3.6.1.2.1.2.2.1.3",
+                            "1.3.6.1.2.1.2.2.1.7",
+                            "1.3.6.1.2.1.2.2.1.8",
+                            "1.3.6.1.2.1.31.1.1.1.1",
+                            "1.3.6.1.2.1.31.1.1.1.18",
+                            "1.3.6.1.2.1.31.1.1.1.15",
+                            "1.3.6.1.2.1.2.2.1.5",
+                            "1.3.6.1.2.1.2.2.1.6",
+                            "1.3.6.1.2.1.2.2.1.4",
+                            "1.3.6.1.2.1.31.1.1.1.6",
+                            "1.3.6.1.2.1.31.1.1.1.10",
+                            "1.3.6.1.2.1.31.1.1.1.9",
+                            "1.3.6.1.2.1.31.1.1.1.13",
+                            "1.3.6.1.2.1.31.1.1.1.7",
+                            "1.3.6.1.2.1.31.1.1.1.11",
+                            "1.3.6.1.2.1.31.1.1.1.8",
+                            "1.3.6.1.2.1.31.1.1.1.12",
+                            "1.3.6.1.2.1.2.2.1.9",
+                            "1.3.6.1.2.1.17.7.1.4.5.1.1",
+                            "1.3.6.1.2.1.2.2.1.14",
+                            "1.3.6.1.2.1.2.2.1.20",
+                            "1.3.6.1.2.1.2.2.1.13",
+                            "1.3.6.1.2.1.2.2.1.19"
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_mutate_1",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "rename": {
+                    "host": "[host][hostname]"
+                }
+            }
+        },
+        {
+            "id": "filter_mutate_2",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "rename": {
+                    "1.3.6.1.4.1.9.2.1.57.0": "[system][cpu][total][norm][pct]",
+                    "1.3.6.1.4.1.9.9.48.1.1.1.5.1": "[system][memory][actual][used][bytes]",
+                    "1.3.6.1.4.1.9.9.48.1.1.1.6.1": "[system][memory][actual][free][bytes]",
+                    "1.3.6.1.2.1.1.1.0": "[host][description]",
+                    "1.3.6.1.2.1.1.5.0": "[host][name]",
+                    "1.3.6.1.2.1.1.2.0": "[host][id]",
+                    "1.3.6.1.2.1.1.3.0": "[host][uptime]"
+                }
+            }
+        },
+        {
+            "id": "filter_mutate_3",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "[network][name]": "home-segment-1 (192.168.4.0/24)",
+                    "[metricset][module]": "system"
+                }
+            }
+        },
+        {
+            "id": "filter_ruby_4",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "    v = event.get(\"[system][cpu][total][norm][pct]\")\n\t    if v\n\t      event.set(\"[system][cpu][total][norm][pct]\", v.to_f / 100.0)\n\t    end"
+            }
+        },
+        {
+            "id": "filter_ruby_5",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "\n\t      used = event.get(\"[system][memory][actual][used][bytes]\")\n\t      free = event.get(\"[system][memory][actual][free][bytes]\")\n\n\t      if used && free\n\t        used_f  = used.to_f\n\t        free_f  = free.to_f\n\t        total_f = used_f + free_f\n\n\t        if total_f > 0\n\t          event.set(\"[system][memory][total]\", total_f)\n\t          event.set(\"[system][memory][actual][used][pct]\", (used_f / total_f))\n\t          event.set(\"[system][memory][actual][free][pct]\", (free_f / total_f))\n\t        end\n\t      end\n\t    "
+            }
+        },
+        {
+            "id": "filter_ruby_6",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "rows = event.get('[cdpCacheTable]')\nif rows.is_a?(Array)\n  host_name = event.get('[host][name]')\n  host_hostname = event.get('[host][hostname]')\n  network_name = event.get('[network][name]')\n  timestamp = event.get('@timestamp')\n  rows.each do |row|\n    next unless row.is_a?(Hash)\n    row['cdpCacheIfIndex'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.1')\n    row['cdpCacheDeviceId'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.6')\n    row['cdpCacheDevicePort'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.7')\n    row['cdpCachePlatform'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.8')\n    row['cdpCacheCapabilities'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.9')\n    row['cdpCacheVersion'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.5')\n    row['cdpCacheAddress'] = row.delete('1.3.6.1.4.1.9.9.23.1.2.1.1.4')\n    new_event = LogStash::Event.new({\n      '@timestamp' => timestamp,\n      'host' => { 'name' => host_name, 'hostname' => host_hostname },\n      'network' => { 'name' => network_name },\n      'table' => row,\n      'metricset' => { 'module' => 'snmp' },\n      'event' => { 'kind' => 'cdpcachetable' }\n    })\n    new_event_block.call(new_event)\n  end\n  event.remove('[cdpCacheTable]')\n  event.set('[event][kind]', 'metrics')\nend"
+            }
+        },
+        {
+            "id": "filter_ruby_7",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "rows = event.get('[sensors]')\nif rows.is_a?(Array)\n  host_name = event.get('[host][name]')\n  host_hostname = event.get('[host][hostname]')\n  network_name = event.get('[network][name]')\n  timestamp = event.get('@timestamp')\n  rows.each do |row|\n    next unless row.is_a?(Hash)\n    row['description'] = row.delete('1.3.6.1.4.1.9.9.13.1.3.1.2')\n    row['temp_celsius'] = row.delete('1.3.6.1.4.1.9.9.13.1.3.1.3')\n    row['temp_threshold'] = row.delete('1.3.6.1.4.1.9.9.13.1.3.1.4')\n    row['temp_last_shutdown'] = row.delete('1.3.6.1.4.1.9.9.13.1.3.1.5')\n    row['state'] = row.delete('1.3.6.1.4.1.9.9.13.1.3.1.6')\n    new_event = LogStash::Event.new({\n      '@timestamp' => timestamp,\n      'host' => { 'name' => host_name, 'hostname' => host_hostname },\n      'network' => { 'name' => network_name },\n      'table' => row,\n      'metricset' => { 'module' => 'snmp' },\n      'event' => { 'kind' => 'sensors' }\n    })\n    new_event_block.call(new_event)\n  end\n  event.remove('[sensors]')\n  event.set('[event][kind]', 'metrics')\nend"
+            }
+        },
+        {
+            "id": "filter_ruby_8",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "rows = event.get('[fans]')\nif rows.is_a?(Array)\n  host_name = event.get('[host][name]')\n  host_hostname = event.get('[host][hostname]')\n  network_name = event.get('[network][name]')\n  timestamp = event.get('@timestamp')\n  rows.each do |row|\n    next unless row.is_a?(Hash)\n    row['description'] = row.delete('1.3.6.1.4.1.9.9.13.1.4.1.2')\n    row['state'] = row.delete('1.3.6.1.4.1.9.9.13.1.4.1.3')\n    new_event = LogStash::Event.new({\n      '@timestamp' => timestamp,\n      'host' => { 'name' => host_name, 'hostname' => host_hostname },\n      'network' => { 'name' => network_name },\n      'table' => row,\n      'metricset' => { 'module' => 'snmp' },\n      'event' => { 'kind' => 'fans' }\n    })\n    new_event_block.call(new_event)\n  end\n  event.remove('[fans]')\n  event.set('[event][kind]', 'metrics')\nend"
+            }
+        },
+        {
+            "id": "filter_ruby_9",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "rows = event.get('[interfaces]')\nif rows.is_a?(Array)\n  host_name = event.get('[host][name]')\n  host_hostname = event.get('[host][hostname]')\n  network_name = event.get('[network][name]')\n  timestamp = event.get('@timestamp')\n  rows.each do |row|\n    next unless row.is_a?(Hash)\n    row['ifIndex'] = row.delete('1.3.6.1.2.1.2.2.1.1')\n    row['ifDescr'] = row.delete('1.3.6.1.2.1.2.2.1.2')\n    row['ifType'] = row.delete('1.3.6.1.2.1.2.2.1.3')\n    row['ifAdminStatus'] = row.delete('1.3.6.1.2.1.2.2.1.7')\n    row['ifOperStatus'] = row.delete('1.3.6.1.2.1.2.2.1.8')\n    row['ifName'] = row.delete('1.3.6.1.2.1.31.1.1.1.1')\n    row['ifAlias'] = row.delete('1.3.6.1.2.1.31.1.1.1.18')\n    row['ifHighSpeed'] = row.delete('1.3.6.1.2.1.31.1.1.1.15')\n    row['ifSpeed'] = row.delete('1.3.6.1.2.1.2.2.1.5')\n    row['ifPhysAddress'] = row.delete('1.3.6.1.2.1.2.2.1.6')\n    row['ifMtu'] = row.delete('1.3.6.1.2.1.2.2.1.4')\n    row['ifHCInOctets'] = row.delete('1.3.6.1.2.1.31.1.1.1.6')\n    row['ifHCOutOctets'] = row.delete('1.3.6.1.2.1.31.1.1.1.10')\n    row['ifHCInBroadcastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.9')\n    row['ifHCOutBroadcastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.13')\n    row['ifHCInUcastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.7')\n    row['ifHCOutUcastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.11')\n    row['ifHCInMulticastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.8')\n    row['ifHCOutMulticastPkts'] = row.delete('1.3.6.1.2.1.31.1.1.1.12')\n    row['ifLastChange'] = row.delete('1.3.6.1.2.1.2.2.1.9')\n    row['dot1qPvid'] = row.delete('1.3.6.1.2.1.17.7.1.4.5.1.1')\n    row['ifInErrors'] = row.delete('1.3.6.1.2.1.2.2.1.14')\n    row['ifOutErrors'] = row.delete('1.3.6.1.2.1.2.2.1.20')\n    row['ifInDiscards'] = row.delete('1.3.6.1.2.1.2.2.1.13')\n    row['ifOutDiscards'] = row.delete('1.3.6.1.2.1.2.2.1.19')\n    new_event = LogStash::Event.new({\n      '@timestamp' => timestamp,\n      'host' => { 'name' => host_name, 'hostname' => host_hostname },\n      'network' => { 'name' => network_name },\n      'table' => row,\n      'metricset' => { 'module' => 'snmp' },\n      'event' => { 'kind' => 'interfaces' }\n    })\n    new_event_block.call(new_event)\n  end\n  event.remove('[interfaces]')\n  event.set('[event][kind]', 'metrics')\nend"
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_10",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "data_stream": "true",
+                "data_stream_type": "metrics",
+                "data_stream_namespace": "default",
+                "data_stream_dataset": "snmp.polling",
+                "cloud_id": "test",
+                "user": "test",
+                "password": "test"
+            }
+        }
+    ]
+}

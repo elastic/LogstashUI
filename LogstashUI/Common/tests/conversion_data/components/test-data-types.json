@@ -1,0 +1,50 @@
+{
+    "input": [],
+    "filter": [
+        {
+            "id": "filter_grok_0",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "test": "test"
+                },
+                "pattern_definitions": {
+                    "1": "2",
+                    "test": "test",
+                    "asd": "asf"
+                },
+                "patterns_dir": [
+                    "test"
+                ],
+                "tag_on_failure": []
+            }
+        },
+        {
+            "id": "filter_grok_1",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "test": [
+                        "test",
+                        "test2"
+                    ]
+                },
+                "pattern_definitions": {
+                    "test": "test"
+                },
+                "patterns_dir": "test"
+            }
+        },
+        {
+            "id": "filter_comment_2",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "test\nmulti\nrow"
+            }
+        }
+    ],
+    "output": []
+}

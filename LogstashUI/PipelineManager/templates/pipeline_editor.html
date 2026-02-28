@@ -13,6 +13,14 @@
 <script src="{% static 'js/simulation_results.js' %}"></script>
 <script src="{% static 'js/pipeline_text_editor.js' %}"></script>
 <link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
+{{ component_data|json_script:"component-data" }}
+{{ plugin_data|json_script:"plugin-data" }}
+<script>
+    // Define components and pluginData early so HTMX hx-vals can reference them
+    const components = JSON.parse(document.getElementById('component-data').textContent);
+    const pluginData = JSON.parse(document.getElementById('plugin-data').textContent);
+    window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
+</script>
 <style>
     .insertion-point {
         position: relative;
@@ -764,9 +772,6 @@
 <div id="slotPreallocationResult" class="hidden"></div>
 
 <script>
-    const components = {{component_data | safe}};
-    const pluginData = {{plugin_data | safe}};
-    window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
     const pipelineName = "{{ pipeline_name }}";
     let currentSlotId = null;  // Store slot_id for logs viewer
     

@@ -1,0 +1,535 @@
+{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "id": "input_beats_1",
+                "port": "5044",
+                "ssl": "true",
+                "ssl_certificate": "/etc/logstash/certs/logstash.crt",
+                "ssl_key": "/etc/logstash/certs/logstash.key",
+                "codec": {
+                    "json": {}
+                },
+                "tags": [
+                    "beats_input",
+                    "app_log"
+                ]
+            }
+        },
+        {
+            "id": "input_udp_1",
+            "type": "input",
+            "plugin": "udp",
+            "config": {
+                "id": "input_udp_1",
+                "port": "5140",
+                "buffer_size": "8192",
+                "codec": {
+                    "plain": {
+                        "charset": "UTF-8"
+                    }
+                },
+                "type": "network_flow",
+                "tags": [
+                    "udp_input",
+                    "unstructured"
+                ]
+            }
+        },
+        {
+            "id": "input_jdbc_2",
+            "type": "input",
+            "plugin": "jdbc",
+            "config": {
+                "id": "input_jdbc_1",
+                "jdbc_driver_library": "/usr/share/logstash/logstash-core/lib/jars/postgresql-42.2.8.jar",
+                "jdbc_driver_class": "org.postgresql.Driver",
+                "jdbc_connection_string": "jdbc:postgresql://db.example.com:5432/config_db",
+                "jdbc_user": "logstash_user",
+                "jdbc_password": "${JDBC_PASSWORD}",
+                "schedule": "0 * * * *",
+                "statement": "SELECT id, user_name, config_item, change_timestamp FROM config_changes WHERE change_timestamp > :sql_last_value ORDER BY change_timestamp ASC",
+                "use_column_value": "true",
+                "tracking_column": "change_timestamp",
+                "tracking_column_type": "timestamp",
+                "last_run_metadata_path": "/var/lib/logstash/.jdbc_last_run_config_db",
+                "type": "config_audit",
+                "tags": [
+                    "jdbc_input",
+                    "audit"
+                ]
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_mutate_3",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "id": "filter_mutate_1",
+                "rename": {
+                    "@timestamp": "log_recv_time"
+                },
+                "add_field": {
+                    "severity": "INFO"
+                }
+            }
+        },
+        {
+            "id": "filter_if_4",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "\"app_log\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "filter_if_5",
+                        "type": "filter",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "\"_jsonparsefailure\" in [tags]",
+                            "plugins": [
+                                {
+                                    "id": "filter_grok_6",
+                                    "type": "filter",
+                                    "plugin": "grok",
+                                    "config": {
+                                        "id": "filter_grok_1",
+                                        "match": {
+                                            "message": "(?\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[%{DATA:thread}] %{LOGLEVEL:log_level} %{DATA:logger} - %{GREEDYDATA:log_message}"
+                                        },
+                                        "add_tag": [
+                                            "grok_fallback_success"
+                                        ],
+                                        "remove_tag": [
+                                            "_jsonparsefailure"
+                                        ]
+                                    }
+                                }
+                            ],
+                            "else_ifs": [],
+                            "else": null
+                        }
+                    },
+                    {
+                        "id": "filter_if_7",
+                        "type": "filter",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "[log_level]",
+                            "plugins": [
+                                {
+                                    "id": "filter_mutate_8",
+                                    "type": "filter",
+                                    "plugin": "mutate",
+                                    "config": {
+                                        "id": "filter_mutate_2",
+                                        "uppercase": [
+                                            "log_level"
+                                        ],
+                                        "copy": {
+                                            "log_level": "severity"
+                                        }
+                                    }
+                                }
+                            ],
+                            "else_ifs": [],
+                            "else": null
+                        }
+                    },
+                    {
+                        "id": "filter_if_9",
+                        "type": "filter",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "[severity] =~ /(WARNING|ERROR|FATAL)/",
+                            "plugins": [
+                                {
+                                    "id": "filter_geoip_10",
+                                    "type": "filter",
+                                    "plugin": "geoip",
+                                    "config": {
+                                        "id": "filter_geoip_1",
+                                        "source": "[fields][source_ip]",
+                                        "target": "geo",
+                                        "database": "/etc/logstash/geoip/GeoLite2-City.mmdb",
+                                        "remove_field": [
+                                            "continent_code",
+                                            "location"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "id": "filter_translate_11",
+                                    "type": "filter",
+                                    "plugin": "translate",
+                                    "config": {
+                                        "id": "filter_translate_1",
+                                        "field": "[service_code]",
+                                        "destination": "service_name",
+                                        "dictionary_path": "/etc/logstash/dictionaries/service_codes.csv",
+                                        "fallback": "Unknown Service",
+                                        "refresh_interval": "300"
+                                    }
+                                }
+                            ],
+                            "else_ifs": [],
+                            "else": null
+                        }
+                    },
+                    {
+                        "id": "filter_mutate_12",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "id": "filter_mutate_3",
+                            "remove_field": [
+                                "message",
+                                "agent"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[type] == \"network_flow\"",
+                        "plugins": [
+                            {
+                                "id": "filter_grok_13",
+                                "type": "filter",
+                                "plugin": "grok",
+                                "config": {
+                                    "id": "filter_grok_2",
+                                    "match": {
+                                        "message": "%{NETFLOW_V9}"
+                                    },
+                                    "on_failure": [
+                                        "_netflowparsefailure"
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "filter_if_14",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "\"_netflowparsefailure\" in [tags]",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_mutate_15",
+                                            "type": "filter",
+                                            "plugin": "mutate",
+                                            "config": {
+                                                "id": "filter_mutate_4",
+                                                "add_tag": [
+                                                    "unparsed_flow"
+                                                ],
+                                                "remove_tag": [
+                                                    "_grokparsefailure",
+                                                    "_netflowparsefailure"
+                                                ],
+                                                "copy": {
+                                                    "message": "unparsed_data"
+                                                },
+                                                "replace": {
+                                                    "message": "Truncated unparsed flow data."
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": {
+                                        "plugins": [
+                                            {
+                                                "id": "filter_aggregate_16",
+                                                "type": "filter",
+                                                "plugin": "aggregate",
+                                                "config": {
+                                                    "id": "filter_aggregate_1",
+                                                    "task_id": "%{source_ip}_%{destination_ip}_%{protocol}",
+                                                    "code": "map['total_packets'] ||= 0; map['total_packets'] += event.get('packets').to_i; map['total_bytes'] ||= 0; map['total_bytes'] += event.get('bytes').to_i",
+                                                    "map_action": "create_or_update",
+                                                    "push_map_as_event_on_timeout": "true",
+                                                    "timeout": "120",
+                                                    "timeout_task_id_field": "aggregated_flow_id",
+                                                    "timeout_tags": [
+                                                        "_aggregate_timeout"
+                                                    ]
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[type] == \"config_audit\"",
+                        "plugins": [
+                            {
+                                "id": "filter_if_17",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[change_timestamp]",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_date_18",
+                                            "type": "filter",
+                                            "plugin": "date",
+                                            "config": {
+                                                "id": "filter_date_1",
+                                                "match": [
+                                                    "change_timestamp",
+                                                    "YYYY-MM-dd HH:mm:ss.SSSSSS"
+                                                ],
+                                                "target": "@timestamp",
+                                                "remove_field": [
+                                                    "change_timestamp"
+                                                ]
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_if_19",
+                                            "type": "filter",
+                                            "plugin": "if",
+                                            "config": {
+                                                "condition": "[user_name] != \"system\"",
+                                                "plugins": [
+                                                    {
+                                                        "id": "filter_ruby_20",
+                                                        "type": "filter",
+                                                        "plugin": "ruby",
+                                                        "config": {
+                                                            "id": "filter_ruby_1",
+                                                            "code": "event.set('user_hash', Digest::MD5.hexdigest(event.get('user_name')))"
+                                                        }
+                                                    },
+                                                    {
+                                                        "id": "filter_mutate_21",
+                                                        "type": "filter",
+                                                        "plugin": "mutate",
+                                                        "config": {
+                                                            "id": "filter_mutate_5",
+                                                            "remove_field": [
+                                                                "user_name"
+                                                            ]
+                                                        }
+                                                    }
+                                                ],
+                                                "else_ifs": [],
+                                                "else": null
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": null
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_22",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "\"_grokparsefailure\" in [tags] or \"_jsonparsefailure\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_23",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "id": "filter_mutate_6",
+                            "add_field": {
+                                "log_status": "FAILED_TO_PARSE"
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": {
+                    "plugins": [
+                        {
+                            "id": "filter_mutate_24",
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "id": "filter_mutate_7",
+                                "add_field": {
+                                    "log_status": "PROCESSED"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "filter_if_25",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[log_recv_time] < now() - 86400000",
+                "plugins": [
+                    {
+                        "id": "filter_drop_26",
+                        "type": "filter",
+                        "plugin": "drop",
+                        "config": {
+                            "id": "filter_drop_1"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_if_27",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "[log_status] == \"PROCESSED\" and [severity] =~ /(ERROR|FATAL)/",
+                "plugins": [
+                    {
+                        "id": "output_elasticsearch_28",
+                        "type": "output",
+                        "plugin": "elasticsearch",
+                        "config": {
+                            "id": "output_elasticsearch_1",
+                            "hosts": [
+                                "https://es-hot.example.com:9200"
+                            ],
+                            "index": "high-priority-%{+YYYY.MM.dd}",
+                            "user": "logstash_writer",
+                            "password": "secure_password",
+                            "ssl": "true",
+                            "cacert": "/etc/logstash/certs/ca.crt",
+                            "action": "index"
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[log_status] == \"PROCESSED\"",
+                        "plugins": [
+                            {
+                                "id": "output_elasticsearch_29",
+                                "type": "output",
+                                "plugin": "elasticsearch",
+                                "config": {
+                                    "id": "output_elasticsearch_2",
+                                    "hosts": [
+                                        "https://es-warm.example.com:9200"
+                                    ],
+                                    "index": "general-logs-%{+YYYY.MM.dd}",
+                                    "user": "logstash_writer",
+                                    "password": "secure_password",
+                                    "ssl": "true",
+                                    "cacert": "/etc/logstash/certs/ca.crt",
+                                    "workers": "4",
+                                    "ilm_enabled": "false"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_30",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "[log_status] == \"FAILED_TO_PARSE\"",
+                "plugins": [
+                    {
+                        "id": "output_file_31",
+                        "type": "output",
+                        "plugin": "file",
+                        "config": {
+                            "id": "output_file_1",
+                            "path": "/var/log/logstash/dlq_failures.json",
+                            "codec": {
+                                "json": {
+                                    "pretty": "true"
+                                }
+                            },
+                            "add_tag": [
+                                "dlq_routed"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_32",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"_aggregate_timeout\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_tcp_33",
+                        "type": "output",
+                        "plugin": "tcp",
+                        "config": {
+                            "id": "output_tcp_1",
+                            "host": "alert-sys.example.com",
+                            "port": "6514",
+                            "codec": {
+                                "gelf": {
+                                    "protocol": "TCP",
+                                    "short_message": "Aggregated Flow Timeout: %{aggregated_flow_id}"
+                                }
+                            },
+                            "socket_timeout": "5"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_34",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "rand(100) < 1",
+                "plugins": [
+                    {
+                        "id": "output_stdout_35",
+                        "type": "output",
+                        "plugin": "stdout",
+                        "config": {
+                            "id": "output_stdout_1",
+                            "codec": {
+                                "rubydebug": {
+                                    "metadata": "true"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ]
+}

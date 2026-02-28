@@ -1,0 +1,44 @@
+{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": "5044"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_1",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "message": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        },
+        {
+            "id": "filter_geoip_2",
+            "type": "filter",
+            "plugin": "geoip",
+            "config": {
+                "source": "clientip"
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_3",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        }
+    ]
+}

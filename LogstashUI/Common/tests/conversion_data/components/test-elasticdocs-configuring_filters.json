@@ -1,0 +1,55 @@
+{
+    "input": [
+        {
+            "id": "input_stdin_0",
+            "type": "input",
+            "plugin": "stdin",
+            "config": {}
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_1",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "message": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        },
+        {
+            "id": "filter_date_2",
+            "type": "filter",
+            "plugin": "date",
+            "config": {
+                "match": [
+                    "timestamp",
+                    "dd/MMM/yyyy:HH:mm:ss Z"
+                ]
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_3",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        },
+        {
+            "id": "output_stdout_4",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

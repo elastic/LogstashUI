@@ -1,0 +1,146 @@
+{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": 5044,
+                "host": "0.0.0.0"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_1",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[fileset][module] == \"nginx\"",
+                "plugins": [
+                    {
+                        "id": "filter_if_2",
+                        "type": "filter",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "[fileset][name] == \"access\"",
+                            "plugins": [
+                                {
+                                    "id": "filter_grok_3",
+                                    "type": "filter",
+                                    "plugin": "grok",
+                                    "config": {
+                                        "match": {
+                                            "message": [
+                                                "%{IPORHOST:[nginx][access][remote_ip]} - %{DATA:[nginx][access][user_name]} \\[%{HTTPDATE:[nginx][access][time]}\\] \"%{WORD:[nginx][access][method]} %{DATA:[nginx][access][url]} HTTP/%{NUMBER:[nginx][access][http_version]}\" %{NUMBER:[nginx][access][response_code]} %{NUMBER:[nginx][access][body_sent][bytes]} \"%{DATA:[nginx][access][referrer]}\" \"%{DATA:[nginx][access][agent]}\""
+                                            ]
+                                        },
+                                        "remove_field": "message"
+                                    }
+                                },
+                                {
+                                    "id": "filter_mutate_4",
+                                    "type": "filter",
+                                    "plugin": "mutate",
+                                    "config": {
+                                        "add_field": {
+                                            "read_timestamp": "%{@timestamp}"
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "filter_date_5",
+                                    "type": "filter",
+                                    "plugin": "date",
+                                    "config": {
+                                        "match": [
+                                            "[nginx][access][time]",
+                                            "dd/MMM/YYYY:H:m:s Z"
+                                        ],
+                                        "remove_field": "[nginx][access][time]"
+                                    }
+                                },
+                                {
+                                    "id": "filter_useragent_6",
+                                    "type": "filter",
+                                    "plugin": "useragent",
+                                    "config": {
+                                        "source": "[nginx][access][agent]",
+                                        "target": "[nginx][access][user_agent]",
+                                        "remove_field": "[nginx][access][agent]"
+                                    }
+                                },
+                                {
+                                    "id": "filter_geoip_7",
+                                    "type": "filter",
+                                    "plugin": "geoip",
+                                    "config": {
+                                        "source": "[nginx][access][remote_ip]",
+                                        "target": "[nginx][access][geoip]"
+                                    }
+                                }
+                            ],
+                            "else_ifs": [
+                                {
+                                    "condition": "[fileset][name] == \"error\"",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_grok_8",
+                                            "type": "filter",
+                                            "plugin": "grok",
+                                            "config": {
+                                                "match": {
+                                                    "message": [
+                                                        "%{DATA:[nginx][error][time]} \\[%{DATA:[nginx][error][level]}\\] %{NUMBER:[nginx][error][pid]}#%{NUMBER:[nginx][error][tid]}: (\\*%{NUMBER:[nginx][error][connection_id]} )?%{GREEDYDATA:[nginx][error][message]}"
+                                                    ]
+                                                },
+                                                "remove_field": "message"
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_mutate_9",
+                                            "type": "filter",
+                                            "plugin": "mutate",
+                                            "config": {
+                                                "rename": {
+                                                    "@timestamp": "read_timestamp"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_date_10",
+                                            "type": "filter",
+                                            "plugin": "date",
+                                            "config": {
+                                                "match": [
+                                                    "[nginx][error][time]",
+                                                    "YYYY/MM/dd H:m:s"
+                                                ],
+                                                "remove_field": "[nginx][error][time]"
+                                            }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "else": null
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_11",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": "localhost",
+                "manage_template": "false",
+                "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+            }
+        }
+    ]
+}

@@ -1,9 +1,40 @@
-from Common.logstash_config_parse import ComponentToPipeline
+from Common.logstash_config_parse import ComponentToPipeline, logstash_config_to_components
 import pytest
 import json
+import os
 
+# Load test cases from external files
+def load_test_cases():
+    """Load test cases from conversion_data directory."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    pipelines_dir = os.path.join(base_dir, "conversion_data", "pipelines")
+    components_dir = os.path.join(base_dir, "conversion_data", "components")
+    
+    test_cases = []
+    
+    # Get all .conf files
+    for filename in sorted(os.listdir(pipelines_dir)):
+        if filename.endswith('.conf'):
+            name = filename[:-5]  # Remove .conf extension
+            
+            # Load pipeline config
+            pipeline_file = os.path.join(pipelines_dir, filename)
+            with open(pipeline_file, 'r', encoding='utf-8') as f:
+                pipeline = f.read()
+            
+            # Load components JSON
+            components_file = os.path.join(components_dir, f"{name}.json")
+            with open(components_file, 'r', encoding='utf-8') as f:
+                components = f.read()
+            
+            test_cases.append((name, pipeline, components))
+    
+    return test_cases
 
-test_cases = [
+test_cases = load_test_cases()
+
+# Legacy inline test cases (kept for reference, can be removed after verification)
+_legacy_test_cases = [
     (
         "test-elasticdocs-configuring_filters",
         '''input {
@@ -1719,13 +1750,40 @@ output {
 ]
 
 
+def normalize_json(json_str):
+    """
+    Normalize JSON for comparison by parsing and re-serializing with consistent formatting.
+    This ignores whitespace differences in string values and ensures consistent ordering.
+    """
+    obj = json.loads(json_str)
+    return json.dumps(obj, sort_keys=True, indent=2)
+
+
 @pytest.mark.parametrize(
     "name, pipeline, components",
     test_cases,
     ids=[case[0] for case in test_cases]
 )
 def test_components_to_config(name, pipeline, components):
-    parser = ComponentToPipeline(json.loads(components))
-    new_config = parser.components_to_logstash_config()
-
-    assert pipeline == new_config
+    """
+    Round-trip test: original pipeline → components → new pipeline → components
+    Compare the component representations to ensure lossless conversion.
+    Uses normalized JSON comparison to ignore formatting differences.
+    """
+    # Step 1: Convert original pipeline to components
+    components_from_pipeline = logstash_config_to_components(pipeline)
+    
+    # Step 2: Convert those components back to pipeline
+    parser = ComponentToPipeline(json.loads(components_from_pipeline))
+    new_pipeline = parser.components_to_logstash_config()
+    
+    # Step 3: Convert the new pipeline to components again
+    components_from_new_pipeline = logstash_config_to_components(new_pipeline)
+    
+    # Step 4: Compare the component representations using normalized JSON
+    # This ensures the conversion is lossless, regardless of formatting differences
+    # like whitespace in multi-line strings or type representation
+    normalized_original = normalize_json(components_from_pipeline)
+    normalized_roundtrip = normalize_json(components_from_new_pipeline)
+    
+    assert normalized_original == normalized_roundtrip

@@ -67,7 +67,8 @@ def PipelineEditor(request):
 
         try:
             parsed_config = logstash_config_parse.logstash_config_to_components(context['pipeline_text'])
-            context['component_data'] = parsed_config
+            # logstash_config_to_components returns a JSON string, so parse it back to a dict
+            context['component_data'] = json.loads(parsed_config)
         except Exception as e:
             # Capture the parsing error to show to the user
             context['parsing_error'] = str(e)
