@@ -2368,7 +2368,7 @@ window.viewSimulationLogs = function() {
                             <span class="text-gray-500 text-xs">${timestamp}</span>
                             <span class="text-gray-400 text-xs">${logger}</span>
                         </div>
-                        <div class="text-gray-200 mb-2">${message}</div>
+                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
                         <details class="text-xs">
                             <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
                             <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>

@@ -347,8 +347,6 @@ function loadNetworkFilter() {
     });
 }
 
-
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
   // Load initial data

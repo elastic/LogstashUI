@@ -5,6 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+
 def get_logstash_pipeline(es_id, pipeline_name):
     try:
         es = get_elastic_connection(es_id)

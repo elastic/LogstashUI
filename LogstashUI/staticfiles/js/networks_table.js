@@ -294,7 +294,6 @@ function previousPage() {
 }
 
 
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
   // Fetch and render networks

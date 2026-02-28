@@ -32,7 +32,9 @@ def get_encryption_key():
     
     # Ensure data directory exists
     key_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
+    key_file.touch(mode=0o600, exist_ok=True)
+
     # Save key to file
     with open(key_file, 'wb') as f:
         f.write(key)

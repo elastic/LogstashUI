@@ -59,7 +59,7 @@ def fetch_latest_version_from_docker_hub():
     """
     logger.debug("Fetching latest version from Docker Hub API")
     try:
-        response = requests.get(DOCKER_HUB_API, timeout=5)
+        response = requests.get(DOCKER_HUB_API, timeout=5, params={"page_size": 100})
         response.raise_for_status()
         data = response.json()
 

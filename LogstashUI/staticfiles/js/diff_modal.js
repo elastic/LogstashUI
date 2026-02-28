@@ -95,6 +95,29 @@ function computeLineDiff(oldLines, newLines) {
     return changes;
 }
 
+/**
+ * Render inline diff with highlighting for a specific side
+ */
+function renderInlineDiff(changes, side) {
+    const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+
+    let html = '';
+    for (const change of changes) {
+        if (change.type === 'equal') {
+            html += escapeHtml(change.text);
+        } else if (change.type === 'delete' && side === 'old') {
+            html += `<span class="bg-red-500/50 font-bold">${escapeHtml(change.text)}</span>`;
+        } else if (change.type === 'insert' && side === 'new') {
+            html += `<span class="bg-green-500/50 font-bold">${escapeHtml(change.text)}</span>`;
+        }
+        // Don't render delete on new side or insert on old side
+    }
+    return html || ' ';
+}
 
 // ===== END DIFF ALGORITHMS =====
 
@@ -422,7 +445,14 @@ async function prepareDiffModal() {
     `;
     document.getElementById('confirmSaveButton').classList.remove('hidden');
     document.getElementById('copyCodeButton').classList.add('hidden');
-    document.getElementById('addIdsContainer').classList.remove('hidden');
+
+    // Hide add IDs checkbox if in Text mode (not applicable)
+    const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
+    if (isTextMode) {
+        document.getElementById('addIdsContainer').classList.add('hidden');
+    } else {
+        document.getElementById('addIdsContainer').classList.remove('hidden');
+    }
 
     // Reset checkbox state
     const checkbox = document.getElementById('addIdsCheckbox');
@@ -432,9 +462,11 @@ async function prepareDiffModal() {
     // Show the modal first
     showDiffModal();
 
-    // Validate for quote mixing
-    quoteValidationWarnings = validateQuoteMixing(components);
-    displayQuoteWarnings(quoteValidationWarnings);
+    // Validate for quote mixing only if in UI mode
+    if (!isTextMode) {
+        quoteValidationWarnings = validateQuoteMixing(components);
+        displayQuoteWarnings(quoteValidationWarnings);
+    }
 
     // Load the diff content
     await loadDiffContent();
@@ -442,9 +474,14 @@ async function prepareDiffModal() {
 
 // Separate function to load diff content (can be called when checkbox changes)
 async function loadDiffContent() {
-    // Re-validate and display warnings (in case components changed)
-    quoteValidationWarnings = validateQuoteMixing(components);
-    displayQuoteWarnings(quoteValidationWarnings);
+    // Check if we're in Text mode
+    const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
+
+    // Re-validate and display warnings only if in UI mode
+    if (!isTextMode) {
+        quoteValidationWarnings = validateQuoteMixing(components);
+        displayQuoteWarnings(quoteValidationWarnings);
+    }
 
     // Show loading state
     document.getElementById('diffLoading').classList.remove('hidden');
@@ -455,14 +492,27 @@ async function loadDiffContent() {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
-        console.log('Fetching diff for:', { esId, pipelineName, addIds: currentAddIdsState });
+        console.log('Fetching diff for:', { esId, pipelineName, addIds: currentAddIdsState, isTextMode });
+
+        // If in Text mode, get the raw text from CodeMirror editor
+        let newPipelineText = null;
+        if (isTextMode && typeof codeMirrorEditor !== 'undefined' && codeMirrorEditor) {
+            newPipelineText = codeMirrorEditor.getValue();
+            console.log('Using raw text from CodeMirror editor');
+        }
 
         // Fetch diff from the server
         const formData = new FormData();
         formData.append('es_id', esId);
         formData.append('pipeline', pipelineName);
-        formData.append('components', JSON.stringify(components));
-        formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
+
+        // If in Text mode, send the raw text; otherwise send components
+        if (isTextMode && newPipelineText) {
+            formData.append('pipeline_text', newPipelineText);
+        } else {
+            formData.append('components', JSON.stringify(components));
+            formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
+        }
 
         const diffResponse = await fetch('/ConnectionManager/GetDiff/', {
             method: 'POST',
@@ -482,6 +532,9 @@ async function loadDiffContent() {
 
         const diffData = await diffResponse.json();
         console.log('Diff data received:', diffData);
+
+        // Store the new pipeline text for use when saving
+        storedNewPipelineCode = diffData.new;
 
         // Hide loading, show container
         document.getElementById('diffLoading').classList.add('hidden');
@@ -677,15 +730,25 @@ async function confirmSavePipeline() {
     try {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
+        const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
 
-        console.log('Saving pipeline:', { esId, pipelineName });
+        console.log('Saving pipeline:', { esId, pipelineName, isTextMode });
 
         const formData = new FormData();
         formData.append('save_pipeline', 'true');
         formData.append('es_id', esId);
         formData.append('pipeline', pipelineName);
-        formData.append('components', JSON.stringify(components));
-        formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
+
+        // If in Text mode, use the stored pipeline text directly
+        // Otherwise, use components (UI mode)
+        if (isTextMode && storedNewPipelineCode) {
+            formData.append('pipeline_config', storedNewPipelineCode);
+            console.log('Using stored pipeline text from Text mode');
+        } else {
+            formData.append('components', JSON.stringify(components));
+            formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
+            console.log('Using components from UI mode');
+        }
 
         const saveResponse = await fetch('/ConnectionManager/SavePipeline/', {
             method: 'POST',

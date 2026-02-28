@@ -2,7 +2,16 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from PipelineManager.models import Connection as ConnectionTable
 
-from Common.elastic_utils import get_elastic_connections_from_list, get_elastic_connection
+from Common.elastic_utils import (
+    get_elastic_connections_from_list,
+    get_elastic_connection
+)
+
+from Common.formatters import (
+    _safe_get_numeric,
+    _safe_extract_value,
+    _format_uptime
+)
 
 import json
 import logging
@@ -29,28 +38,6 @@ def Monitoring(request):
 
 
 
-def _safe_get_numeric(data, default=0):
-    """
-    Safely extract a numeric value from data.
-    Handles cases where data might be a list, None, or invalid.
-    Returns default if value cannot be converted to a number.
-    """
-    if data is None:
-        return default
-
-    # If it's a list, try to get the first element
-    if isinstance(data, list):
-        if len(data) == 0:
-            return default
-        data = data[0]
-
-    # Try to convert to the appropriate numeric type
-    try:
-        if isinstance(data, (int, float)):
-            return data
-        return float(data) if '.' in str(data) else int(data)
-    except (ValueError, TypeError):
-        return default
 
 
 def check_for_monitoring_indices(es_connections):
@@ -67,19 +54,47 @@ def check_for_monitoring_indices(es_connections):
     for connection in es_connections:
         es = connection['es']
 
-        indices = es.cat.indices(index="*logstash*")
+        indices_response = es.cat.indices(index="*logstash*")
+        
+        # Handle both string and list responses from cat.indices
+        if isinstance(indices_response, list):
+            # List of dicts like [{'index': 'name'}, ...]
+            index_names = [idx.get('index', '') for idx in indices_response]
+            logger.debug(f"[{connection['name']}] Got list response with {len(index_names)} indices")
+        else:
+            # String response - parse index names from table format
+            # Format: "health status index uuid pri rep docs.count ..."
+            # Index name is the 3rd column (index 2)
+            lines = indices_response.split('\n') if indices_response else []
+            index_names = []
+            for line in lines:
+                if line.strip():
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        index_names.append(parts[2])  # 3rd column is the index name
+            logger.debug(f"[{connection['name']}] Got string response, parsed {len(index_names)} index names")
+            logger.debug(f"[{connection['name']}] First 3 indices: {index_names[:3]}")
 
         monitoring_indices[connection['name']] = {}
         monitoring_indices[connection['name']]['has_all'] = True
-
         monitoring_indices[connection['name']]['missing'] = []
+        
         for required_stream in required_data_streams:
-            if not required_stream in indices:
+            # Check if any index name contains the required stream pattern
+            # Handle both regular indices (metrics-logstash.node-*) and data streams (.ds-metrics-logstash.node-*)
+            found = any(required_stream in idx for idx in index_names)
+            if not found:
                 monitoring_indices[connection['name']]['has_all'] = False
                 monitoring_indices[connection['name']]['missing'].append(required_stream)
+                logger.debug(f"[{connection['name']}] Missing: {required_stream}")
 
         if len(monitoring_indices[connection['name']]['missing']) == len(required_data_streams):
             monitoring_indices[connection['name']]['has_none'] = True
+            logger.warning(f"[{connection['name']}] ALL monitoring indices missing!")
+        else:
+            monitoring_indices[connection['name']]['has_none'] = False
+            
+        logger.info(f"[{connection['name']}] Result: has_all={monitoring_indices[connection['name']]['has_all']}, has_none={monitoring_indices[connection['name']]['has_none']}, missing={len(monitoring_indices[connection['name']]['missing'])} streams")
 
     return monitoring_indices
 
@@ -103,6 +118,9 @@ def get_logs(es, logstash_node="", pipeline_name=""):
                     "logstash.log.pipeline_id": pipeline_name
                 }
             })
+
+    # We lazily just get the top 1000 hits.
+    # This will be changed to a paginated scroll later
     logstash_logs = es.search(
         size=1000,
         index="logs-logstash.log-*",
@@ -224,7 +242,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                     try:
                         last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
                     except KeyError as e:
-                        logger.error(f"Unable to fetch last_hit for {node['key']}", e)
+                        logger.error(f"Unable to fetch last_hit for {node['key']}")
                         continue
 
                     # Use safe numeric extraction to handle lists and missing values
@@ -243,9 +261,9 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                     meta_agg_stats['heap_memory'] += _safe_get_numeric(
                         last_hit_doc['node']['stats'].get('jvm', {}).get('mem', {}).get('heap_used_percent'))
 
-    if meta_agg_stats['cpu']:
+    if meta_agg_stats['cpu'] and meta_agg_stats['nodes']:
         meta_agg_stats['cpu'] = round(meta_agg_stats['cpu'] / len(meta_agg_stats['nodes']), 2)
-    if meta_agg_stats['heap_memory']:
+    if meta_agg_stats['heap_memory'] and meta_agg_stats['nodes']:
         meta_agg_stats['heap_memory'] = round(meta_agg_stats['heap_memory'] / len(meta_agg_stats['nodes']), 2)
 
     return meta_agg_stats
@@ -349,7 +367,7 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                         logger.warning(f"No pipeline data found in aggregations for {connection['name']}")
                         meta_agg_stats['connections_with_no_data'].append({
                             'name': connection['name'],
-                            'reason': 'No pipeline metrics found in the last 30 minutes'
+                            'reason': 'No pipeline metrics found in the last 2 hours'
                         })
                     else:
                         logger.warning(
@@ -373,7 +391,7 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                         try:
                             last_hit_doc = pipeline_bucket['last_hit']['hits']['hits'][0]['_source']['logstash']
                         except KeyError as e:
-                            logger.warning(f"Unable to fetch last_hit for {pipeline_bucket['key']}", e)
+                            logger.warning(f"Unable to fetch last_hit for {pipeline_bucket['key']}")
                             continue
 
                         # Use safe numeric extraction to handle lists and missing values
@@ -390,8 +408,8 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
                         meta_agg_stats['duration'] += _safe_get_numeric(
                             pipeline_total.get('time', {}).get('duration', {}).get('ms'))
 
-    if meta_agg_stats['duration']:
-        meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
+    if meta_agg_stats['duration'] and meta_agg_stats['pipeline_buckets']:
+       meta_agg_stats['duration'] = round(meta_agg_stats['duration'] / len(meta_agg_stats['pipeline_buckets']), 2)
 
     return meta_agg_stats
 
@@ -419,22 +437,6 @@ def get_pipeline_health_report(es, pipeline_name=""):
     else:
         return {}
 
-
-def _format_uptime(milliseconds):
-    """Format uptime from milliseconds to human-readable string"""
-    seconds = milliseconds // 1000
-    minutes = seconds // 60
-    hours = minutes // 60
-    days = hours // 24
-
-    if days > 0:
-        return f"{days}d {hours % 24}h"
-    elif hours > 0:
-        return f"{hours}h {minutes % 60}m"
-    elif minutes > 0:
-        return f"{minutes}m {seconds % 60}s"
-    else:
-        return f"{seconds}s"
 
 
 def GetNodeMetrics(request):
@@ -507,36 +509,19 @@ def GetNodeMetrics(request):
     return response
 
 
-def _safe_extract_value(data, default=0):
-    """
-    Safely extract a value from pipeline data.
-    Returns default if value is None, empty list, or invalid.
-    """
-    if data is None:
-        return default
-    if isinstance(data, list):
-        # If it's an empty list or list with no valid values, return default
-        if not data or all(v is None or v == '' for v in data):
-            return default
-        # If it's a list with values, return the first non-null value
-        for v in data:
-            if v is not None and v != '':
-                return v
-        return default
-    return data
-
 
 def GetPipelineHealthReport(request):
     connection_id = request.GET.get("connection_id", "")
     pipeline = request.GET.get("pipeline", "")
 
-    # Get the health report data
-    health_report_data = get_pipeline_health_report(
-        get_elastic_connection(connection_id),
-        pipeline
-    )
-
-    return JsonResponse(health_report_data)
+    try:
+        # Get the health report data
+        es = get_elastic_connection(connection_id)
+        health_report_data = get_pipeline_health_report(es, pipeline)
+        return JsonResponse(health_report_data)
+    except Exception as e:
+        logger.error(f"Error fetching pipeline health report for connection {connection_id}: {e.__class__.__name__}")
+        return JsonResponse({"error": "Failed to fetch pipeline health report"}, status=500)
 
 
 def GetPipelineMetrics(request):
@@ -639,5 +624,5 @@ def GetLogs(request):
         all_logs = get_logs(es, logstash_node, pipeline_name)
         return JsonResponse(all_logs, safe=False)
     except Exception as e:
-        logger.error(f"Error fetching logs for connection {connection_id}: {e}")
-        return JsonResponse({"error": f"Failed to fetch logs: {str(e)}"}, status=500)
+        logger.error(f"Error fetching logs for connection {connection_id}: {e.__class__.__name__}")
+        return JsonResponse({"error": f"Failed to fetch logs"}, status=500)

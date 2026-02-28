@@ -356,121 +356,180 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// Render a metric line chart
-function renderMetricChart(canvas, timeData, metricData, label, borderColor, backgroundColor) {
-  if (!canvas || !timeData || !metricData) return;
+// Render a metric line chart using D3.js
+function renderMetricChart(chartDiv, timeData, metricData, label, borderColor, backgroundColor) {
+  if (!chartDiv || !timeData || !metricData) return;
 
   // Parse ISO timestamp strings to Date objects and create paired data
-  const pairedData = timeData.map((timestamp, index) => ({
+  const data = timeData.map((timestamp, index) => ({
     time: new Date(timestamp),
     value: metricData[index] * 100  // Convert to percentage
   }));
 
   // Sort by time (chronological order)
-  pairedData.sort((a, b) => a.time - b.time);
+  data.sort((a, b) => a.time - b.time);
 
-  // Extract sorted arrays
-  const sortedTimeData = pairedData.map(item => item.time);
-  const sortedPercentageData = pairedData.map(item => item.value);
+  // Clear any existing content and get container dimensions
+  const container = chartDiv.parentElement;
+  chartDiv.innerHTML = '';
+  
+  const margin = { top: 10, right: 10, bottom: 40, left: 45 };
+  const width = container.clientWidth - margin.left - margin.right;
+  const height = container.clientHeight - margin.top - margin.bottom;
 
-  new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: sortedTimeData,
-      datasets: [{
-        label: label,
-        data: sortedPercentageData,
-        borderColor: borderColor,
-        backgroundColor: backgroundColor,
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        pointBackgroundColor: borderColor,
-        pointBorderColor: '#fff',
-        pointBorderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: {
-          display: false
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          borderColor: borderColor,
-          borderWidth: 1,
-          padding: 10,
-          displayColors: false,
-          callbacks: {
-            label: function (context) {
-              return context.parsed.y.toFixed(2) + '%';
-            },
-            title: function (context) {
-              const date = new Date(context[0].label);
-              return date.toLocaleString();
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          min: 0,
-          max: 100,
-          ticks: {
-            color: '#9CA3AF',
-            callback: function (value) {
-              return value + '%';
-            }
-          },
-          grid: {
-            color: 'rgba(75, 85, 99, 0.3)'
-          }
-        },
-        x: {
-          type: 'timeseries',
-          bounds: 'ticks',
-          time: {
-            unit: 'minute',
-            tooltipFormat: 'MMM dd yyyy, HH:mm',
-            displayFormats: {
-              hour: 'HH:mm',
-              minute: 'HH:mm'
-            }
-          },
-          ticks: {
-            color: '#9CA3AF',
-            maxRotation: 45,
-            minRotation: 45,
-            autoSkip: false,
-            callback: function (value, index, ticks) {
-              const date = new Date(value);
-              const minutes = date.getMinutes();
-              // Only show labels at :00 and :30
-              if (minutes === 0 || minutes === 30) {
-                const hours = date.getHours().toString().padStart(2, '0');
-                const mins = minutes.toString().padStart(2, '0');
-                return `${hours}:${mins}`;
-              }
-              return null;
-            }
-          },
-          grid: {
-            color: 'rgba(75, 85, 99, 0.3)'
-          }
-        }
+  // Create SVG
+  const svg = d3.select(chartDiv)
+    .append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Create scales
+  const xScale = d3.scaleTime()
+    .domain(d3.extent(data, d => d.time))
+    .range([0, width]);
+
+  const yScale = d3.scaleLinear()
+    .domain([0, 100])
+    .range([height, 0]);
+
+  // Create line generator with curve
+  const line = d3.line()
+    .x(d => xScale(d.time))
+    .y(d => yScale(d.value))
+    .curve(d3.curveMonotoneX);
+
+  // Create area generator for fill
+  const area = d3.area()
+    .x(d => xScale(d.time))
+    .y0(height)
+    .y1(d => yScale(d.value))
+    .curve(d3.curveMonotoneX);
+
+  // Add gradient for area fill with unique ID
+  const gradientId = `gradient-${Math.random().toString(36).substr(2, 9)}`;
+  const defs = svg.append('defs');
+  
+  const gradient = defs.append('linearGradient')
+    .attr('id', gradientId)
+    .attr('x1', '0%')
+    .attr('y1', '0%')
+    .attr('x2', '0%')
+    .attr('y2', '100%');
+
+  gradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', borderColor)
+    .attr('stop-opacity', 0.4);
+
+  gradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', borderColor)
+    .attr('stop-opacity', 0.05);
+
+  // Add grid lines
+  svg.append('g')
+    .attr('class', 'grid')
+    .attr('opacity', 0.1)
+    .call(d3.axisLeft(yScale)
+      .tickSize(-width)
+      .tickFormat(''));
+
+  // Add area
+  svg.append('path')
+    .datum(data)
+    .attr('fill', `url(#${gradientId})`)
+    .attr('d', area);
+
+  // Add line
+  svg.append('path')
+    .datum(data)
+    .attr('fill', 'none')
+    .attr('stroke', borderColor)
+    .attr('stroke-width', 2)
+    .attr('d', line);
+
+  // Add X axis
+  const xAxis = d3.axisBottom(xScale)
+    .ticks(d3.timeMinute.every(30))
+    .tickFormat(d => {
+      const hours = d.getHours().toString().padStart(2, '0');
+      const mins = d.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${mins}`;
+    });
+
+  svg.append('g')
+    .attr('transform', `translate(0,${height})`)
+    .call(xAxis)
+    .selectAll('text')
+    .style('fill', '#9CA3AF')
+    .style('text-anchor', 'end')
+    .attr('dx', '-.8em')
+    .attr('dy', '.15em')
+    .attr('transform', 'rotate(-45)');
+
+  svg.selectAll('.domain, .tick line')
+    .style('stroke', 'rgba(75, 85, 99, 0.3)');
+
+  // Add Y axis
+  const yAxis = d3.axisLeft(yScale)
+    .ticks(5)
+    .tickFormat(d => d + '%');
+
+  svg.append('g')
+    .call(yAxis)
+    .selectAll('text')
+    .style('fill', '#9CA3AF');
+
+  svg.selectAll('.domain, .tick line')
+    .style('stroke', 'rgba(75, 85, 99, 0.3)');
+
+  // Add tooltip with chart color theme
+  const tooltip = d3.select(chartDiv)
+    .append('div')
+    .style('position', 'absolute')
+    .style('background-color', borderColor)
+    .style('color', '#fff')
+    .style('padding', '8px 12px')
+    .style('border-radius', '6px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .style('font-size', '12px')
+    .style('box-shadow', '0 4px 6px rgba(0, 0, 0, 0.3)')
+    .style('z-index', 1000);
+
+  // Add invisible overlay for mouse tracking
+  const bisect = d3.bisector(d => d.time).left;
+  
+  svg.append('rect')
+    .attr('width', width)
+    .attr('height', height)
+    .style('fill', 'none')
+    .style('pointer-events', 'all')
+    .on('mousemove', function(event) {
+      const [mouseX] = d3.pointer(event);
+      const x0 = xScale.invert(mouseX);
+      const i = bisect(data, x0, 1);
+      const d0 = data[i - 1];
+      const d1 = data[i];
+      const d = d1 && (x0 - d0.time > d1.time - x0) ? d1 : d0;
+
+      if (d) {
+        const containerRect = chartDiv.getBoundingClientRect();
+        tooltip
+          .style('opacity', 0.95)
+          .html(`
+            <div style="font-weight: bold; margin-bottom: 4px;">${d.time.toLocaleString()}</div>
+            <div style="font-size: 14px; font-weight: bold;">${d.value.toFixed(2)}%</div>
+          `)
+          .style('left', (event.pageX - containerRect.left + 15) + 'px')
+          .style('top', (event.pageY - containerRect.top - 10) + 'px');
       }
-    }
-  });
+    })
+    .on('mouseout', function() {
+      tooltip.style('opacity', 0);
+    });
 }
 
 // Create a sensor card with temperature gauge

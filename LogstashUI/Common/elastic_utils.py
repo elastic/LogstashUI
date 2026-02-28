@@ -126,7 +126,7 @@ def query_elasticsearch_documents(connection_id, index, doc_ids=None, field=None
     try:
         if doc_ids:
             # Query by document IDs
-            response = es.mget(index=index, body={'ids': doc_ids})
+            response = es.mget(index=index, ids=doc_ids)
             documents = [doc['_source'] for doc in response['docs'] if doc.get('found')]
         else:
             # Query by field with optional query string
@@ -145,7 +145,7 @@ def query_elasticsearch_documents(connection_id, index, doc_ids=None, field=None
             else:
                 query["query"] = {"match_all": {}}
 
-            response = es.search(index=index, body=query)
+            response = es.search(index=index, size=query['size'], source=query['_source'], query=query['query'])
             documents = [hit['_source'] for hit in response['hits']['hits']]
 
         return documents

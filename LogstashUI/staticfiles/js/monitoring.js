@@ -157,7 +157,7 @@
                     <div class="flex items-start gap-3">
                         <span class="px-2 py-1 rounded text-xs font-semibold flex-shrink-0 ${levelColor}">${level}</span>
                         <div class="flex-1 min-w-0 overflow-hidden">
-                            <p class="text-sm text-gray-300 break-words" style="word-wrap: break-word; overflow-wrap: anywhere;">${message}</p>
+                            <p class="text-sm text-gray-300 break-words" style="word-wrap: break-word; overflow-wrap: anywhere;">${escapeHtml(message)}</p>
                             <p class="text-xs text-gray-500 mt-1">${timestamp}</p>
                         </div>
                     </div>
@@ -310,7 +310,7 @@
                     <div class="flex items-start gap-3">
                         <span class="px-2 py-1 rounded text-xs font-semibold flex-shrink-0 ${levelColor}">${level}</span>
                         <div class="flex-1 min-w-0 overflow-hidden">
-                            <p class="text-sm text-gray-300 break-words" style="word-wrap: break-word; overflow-wrap: anywhere;">${message}</p>
+                            <p class="text-sm text-gray-300 break-words" style="word-wrap: break-word; overflow-wrap: anywhere;">${escapeHtml(message)}</p>
                             <p class="text-xs text-gray-500 mt-1">${timestamp}</p>
                         </div>
                     </div>
@@ -362,7 +362,7 @@
                         <span class="w-3 h-3 rounded-full ${statusColor}"></span>
                         <div>
                             <p class="text-xs text-gray-400">Status</p>
-                            <p class="text-lg font-semibold text-white uppercase">${pipeline.status || 'Unknown'}</p>
+                            <p class="text-lg font-semibold text-white uppercase">${escapeHtml(pipeline.status) || 'Unknown'}</p>
                         </div>
                     </div>
                 </div>
@@ -370,7 +370,7 @@
                 <!-- State -->
                 <div class="bg-gray-700 rounded-lg p-4">
                     <p class="text-xs text-gray-400">State</p>
-                    <p class="text-lg font-semibold text-white">${pipeline.state || 'Unknown'}</p>
+                    <p class="text-lg font-semibold text-white">${escapeHtml(pipeline.state) || 'Unknown'}</p>
                 </div>
             </div>
         `;
@@ -384,7 +384,7 @@
                 html += `
                     <div class="bg-yellow-900/20 border border-yellow-600/50 rounded-lg p-4">
                         <p class="text-sm font-semibold text-yellow-400 mb-1">Symptom</p>
-                        <p class="text-sm text-gray-300">${pipeline.symptom}</p>
+                        <p class="text-sm text-gray-300">${escapeHtml(pipeline.symptom)}</p>
                     </div>
                 `;
             }
@@ -396,9 +396,9 @@
                     <div class="bg-red-900/20 border border-red-600/50 rounded-lg p-4">
                         <p class="text-sm font-semibold text-red-400 mb-2">Diagnosis</p>
                         <div class="space-y-2 text-sm">
-                            ${diagnosis.cause ? `<p><span class="text-gray-400">Cause:</span> <span class="text-gray-300">${diagnosis.cause}</span></p>` : ''}
-                            ${diagnosis.action ? `<p><span class="text-gray-400">Action:</span> <span class="text-gray-300">${diagnosis.action}</span></p>` : ''}
-                            ${diagnosis.help_url ? `<p><a href="${diagnosis.help_url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">View Documentation →</a></p>` : ''}
+                            ${diagnosis.cause ? `<p><span class="text-gray-400">Cause:</span> <span class="text-gray-300">${escapeHtml(diagnosis.cause)}</span></p>` : ''}
+                            ${diagnosis.action ? `<p><span class="text-gray-400">Action:</span> <span class="text-gray-300">${escapeHtml(diagnosis.action)}</span></p>` : ''}
+                            ${diagnosis.help_url ? `<p><a href="${escapeHtml(diagnosis.help_url)}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">View Documentation →</a></p>` : ''}
                         </div>
                     </div>
                 `;
@@ -419,8 +419,8 @@
                         <p class="text-sm font-semibold text-orange-400 mb-2">Impact</p>
                         <div class="space-y-2 text-sm">
                             <p><span class="text-gray-400">Severity:</span> <span class="${severityColor} font-semibold">${impacts.severity}</span></p>
-                            ${impacts.description ? `<p><span class="text-gray-400">Description:</span> <span class="text-gray-300">${impacts.description}</span></p>` : ''}
-                            ${impacts.impact_areas ? `<p><span class="text-gray-400">Areas:</span> <span class="text-gray-300">${impacts.impact_areas.join(', ')}</span></p>` : ''}
+                            ${escapeHtml(impacts.description) ? `<p><span class="text-gray-400">Description:</span> <span class="text-gray-300">${impacts.description}</span></p>` : ''}
+                            ${escapeHtml(impacts.impact_areas) ? `<p><span class="text-gray-400">Areas:</span> <span class="text-gray-300">${impacts.impact_areas.join(', ')}</span></p>` : ''}
                         </div>
                     </div>
                 `;

@@ -144,7 +144,6 @@ function addDiscoveredDevice(deviceIndex) {
 }
 
 
-
 // Attach event listener to discovered devices button
 document.addEventListener('DOMContentLoaded', function() {
     const discoveredDevicesBtn = document.getElementById('discoveredDevicesBtn');
