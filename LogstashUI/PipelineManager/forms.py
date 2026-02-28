@@ -7,7 +7,7 @@ from PipelineManager.models import Connection
 class ConnectionForm(ModelForm):
     """
     Form for creating and updating Connection instances.
-    Handles both SSH and Centralized connection types with dynamic field requirements.
+    Handles both Agent and Centralized connection types with dynamic field requirements.
     """
     # Connection type radio buttons
     connection_type = forms.ChoiceField(
@@ -18,15 +18,15 @@ class ConnectionForm(ModelForm):
         initial=Connection.ConnectionType.CENTRALIZED,
     )
 
-    # SSH Fields
+    # Agent Fields
     ssh_key = forms.CharField(
         widget=forms.Textarea(attrs={
             'class': 'textarea textarea-bordered w-full',
             'rows': 5,
-            'placeholder': 'Paste your SSH private key (PEM format) here',
+            'placeholder': 'Paste your private key (PEM format) here',
         }),
         required=False,
-        help_text='SSH private key for key-based authentication',
+        help_text='Private key for key-based authentication',
         label_suffix='',
     )
 
@@ -55,7 +55,7 @@ class ConnectionForm(ModelForm):
         model = Connection
         fields = [
             'name', 'connection_type',
-            # SSH fields
+            # Agent fields
             'host', 'port', 'username', 'password', 'ssh_key',
             # Centralized fields
             'cloud_id', 'cloud_url', 'api_key',
@@ -94,7 +94,7 @@ class ConnectionForm(ModelForm):
         help_texts = {
             'password': 'Leave empty to keep current password',
             'cloud_url': 'Full URL to your Elasticsearch cluster',
-            'ssh_key': 'Paste your SSH private key in PEM format',
+            'ssh_key': 'Paste your private key in PEM format',
             'username': 'Elasticsearch username (usually "elastic")',
             'port': 'Elasticsearch API port (usually 9200)',
         }
@@ -133,10 +133,10 @@ class ConnectionForm(ModelForm):
         cleaned_data = super().clean()
         connection_type = cleaned_data.get('connection_type')
         
-        if connection_type == Connection.ConnectionType.SSH:
-            # For SSH connections, require either host or cloud_url
+        if connection_type == Connection.ConnectionType.AGENT:
+            # For Agent connections, require either host or cloud_url
             if not cleaned_data.get('host') and not cleaned_data.get('cloud_url'):
-                raise forms.ValidationError("Either Host or Cloud URL is required for SSH connections.")
+                raise forms.ValidationError("Either Host or Cloud URL is required for Agent connections.")
         else:  # CENTRALIZED
             # For Centralized connections, require either cloud_id or cloud_url
             if not cleaned_data.get('cloud_id') and not cleaned_data.get('host'):

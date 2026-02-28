@@ -21,7 +21,9 @@ def client():
 
 @pytest.fixture
 def test_user(db):
-    """Create a test user"""
+    """Create a test user with admin profile"""
+    from Management.models import UserProfile
+    
     user = User.objects.create_user(
         username='testuser',
         password='testpass123',
@@ -30,6 +32,13 @@ def test_user(db):
     user.is_superuser = True
     user.is_staff = True
     user.save()
+    
+    # Create admin profile (use get_or_create to avoid UNIQUE constraint errors)
+    UserProfile.objects.get_or_create(
+        user=user,
+        defaults={'role': 'admin'}
+    )
+    
     return user
 
 

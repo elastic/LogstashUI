@@ -15,11 +15,11 @@ from Common.validators import validate_pipeline_name
 from Common import logstash_config_parse
 
 from datetime import datetime, timezone
+from html import escape
 
 import json
 import os
 import logging
-import html
 import traceback
 import requests
 import difflib
@@ -81,48 +81,7 @@ def PipelineEditor(request):
 
 # Builds the table of pipelines
 def PipelineManager(request):
-
     context = {}
-    if request.method == "POST":
-        try:
-            is_htmx = request.headers.get('HX-Request') == 'true'
-
-            if is_htmx:
-
-                form = ConnectionForm(request.POST)
-
-                if form.is_valid():
-                    form.save()
-                else:
-                    raise Exception(form.errors)
-
-                return HttpResponse("""
-                    <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-                        Connection created successfully!
-                        <script>
-                            // Close the flyout after a short delay
-                            setTimeout(() => {
-                                const flyout = document.getElementById('connectionFormFlyout');
-                                if (flyout) {
-                                    flyout.classList.add('hidden');
-                                }
-                                // Reload the page to show the new connection
-                                window.location.reload();
-                            }, 100000);
-                        </script>
-                    </div>
-                """)
-        except Exception as e:
-            error_message = f"Error: {str(e)}"
-            if request.headers.get('HX-Request') == 'true':
-                return HttpResponse(f"""
-                    <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
-                        {error_message}
-                    </div>
-                """, status=400)
-
-            return redirect('logstash')
-
     connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
     
     context['connections'] = connections
@@ -131,45 +90,56 @@ def PipelineManager(request):
 
     return render(request, "pipeline_manager.html", context=context)
 
-def TestConnectivity(request=None, connection_id=None):
-    # Allow calling from request (frontend) or directly with connection_id (backend)
-    logger.info("Testing connection...")
-    if request:
-        test_id = request.GET.get('test')
+def test_connectivity(connection_id):
+    """
+    Test connectivity to an Elasticsearch connection.
+    Pure Python function for programmatic use.
+    
+    Args:
+        connection_id: ID of the connection to test
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    if not connection_id:
+        return (False, "No connection ID provided")
+    
+    try:
+        elastic_connection = get_elastic_connection(connection_id)
+        result = test_elastic_connectivity(elastic_connection)
+        return (True, result)
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Connection test against {connection_id} failed: {error_msg}")
+        return (False, error_msg)
+
+
+def TestConnectivity(request):
+    """
+    Django view to test connectivity to an Elasticsearch connection.
+    Returns HTML response for HTMX.
+    """
+    test_id = request.GET.get('test')
+    
+    if not test_id:
+        return HttpResponse("No connection ID provided", status=400)
+    
+    logger.info(f"User '{request.user.username}' testing connection {test_id}")
+    success, message = test_connectivity(test_id)
+    
+    if success:
+        return HttpResponse("""
+            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
+                onload="setTimeout(() => this.remove(), 3000);">
+                <p>{0}</p>
+            </div>
+        """.format(escape(str(message))))
     else:
-        test_id = connection_id
-
-    if test_id:
-        try:
-            elastic_connection = get_elastic_connection(test_id)
-            result = test_elastic_connectivity(elastic_connection)
-
-            # If called from request, return HTML response
-            if request:
-                return HttpResponse("""
-                    <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
-                        onload="setTimeout(() => this.remove(), 3000);">
-                        <p>{0}</p>
-                    </div>
-                """.format(result))
-            # If called programmatically, return tuple (success, message)
-            else:
-                return (True, result)
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Connection test against {test_id} failed: {error_msg}")
-            # If called from request, return HTML error response
-            if request:
-                return HttpResponse("""
-                    <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
-                        <p>Connection failed: {0}</p>
-                    </div>
-                """.format(error_msg))
-            # If called programmatically, return tuple (failure, error message)
-            else:
-                return (False, error_msg)
-
-    return (False, "No connection ID provided") if not request else HttpResponse("No connection ID provided")
+        return HttpResponse("""
+            <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
+                <p>Connection failed: {0}</p>
+            </div>
+        """.format(escape(str(message))))
 
 
 def GetConnections(request):
@@ -192,8 +162,7 @@ def AddConnection(request):
             new_connection = form.save()
 
             # Test the connection
-            success, message = TestConnectivity(connection_id=new_connection.id)
-            logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
+            success, message = test_connectivity(new_connection.id)
 
             if not success:
                 # If test fails, delete the connection and return JSON error
@@ -201,7 +170,7 @@ def AddConnection(request):
                 logger.error(f"User '{request.user.username}' failed to add connection, {new_connection.id}")
                 # Escape HTML in error message to prevent injection but preserve formatting
 
-                escaped_message = html.escape(str(message))
+                escaped_message = escape(str(message))
                 response = HttpResponse(f"""
                     <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
                         <h3 class="font-bold mb-2 text-lg">❌ Connection Test Failed</h3>
@@ -218,6 +187,7 @@ def AddConnection(request):
                 return response
 
             # Connection test succeeded, return JSON response
+            logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
             logger.info(f"Returning success response with connection ID: {new_connection.id}")
             return JsonResponse({
                 'success': True,
@@ -229,7 +199,7 @@ def AddConnection(request):
             response = HttpResponse(f"""
                 <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg">
                     <h3 class="font-bold mb-2">Form Validation Error</h3>
-                    <div class="text-sm">{form.errors}</div>
+                    <div class="text-sm">{escape(str(form.errors))}</div>
                 </div>
             """)
             response['HX-Retarget'] = '#connectionErrorContainer'
@@ -241,29 +211,44 @@ def AddConnection(request):
 
 @require_admin_role
 def DeleteConnection(request, connection_id=None):
-    if connection_id:
-        connection = ConnectionTable.objects.filter(id=connection_id).first()
-        if connection:
-            logger.warning(
-                f"User '{request.user.username}' deleted connection '{connection.name}' (ID: {connection_id})")
-        ConnectionTable.objects.filter(id=connection_id).delete()
+    if request.method != "POST":
+        return HttpResponse("Method not allowed", status=405)
+    
+    if not connection_id:
+        return HttpResponse("Connection ID is required", status=400)
+    
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return HttpResponse(
+            '<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">Connection not found</div>',
+            status=404
+        )
+    
+    connection_name = connection.name
+    connection.delete()
+    logger.warning(
+        f"User '{request.user.username}' deleted connection '{connection_name}' (ID: {connection_id})")
 
     return HttpResponse("""
-        <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-            Connection deleted successfully!
-            <script>
-                // Reload the page to show the updated connections
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            </script>
-        </div>
+        <script>
+            showToast('Connection deleted successfully!', 'success');
+            // Reload the page to show the updated connections
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+        </script>
     """)
 
 
 def GetPipelines(request, connection_id):
     context = {}
-    connection = ConnectionTable.objects.get(pk=connection_id)
+    try:
+        connection = ConnectionTable.objects.get(pk=connection_id)
+    except ConnectionTable.DoesNotExist:
+        return HttpResponse(
+            '<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">Connection not found</div>',
+            status=404
+        )
 
     logstash_pipelines = []
     if connection.connection_type == "CENTRALIZED":
@@ -547,8 +532,8 @@ def ClonePipeline(request):
             response = HttpResponse("""
                 <script>
                     document.getElementById('clonePipelineModal').close();
-                    htmx.ajax('GET', '/ConnectionManager/GetPipelines/""" + str(
-                es_id) + """/', {target: '#pipelines-""" + str(es_id) + """', swap: 'innerHTML'});
+                    htmx.ajax('GET', '/ConnectionManager/GetPipelines/""" + escape(str(es_id)) + """/', 
+                              {target: '#pipelines-""" + escape(str(es_id)) + """', swap: 'innerHTML'});
                 </script>
             """)
             return response
@@ -578,7 +563,7 @@ def GetCurrentPipelineCode(request, components={}):
 
     # Return the code wrapped in a pre tag with proper formatting
     return HttpResponse(
-        f'<pre class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code class="language-ruby">{config}</code></pre>',
+        f'<pre class="bg-gray-900 text-green-400 p-4 rounded overflow-auto"><code class="language-ruby">{escape(config)}</code></pre>',
         content_type="text/html"
     )
 
@@ -622,7 +607,7 @@ def SavePipeline(request):
                 logstash_config_parse.logstash_config_to_components(config)
             except Exception as e:
                 # If conversion fails, return detailed error to user
-                error_message = str(e)
+                error_message = escape(str(e))
                 return HttpResponse(
                     f"""<div class="p-4 bg-red-900/20 border border-red-600 rounded-lg">
                         <h3 class="text-lg font-semibold text-red-400 mb-2">We're sorry! Something went wrong in the conversion of your pipeline!</h3>
@@ -636,14 +621,16 @@ def SavePipeline(request):
 
         es = get_elastic_connection(request.POST.get("es_id"))
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
+        
+        pipeline_data = current_pipeline_config.get(pipeline_name, {})
 
         es.logstash.put_pipeline(id=pipeline_name, body={
             "pipeline": config,
             "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-            "pipeline_metadata": current_pipeline_config[pipeline_name]['pipeline_metadata'],
+            "pipeline_metadata": pipeline_data.get('pipeline_metadata', {"version": 1, "type": "logstash_pipeline"}),
             "username": "LogstashUI",
-            "pipeline_settings": current_pipeline_config[pipeline_name]['pipeline_settings'],
-            "description": current_pipeline_config[pipeline_name]['description']
+            "pipeline_settings": pipeline_data.get('pipeline_settings', {}),
+            "description": pipeline_data.get('description', '')
         }
                                  )
 

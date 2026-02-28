@@ -5,11 +5,11 @@ from django.core.exceptions import ValidationError
 
 class Connection(models.Model):
     """
-    Represents a connection to either a Logstash server (SSH) or a centralized management service.
+    Represents a connection to either a Logstash Agent or a centralized management service.
     """
 
     class ConnectionType(models.TextChoices):
-        SSH = 'SSH', 'SSH'
+        AGENT = 'AGENT', 'Logstash Agent'
         CENTRALIZED = 'CENTRALIZED', 'Centralized Pipeline Management'
 
     name = models.CharField(
@@ -19,21 +19,21 @@ class Connection(models.Model):
     connection_type = models.CharField(
         max_length=20,
         choices=ConnectionType.choices,
-        help_text="Type of connection (SSH or Centralized)"
+        help_text="Type of connection (Agent or Centralized)"
     )
 
-    # SSH Connection Fields (optional)
+    # Agent Connection Fields (optional)
     host = models.CharField(
         max_length=255,
         blank=True,
         null=True,
-        help_text="Hostname or IP address for SSH connection"
+        help_text="Hostname or IP address for Agent connection"
     )
     port = models.PositiveIntegerField(
         default=22,
         blank=True,
         null=True,
-        help_text="SSH port (default: 22)"
+        help_text="Agent port (default: 22)"
     )
     username = models.CharField(
         max_length=100,
@@ -45,12 +45,12 @@ class Connection(models.Model):
         max_length=512,
         blank=True,
         null=True,
-        help_text="Password for authentication (leave empty if using SSH key)"
+        help_text="Password for authentication (leave empty if using key-based auth)"
     )
     ssh_key = models.TextField(
         blank=True,
         null=True,
-        help_text="SSH private key (PEM format) for key-based authentication"
+        help_text="Private key (PEM format) for key-based authentication"
     )
 
     # Centralized Management Fields (optional)
@@ -89,12 +89,12 @@ class Connection(models.Model):
         """
         Validate that the required fields are provided based on the connection type.
         """
-        if self.connection_type == self.ConnectionType.SSH:
+        if self.connection_type == self.ConnectionType.AGENT:
             if not self.host:
-                raise ValidationError("Host is required for SSH connections")
+                raise ValidationError("Host is required for Agent connections")
             if not (self.ssh_key or (self.username and self.password)):
                 raise ValidationError(
-                    "Either SSH key or username/password is required for SSH connections"
+                    "Either key or username/password is required for Agent connections"
                 )
         else:  # CENTRALIZED
             if not (self.cloud_id or self.host):

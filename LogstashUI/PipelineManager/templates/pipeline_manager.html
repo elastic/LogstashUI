@@ -49,8 +49,8 @@
               <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
                 Centralized Pipeline Management
               </a>
-              <a id="sshPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
-                Logstash Server (SSH) - Coming soon!
+              <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
+                Logstash Agent - Coming soon!
               </a>
             </div>
           </div>
@@ -78,8 +78,8 @@
           <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
             Centralized Pipeline Management
           </a>
-          <a id="sshPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
-            Logstash Server (SSH) - Coming soon!
+          <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
+            Logstash Agent - Coming soon!
           </a>
         </div>
       </div>
@@ -125,7 +125,7 @@
                 {% if connection.connection_type == "CENTRALIZED" %}
                   <img src="{% static 'images/ElasticIcon.png' %}" alt="Centralized" width="52" height="52" class="inline-block">
                 {% else %}
-                  <img src="{% static 'images/LoggyIcon.png' %}" alt="SSH" class="inline-block">
+                  <img src="{% static 'images/LoggyIcon.png' %}" alt="Agent" class="inline-block">
                 {% endif %}
               </td>
 
@@ -235,21 +235,23 @@
     }
   });
 
-  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
-    document.getElementById('connectionFormFlyout').classList.remove('hidden');
+  document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Do nothing - this feature is coming soon
   });
 
   // Set connection type based on which button was clicked
   document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
     document.getElementById('connectionTypeField').value = 'CENTRALIZED';
     document.getElementById('centralizedFields').classList.remove('hidden');
-    document.getElementById('sshFields').classList.add('hidden');
+    document.getElementById('agentFields').classList.add('hidden');
   });
 
-  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
-    document.getElementById('connectionTypeField').value = 'SSH';
-    document.getElementById('centralizedFields').classList.add('hidden');
-    document.getElementById('sshFields').classList.remove('hidden');
+  document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Do nothing - this feature is coming soon
   });
 
   // Set flag to indicate we're on the pipeline manager page

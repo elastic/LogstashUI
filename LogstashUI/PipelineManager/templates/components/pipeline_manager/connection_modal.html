@@ -164,27 +164,12 @@
                 </div>
               </div>
 
-              <!-- SSH Connection Fields -->
-              <div id="sshFields" class="hidden">
-                <div class="mb-4">
-                  <label for="ssh_host" class="form-label">Host</label>
-                  <input type="text" id="ssh_host" name="ssh_host" class="form-input">
-                </div>
-                <div class="mb-4">
-                  <label for="ssh_port" class="form-label">Port</label>
-                  <input type="number" id="ssh_port" name="ssh_port" class="form-input w-32" value="22" min="1" max="65535">
-                </div>
-                <div class="mb-4">
-                  <label for="ssh_username" class="form-label">Username</label>
-                  <input type="text" id="ssh_username" name="ssh_username" class="form-input">
-                </div>
-                <div class="mb-4">
-                  <label for="ssh_password" class="form-label">Password</label>
-                  <input type="password" id="ssh_password" name="ssh_password" class="form-input">
-                </div>
-                <div class="mb-4">
-                  <label for="ssh_path" class="form-label">Config Path</label>
-                  <input type="text" id="ssh_path" name="ssh_path" class="form-input" value="/etc/logstash/config">
+              <!-- Logstash Agent Connection Fields - Coming Soon -->
+              <div id="agentFields" class="hidden">
+                <div class="p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
+                  <p class="text-blue-400 text-sm">
+                    Logstash Agent connection support is coming soon! This will allow you to connect to remote Logstash instances.
+                  </p>
                 </div>
               </div>
 
@@ -218,23 +203,12 @@
   // Handle form submission and front end validation
   document.getElementById('connectionForm').addEventListener('submit', function(e) {
     // Only validate visible fields
-    if (document.getElementById('connectionTypeField').value === 'SSH') {
-      // For SSH form, only validate SSH fields
-      const sshFields = ['ssh_host', 'ssh_port', 'ssh_username', 'ssh_password'];
-      let isValid = true;
-
-      sshFields.forEach(field => {
-        const input = document.querySelector(`[name="${field}"]`);
-        if (!input.value.trim()) {
-          isValid = false;
-          input.reportValidity();
-        }
-      });
-
-      if (!isValid) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+    if (document.getElementById('connectionTypeField').value === 'AGENT') {
+      // Logstash Agent not yet implemented - prevent submission
+      e.preventDefault();
+      e.stopPropagation();
+      showToast('Logstash Agent connections are coming soon!', 'info');
+      return;
     } else {
       // For centralized form, validate based on selected auth type
       const authType = document.querySelector('input[name="auth_type"]:checked').value;

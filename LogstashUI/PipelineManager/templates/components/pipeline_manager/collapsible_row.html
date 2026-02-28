@@ -198,23 +198,6 @@
     </dialog>
 </td>
 
-<!-- DISABLED: Instances table can cause issues
-<td colspan=2 class="overflow-x-auto">
-    <table class="w-full">
-        <thead>
-            <th class="text-left">Instances</th>
-        </thead>
-        <tbody>
-            {% for node in instances %}
-            <tr>
-                <td>{{ node }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</td>
--->
-
 <script>
     document.body.addEventListener('htmx:configRequest', function(event) {
         event.detail.headers['X-CSRFToken'] = document.querySelector('[name=csrfmiddlewaretoken]').value;
