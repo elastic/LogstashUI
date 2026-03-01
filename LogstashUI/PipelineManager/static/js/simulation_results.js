@@ -104,9 +104,7 @@ function highlightJSON(jsonString, changes = null) {
     try {
         // Parse the JSON
         const obj = JSON.parse(jsonString);
-        
-        // console.log('highlightJSON called with changes:', JSON.stringify(changes, null, 2));
-        
+
         // Add deleted fields to the object for display
         if (changes && changes.deleted) {
             for (const deletedPath in changes.deleted) {
@@ -115,22 +113,20 @@ function highlightJSON(jsonString, changes = null) {
                 }
             }
         }
-        
+
         // Annotate with change information
         const annotated = changes ? annotateWithChanges(obj, changes) : null;
-        
-        // console.log('Annotated object:', JSON.stringify(annotated, null, 2));
-        
+
         // Format for display
         const formatted = JSON.stringify(obj, null, 2);
-        
+
         // Track path as we process lines
         let pathStack = [];
         let lastKey = '';
-        
+
         const highlighted = formatted.split('\n').map(line => {
             const trimmed = line.trim();
-            
+
             // Update path stack based on braces BEFORE processing the line
             if (trimmed.endsWith('{')) {
                 // Line ends with opening brace - this key starts an object
@@ -141,43 +137,42 @@ function highlightJSON(jsonString, changes = null) {
                     pathStack.pop();
                 }
             }
-            
+
             let shouldPushKey = trimmed.endsWith('{');
-            
+
             return line.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
                 const escaped = match.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                
+
                 if (/^"/.test(match) && /:$/.test(match)) {
                     // This is a key
                     lastKey = match.slice(1, -2);
-                    
+
                     // If this line ends with {, push this key to the stack after we process it
                     if (shouldPushKey) {
                         pathStack.push(lastKey);
                         shouldPushKey = false; // Only push once per line
                     }
-                    
+
                     return `<span style="color: #60a5fa">${escaped}</span>`;
                 } else {
                     // Value - get status from annotated object
                     const fullPath = pathStack.length > 0 ? pathStack.join('.') + '.' + lastKey : lastKey;
                     let color = '#ffffff';
-                    
+
                     if (annotated) {
                         const status = getStatus(annotated, fullPath);
-                        // console.log('Path:', fullPath, 'pathStack:', JSON.stringify(pathStack), 'lastKey:', lastKey, 'Status:', status);
                         if (status === 'added') color = '#86efac'; // green
                         else if (status === 'modified') color = '#fbbf24'; // yellow
                         else if (status === 'deleted') color = '#ef4444'; // red
                     }
-                    
+
                     if (/null/.test(match)) color = '#9ca3af';
-                    
+
                     return `<span style="color: ${color}">${escaped}</span>`;
                 }
             });
         }).join('\n');
-        
+
         return highlighted;
     } catch (e) {
         return jsonString.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -193,27 +188,27 @@ function getStatus(annotated, path) {
     if (annotated[path] && annotated[path].__status) {
         return annotated[path].__status;
     }
-    
+
     // Try as a nested path
     const parts = path.split('.');
     let current = annotated;
-    
+
     // Try different combinations - e.g., for "observer.ip.name", try:
     // 1. "observer.ip" as key, then "name"
     // 2. "observer" -> "ip" -> "name"
     for (let i = parts.length - 1; i >= 0; i--) {
         const keyPart = parts.slice(0, i + 1).join('.');
         const remainingParts = parts.slice(i + 1);
-        
+
         if (annotated[keyPart]) {
             // Found a key that matches - now traverse the remaining parts
             let temp = annotated[keyPart];
-            
+
             if (remainingParts.length === 0) {
                 // This is the exact field
                 return temp.__status || null;
             }
-            
+
             // Navigate through remaining parts
             for (const part of remainingParts) {
                 if (!temp || !temp.__value || !temp.__value[part]) {
@@ -221,24 +216,24 @@ function getStatus(annotated, path) {
                 }
                 temp = temp.__value[part];
             }
-            
+
             if (temp && temp.__status) {
                 return temp.__status;
             }
         }
     }
-    
+
     // Fallback: try as fully nested path
     current = annotated;
     for (const part of parts) {
         if (!current || !current[part]) return null;
-        
+
         const status = current[part].__status;
         if (status) return status;
-        
+
         current = current[part].__value;
     }
-    
+
     return null;
 }
 
@@ -254,14 +249,12 @@ function checkForParsingFailures(event) {
         hasFailure: false,
         failureTags: []
     };
-    
+
     if (!event) {
-        // console.log('checkForParsingFailures: No event provided');
         return result;
     }
-    
-    // console.log('checkForParsingFailures: Checking event for failures', event);
-    
+
+
     // Common Logstash parsing failure tags
     const commonFailureTags = [
         '_grokparsefailure',
@@ -269,44 +262,40 @@ function checkForParsingFailures(event) {
         '_dateparsefailure',
         '_jsonparsefailure'
     ];
-    
+
     // Check if event has a tags field
     if (event.tags && Array.isArray(event.tags)) {
-        // console.log('checkForParsingFailures: Event has tags:', event.tags);
-        
+
         // Check for common failure tags (case-insensitive)
-        const foundCommonFailures = event.tags.filter(tag => 
+        const foundCommonFailures = event.tags.filter(tag =>
             typeof tag === 'string' && commonFailureTags.includes(tag.toLowerCase())
         );
-        
+
         if (foundCommonFailures.length > 0) {
-            // console.log('checkForParsingFailures: Found common failure tags:', foundCommonFailures);
             result.hasFailure = true;
             result.failureTags.push(...foundCommonFailures);
         }
-        
+
         // Also check for ANY tag that starts with underscore and contains "fail"
         // This catches custom failure tags like "_grok_syslog_wrapper_fail", "_grok_ciscotag_fail", etc.
-        const customFailureTags = event.tags.filter(tag => 
-            typeof tag === 'string' && 
-            tag.startsWith('_') && 
+        const customFailureTags = event.tags.filter(tag =>
+            typeof tag === 'string' &&
+            tag.startsWith('_') &&
             tag.toLowerCase().includes('fail')
         );
-        
+
         if (customFailureTags.length > 0) {
-            // console.log('checkForParsingFailures: Found custom failure tags:', customFailureTags);
             result.hasFailure = true;
             result.failureTags.push(...customFailureTags);
         }
     } else {
-        // console.log('checkForParsingFailures: Event has no tags field or tags is not an array');
+        console.error('checkForParsingFailures: Event has no tags field or tags is not an array');
     }
-    
+
     // Remove duplicates from failureTags
     result.failureTags = [...new Set(result.failureTags)];
-    
-    // console.log('checkForParsingFailures: Result:', result);
-    
+
+
     return result;
 }
 
@@ -318,37 +307,20 @@ function filterMetadata(obj) {
     if (!obj) {
         return obj;
     }
-    
+
     const toggle = document.getElementById('debugMetadataToggle');
     const showMetadata = toggle ? toggle.checked : false; // Default to hiding metadata
-    
-    // console.log('filterMetadata called:', {
-    //     toggleExists: !!toggle,
-    //     toggleChecked: toggle ? toggle.checked : 'N/A',
-    //     showMetadata: showMetadata,
-    //     hasSimulation: obj.hasOwnProperty('simulation'),
-    //     hasSlot: obj.hasOwnProperty('slot'),
-    //     hasRunId: obj.hasOwnProperty('run_id')
-    // });
-    
+
     if (showMetadata) {
-        // console.log('Returning original object (metadata visible)');
         return obj; // Return original if showing metadata
     }
-    
+
     // Create copy and remove metadata fields
-    // console.log('Creating filtered copy (removing metadata)');
     const copy = JSON.parse(JSON.stringify(obj));
     delete copy.simulation;
     delete copy.slot;
     delete copy.run_id;
-    
-    // console.log('Filtered copy created:', {
-    //     hasSimulation: copy.hasOwnProperty('simulation'),
-    //     hasSlot: copy.hasOwnProperty('slot'),
-    //     hasRunId: copy.hasOwnProperty('run_id')
-    // });
-    
+
     return copy;
 }
 
@@ -360,12 +332,12 @@ function markExecutedPlugins(nodes, originalEvent) {
     document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
     document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
-    
+
     // Remove any existing dimming
     document.querySelectorAll('.simulation-dimmed').forEach(el => {
         el.classList.remove('simulation-dimmed');
     });
-    
+
     // Collect IDs of executed plugins
     const executedPluginIds = new Set();
     nodes.forEach(node => {
@@ -377,7 +349,7 @@ function markExecutedPlugins(nodes, originalEvent) {
             executedPluginIds.add(componentId);
         }
     });
-    
+
     // Dim all plugins that were NOT executed
     document.querySelectorAll('[data-id]').forEach(element => {
         const componentId = element.getAttribute('data-id');
@@ -385,7 +357,7 @@ function markExecutedPlugins(nodes, originalEvent) {
             element.classList.add('simulation-dimmed');
         }
     });
-    
+
     // Add original event data flow indicator at the top of filter section
     if (originalEvent) {
         const filterContainer = document.getElementById('filterComponents');
@@ -393,22 +365,22 @@ function markExecutedPlugins(nodes, originalEvent) {
             addOriginalEventIndicator(filterContainer, originalEvent);
         }
     }
-    
+
     // Add badges and data indicators to executed plugins
     nodes.forEach(node => {
         // Skip the start node
         if (node.id === 'start') return;
-        
+
         let componentId = node.id;
-        
+
         // For decision point nodes, use the conditional ID
         if (node.isDecisionPoint) {
             componentId = node.conditionalId;
         }
-        
+
         // Use data-id selector (not data-component-id)
         const componentElement = document.querySelector(`[data-id="${componentId}"]`);
-        
+
         if (componentElement) {
             // Check for parsing failures ADDED by this plugin
             let hasFailure = false;
@@ -418,7 +390,7 @@ function markExecutedPlugins(nodes, originalEvent) {
                     // Check if this plugin ADDED any failure tags
                     // Look in the changes.added or changes.modified for the 'tags' field
                     const changes = typeof node.changes === 'string' ? JSON.parse(node.changes) : node.changes;
-                    
+
                     // Check if tags were added
                     if (changes.added && changes.added.tags) {
                         const addedTags = Array.isArray(changes.added.tags) ? changes.added.tags : [changes.added.tags];
@@ -428,16 +400,16 @@ function markExecutedPlugins(nodes, originalEvent) {
                             failureTags = failureCheck.failureTags;
                         }
                     }
-                    
+
                     // Check if tags were modified (from old value to new value)
                     if (!hasFailure && changes.modified && changes.modified.tags) {
                         const modifiedTags = changes.modified.tags;
                         const oldTags = Array.isArray(modifiedTags.from) ? modifiedTags.from : [];
                         const newTags = Array.isArray(modifiedTags.to) ? modifiedTags.to : [];
-                        
+
                         // Find tags that were added (in new but not in old)
                         const addedInModification = newTags.filter(tag => !oldTags.includes(tag));
-                        
+
                         if (addedInModification.length > 0) {
                             const failureCheck = checkForParsingFailures({ tags: addedInModification });
                             if (failureCheck.hasFailure) {
@@ -450,12 +422,12 @@ function markExecutedPlugins(nodes, originalEvent) {
                     console.error('Error checking for failure tags in changes:', e);
                 }
             }
-            
+
             // Add badge indicator (success or failure)
             if (!componentElement.querySelector('.simulation-executed-badge')) {
                 const badge = document.createElement('div');
                 badge.className = 'simulation-executed-badge';
-                
+
                 if (hasFailure) {
                     // Failure badge - clean and professional
                     badge.innerHTML = '!';
@@ -502,10 +474,10 @@ function markExecutedPlugins(nodes, originalEvent) {
                         animation: badgePop 0.3s ease-out;
                     `;
                 }
-                
+
                 componentElement.appendChild(badge);
             }
-            
+
             // Add execution time badge if available
             if (node.executionTimeMs && !componentElement.querySelector('.simulation-timing-badge')) {
                 const timingBadge = document.createElement('div');
@@ -530,10 +502,10 @@ function markExecutedPlugins(nodes, originalEvent) {
                     animation: badgePop 0.3s ease-out;
                     white-space: nowrap;
                 `;
-                
+
                 componentElement.appendChild(timingBadge);
             }
-            
+
             // Add change indicators inside the plugin row
             if (!node.isDecisionPoint && node.hasChanges && node.changesText && node.changesText !== 'No changes') {
                 const changesIndicator = document.createElement('div');
@@ -547,11 +519,11 @@ function markExecutedPlugins(nodes, originalEvent) {
                     font-size: 11px;
                     color: #86efac;
                 `;
-                
+
                 try {
                     const changes = JSON.parse(node.changesText);
                     let changesHtml = '<div style="font-weight: 600; margin-bottom: 4px;">Changes:</div>';
-                    
+
                     if (changes.added && Object.keys(changes.added).length > 0) {
                         changesHtml += '<div style="color: #86efac; margin-bottom: 4px;">';
                         for (const [key, value] of Object.entries(changes.added)) {
@@ -577,15 +549,15 @@ function markExecutedPlugins(nodes, originalEvent) {
                         }
                         changesHtml += '</div>';
                     }
-                    
+
                     changesIndicator.innerHTML = changesHtml;
                 } catch (e) {
                     changesIndicator.innerHTML = '<div style="font-weight: 600;">Changes detected</div>';
                 }
-                
+
                 componentElement.appendChild(changesIndicator);
             }
-            
+
             // Add data flow indicator after this plugin (showing output state)
             if (!node.isDecisionPoint) {
                 addDataFlowIndicator(componentElement, node);
@@ -615,7 +587,7 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
         </svg>
     `;
-    
+
     dataFlow.style.cssText = `
         display: flex;
         align-items: center;
@@ -632,51 +604,49 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     `;
-    
+
     // Store the original event data (filter metadata if toggle unchecked)
-    // console.log('addOriginalEventIndicator: About to filter original event');
     const filtered = filterMetadata(originalEvent);
-    // console.log('addOriginalEventIndicator: Filtered, now stringifying');
     dataFlow.dataset.eventJson = JSON.stringify(filtered, null, 2);
-    
+
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
         showDataFlowTooltip(e, this.dataset.eventJson, true, null); // No changes for original event
     });
-    
+
     // Add hover effects and tooltip
     dataFlow.addEventListener('mouseenter', function(e) {
         this.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.2))';
         this.style.borderColor = 'rgba(16, 185, 129, 0.5)';
         this.style.transform = 'translateX(4px)';
         this.style.boxShadow = '0 4px 6px rgba(16, 185, 129, 0.2)';
-        
+
         // Make icons more visible on hover
         const icons = this.querySelectorAll('.hover-icon, .click-icon');
         icons.forEach(icon => icon.style.opacity = '1');
-        
+
         // Show hover tooltip (non-sticky)
         showDataFlowTooltip(e, this.dataset.eventJson, false, null);
     });
-    
+
     dataFlow.addEventListener('mouseleave', function() {
         this.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1))';
         this.style.borderColor = 'rgba(16, 185, 129, 0.3)';
         this.style.transform = 'translateX(0)';
         this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
-        
+
         // Reset icon opacity
         const icons = this.querySelectorAll('.hover-icon, .click-icon');
         icons.forEach(icon => icon.style.opacity = '0.5');
-        
+
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
         if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
             hideDataFlowTooltip();
         }
     });
-    
+
     // Insert at the beginning of the filter container
     filterContainer.insertBefore(dataFlow, filterContainer.firstChild);
 }
@@ -704,7 +674,7 @@ function addDataFlowIndicator(componentElement, node) {
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
         </svg>
     `;
-    
+
     dataFlow.style.cssText = `
         display: flex;
         align-items: center;
@@ -721,64 +691,62 @@ function addDataFlowIndicator(componentElement, node) {
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     `;
-    
+
     // Store the full event snapshot data for tooltip (from node's eventJson if available)
     let eventData = 'No data available';
     let changesData = null;
     if (node.eventJson) {
         // Parse, filter, and re-stringify
-        // console.log('addDataFlowIndicator: About to parse and filter node eventJson');
         const parsed = JSON.parse(node.eventJson);
         const filtered = filterMetadata(parsed);
         eventData = JSON.stringify(filtered, null, 2);
         changesData = node.changes || null; // Store changes for highlighting
-        // console.log('addDataFlowIndicator: Filtered and stringified');
     }
     dataFlow.dataset.eventJson = eventData;
     if (changesData) {
         dataFlow.dataset.changes = JSON.stringify(changesData);
     }
-    
+
     // Add click to show sticky tooltip
     dataFlow.addEventListener('click', function(e) {
         e.stopPropagation();
         const changes = this.dataset.changes ? JSON.parse(this.dataset.changes) : null;
         showDataFlowTooltip(e, this.dataset.eventJson, true, changes); // sticky = true
     });
-    
+
     // Add hover effects and tooltip
     dataFlow.addEventListener('mouseenter', function(e) {
         this.style.background = 'linear-gradient(90deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2))';
         this.style.borderColor = 'rgba(59, 130, 246, 0.5)';
         this.style.transform = 'translateX(4px)';
         this.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.2)';
-        
+
         // Make icons more visible on hover
         const icons = this.querySelectorAll('.hover-icon, .click-icon');
         icons.forEach(icon => icon.style.opacity = '1');
-        
+
         // Show hover tooltip (non-sticky)
         const changes = this.dataset.changes ? JSON.parse(this.dataset.changes) : null;
         showDataFlowTooltip(e, this.dataset.eventJson, false, changes);
     });
-    
+
     dataFlow.addEventListener('mouseleave', function() {
         this.style.background = 'linear-gradient(90deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1))';
         this.style.borderColor = 'rgba(59, 130, 246, 0.3)';
         this.style.transform = 'translateX(0)';
         this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
-        
+
         // Reset icon opacity
         const icons = this.querySelectorAll('.hover-icon, .click-icon');
         icons.forEach(icon => icon.style.opacity = '0.5');
-        
+
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
         if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
             hideDataFlowTooltip();
         }
     });
-    
+
     // Insert after the component element
     componentElement.parentNode.insertBefore(dataFlow, componentElement.nextSibling);
 }
@@ -792,7 +760,7 @@ function addDataFlowIndicator(componentElement, node) {
  */
 function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
     let tooltip = document.getElementById('data-flow-tooltip');
-    
+
     if (!tooltip) {
         tooltip = document.createElement('div');
         tooltip.id = 'data-flow-tooltip';
@@ -815,18 +783,18 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
         `;
         document.body.appendChild(tooltip);
     }
-    
+
     if (sticky) {
         // Sticky mode: make interactive and draggable
         tooltip.style.pointerEvents = 'auto';
         tooltip.style.cursor = 'move';
-        
+
         // Apply syntax highlighting with change context
         const highlightedJSON = highlightJSON(eventJson, changes);
-        
+
         // Store the raw JSON data for copying
         tooltip.dataset.eventJson = eventJson;
-        
+
         // Update content with close button and copy button
         tooltip.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -850,20 +818,20 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
             </div>
             <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
-        
+
         // Make draggable only when sticky
         makeDraggable(tooltip);
     } else {
         // Hover mode: allow copy button clicks but prevent other interactions
         tooltip.style.pointerEvents = 'auto';
         tooltip.style.cursor = 'default';
-        
+
         // Apply syntax highlighting with change context
         const highlightedJSON = highlightJSON(eventJson, changes);
-        
+
         // Store the raw JSON data for copying
         tooltip.dataset.eventJson = eventJson;
-        
+
         tooltip.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                 <div style="font-weight: 600; color: #60a5fa;">Event State at This Point:</div>
@@ -881,11 +849,11 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
             <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
     }
-    
+
     // Position the tooltip near the cursor
     const x = event.clientX + 10;
     const y = event.clientY + 10;
-    
+
     tooltip.style.left = x + 'px';
     tooltip.style.top = y + 'px';
     tooltip.style.display = 'block';
@@ -896,32 +864,32 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
  */
 function makeDraggable(element) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    
+
     // Remove any existing mousedown handler to avoid duplicates
     element.onmousedown = null;
-    
+
     element.onmousedown = dragMouseDown;
-    
+
     function dragMouseDown(e) {
         // Don't drag if clicking on close button, copy button, or any interactive element
-        if (e.target.tagName === 'BUTTON' || 
-            e.target.closest('button') || 
-            e.target.tagName === 'SVG' || 
+        if (e.target.tagName === 'BUTTON' ||
+            e.target.closest('button') ||
+            e.target.tagName === 'SVG' ||
             e.target.closest('svg')) {
             return;
         }
-        
+
         e.preventDefault();
         e.stopPropagation();
         pos3 = e.clientX;
         pos4 = e.clientY;
         document.onmouseup = closeDragElement;
         document.onmousemove = elementDrag;
-        
+
         // Add visual feedback that dragging is active
         element.style.cursor = 'grabbing';
     }
-    
+
     function elementDrag(e) {
         e.preventDefault();
         pos1 = pos3 - e.clientX;
@@ -931,7 +899,7 @@ function makeDraggable(element) {
         element.style.top = (element.offsetTop - pos2) + 'px';
         element.style.left = (element.offsetLeft - pos1) + 'px';
     }
-    
+
     function closeDragElement() {
         document.onmouseup = null;
         document.onmousemove = null;
@@ -946,14 +914,14 @@ function makeDraggable(element) {
 function copyTooltipData() {
     const tooltip = document.getElementById('data-flow-tooltip');
     if (!tooltip || !tooltip.dataset.eventJson) return;
-    
+
     const jsonData = tooltip.dataset.eventJson;
-    
+
     // Try to format the JSON nicely
     try {
         const parsed = JSON.parse(jsonData);
         const formatted = JSON.stringify(parsed, null, 2);
-        
+
         // Copy to clipboard
         navigator.clipboard.writeText(formatted).then(() => {
             // Visual feedback - change button text and color temporarily
@@ -961,7 +929,7 @@ function copyTooltipData() {
             if (copyBtn) {
                 const originalHTML = copyBtn.innerHTML;
                 const originalBg = copyBtn.style.background;
-                
+
                 copyBtn.innerHTML = `
                     <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
@@ -971,7 +939,7 @@ function copyTooltipData() {
                 copyBtn.style.background = '#10b981';
                 copyBtn.onmouseover = null;
                 copyBtn.onmouseout = null;
-                
+
                 // Reset after 2 seconds
                 setTimeout(() => {
                     copyBtn.innerHTML = originalHTML;
@@ -1022,34 +990,34 @@ function createForceDirectedGraph(graphData) {
     const svg = d3.select("#pipeline-graph");
     const containerElement = document.getElementById("results-container");
     const height = containerElement.clientHeight || 100;
-    
+
     // Calculate proper spacing and total width needed
     const nodeSpacing = 100; // Space between nodes (adjust to match node size)
     const padding = 50; // Padding on left and right
-    
+
     // Find max step to calculate total width needed
     const maxStep = Math.max(...graphData.nodes.map(n => n.step));
     const totalWidth = (maxStep * nodeSpacing) + (padding * 2);
-    
+
     // Set SVG width to accommodate all nodes
     const width = Math.max(totalWidth, containerElement.clientWidth);
     svg.attr("width", width).attr("height", height);
-    
+
     // Clear any existing content
     svg.selectAll("*").remove();
-    
+
     // Create a container group for zoom/pan
     const container = svg.append("g");
-    
+
     // Add zoom behavior
     const zoom = d3.zoom()
         .scaleExtent([0.1, 4])
         .on("zoom", (event) => {
             container.attr("transform", event.transform);
         });
-    
+
     svg.call(zoom);
-    
+
     // Create arrow marker for links
     svg.append("defs").append("marker")
         .attr("id", "arrowhead")
@@ -1062,22 +1030,13 @@ function createForceDirectedGraph(graphData) {
         .append("path")
         .attr("d", "M0,-5L10,0L0,5")
         .attr("fill", "#6b7280");
-    
-    // Set fixed positions for nodes - completely static, no simulation
-    // console.log('Setting node positions:', {
-    //     nodeCount: graphData.nodes.length,
-    //     padding,
-    //     nodeSpacing,
-    //     height,
-    //     nodes: graphData.nodes.map(n => ({ id: n.id, step: n.step }))
-    // });
-    
+
+
     graphData.nodes.forEach((node, i) => {
         node.x = padding + (node.step * nodeSpacing); // Space nodes horizontally with proper spacing
         node.y = height / 2; // Center all nodes vertically for linear flow
-        // console.log(`Node ${node.id}: step=${node.step}, x=${node.x}, y=${node.y}`);
     });
-    
+
     // Resolve link source/target to actual node objects
     graphData.links.forEach(link => {
         if (typeof link.source === 'string') {
@@ -1087,26 +1046,20 @@ function createForceDirectedGraph(graphData) {
             link.target = graphData.nodes.find(n => n.id === link.target);
         }
     });
-    
-    // console.log('Links resolved:', graphData.links.map(l => ({ 
-    //     source: l.source.id, 
-    //     target: l.target.id,
-    //     sourceX: l.source.x,
-    //     targetX: l.target.x
-    // })));
-    
+
+
     // Create links with hover interaction
     const linkGroup = container.append("g")
         .selectAll("g")
         .data(graphData.links)
         .enter().append("g");
-    
+
     // Add visible line
     const link = linkGroup.append("line")
         .attr("stroke", "#6b7280")
         .attr("stroke-width", 2)
         .attr("marker-end", "url(#arrowhead)");
-    
+
     // Add invisible wider line for easier hovering
     const linkHover = linkGroup.append("line")
         .attr("stroke", "transparent")
@@ -1122,7 +1075,7 @@ function createForceDirectedGraph(graphData) {
             d3.select(this.previousSibling)
                 .attr("stroke", "#22c55e")
                 .attr("stroke-width", 3);
-            
+
             // Show hover tooltip
             showLinkTooltip(event, d.eventJson, false);
         })
@@ -1131,21 +1084,21 @@ function createForceDirectedGraph(graphData) {
             d3.select(this.previousSibling)
                 .attr("stroke", "#6b7280")
                 .attr("stroke-width", 2);
-            
+
             // Hide hover tooltip immediately
             hideLinkTooltip();
         });
-    
+
     // Create node groups (no drag behavior since positions are fixed)
     const node = container.append("g")
         .selectAll("g")
         .data(graphData.nodes)
         .enter().append("g");
-    
+
     // Add shapes to nodes (circles for regular, hexagons for decision points)
     node.each(function(d) {
         const nodeGroup = d3.select(this);
-        
+
         // Check for parsing failures ADDED by this node
         let hasFailure = false;
         let failureTags = [];
@@ -1153,7 +1106,7 @@ function createForceDirectedGraph(graphData) {
             try {
                 // Check if this plugin ADDED any failure tags
                 const changes = typeof d.changes === 'string' ? JSON.parse(d.changes) : d.changes;
-                
+
                 // Check if tags were added
                 if (changes.added && changes.added.tags) {
                     const addedTags = Array.isArray(changes.added.tags) ? changes.added.tags : [changes.added.tags];
@@ -1163,16 +1116,16 @@ function createForceDirectedGraph(graphData) {
                         failureTags = failureCheck.failureTags;
                     }
                 }
-                
+
                 // Check if tags were modified (from old value to new value)
                 if (!hasFailure && changes.modified && changes.modified.tags) {
                     const modifiedTags = changes.modified.tags;
                     const oldTags = Array.isArray(modifiedTags.from) ? modifiedTags.from : [];
                     const newTags = Array.isArray(modifiedTags.to) ? modifiedTags.to : [];
-                    
+
                     // Find tags that were added (in new but not in old)
                     const addedInModification = newTags.filter(tag => !oldTags.includes(tag));
-                    
+
                     if (addedInModification.length > 0) {
                         const failureCheck = checkForParsingFailures({ tags: addedInModification });
                         if (failureCheck.hasFailure) {
@@ -1181,7 +1134,7 @@ function createForceDirectedGraph(graphData) {
                         }
                     }
                 }
-                
+
                 // Store failure info on the node for tooltip
                 d.hasFailure = hasFailure;
                 d.failureTags = failureTags;
@@ -1189,12 +1142,12 @@ function createForceDirectedGraph(graphData) {
                 console.error('Error checking for failure tags in changes:', e);
             }
         }
-        
+
         if (d.isConditional && d.isDecisionPoint) {
             // Hexagon shape for decision point nodes (path taken)
             const size = 20;
             const hexPath = `M ${size},0 L ${size/2},${size*0.866} L ${-size/2},${size*0.866} L ${-size},0 L ${-size/2},${-size*0.866} L ${size/2},${-size*0.866} Z`;
-            
+
             nodeGroup.append("path")
                 .attr("d", hexPath)
                 .attr("fill", "#eab308")
@@ -1227,7 +1180,7 @@ function createForceDirectedGraph(graphData) {
                 fillColor = "#4b5563"; // Gray for no changes
                 strokeColor = "#6b7280";
             }
-            
+
             nodeGroup.append("circle")
                 .attr("r", 18)
                 .attr("fill", fillColor)
@@ -1249,7 +1202,7 @@ function createForceDirectedGraph(graphData) {
                 });
         }
     });
-    
+
     // Add text labels to nodes
     node.append("text")
         .text(d => d.label)
@@ -1259,38 +1212,38 @@ function createForceDirectedGraph(graphData) {
         .attr("font-size", "10px")
         .attr("font-weight", "bold")
         .style("pointer-events", "none");
-    
+
     // Manually position all elements since we have no simulation
     link
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
-    
+
     linkHover
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
-    
+
     node.attr("transform", d => `translate(${d.x},${d.y})`);
-    
+
     // Add click handlers to scroll to component in editor
     node.on("click", function(event, d) {
         event.stopPropagation();
-        
+
         // Special handling for "Start" node - scroll to Original Event
         if (d.id === 'start') {
             const originalEventElement = document.querySelector('.simulation-data-flow');
             if (originalEventElement) {
-                originalEventElement.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center' 
+                originalEventElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
                 });
-                
+
                 // Apply the same glowing animation
                 originalEventElement.classList.add('newly-added');
-                
+
                 // Remove the animation class after it completes
                 setTimeout(() => {
                     originalEventElement.classList.remove('newly-added');
@@ -1298,20 +1251,20 @@ function createForceDirectedGraph(graphData) {
             }
             return;
         }
-        
+
         // Special handling for "End" node - scroll to last "View Full Event"
         if (d.id === 'end') {
             const allDataFlows = document.querySelectorAll('.simulation-data-flow');
             if (allDataFlows.length > 0) {
                 const lastDataFlow = allDataFlows[allDataFlows.length - 1];
-                lastDataFlow.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center' 
+                lastDataFlow.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
                 });
-                
+
                 // Apply the same glowing animation
                 lastDataFlow.classList.add('newly-added');
-                
+
                 // Remove the animation class after it completes
                 setTimeout(() => {
                     lastDataFlow.classList.remove('newly-added');
@@ -1319,42 +1272,40 @@ function createForceDirectedGraph(graphData) {
             }
             return;
         }
-        
+
         // Extract the component ID from the node
         let componentId = d.id;
-        
+
         // For decision point nodes, find the first plugin in the taken branch instead
         if (d.isDecisionPoint) {
             // Find the next node in the graph that is NOT a decision point
             // This will be the first plugin in the condition branch
             const currentStep = d.step;
-            const nextPlugin = graphData.nodes.find(node => 
+            const nextPlugin = graphData.nodes.find(node =>
                 node.step > currentStep && !node.isDecisionPoint && node.id !== 'start'
             );
-            
+
             if (nextPlugin) {
                 componentId = nextPlugin.id;
-                // console.log(`Decision point clicked - focusing on first plugin in branch: ${componentId}`);
             } else {
                 // Fallback to the condition block if no plugin found
                 componentId = d.conditionalId;
-                // console.log(`No plugin found after decision point - focusing on condition block: ${componentId}`);
             }
         }
-        
+
         // Find the component in the editor using data-id
         const componentElement = document.querySelector(`[data-id="${componentId}"]`);
-        
+
         if (componentElement) {
             // Scroll to the component
-            componentElement.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
+            componentElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
             });
-            
+
             // Apply the same glowing animation used when adding plugins
             componentElement.classList.add('newly-added');
-            
+
             // Remove the animation class after it completes
             setTimeout(() => {
                 componentElement.classList.remove('newly-added');
@@ -1363,7 +1314,7 @@ function createForceDirectedGraph(graphData) {
             console.warn(`Component not found: ${componentId}`);
         }
     });
-    
+
     // Create tooltip container for links
     const linkTooltip = d3.select("body").append("div")
         .attr("class", "d3-link-tooltip")
@@ -1382,16 +1333,16 @@ function createForceDirectedGraph(graphData) {
         .style("font-size", "11px")
         .style("color", "#d1d5db")
         .style("pointer-events", "none");
-    
+
     function showLinkTooltip(event, eventJson, sticky = false) {
         // Apply syntax highlighting
         const highlightedJSON = highlightJSON(eventJson);
-        
+
         if (sticky) {
             // Make tooltip interactive and draggable when pinned
             linkTooltip.style("pointer-events", "auto")
                 .style("cursor", "move");
-            
+
             // Add close button for sticky tooltips
             const content = `
                 <div style="position: relative; padding-right: 24px;">
@@ -1403,7 +1354,7 @@ function createForceDirectedGraph(graphData) {
                 </div>
             `;
             linkTooltip.html(content);
-            
+
             // Make draggable
             makeDraggable(linkTooltip.node());
         } else {
@@ -1412,19 +1363,19 @@ function createForceDirectedGraph(graphData) {
                 <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
             `);
         }
-        
+
         linkTooltip
             .style("visibility", "visible")
             .style("left", (event.clientX + 10) + "px")
             .style("top", (event.clientY - 10) + "px");
     }
-    
+
     function hideLinkTooltip() {
         linkTooltip.style("visibility", "hidden")
             .style("pointer-events", "none")
             .style("cursor", "default");
     }
-    
+
     // Create tooltip container for nodes
     const nodeTooltip = d3.select("body").append("div")
         .attr("class", "d3-node-tooltip")
@@ -1441,11 +1392,11 @@ function createForceDirectedGraph(graphData) {
         .style("box-shadow", "0 10px 15px -3px rgba(0, 0, 0, 0.3)")
         .style("font-size", "11px")
         .style("color", "#d1d5db");
-    
-    
+
+
     function showNodeTooltip(event, d) {
         let title, content;
-        
+
         if (d.isConditional && d.isDecisionPoint) {
             // Decision point node - show which branch was taken
             title = `<div style="font-weight: 600; color: #fbbf24; margin-bottom: 0.5rem;">
@@ -1468,7 +1419,7 @@ function createForceDirectedGraph(graphData) {
             // Regular plugin node - show changes and failure status
             let titleColor = d.hasFailure ? '#ef4444' : '#9ca3af';
             let failureWarning = '';
-            
+
             if (d.hasFailure) {
                 failureWarning = `<div style="background: rgba(220, 38, 38, 0.2); border: 2px solid #dc2626; border-radius: 6px; padding: 8px; margin-bottom: 0.5rem;">
                     <div style="font-weight: 700; color: #fca5a5; margin-bottom: 0.25rem; font-size: 12px;">⚠ PARSING FAILURE DETECTED</div>
@@ -1476,19 +1427,19 @@ function createForceDirectedGraph(graphData) {
                     <div style="color: #ef4444; font-weight: 600; font-size: 11px;">${d.failureTags.join(', ')}</div>
                 </div>`;
             }
-            
+
             title = `<div style="font-weight: 600; color: ${titleColor}; margin-bottom: 0.5rem;">Step ${d.step}: ${d.label}<br/><span style="font-weight: 400; font-size: 10px;">${d.id}</span></div>`;
-            content = failureWarning + (d.hasChanges 
+            content = failureWarning + (d.hasChanges
                 ? `<div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem;">Changes:</div><pre style="color: #86efac; white-space: pre-wrap; margin: 0;">${d.changesText}</pre>`
                 : `<div style="color: #6b7280; font-style: italic;">No changes</div>`);
         }
-        
+
         nodeTooltip.html(title + content)
             .style("visibility", "visible")
             .style("left", (event.pageX + 10) + "px")
             .style("top", (event.pageY - 10) + "px");
     }
-    
+
     function hideNodeTooltip() {
         nodeTooltip.style("visibility", "hidden");
     }
@@ -1504,7 +1455,7 @@ function diffObjects(prev, curr, path = '') {
         modified: {},
         deleted: {}
     };
-    
+
     // Handle null/undefined cases
     if (prev === null || prev === undefined) {
         if (curr !== null && curr !== undefined) {
@@ -1516,7 +1467,7 @@ function diffObjects(prev, curr, path = '') {
         changes.deleted[path || 'root'] = prev;
         return changes;
     }
-    
+
     // If both are primitives or arrays, compare directly
     if (typeof prev !== 'object' || typeof curr !== 'object' || Array.isArray(prev) || Array.isArray(curr)) {
         if (JSON.stringify(prev) !== JSON.stringify(curr)) {
@@ -1524,11 +1475,11 @@ function diffObjects(prev, curr, path = '') {
         }
         return changes;
     }
-    
+
     // Get all keys from both objects
     const prevKeys = new Set(Object.keys(prev));
     const currKeys = new Set(Object.keys(curr));
-    
+
     // Check for deleted keys
     prevKeys.forEach(key => {
         if (!currKeys.has(key)) {
@@ -1536,11 +1487,11 @@ function diffObjects(prev, curr, path = '') {
             changes.deleted[fullPath] = prev[key];
         }
     });
-    
+
     // Check for added and modified keys
     currKeys.forEach(key => {
         const fullPath = path ? `${path}.${key}` : key;
-        
+
         if (!prevKeys.has(key)) {
             // Key was added
             changes.added[fullPath] = curr[key];
@@ -1548,8 +1499,8 @@ function diffObjects(prev, curr, path = '') {
             // Key exists in both, check if modified
             const prevVal = prev[key];
             const currVal = curr[key];
-            
-            if (typeof prevVal === 'object' && prevVal !== null && 
+
+            if (typeof prevVal === 'object' && prevVal !== null &&
                 typeof currVal === 'object' && currVal !== null &&
                 !Array.isArray(prevVal) && !Array.isArray(currVal)) {
                 // Recursively diff nested objects
@@ -1562,7 +1513,7 @@ function diffObjects(prev, curr, path = '') {
             }
         }
     });
-    
+
     return changes;
 }
 
@@ -1571,14 +1522,14 @@ window.switchOverlayView = function(mode) {
     const resultsContainer = document.getElementById('results-container');
     const textViewContainer = document.getElementById('textViewContainer');
     const textViewContent = document.getElementById('textViewContent');
-    
+
     if (mode === 'debugger') {
         resultsContainer.style.display = 'block';
         textViewContainer.style.display = 'none';
     } else if (mode === 'text') {
         resultsContainer.style.display = 'none';
         textViewContainer.style.display = 'block';
-        
+
         // Generate text view if we have simulation data
         if (window.simulationData && textViewContent) {
             textViewContent.innerHTML = generateTextView(window.simulationData);
@@ -1589,22 +1540,22 @@ window.switchOverlayView = function(mode) {
 // Global function to generate text view HTML from simulation data
 window.generateTextView = function(data) {
     if (!data || !data.nodes) return '<div class="text-gray-500 text-center py-8">No simulation data available</div>';
-    
+
     let html = '';
-    
+
     // Filter out the 'start' node and sort by step
     const pluginNodes = data.nodes.filter(n => n.id !== 'start').sort((a, b) => a.step - b.step);
-    
+
     pluginNodes.forEach((node, index) => {
         const stepNum = index + 1;
         const pluginName = node.label;
         const hasChanges = node.hasChanges;
         const changesText = node.changesText || 'No changes';
         const eventJson = node.eventJson || 'No event data';
-        
+
         // Apply syntax highlighting to the event JSON
         const highlightedEventJson = highlightJSON(eventJson);
-        
+
         html += `
             <div class="border border-gray-700 rounded-lg p-4 bg-gray-800">
                 <div class="text-lg font-bold text-blue-400 mb-3 pb-2 border-b border-gray-700">
@@ -1623,7 +1574,7 @@ window.generateTextView = function(data) {
             </div>
         `;
     });
-    
+
     return html || '<div class="text-gray-500 text-center py-8">No simulation data available</div>';
 };
 
@@ -1631,11 +1582,11 @@ window.generateTextView = function(data) {
 window.toggleOverlayExpand = function() {
     const overlay = document.getElementById('simulation-overlay');
     const expandBtn = document.getElementById('expandOverlayBtn');
-    
+
     if (!overlay) return;
-    
+
     const isExpanded = overlay.style.height === '100vh' || overlay.style.height === '100%';
-    
+
     if (isExpanded) {
         // Collapse back to 150px
         overlay.style.height = '150px';
@@ -1660,31 +1611,27 @@ window.toggleOverlayExpand = function() {
 // Document cycling functions
 window.previousDocument = function() {
     if (!window.simulationDocuments || window.simulationDocuments.length <= 1) return;
-    
+
     window.currentDocumentIndex--;
     if (window.currentDocumentIndex < 0) {
         window.currentDocumentIndex = window.simulationDocuments.length - 1;
     }
-    
+
     switchToDocument(window.currentDocumentIndex);
 };
 
 window.nextDocument = function() {
     if (!window.simulationDocuments || window.simulationDocuments.length <= 1) return;
-    
+
     window.currentDocumentIndex++;
     if (window.currentDocumentIndex >= window.simulationDocuments.length) {
         window.currentDocumentIndex = 0;
     }
-    
+
     switchToDocument(window.currentDocumentIndex);
 };
 
 function switchToDocument(index) {
-    // console.log('=== Switching to document', index, '===');
-    // console.log('simulationRunIds array:', window.simulationRunIds);
-    // console.log('simulationDocuments array length:', window.simulationDocuments ? window.simulationDocuments.length : 0);
-    
     // Check if we have a run_id for this document
     if (!window.simulationRunIds || !window.simulationRunIds[index]) {
         console.error('No run_id available for document', index);
@@ -1692,90 +1639,81 @@ function switchToDocument(index) {
         alert('Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.');
         return;
     }
-    
+
     const runId = window.simulationRunIds[index];
-    // console.log('Switching to run_id:', runId);
-    
+
     // Initialize results cache if needed
     if (!window.simulationResultsCache) {
         window.simulationResultsCache = {};
     }
-    
+
     // Check if we have cached results for this run_id
     if (window.simulationResultsCache[runId]) {
-        // console.log('Using cached results for run_id:', runId);
         renderCachedResults(runId, index);
     } else {
-        // console.log('No cached results, starting poller for run_id:', runId);
-        // console.log('Active pollers before switch:', window.activePollers ? Array.from(window.activePollers) : []);
-        
         // Clear existing simulation artifacts
         clearSimulationArtifacts();
-        
+
         // Update counter
         updateDocumentCounter();
-        
+
         // Show loading indicator
         const loadingIndicator = document.getElementById('simulation-loading-indicator');
         if (loadingIndicator) {
             loadingIndicator.style.display = 'flex';
-            // console.log('Loading indicator shown');
         } else {
             console.error('Loading indicator not found');
         }
-        
+
         // Hide view mode selector during reload
         const viewModeSelector = document.getElementById('viewModeSelector');
         if (viewModeSelector) {
             viewModeSelector.style.display = 'none';
         }
-        
+
         // Start polling for this run_id
-        console.log('Calling initSimulationResults for run_id:', runId);
         initSimulationResults(runId);
     }
 }
 
 function renderCachedResults(runId, index) {
     const cachedData = window.simulationResultsCache[runId];
-    console.log('Rendering cached results for run_id:', runId, 'data:', cachedData);
-    
+
     // Clear existing simulation artifacts
     clearSimulationArtifacts();
-    
+
     // Update counter
     updateDocumentCounter();
-    
+
     // Re-render the graph and badges with cached data
     if (cachedData.nodes && cachedData.links) {
         // Mark executed plugins
         if (cachedData.originalEvent) {
             markExecutedPlugins(cachedData.nodes, cachedData.originalEvent);
         }
-        
+
         // Create the graph
         createForceDirectedGraph({ nodes: cachedData.nodes, links: cachedData.links });
-        
+
         // Display total execution time
         const totalTimeElement = document.getElementById('totalExecutionTime');
         if (totalTimeElement && cachedData.totalExecutionTimeMs) {
             totalTimeElement.textContent = `⏱ ${cachedData.totalExecutionTimeMs}ms`;
             totalTimeElement.style.display = 'inline';
         }
-        
+
         // Show view mode selector
         const viewModeSelector = document.getElementById('viewModeSelector');
         if (viewModeSelector) {
             viewModeSelector.style.display = 'flex';
         }
-        
+
         // Hide loading indicator
         const loadingIndicator = document.getElementById('simulation-loading-indicator');
         if (loadingIndicator) {
             loadingIndicator.style.display = 'none';
         }
-        
-        console.log('Cached results rendered successfully');
+
     } else {
         console.error('Cached data missing nodes or links');
     }
@@ -1787,29 +1725,29 @@ function clearSimulationArtifacts() {
     if (svg) {
         svg.selectAll("*").remove();
     }
-    
+
     // Remove all simulation badges and indicators from pipeline editor
     document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-timing-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
     document.querySelectorAll('.simulation-data-flow').forEach(flow => flow.remove());
-    
+
     // Remove dimming effect
     document.querySelectorAll('.simulation-dimmed').forEach(el => {
         el.classList.remove('simulation-dimmed');
     });
-    
+
     // Close any open tooltips
     const dataFlowTooltip = document.getElementById('data-flow-tooltip');
     if (dataFlowTooltip) {
         dataFlowTooltip.remove();
     }
-    
+
     const linkTooltip = document.querySelector('.d3-link-tooltip');
     if (linkTooltip) {
         linkTooltip.remove();
     }
-    
+
     // Clear text view
     const textViewContent = document.getElementById('textViewContent');
     if (textViewContent) {
@@ -1821,12 +1759,12 @@ function updateDocumentCounter() {
     const counter = document.getElementById('documentCounter');
     const prevBtn = document.getElementById('prevDocBtn');
     const nextBtn = document.getElementById('nextDocBtn');
-    
+
     if (counter && window.simulationDocuments) {
         const total = window.simulationDocuments.length;
         const current = window.currentDocumentIndex + 1;
         counter.textContent = `${current} / ${total}`;
-        
+
         // Enable/disable buttons
         if (prevBtn) prevBtn.disabled = total <= 1;
         if (nextBtn) nextBtn.disabled = total <= 1;
@@ -1840,10 +1778,10 @@ window.cleanupSimulation = function() {
     if (overlay) {
         overlay.remove();
     }
-    
+
     // Remove all simulation artifacts
     clearSimulationArtifacts();
-    
+
     // Clear document storage
     window.simulationDocuments = [];
     window.currentDocumentIndex = 0;
@@ -1854,23 +1792,20 @@ function initSimulationResults(runId) {
     if (!window.activePollers) {
         window.activePollers = new Set();
     }
-    
+
     // Prevent double polling for the same run_id
     if (window.activePollers.has(runId)) {
-        console.log('Already polling for run_id:', runId, '- skipping duplicate');
         return;
     }
     window.activePollers.add(runId);
-    console.log('Active pollers:', Array.from(window.activePollers));
-    
+
     let pollCount = 0;
     const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
     const pollInterval = 250; // Poll every 250ms for faster updates
     let receivedFinal = false; // Track if we've received the final event
     let originalEvent = null; // Store the original event for baseline comparison
-    
-    console.log('Starting simulation polling for run_id:', runId);
-    
+
+
     // Add a 10-second timeout to show a warning message
     const loadingTimeout = setTimeout(() => {
         if (!receivedFinal) {
@@ -1887,14 +1822,13 @@ function initSimulationResults(runId) {
             }
         }
     }, 10000); // 10 seconds
-    
+
     function pollResults() {
         // Stop if we've received the final event
         if (receivedFinal) {
-            console.log('Received final event, stopping polling');
             return;
         }
-        
+
         if (pollCount >= maxPolls) {
             const stream = document.getElementById('results-stream');
             if (stream && stream.innerHTML.trim() === '') {
@@ -1902,39 +1836,34 @@ function initSimulationResults(runId) {
             }
             return;
         }
-        
+
         fetch(`/ConnectionManager/GetSimulationResults/?run_id=${encodeURIComponent(runId)}`)
             .then(response => response.json())
             .then(data => {
-                console.log('Poll response:', data);
-                console.log('Results count:', data.results ? data.results.length : 0);
-                
+
+
                 if (data.results && data.results.length > 0) {
-                    console.log('Processing', data.results.length, 'events');
-                    
+
                     data.results.forEach(event => {
                         // Check if this is the original event
                         if (event.simulation.id === 'original') {
-                            console.log('Storing original event for baseline comparison');
                             originalEvent = event;
                         }
                         // Check if this is the final event
                         else if (event.simulation.id === 'final') {
-                                console.log('Found final event, processing snapshots in order');
                                 receivedFinal = true;
-                                
+
                                 // Check if no plugins were executed (empty or missing snapshots)
                                 const hasSnapshots = event.snapshots && Object.keys(event.snapshots).length > 0;
-                                
+
                                 if (!hasSnapshots) {
-                                    console.log('No plugins were executed - event did not match any conditions');
-                                    
+
                                     // Hide loading indicator
                                     const loadingIndicator = document.getElementById('simulation-loading-indicator');
                                     if (loadingIndicator) {
                                         loadingIndicator.style.display = 'none';
                                     }
-                                    
+
                                     // Show message that no plugins were executed
                                     const resultsContainer = document.getElementById('results-container');
                                     if (resultsContainer) {
@@ -1954,29 +1883,28 @@ function initSimulationResults(runId) {
                                             </div>
                                         `;
                                     }
-                                    
+
                                     // Clear loading timeout
                                     if (loadingTimeout) {
                                         clearTimeout(loadingTimeout);
                                     }
-                                    
+
                                     // Remove from active pollers
                                     if (window.activePollers) {
                                         window.activePollers.delete(runId);
-                                        console.log('Polling complete for', runId, '(no plugins executed), active pollers:', Array.from(window.activePollers));
                                     }
-                                    
+
                                     return;
                                 }
-                                
+
                                 // Access the components variable from the page
                                 if (typeof components !== 'undefined' && components.filter && event.snapshots) {
                                     let previousSnapshot = originalEvent; // Start with original event as baseline
-                                    
+
                                     // Build graph data structure
                                     const nodes = [];
                                     const links = [];
-                                    
+
                                     // Add starting node
                                     nodes.push({
                                         id: 'start',
@@ -1986,29 +1914,29 @@ function initSimulationResults(runId) {
                                         changesText: 'Original event',
                                         isConditional: false
                                     });
-                                    
+
                                     // Track the last node ID that was actually added
                                     let lastNodeId = 'start';
                                     let stepNumber = 0;
-                                    
+
                                     // Get conditional branches taken from the final event
                                     const conditionalBranches = event.simulation?.conditional_branches || {};
                                     const conditionalConditions = event.simulation?.conditional_conditions || {};
-                                    
+
                                     // Helper function to recursively process plugins and conditionals
                                     function processPlugins(pluginsList, parentNodeId) {
                                         let currentNodeId = parentNodeId;
-                                        
+
                                         pluginsList.forEach((filterPlugin) => {
                                             if (filterPlugin.plugin === 'if') {
                                                 // This is a conditional - only show the path that was taken
                                                 const conditionalId = filterPlugin.id;
                                                 const branchTaken = conditionalBranches[conditionalId];
-                                                
+
                                                 // Find which branch was taken and get its details
                                                 let takenBranchInfo = null;
                                                 let takenBranchPlugins = null;
-                                                
+
                                                 if (branchTaken === 'if') {
                                                     takenBranchInfo = {
                                                         label: 'if',
@@ -2033,17 +1961,17 @@ function initSimulationResults(runId) {
                                                     };
                                                     takenBranchPlugins = filterPlugin.config.else.plugins;
                                                 }
-                                                
+
                                                 // Create a single "decision point" node showing which branch was taken
                                                 if (takenBranchInfo) {
                                                     stepNumber++;
                                                     const decisionNodeId = `${conditionalId}_decision`;
-                                                    
+
                                                     // Count total branches for context
                                                     let totalBranches = 1; // if
                                                     if (filterPlugin.config.else_ifs) totalBranches += filterPlugin.config.else_ifs.length;
                                                     if (filterPlugin.config.else) totalBranches += 1;
-                                                    
+
                                                     nodes.push({
                                                         id: decisionNodeId,
                                                         label: `✓ ${takenBranchInfo.label}`,
@@ -2058,7 +1986,7 @@ function initSimulationResults(runId) {
                                                         wasTaken: true,
                                                         totalBranches: totalBranches
                                                     });
-                                                    
+
                                                     // Connect from previous node
                                                     links.push({
                                                         source: currentNodeId,
@@ -2066,7 +1994,7 @@ function initSimulationResults(runId) {
                                                         eventJson: 'Conditional evaluation',
                                                         isConditional: true
                                                     });
-                                                    
+
                                                     // Process plugins from the taken branch
                                                     if (takenBranchPlugins) {
                                                         currentNodeId = processPlugins(takenBranchPlugins, decisionNodeId);
@@ -2078,22 +2006,22 @@ function initSimulationResults(runId) {
                                                 // Regular plugin
                                                 const pluginId = filterPlugin.id;
                                                 const snapshot = event.snapshots[pluginId];
-                                                
+
                                                 if (snapshot) {
                                                     stepNumber++;
-                                                    
+
                                                     // Filter metadata from both snapshots before comparing
                                                     const filteredPrevious = filterMetadata(previousSnapshot);
                                                     const filteredCurrent = filterMetadata(snapshot);
-                                                    
+
                                                     // Compare with previous snapshot (or original) and show only changes
                                                     const changes = diffObjects(filteredPrevious, filteredCurrent);
-                                                    
+
                                                     // Check if there are any changes
                                                     const hasChanges = Object.keys(changes.added).length > 0 ||
                                                                      Object.keys(changes.modified).length > 0 ||
                                                                      Object.keys(changes.deleted).length > 0;
-                                                    
+
                                                     // Format changes for tooltip
                                                     let changesText = 'No changes';
                                                     if (hasChanges) {
@@ -2103,19 +2031,17 @@ function initSimulationResults(runId) {
                                                         if (Object.keys(changes.deleted).length > 0) changesObj.deleted = changes.deleted;
                                                         changesText = JSON.stringify(changesObj, null, 2);
                                                     }
-                                                    
+
                                                     // Filter snapshot before storing
-                                                    console.log('About to call filterMetadata for plugin:', pluginId);
                                                     const filteredSnap = filterMetadata(snapshot);
-                                                    console.log('filterMetadata returned, storing in node');
-                                                    
+
                                                     // Extract timing data if available
                                                     let executionTimeMs = null;
                                                     if (snapshot.simulation && snapshot.simulation.timing && snapshot.simulation.timing.execution_ns) {
                                                         // Convert nanoseconds to milliseconds, rounded to 3 decimal places
                                                         executionTimeMs = (snapshot.simulation.timing.execution_ns / 1000000).toFixed(3);
                                                     }
-                                                    
+
                                                     // Add node with changes for context-aware highlighting
                                                     nodes.push({
                                                         id: pluginId,
@@ -2128,7 +2054,7 @@ function initSimulationResults(runId) {
                                                         isConditional: false,
                                                         executionTimeMs: executionTimeMs // Store execution time in milliseconds
                                                     });
-                                                    
+
                                                     // Add link from the last actual node that was added
                                                     // Include the snapshot (event state) for this link
                                                     links.push({
@@ -2137,22 +2063,22 @@ function initSimulationResults(runId) {
                                                         eventJson: JSON.stringify(filteredSnap, null, 2),
                                                         isConditional: false
                                                     });
-                                                    
+
                                                     // Update current node ID for next iteration
                                                     currentNodeId = pluginId;
-                                                    
+
                                                     // Update previous snapshot for next iteration
                                                     previousSnapshot = snapshot;
                                                 }
                                             }
                                         });
-                                        
+
                                         return currentNodeId;
                                     }
-                                    
+
                                     // Process all filter plugins
                                     const finalNodeId = processPlugins(components.filter, lastNodeId);
-                                    
+
                                     // Add ending node
                                     stepNumber++;
                                     nodes.push({
@@ -2163,7 +2089,7 @@ function initSimulationResults(runId) {
                                         changesText: 'Pipeline complete',
                                         isConditional: false
                                     });
-                                    
+
                                     // Connect final plugin to end node
                                     links.push({
                                         source: finalNodeId,
@@ -2171,7 +2097,7 @@ function initSimulationResults(runId) {
                                         eventJson: 'Pipeline complete',
                                         isConditional: false
                                     });
-                                    
+
                                     // Calculate total execution time from all nodes
                                     let totalExecutionTimeMs = 0;
                                     nodes.forEach(node => {
@@ -2179,10 +2105,10 @@ function initSimulationResults(runId) {
                                             totalExecutionTimeMs += parseFloat(node.executionTimeMs);
                                         }
                                     });
-                                    
+
                                     // Store simulation data globally for view switching
                                     window.simulationData = { nodes, links, totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3) };
-                                    
+
                                     // Cache results for this run_id
                                     if (!window.simulationResultsCache) {
                                         window.simulationResultsCache = {};
@@ -2193,69 +2119,59 @@ function initSimulationResults(runId) {
                                         originalEvent: originalEvent,
                                         totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3)
                                     };
-                                    console.log('Cached results for run_id:', runId);
-                                    
+
                                     // Check if we're in text mode (modal-based) or overlay mode
                                     const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
                                     const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
-                                    
+
                                     if (isTextMode) {
                                         // Text Mode: Skip graph creation, just dispatch event for modal
-                                        window.dispatchEvent(new CustomEvent('simulationDataReady', { 
-                                            detail: { nodes, links } 
+                                        window.dispatchEvent(new CustomEvent('simulationDataReady', {
+                                            detail: { nodes, links }
                                         }));
                                     } else {
                                         // Overlay Mode: Mark plugins and create graph
                                         markExecutedPlugins(nodes, originalEvent);
                                         createForceDirectedGraph({ nodes, links });
-                                        
+
                                         // Display total execution time
                                         const totalTimeElement = document.getElementById('totalExecutionTime');
                                         if (totalTimeElement && totalExecutionTimeMs > 0) {
                                             totalTimeElement.textContent = `⏱ ${totalExecutionTimeMs.toFixed(3)}ms`;
                                             totalTimeElement.style.display = 'inline';
                                         }
-                                        
+
                                         // Show view mode selector in overlay
                                         const viewModeSelector = document.getElementById('viewModeSelector');
-                                        console.log('Looking for viewModeSelector:', viewModeSelector);
                                         if (viewModeSelector) {
-                                            console.log('Setting viewModeSelector display to flex');
                                             viewModeSelector.style.display = 'flex';
-                                            console.log('viewModeSelector display is now:', viewModeSelector.style.display);
                                         } else {
                                             console.error('viewModeSelector element not found in DOM');
                                         }
-                                        
+
                                         // Show document navigation if multiple documents
-                                        console.log('Checking for document navigation:', window.simulationDocuments ? window.simulationDocuments.length : 0, 'documents');
                                         if (window.simulationDocuments && window.simulationDocuments.length > 1) {
                                             const docNav = document.getElementById('documentNavigation');
-                                            console.log('Document navigation element:', docNav);
                                             if (docNav) {
                                                 docNav.style.display = 'flex';
                                                 updateDocumentCounter();
-                                                console.log('Navigation buttons shown');
                                             }
-                                        } else {
-                                            console.log('Not showing navigation - only', window.simulationDocuments ? window.simulationDocuments.length : 0, 'documents');
                                         }
-                                        
+
                                         // Hide loading indicator
                                         const loadingIndicator = document.getElementById('simulation-loading-indicator');
                                         if (loadingIndicator) {
                                             loadingIndicator.style.display = 'none';
                                         }
-                                        
+
                                         // Clear the loading timeout
                                         if (loadingTimeout) {
                                             clearTimeout(loadingTimeout);
                                         }
-                                        
+
                                         // Remove from active pollers
                                         if (window.activePollers) {
                                             window.activePollers.delete(runId);
-                                            console.log('Polling complete for', runId, ', active pollers:', Array.from(window.activePollers));
                                         }
                                     }
                                 } else {
@@ -2264,12 +2180,11 @@ function initSimulationResults(runId) {
                         }
                     });
                 }
-                
+
                 // Stop polling if we received the final event
                 if (receivedFinal) {
                     if (window.activePollers) {
                         window.activePollers.delete(runId);
-                        console.log('Polling complete for', runId, ', active pollers:', Array.from(window.activePollers));
                     }
                     return;
                 }

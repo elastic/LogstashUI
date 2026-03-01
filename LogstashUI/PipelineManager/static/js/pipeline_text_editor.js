@@ -48,10 +48,6 @@ function switchToUIMode() {
         const formData = new FormData();
         formData.append('config_text', configText);
         
-        console.log('=== TEXT BEING SENT TO API ===');
-        console.log(configText);
-        console.log('=== END TEXT ===');
-        
         fetch('/ConnectionManager/ConfigToComponents/', {
             method: 'POST',
             headers: {
@@ -68,18 +64,12 @@ function switchToUIMode() {
             return response.json();
         })
         .then(data => {
-            console.log('Raw data from API:', data);
-            console.log('Type of data:', typeof data);
             
             // If data is a string, parse it
             let parsedData = data;
             if (typeof data === 'string') {
-                console.log('Data is string, parsing JSON...');
                 parsedData = JSON.parse(data);
             }
-            
-            console.log('Parsed data:', parsedData);
-            console.log('Is array:', Array.isArray(parsedData));
             
             // The API returns the components structure directly
             // If it's an array, it needs to be converted to the expected object format
@@ -95,56 +85,29 @@ function switchToUIMode() {
                 // Data is already an object
                 convertedComponents = parsedData;
             }
-            
-            console.log('Converted components:', convertedComponents);
-            
+
             // Update the global components variable
             if (typeof components !== 'undefined') {
-                console.log('BEFORE update - components:', components);
-                console.log('BEFORE update - convertedComponents:', convertedComponents);
+
                 
                 // Clear existing arrays and push new items (preserves Proxy/reactive behavior)
                 components.input.length = 0;
                 components.filter.length = 0;
                 components.output.length = 0;
-                
-                console.log('Cleared arrays - components:', components);
-                
-                // Push converted components
-                console.log('Checking input:', convertedComponents.input, 'length:', convertedComponents.input?.length);
-                console.log('Checking filter:', convertedComponents.filter, 'length:', convertedComponents.filter?.length);
-                console.log('Checking output:', convertedComponents.output, 'length:', convertedComponents.output?.length);
-                
+
                 // Use Array.isArray and check length
                 if (Array.isArray(convertedComponents.input) && convertedComponents.input.length > 0) {
-                    console.log('Pushing to input:', convertedComponents.input);
                     components.input.push(...convertedComponents.input);
-                    console.log('After push - components.input:', components.input);
                 }
                 if (Array.isArray(convertedComponents.filter) && convertedComponents.filter.length > 0) {
-                    console.log('Pushing to filter:', convertedComponents.filter);
                     components.filter.push(...convertedComponents.filter);
-                    console.log('After push - components.filter:', components.filter);
                 }
                 if (Array.isArray(convertedComponents.output) && convertedComponents.output.length > 0) {
-                    console.log('Pushing to output:', convertedComponents.output);
                     const pushResult = components.output.push(...convertedComponents.output);
-                    console.log('Push returned:', pushResult);
-                    console.log('After push - components.output:', components.output);
-                    console.log('After push - components.output.length:', components.output.length);
                 } else {
-                    console.log('Output check failed - isArray:', Array.isArray(convertedComponents.output), 'length:', convertedComponents.output?.length);
+                    console.error('Output check failed - isArray:', Array.isArray(convertedComponents.output), 'length:', convertedComponents.output?.length);
                 }
-                
-                console.log('AFTER update - components.input:', components.input);
-                console.log('AFTER update - components.filter:', components.filter);
-                console.log('AFTER update - components.output:', components.output);
-                
-                console.log('Global components updated:', {
-                    inputCount: components.input.length,
-                    filterCount: components.filter.length,
-                    outputCount: components.output.length
-                });
+
             } else {
                 console.error('Global components variable is undefined!');
             }
@@ -154,14 +117,10 @@ function switchToUIMode() {
             
             // Use setTimeout to ensure UI container is visible before rendering
             setTimeout(() => {
-                console.log('About to call loadExistingComponents');
-                console.log('Current components state:', components);
                 
                 // Reload the visual editor with the new components
                 if (typeof loadExistingComponents === 'function') {
-                    console.log('Calling loadExistingComponents with converted data');
                     loadExistingComponents();
-                    console.log('loadExistingComponents completed');
                 } else {
                     console.error('loadExistingComponents function not found!');
                 }
@@ -169,7 +128,6 @@ function switchToUIMode() {
                 // Mark UI as changed since we just loaded from text
                 // This ensures switching back to Text mode will convert components to config
                 uiHasChanges = true;
-                console.log('Marked UI as changed after Text-to-UI conversion');
             }, 100);
         })
         .catch(error => {
@@ -251,7 +209,6 @@ function switchToTextMode() {
     
     // If no changes were made in UI mode, use the original pipeline text
     if (!uiHasChanges && originalPipelineText) {
-        console.log('No UI changes detected, using original pipeline text');
         if (codeMirrorEditor) {
             codeMirrorEditor.setValue(originalPipelineText);
         } else if (textEditor) {
@@ -265,7 +222,6 @@ function switchToTextMode() {
     }
     
     // UI has changes, convert components to config
-    console.log('UI changes detected, converting components to config');
     if (typeof components !== 'undefined') {
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
         
@@ -534,9 +490,7 @@ function defineLogstashMode() {
  */
 function detectCurrentPlugin(cm, cursor) {
     let depth = 0;
-    
-    console.log('detectCurrentPlugin - Starting at line', cursor.line, 'ch', cursor.ch);
-    
+
     // First, count braces from cursor position backwards to determine current depth
     for (let line = cursor.line; line >= 0; line--) {
         const fullLine = cm.getLine(line);
@@ -548,12 +502,9 @@ function detectCurrentPlugin(cm, cursor) {
             if (fullLine[ch] === '{') depth--;
         }
     }
-    
-    console.log('detectCurrentPlugin - Current depth:', depth);
-    
+
     // If depth is >= 0, we're not inside any block
     if (depth >= 0) {
-        console.log('detectCurrentPlugin - Not inside any block (depth >= 0)');
         return null;
     }
     
@@ -573,32 +524,25 @@ function detectCurrentPlugin(cm, cursor) {
                 
                 // When we find the opening brace that matches our depth
                 if (searchDepth < 0) {
-                    console.log('detectCurrentPlugin - Found opening brace at line', line, ':', lineText);
                     // Check if this line starts a plugin
                     const pluginMatch = lineText.match(/^(\w+)\s*\{/);
                     if (pluginMatch) {
                         const possiblePlugin = pluginMatch[1];
-                        console.log('detectCurrentPlugin - Found possible plugin:', possiblePlugin);
-                        
+
                         // Make sure it's not a main section
                         if (!['input', 'filter', 'output', 'if', 'else'].includes(possiblePlugin)) {
                             // We found the plugin we're inside
                             const section = detectCurrentSection(cm, { line: line, ch: 0 });
-                            console.log('detectCurrentPlugin - Detected plugin:', possiblePlugin, 'type:', section);
                             return { name: possiblePlugin, type: section };
-                        } else {
-                            console.log('detectCurrentPlugin - Skipping main section:', possiblePlugin);
                         }
                     }
                     // Found the brace but it's not a plugin, stop searching
-                    console.log('detectCurrentPlugin - No plugin detected');
                     return null;
                 }
             }
         }
     }
     
-    console.log('detectCurrentPlugin - No plugin detected');
     return null;
 }
 
@@ -651,17 +595,12 @@ function detectCurrentSection(cm, cursor) {
  * Get plugin suggestions based on current section
  */
 function getPluginSuggestions(section, filterText = '') {
-    console.log('getPluginSuggestions - section:', section);
-    console.log('window.pluginData exists:', !!window.pluginData);
-    console.log('window.pluginData:', window.pluginData);
-    
+
     if (!section || !window.pluginData || !window.pluginData[section]) {
-        console.log('Early return - section:', section, 'pluginData:', !!window.pluginData, 'pluginData[section]:', window.pluginData ? !!window.pluginData[section] : 'N/A');
         return [];
     }
     
     const plugins = window.pluginData[section];
-    console.log('Plugins for section:', section, 'count:', Object.keys(plugins).length);
     const suggestions = [];
     const filter = filterText.toLowerCase();
     
@@ -1009,9 +948,6 @@ function getPlaceholderForType(inputType) {
  * Show plugin autocomplete
  */
 function showPluginAutocomplete(cm) {
-    console.log('showPluginAutocomplete called');
-    console.log('CodeMirror.showHint available:', typeof CodeMirror.showHint);
-    
     if (typeof CodeMirror.showHint !== 'function') {
         console.error('CodeMirror.showHint is not available! The show-hint addon is not loaded.');
         return;
@@ -1024,20 +960,16 @@ function showPluginAutocomplete(cm) {
     
     // Detect which section we're in
     const section = detectCurrentSection(cm, cursor);
-    console.log('Section detected:', section);
     if (!section) return;
     
     // Get the word being typed (if any) - this will be used for filtering
     const wordMatch = trimmedLine.match(/^([a-zA-Z_]+)$/);
     const filterText = wordMatch ? wordMatch[1] : '';
-    console.log('Filter text:', filterText);
-    
+
     // Get plugin suggestions (filtered by current text)
     const suggestions = getPluginSuggestions(section, filterText);
-    console.log('Suggestions count:', suggestions.length);
     if (suggestions.length === 0) return;
     
-    console.log('Calling CodeMirror.showHint...');
     CodeMirror.showHint(cm, function(cm) {
         const cursor = cm.getCursor();
         const line = cm.getLine(cursor.line);
@@ -1065,8 +997,6 @@ function showPluginAutocomplete(cm) {
             hintsContainer.setAttribute('data-header', '📦 Available Plugins');
         }
     }, 0);
-    
-    console.log('CodeMirror.showHint called');
 }
 
 /**
@@ -1366,7 +1296,6 @@ function initializeTextEditor() {
             const currentContent = cm.getValue();
             if (currentContent !== textModeInitialContent) {
                 textHasChanges = true;
-                console.log('Text mode changes detected');
             } else {
                 textHasChanges = false;
             }
@@ -1398,11 +1327,9 @@ function initializeTextEditor() {
         
         if (currentPlugin) {
             // We're inside a plugin - show option autocomplete
-            console.log('Inside plugin:', currentPlugin.name, 'type:', currentPlugin.type);
-            
+
             // Check if line contains only whitespace or partial word (option name)
             if (trimmedLine === '' || /^[a-zA-Z_]+$/.test(trimmedLine)) {
-                console.log('Triggering option autocomplete...');
                 autocompleteTimeout = setTimeout(() => {
                     const pluginInfo = window.pluginData?.[currentPlugin.type]?.[currentPlugin.name];
                     if (pluginInfo) {
@@ -1413,13 +1340,11 @@ function initializeTextEditor() {
         } else {
             // Not inside a plugin - show plugin autocomplete
             const section = detectCurrentSection(cm, cursor);
-            console.log('Autocomplete check - Section:', section, 'Line:', trimmedLine);
-            
+
             if (!section) return;
             
             // Check if line contains only whitespace or partial word (no special chars like =>, {, etc)
             if (trimmedLine === '' || /^[a-zA-Z_]+$/.test(trimmedLine)) {
-                console.log('Triggering autocomplete...');
                 autocompleteTimeout = setTimeout(() => {
                     showPluginAutocomplete(cm);
                 }, 150);

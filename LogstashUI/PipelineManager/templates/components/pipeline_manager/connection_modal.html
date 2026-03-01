@@ -21,9 +21,6 @@
               hx-indicator=".loading"
               hx-on::before-request="document.getElementById('connectionErrorContainer').innerHTML = '';"
               hx-on::after-request="
-                  console.log('Response status:', event.detail.xhr.status);
-                  console.log('Response text:', event.detail.xhr.responseText);
-                  
                   const errorContainer = document.getElementById('connectionErrorContainer');
                   
                   try {

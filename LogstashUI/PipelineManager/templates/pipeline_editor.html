@@ -7,12 +7,17 @@
 <script src="{% static 'js/d3.v7.js' %}"></script>
 <script src="{% static 'js/codemirror.min.js' %}"></script>
 <script src="{% static 'js/show-hint.min.js' %}"></script>
+
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
 <script src="{% static 'js/pipeline_settings.js' %}"></script>
 <script src="{% static 'js/move_mode.js' %}"></script>
 <script src="{% static 'js/simulation_results.js' %}"></script>
 <script src="{% static 'js/pipeline_text_editor.js' %}"></script>
+
 <link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
+<link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/monokai.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/show-hint.min.css' %}">
 {{ component_data|json_script:"component-data" }}
 {{ plugin_data|json_script:"plugin-data" }}
 <script>
@@ -20,6 +25,18 @@
     const components = JSON.parse(document.getElementById('component-data').textContent);
     const pluginData = JSON.parse(document.getElementById('plugin-data').textContent);
     window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
+    
+    // Register htmx:afterSwap listener EARLY to catch the initial page load preallocation
+    // This must be done before the slotPreallocation element is parsed
+    document.addEventListener('DOMContentLoaded', function() {
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+        if (preallocationResult) {
+            preallocationResult.addEventListener('htmx:afterSwap', function(event) {
+                // Small delay to ensure DOM is fully updated
+                setTimeout(checkPipelineLoadStatus, 100);
+            });
+        }
+    });
 </script>
 <style>
     .insertion-point {
@@ -782,7 +799,6 @@
     // Track when components are added, modified, or deleted
     function markUIAsChanged() {
         if (!uiHasChanges) {
-            console.log('UI has been modified');
             uiHasChanges = true;
         }
     }
@@ -809,7 +825,6 @@
         const parsingErrorBanner = document.getElementById('parsingErrorBanner');
         if (parsingErrorBanner) {
             // Parsing error detected - automatically switch to Text mode
-            console.log('Parsing error detected, switching to Text mode');
             if (typeof switchToTextMode === 'function') {
                 switchToTextMode();
             } else {
@@ -941,16 +956,10 @@
         // Get slot_id from preallocation result
         const preallocationResult = document.getElementById('slotPreallocationResult');
         
-        // Debug: log the HTML content
-        console.log('Preallocation result HTML:', preallocationResult?.innerHTML);
-        
         const slotElement = preallocationResult?.querySelector('[data-slot-id]');
-        console.log('Slot element found:', slotElement);
         
         const slotId = slotElement?.getAttribute('data-slot-id');
         const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
-        console.log('Extracted slot_id:', slotId);
-        console.log('Pipeline failed during allocation:', pipelineFailed);
         
         // Store slot_id globally for logs viewer (even if pipeline failed)
         if (slotId) {
@@ -959,7 +968,6 @@
         
         // If pipeline already failed during allocation, show failure immediately
         if (pipelineFailed) {
-            console.log('Pipeline failed during allocation - showing failure status');
             statusContainer.classList.remove('hidden');
             statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
             statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
@@ -983,7 +991,6 @@
         
         // The actual pipeline name in Logstash is slot{id}-filter1
         const slotPipelineName = `slot${slotId}-filter1`;
-        console.log(`Checking for slot pipeline: ${slotPipelineName}`);
         
         // Show loading state
         statusContainer.classList.remove('hidden');
@@ -1006,9 +1013,6 @@
             
             const data = await response.json();
             const isRunning = data.is_running;
-            
-            console.log(`Pipeline ${slotPipelineName} running:`, isRunning);
-            console.log('Running pipelines:', data.running_pipelines);
             
             statusIcon.classList.remove('animate-spin');
             
@@ -1040,14 +1044,6 @@
             statusMessage.className = 'text-sm font-medium text-yellow-400';
         }
     }
-    
-    // Check pipeline status after HTMX completes the slot preallocation swap
-    // The event fires on the TARGET element (slotPreallocationResult), not the trigger
-    document.getElementById('slotPreallocationResult')?.addEventListener('htmx:afterSwap', (event) => {
-        console.log('HTMX afterSwap event fired, checking pipeline status...');
-        // Small delay to ensure DOM is fully updated
-        setTimeout(checkPipelineLoadStatus, 100);
-    });
 
 
 </script>

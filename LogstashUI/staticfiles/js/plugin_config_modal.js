@@ -1207,18 +1207,15 @@ window.PluginConfigModal = (function () {
         }
 
         // Update the component's configuration
-        console.log('[Save Flow] Starting save at:', new Date().toISOString());
         currentComponent.config = config;
 
         // Store the pending animation ID before updating (in case it gets cleared)
         const savedPendingId = typeof pendingAnimationPluginId !== 'undefined' ? pendingAnimationPluginId : null;
 
         // If there's a global update function, call it
-        console.log('[Save Flow] Calling window.updateComponent at:', new Date().toISOString());
         if (window.updateComponent) {
             window.updateComponent(currentComponent);
         }
-        console.log('[Save Flow] window.updateComponent completed at:', new Date().toISOString());
 
         // Restore the pending animation ID if it was cleared
         if (savedPendingId && typeof pendingAnimationPluginId !== 'undefined') {
@@ -1226,17 +1223,13 @@ window.PluginConfigModal = (function () {
         }
 
         // Hide the modal (this will trigger the animation)
-        console.log('[Save Flow] Hiding modal at:', new Date().toISOString());
         hide();
-        console.log('[Save Flow] Modal hidden at:', new Date().toISOString());
 
         // Trigger pipeline warming synchronously (same as delete behavior)
-        console.log('[Pipeline Warming] Triggering pipeline warming after config save at:', new Date().toISOString());
         if (typeof triggerPipelineWarmingAndChecking === 'function') {
             triggerPipelineWarmingAndChecking();
-            console.log('[Pipeline Warming] triggerPipelineWarmingAndChecking() called at:', new Date().toISOString());
         } else {
-            console.error('[Pipeline Warming] triggerPipelineWarmingAndChecking function not found!');
+            console.error('[Plugin Config Modal] triggerPipelineWarmingAndChecking function not found - pipeline warming will not occur');
         }
 
         // Dispatch event to mark UI as changed

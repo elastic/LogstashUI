@@ -26,6 +26,11 @@ The ultimate control plane for Logstash
 
 ## Quick Start
 
+### 0. System setup - System Requirements
+**Minimum:**
+- 4GB of RAM
+- 2 Cores
+
 ### 1. Clone the Repository
 
 ```bash

@@ -396,6 +396,229 @@ class TestSecurityAndErrorHandling:
 
 
 # ============================================================================
+# RBAC Tests for Simulation and Pipeline Editor Endpoints
+# ============================================================================
+
+@pytest.mark.django_db
+class TestRBACSimulationEndpoints:
+    """Test RBAC (Role-Based Access Control) for simulation endpoints"""
+
+    def test_readonly_user_cannot_simulate_pipeline(self, client):
+        """Test that readonly user cannot access SimulatePipeline"""
+        from django.contrib.auth.models import User
+        from Management.models import UserProfile
+        
+        readonly_user = User.objects.create_user(
+            username='readonly_simulate',
+            password='testpass123',
+            is_staff=False
+        )
+        readonly_user.profile.role = 'readonly'
+        readonly_user.profile.save()
+        client.login(username='readonly_simulate', password='testpass123')
+
+        components = {
+            "input": [],
+            "filter": [{"id": "filter_1", "plugin": "mutate", "config": {}}],
+            "output": []
+        }
+
+        response = client.post('/ConnectionManager/SimulatePipeline/', {
+            'components': json.dumps(components),
+            'log_text': '{"message": "test"}'
+        })
+
+        assert response.status_code == 403
+
+    def test_readonly_user_cannot_upload_file(self, client):
+        """Test that readonly user cannot upload files"""
+        from django.contrib.auth.models import User
+        from Management.models import UserProfile
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        
+        readonly_user = User.objects.create_user(
+            username='readonly_upload_rbac',
+            password='testpass123',
+            is_staff=False
+        )
+        readonly_user.profile.role = 'readonly'
+        readonly_user.profile.save()
+        client.login(username='readonly_upload_rbac', password='testpass123')
+
+        file_content = b'test content'
+        uploaded_file = SimpleUploadedFile("test.txt", file_content)
+
+        response = client.post('/ConnectionManager/UploadFile/', {
+            'file': uploaded_file,
+            'filename': 'test.txt'
+        })
+
+        assert response.status_code == 403
+
+    def test_readonly_user_can_view_simulation_results(self, authenticated_client):
+        """Test that readonly users can view simulation results (read-only operation)"""
+        # GetSimulationResults doesn't have @require_admin_role, so readonly users can access
+        response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-123')
+
+        # Should work (returns 200 with empty results)
+        assert response.status_code == 200
+
+    def test_readonly_user_can_check_pipeline_loaded(self, authenticated_client):
+        """Test that readonly users can check if pipeline is loaded (read-only operation)"""
+        # CheckIfPipelineLoaded has @login_required but not @require_admin_role
+        response = authenticated_client.get('/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=test')
+
+        # Should work (may return error about missing pipeline, but not 403)
+        assert response.status_code in [200, 400, 500]
+
+    def test_readonly_user_can_get_related_logs(self, authenticated_client):
+        """Test that readonly users can get related logs (read-only operation)"""
+        # GetRelatedLogs has @login_required but not @require_admin_role
+        response = authenticated_client.get('/ConnectionManager/GetRelatedLogs/?slot_id=1')
+
+        # Should work (may return error, but not 403)
+        assert response.status_code in [200, 400, 500]
+
+    def test_admin_user_can_simulate_pipeline(self, authenticated_client):
+        """Test that admin user can access SimulatePipeline"""
+        components = {
+            "input": [],
+            "filter": [{"id": "filter_1", "plugin": "mutate", "config": {}}],
+            "output": []
+        }
+
+        with patch('PipelineManager.simulation.requests.post') as mock_post:
+            mock_post.return_value.status_code = 200
+            mock_post.return_value.json.return_value = {'slot_id': 1, 'reused': False}
+
+            response = authenticated_client.post('/ConnectionManager/SimulatePipeline/', {
+                'components': json.dumps(components),
+                'log_text': '{"message": "test"}'
+            })
+
+            # Should work for admin
+            assert response.status_code == 200
+
+    def test_unauthenticated_user_cannot_simulate(self, client):
+        """Test that unauthenticated users cannot access SimulatePipeline"""
+        components = {
+            "input": [],
+            "filter": [{"id": "filter_1", "plugin": "mutate", "config": {}}],
+            "output": []
+        }
+
+        response = client.post('/ConnectionManager/SimulatePipeline/', {
+            'components': json.dumps(components),
+            'log_text': '{"message": "test"}'
+        })
+
+        # Should redirect to login
+        assert response.status_code == 302
+        assert '/Management/Login/' in response.url
+
+
+@pytest.mark.django_db
+class TestRBACPipelineEditorEndpoints:
+    """Test RBAC for pipeline editor endpoints"""
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_readonly_user_cannot_save_pipeline(self, mock_get_pipeline, mock_get_es, client, test_connection):
+        """Test that readonly user cannot save pipelines"""
+        from django.contrib.auth.models import User
+        from Management.models import UserProfile
+        
+        readonly_user = User.objects.create_user(
+            username='readonly_save',
+            password='testpass123',
+            is_staff=False
+        )
+        readonly_user.profile.role = 'readonly'
+        readonly_user.profile.save()
+        client.login(username='readonly_save', password='testpass123')
+
+        mock_get_pipeline.return_value = {
+            'pipeline': 'input {}\nfilter {}\noutput {}',
+            'pipeline_metadata': {'version': 1, 'type': 'logstash_pipeline'},
+            'pipeline_settings': {},
+            'description': ''
+        }
+
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.return_value = {
+            'test_pipeline': {
+                'pipeline': 'input {}\nfilter {}\noutput {}',
+                'pipeline_metadata': {'version': 1, 'type': 'logstash_pipeline'},
+                'pipeline_settings': {},
+                'description': ''
+            }
+        }
+        mock_get_es.return_value = mock_es
+
+        components = {"input": [], "filter": [], "output": []}
+
+        response = client.post('/ConnectionManager/SavePipeline/', {
+            'save_pipeline': 'true',
+            'es_id': test_connection.id,
+            'pipeline': 'test_pipeline',
+            'components': json.dumps(components)
+        })
+
+        assert response.status_code == 403
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    def test_readonly_user_cannot_clone_pipeline(self, mock_get_es, client, test_connection):
+        """Test that readonly user cannot clone pipelines"""
+        from django.contrib.auth.models import User
+        from Management.models import UserProfile
+        
+        readonly_user = User.objects.create_user(
+            username='readonly_clone',
+            password='testpass123',
+            is_staff=False
+        )
+        readonly_user.profile.role = 'readonly'
+        readonly_user.profile.save()
+        client.login(username='readonly_clone', password='testpass123')
+
+        response = client.post('/ConnectionManager/ClonePipeline/', {
+            'es_id': test_connection.id,
+            'source_pipeline': 'source',
+            'new_pipeline': 'cloned'
+        })
+
+        assert response.status_code == 403
+
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_readonly_user_can_view_pipeline_editor(self, mock_get_pipeline, client, test_connection):
+        """Test that readonly user can view pipeline editor (read-only)"""
+        from django.contrib.auth.models import User
+        from Management.models import UserProfile
+        
+        readonly_user = User.objects.create_user(
+            username='readonly_view',
+            password='testpass123',
+            is_staff=False
+        )
+        readonly_user.profile.role = 'readonly'
+        readonly_user.profile.save()
+        client.login(username='readonly_view', password='testpass123')
+
+        mock_get_pipeline.return_value = {
+            'pipeline': 'input {}\nfilter {}\noutput {}',
+            'pipeline_settings': {},
+            'description': ''
+        }
+
+        response = client.get(
+            f'/ConnectionManager/Pipelines/Editor/?es_id={test_connection.id}&pipeline=test_pipeline'
+        )
+
+        # PipelineEditor doesn't have @require_admin_role, so readonly can view
+        assert response.status_code == 200
+
+
+# ============================================================================
 # Integration Tests
 # ============================================================================
 

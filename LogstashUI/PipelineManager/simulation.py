@@ -62,9 +62,15 @@ def SimulatePipeline(request):
         if not filter_plugins:
             return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
 
-        # Generate unique run_id for this simulation
-        run_id = str(uuid.uuid4())
-        logger.info(f"Starting simulation with run_id: {run_id}")
+        # Generate run_id for this simulation
+        # For slot preallocation (empty log_text), use a deterministic ID to ensure consistent hashing
+        # For actual simulations, generate a unique UUID to track results
+        if not log_text:
+            run_id = "preallocation"
+            logger.info(f"Slot preallocation request (using deterministic run_id)")
+        else:
+            run_id = str(uuid.uuid4())
+            logger.info(f"Starting simulation with run_id: {run_id}")
 
         # Get LogstashAgent URL early so we can use it in instrumentation
         logstash_agent_url = settings.LOGSTASH_AGENT_URL
@@ -389,25 +395,25 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
             # If slot_id wasn't extracted from successful response, try to get it from error response
             if not slot_id and hasattr(e, 'response') and e.response is not None:
                 try:
-                    logger.info(f"Error response status: {e.response.status_code}")
-                    logger.info(f"Error response content: {e.response.text[:500]}")
+                    logger.debug(f"Error response status: {e.response.status_code}")
+                    logger.debug(f"Error response content: {e.response.text[:500]}")
 
                     error_data = e.response.json()
-                    logger.info(f"Error response JSON: {error_data}")
+                    logger.debug(f"Error response JSON: {error_data}")
 
                     # Check if detail is a dict with slot_id (new format)
                     detail = error_data.get('detail')
-                    logger.info(f"Error detail type: {type(detail)}, value: {detail}")
+                    logger.debug(f"Error detail type: {type(detail)}, value: {detail}")
 
                     if isinstance(detail, dict):
                         slot_id = detail.get('slot_id')
-                        logger.info(f"Extracted slot_id {slot_id} from error response detail dict")
+                        logger.debug(f"Extracted slot_id {slot_id} from error response detail dict")
                     elif isinstance(detail, str) and 'Slot' in detail:
                         # Fallback: try to extract from string
                         match = re.search(r'Slot (\d+)', detail)
                         if match:
                             slot_id = int(match.group(1))
-                            logger.info(f"Extracted slot_id {slot_id} from error detail string")
+                            logger.debug(f"Extracted slot_id {slot_id} from error detail string")
                 except Exception as extract_error:
                     logger.error(f"Could not extract slot_id from error detail: {extract_error}")
                     logger.error(traceback.format_exc())
@@ -418,12 +424,12 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
             failed_attr = ' data-pipeline-failed="true"'
 
             if slot_id:
-                logger.info(f"Including slot_id {slot_id} in error response for logs access")
+                logger.debug(f"Including slot_id {slot_id} in error response for logs access")
             else:
                 logger.warning("No slot_id available for error response - logs will not be accessible")
 
             error_html = f'<div class="text-red-400"{slot_id_attr}{failed_attr}>Error allocating slot: {str(e)}</div>'
-            logger.info(f"Returning error HTML: {error_html}")
+            logger.debug(f"Returning error HTML: {error_html}")
             return HttpResponse(error_html)
 
         # Wait for Logstash to reload the pipeline (only if new slot)
@@ -660,20 +666,20 @@ def GetRelatedLogs(request):
             slots_response.raise_for_status()
             slots_data = slots_response.json()
             
-            logger.info(f"Slots data type: {type(slots_data)}, Keys: {list(slots_data.keys()) if isinstance(slots_data, dict) else 'N/A'}")
-            logger.info(f"Looking for slot_id: {slot_id} (type: {type(slot_id)})")
+            logger.debug(f"Slots data type: {type(slots_data)}, Keys: {list(slots_data.keys()) if isinstance(slots_data, dict) else 'N/A'}")
+            logger.debug(f"Looking for slot_id: {slot_id} (type: {type(slot_id)})")
 
             # Find the slot and get its creation timestamp
             # JSON converts int keys to strings, so try both
             slot_info = slots_data.get(str(slot_id)) or slots_data.get(int(slot_id))
-            logger.info(f"Slot info found: {slot_info is not None}")
+            logger.debug(f"Slot info found: {slot_info is not None}")
             if slot_info:
                 # Use slot creation time as minimum timestamp to avoid showing logs
                 # from previous pipelines that used this slot
                 min_timestamp = slot_info.get('created_at_millis')
                 current_time_millis = int(time.time() * 1000)
                 time_diff_seconds = (current_time_millis - min_timestamp) / 1000 if min_timestamp else 0
-                logger.info(f"Slot {slot_id} - Current time: {current_time_millis}, Min timestamp: {min_timestamp}, Diff: {time_diff_seconds:.1f}s ago")
+                logger.debug(f"Slot {slot_id} - Current time: {current_time_millis}, Min timestamp: {min_timestamp}, Diff: {time_diff_seconds:.1f}s ago")
             else:
                 # Slot not found - use recent time window as fallback (last 30 seconds)
                 current_time_millis = int(time.time() * 1000)
@@ -697,12 +703,12 @@ def GetRelatedLogs(request):
         # Add min_timestamp if available
         if min_timestamp:
             params["min_timestamp"] = min_timestamp
-            logger.info(f"Fetching logs with min_timestamp filter: {min_timestamp}")
+            logger.debug(f"Fetching logs with min_timestamp filter: {min_timestamp}")
         else:
             logger.warning(f"No min_timestamp available - will fetch ALL logs for {pipeline_id}")
 
         try:
-            logger.info(f"Requesting logs from {logstash_agent_url} with params: {params}")
+            logger.debug(f"Requesting logs from {logstash_agent_url} with params: {params}")
             response = requests.get(logstash_agent_url, params=params, timeout=10, verify=False)
             response.raise_for_status()
 

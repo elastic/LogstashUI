@@ -19,6 +19,7 @@
 - Overhaul of plugin config modal to be more user friendly
 - View Full Event and Original Event in the editor during a simulate is more obviously clickable
 - Default condition is now 'if [message]'
+- Migrated to Gunicorn
 
 ### Fixed
 - Drops no longer time out in the simulation feature

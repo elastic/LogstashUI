@@ -12,50 +12,41 @@ let isSelectionMode = false;
  * This function reuses the existing slot preallocation mechanism
  */
 function triggerPipelineWarmingAndChecking() {
-    // console.log('[Pipeline Warming] Function called at:', new Date().toISOString());
-    
     // Check if there are any filter components
     const hasFilters = components && components.filter && components.filter.length > 0;
-    // console.log('[Pipeline Warming] Has filters:', hasFilters, 'Filter count:', components?.filter?.length || 0);
-    
+
     if (!hasFilters) {
         // No filters, hide status banner
-        const statusBanner = document.getElementById('pipelineLoadStatus');
+        const statusBanner = document.getElementById('pipelineStatusBanner');
         if (statusBanner) {
             statusBanner.style.display = 'none';
         }
-        // console.log('[Pipeline Warming] No filters, skipping warming');
         return;
     }
-    
+
     // Show the status banner and immediately set to loading state
     const statusBanner = document.getElementById('pipelineLoadStatus');
     const statusIcon = document.getElementById('pipelineStatusIcon');
     const statusMessage = document.getElementById('pipelineStatusMessage');
-    
+
     if (statusBanner && statusIcon && statusMessage) {
         statusBanner.style.display = 'flex';
         statusBanner.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
-        
+
         // Set loading spinner - statusIcon is already an SVG element
         statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
         statusIcon.setAttribute('class', 'w-5 h-5 animate-spin text-gray-300');
         statusIcon.setAttribute('fill', 'currentColor');
         statusIcon.setAttribute('viewBox', '0 0 24 24');
-        
+
         statusMessage.textContent = 'Allocating pipeline slot...';
         statusMessage.className = 'text-sm font-medium text-gray-300';
-        
-        // console.log('[Pipeline Warming] Status banner updated to loading state at:', new Date().toISOString());
     }
-    
+
     // Trigger the slot preallocation using HTMX
     const slotPreallocation = document.getElementById('slotPreallocation');
-    // console.log('[Pipeline Warming] slotPreallocation element:', slotPreallocation ? 'found' : 'NOT FOUND');
-    // console.log('[Pipeline Warming] htmx available:', typeof htmx !== 'undefined');
-    
+
     if (slotPreallocation && typeof htmx !== 'undefined') {
-        // console.log('[Pipeline Warming] Sending HTMX request at:', new Date().toISOString());
         // Use htmx.ajax to send the request with current components data
         htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
             target: '#slotPreallocationResult',
@@ -68,9 +59,8 @@ function triggerPipelineWarmingAndChecking() {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
             }
         });
-        // console.log('[Pipeline Warming] HTMX request initiated at:', new Date().toISOString());
     } else {
-        console.error('[Pipeline Warming] Cannot trigger - missing element or htmx');
+        console.error('[Pipeline Warming] Cannot trigger pipeline warming - slotPreallocation element or htmx library not found');
     }
 }
 
@@ -79,11 +69,11 @@ function updateSimulateSubsetButton() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
     const container = document.getElementById('simulateSubsetContainer');
     const countBadge = document.getElementById('selectedCount');
-    
+
     if (!container || !countBadge) return;
-    
+
     const count = selectedElements.length;
-    
+
     if (count > 0) {
         container.classList.remove('hidden');
         countBadge.textContent = count;
@@ -96,14 +86,14 @@ function updateSimulateSubsetButton() {
 // Function to clear all selections
 window.clearAllSelections = function() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
-    
+
     selectedElements.forEach(element => {
         const componentId = element.getAttribute('data-id');
         if (!componentId) return;
-        
+
         // Find the component to determine if it's a conditional block
         const component = findComponentById(componentId);
-        
+
         if (component && component.plugin === 'if') {
             // It's a conditional block
             deselectConditionalBlock(componentId);
@@ -112,7 +102,7 @@ window.clearAllSelections = function() {
             deselectPlugin(componentId);
         }
     });
-    
+
     // Update the button visibility
     updateSimulateSubsetButton();
 };
@@ -125,14 +115,14 @@ let selectedComponentIds = [];
 function getSelectedComponentIds() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
     const ids = [];
-    
+
     selectedElements.forEach(element => {
         const id = element.getAttribute('data-id');
         if (id) {
             ids.push(id);
         }
     });
-    
+
     return ids;
 }
 
@@ -141,33 +131,33 @@ function getSubsetComponents() {
     if (!isSubsetSimulation || selectedComponentIds.length === 0) {
         return components;
     }
-    
+
     // Create a deep copy of components
     const subsetComponents = {
         input: [],
         filter: [],
         output: []
     };
-    
+
     // Helper function to check if a component or any of its children are selected
     function isComponentSelected(component) {
         return selectedComponentIds.includes(component.id);
     }
-    
+
     // Helper function to recursively filter conditional blocks
     function filterConditionalBlock(component) {
         if (!isComponentSelected(component)) {
             return null;
         }
-        
+
         // Clone the component
         const filtered = JSON.parse(JSON.stringify(component));
-        
+
         // If it's a conditional block, we include all its nested plugins
         // (they were already selected when the parent was selected)
         return filtered;
     }
-    
+
     // Filter each section
     ['input', 'filter', 'output'].forEach(type => {
         if (components[type]) {
@@ -183,7 +173,7 @@ function getSubsetComponents() {
             });
         }
     });
-    
+
     return subsetComponents;
 }
 
@@ -192,13 +182,13 @@ window.openSimulateSubsetModal = function() {
     // Set subset mode and collect selected IDs
     isSubsetSimulation = true;
     selectedComponentIds = getSelectedComponentIds();
-    
+
     // Check for memory-intensive filter plugins
     checkMemoryIntensivePlugins();
-    
+
     // Check for plugins requiring file paths
     checkFilePathRequiredPlugins();
-    
+
     // Open the same simulation modal
     const modal = document.getElementById('simulationModal');
     if (modal) {
@@ -210,10 +200,10 @@ window.openSimulateSubsetModal = function() {
 function selectPlugin(componentId) {
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Add green border
     componentElement.classList.add('simulation-selected');
-    
+
     // Replace play button with checkmark
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -226,7 +216,7 @@ function selectPlugin(componentId) {
         playBtn.classList.add('simulation-selected-checkbox');
         playBtn.title = 'Deselect from simulation';
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -235,10 +225,10 @@ function selectPlugin(componentId) {
 function deselectPlugin(componentId) {
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Remove green border
     componentElement.classList.remove('simulation-selected');
-    
+
     // Restore play button
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -252,7 +242,7 @@ function deselectPlugin(componentId) {
         playBtn.classList.remove('simulation-selected-checkbox');
         playBtn.title = 'Select for simulation';
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -261,13 +251,13 @@ function deselectPlugin(componentId) {
 function selectConditionalBlock(componentId) {
     const component = findComponentById(componentId);
     if (!component || component.plugin !== 'if') return;
-    
+
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Add green border to the main conditional block
     componentElement.classList.add('simulation-selected');
-    
+
     // Replace play button with checkmark
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -280,13 +270,13 @@ function selectConditionalBlock(componentId) {
         playBtn.classList.add('simulation-selected-checkbox');
         playBtn.title = 'Deselect from simulation';
     }
-    
+
     // Helper to select a plugin and convert its play button
     const selectNestedPlugin = (plugin) => {
         const pluginElement = document.querySelector(`[data-id="${plugin.id}"]`);
         if (pluginElement) {
             pluginElement.classList.add('simulation-selected');
-            
+
             // Convert play button to checkmark
             const nestedPlayBtn = pluginElement.querySelector('.play-btn');
             if (nestedPlayBtn) {
@@ -301,12 +291,12 @@ function selectConditionalBlock(componentId) {
             }
         }
     };
-    
+
     // Select all plugins in the if block
     if (component.config.plugins) {
         component.config.plugins.forEach(selectNestedPlugin);
     }
-    
+
     // Select all plugins in else-if blocks
     if (component.config.else_ifs) {
         component.config.else_ifs.forEach(elseIf => {
@@ -315,12 +305,12 @@ function selectConditionalBlock(componentId) {
             }
         });
     }
-    
+
     // Select all plugins in else block
     if (component.config.else && component.config.else.plugins) {
         component.config.else.plugins.forEach(selectNestedPlugin);
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -329,13 +319,13 @@ function selectConditionalBlock(componentId) {
 function deselectConditionalBlock(componentId) {
     const component = findComponentById(componentId);
     if (!component || component.plugin !== 'if') return;
-    
+
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Remove green border from the main conditional block
     componentElement.classList.remove('simulation-selected');
-    
+
     // Restore play button
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -349,13 +339,13 @@ function deselectConditionalBlock(componentId) {
         playBtn.classList.remove('simulation-selected-checkbox');
         playBtn.title = 'Select entire condition for simulation';
     }
-    
+
     // Helper to deselect a plugin and restore its play button
     const deselectNestedPlugin = (plugin) => {
         const pluginElement = document.querySelector(`[data-id="${plugin.id}"]`);
         if (pluginElement) {
             pluginElement.classList.remove('simulation-selected');
-            
+
             // Restore play button
             const nestedPlayBtn = pluginElement.querySelector('.play-btn');
             if (nestedPlayBtn) {
@@ -371,12 +361,12 @@ function deselectConditionalBlock(componentId) {
             }
         }
     };
-    
+
     // Deselect all plugins in the if block
     if (component.config.plugins) {
         component.config.plugins.forEach(deselectNestedPlugin);
     }
-    
+
     // Deselect all plugins in else-if blocks
     if (component.config.else_ifs) {
         component.config.else_ifs.forEach(elseIf => {
@@ -385,12 +375,12 @@ function deselectConditionalBlock(componentId) {
             }
         });
     }
-    
+
     // Deselect all plugins in else block
     if (component.config.else && component.config.else.plugins) {
         component.config.else.plugins.forEach(deselectNestedPlugin);
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -539,13 +529,12 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
 }
 
 function loadExistingComponents() {
-    // console.log('[loadExistingComponents] Starting at:', new Date().toISOString());
     // Check if we're in simulation mode before clearing
     const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
     const simulationNodes = wasInSimulationMode && window.simulationData ? window.simulationData.nodes : null;
-    const originalEventData = wasInSimulationMode && window.simulationResultsCache ? 
+    const originalEventData = wasInSimulationMode && window.simulationResultsCache ?
         Object.values(window.simulationResultsCache)[0]?.originalEvent : null;
-    
+
     // Clears all existing components first
     const componentTypes = ['input', 'filter', 'output'];
 
@@ -599,13 +588,11 @@ function loadExistingComponents() {
         // If we only have a pending ID, preserve it
         newlyAddedPluginId = pendingAnimationPluginId;
     }
-    
+
     // Restore simulation data if we were in simulation mode
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
         markExecutedPlugins(simulationNodes, originalEventData);
     }
-    
-    // console.log('[loadExistingComponents] Completed at:', new Date().toISOString());
 }
 
 // Function to trigger animation for pending plugin (called after config modal closes)
@@ -620,8 +607,8 @@ window.triggerPendingAnimation = function () {
 // Helper function to check if a field is sensitive (password/api_key)
 function isSensitiveField(fieldName) {
     const lowerFieldName = fieldName.toLowerCase();
-    return lowerFieldName.includes('password') || 
-           lowerFieldName.includes('api_key') || 
+    return lowerFieldName.includes('password') ||
+           lowerFieldName.includes('api_key') ||
            lowerFieldName.includes('apikey') ||
            lowerFieldName === 'token' ||
            lowerFieldName.includes('secret');
@@ -637,65 +624,56 @@ function validateRequiredFields(component) {
         isValid: true,
         missingFields: []
     };
-    
+
     // Skip validation for comment plugins and conditionals
     if (component.plugin === 'comment' || component.plugin === 'if') {
         return result;
     }
-    
+
     // Get plugin definition from pluginData (check both global scope and window)
     const pluginDataSource = typeof pluginData !== 'undefined' ? pluginData : window.pluginData;
     const pluginDef = pluginDataSource?.[component.type]?.[component.plugin];
-    
+
     if (!pluginDataSource) {
-        // console.log(`[Validation] pluginData not available yet`);
+        console.error('[Validation] pluginData not available yet');
         return result;
     }
-    
+
     if (!pluginDef) {
-        // console.log(`[Validation] No plugin definition for ${component.plugin}`);
+        console.error(`[Validation] No plugin definition for ${component.plugin}`);
         return result;
     }
-    
+
     // The field definitions are in 'options', not 'fields'
     if (!pluginDef.options) {
-        // console.log(`[Validation] No options property for ${component.plugin}`);
+        console.error(`[Validation] No options property for ${component.plugin}`);
         return result;
     }
-    
-    // console.log(`[Validation] Checking ${component.type}/${component.plugin} with ${Object.keys(pluginDef.options).length} options`);
-    
+
     // Check each field in the plugin definition
     for (const [fieldName, fieldDef] of Object.entries(pluginDef.options)) {
         // Check if field is required
         if (fieldDef.required === 'Yes') {
             const fieldValue = component.config[fieldName];
-            
-            // console.log(`[Validation] Field "${fieldName}" is required, value:`, fieldValue);
-            
+
             // Check if field is missing or empty
             if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
                 result.isValid = false;
                 result.missingFields.push(fieldName);
-                // console.log(`[Validation] Field "${fieldName}" is MISSING or EMPTY`);
             }
             // Check for empty arrays
             else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
                 result.isValid = false;
                 result.missingFields.push(fieldName);
-                // console.log(`[Validation] Field "${fieldName}" is an EMPTY ARRAY`);
             }
             // Check for empty objects
             else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue) && Object.keys(fieldValue).length === 0) {
                 result.isValid = false;
                 result.missingFields.push(fieldName);
-                // console.log(`[Validation] Field "${fieldName}" is an EMPTY OBJECT`);
             }
         }
     }
-    
-    // console.log(`[Validation] Result for ${component.plugin}:`, result);
-    
+
     return result;
 }
 
@@ -743,14 +721,14 @@ function formatConfigValue(value, key) {
         if (value.length === 0) {
             return '[]';
         }
-        
+
         // Check if this is an array of objects (array_of_hashes)
         const firstItem = value[0];
         if (typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem)) {
             // This is an array of hashes - show count instead of content
             return `[${value.length} ${value.length === 1 ? 'entry' : 'entries'}]`;
         }
-        
+
         // Format as: "item1", "item2", "item3"
         const formattedItems = value.map(item => {
             return `"${cleanString(item)}"`;
@@ -825,9 +803,9 @@ function createComponentElement(component, depth = 0, isConditional = false, par
                     configItems.push(`<div class="text-sm text-gray-300 whitespace-pre-wrap font-mono mt-2">${fullText}</div>`);
                     continue;
                 }
-                
+
                 let displayValue = formatConfigValue(value, key);
-                
+
                 // Add eye icon for sensitive fields
                 if (isSensitiveField(key)) {
                     const actualValue = String(value).length > 30 ? String(value).substring(0, 30) + '...' : String(value);
@@ -835,7 +813,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
                     configItems.push(`
                         <span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded inline-flex items-center gap-1">
                             ${key}: <span class="sensitive-value" data-actual="${escapedActualValue}">${displayValue}</span>
-                            <button type="button" 
+                            <button type="button"
                                     class="text-gray-400 hover:text-gray-200 inline-flex items-center"
                                     onclick="toggleSensitiveValue(this, event)"
                                     title="Show/Hide">
@@ -857,16 +835,16 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     }
 
     // Only show image for input and output plugins
-    const imageHtml = (component.type === 'input' || component.type === 'output') 
-        ? `<img src="/static/images/${component.plugin}.png" 
-                alt="${component.plugin} icon" 
+    const imageHtml = (component.type === 'input' || component.type === 'output')
+        ? `<img src="/static/images/${component.plugin}.png"
+                alt="${component.plugin} icon"
                 class="w-5 h-5 mr-2 object-contain flex-shrink-0"
                 onerror="this.style.display='none';">`
         : '';
 
     // Validate required fields
     const validation = validateRequiredFields(component);
-    
+
     el.innerHTML = `
 <button class="move-handle" data-component-id="${component.id}" title="Click to move this component">
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -902,7 +880,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
       </svg>
     </button>
     ` : ''}
-    
+
     <button class="config-btn text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
             data-component-id="${component.id}"
             title="Configure">
@@ -948,7 +926,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
             animation: badgePop 0.3s ease-out;
         `;
         el.appendChild(badge);
-        
+
         // Add text indicator below the plugin
         const warningText = document.createElement('div');
         warningText.className = 'required-fields-warning';
@@ -1028,7 +1006,7 @@ function createConditionalBlockElement(component, depth = 0) {
   <span class="font-medium text-yellow-300">if</span>
   <div class="flex items-center ml-2 group/condition">
     <span class="text-xs text-gray-400 condition-text">${component.config.condition || ''}</span>
-    <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-condition" 
+    <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-condition"
             data-component-id="${component.id}">
       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1141,8 +1119,8 @@ function createConditionalBlockElement(component, depth = 0) {
       <span class="font-medium text-yellow-300">else if</span>
       <div class="flex items-center ml-2">
         <span id="${conditionId}" class="text-xs text-gray-400 condition-text">${elseIf.condition || ''}</span>
-        <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition" 
-                data-component-id="${component.id}" 
+        <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition"
+                data-component-id="${component.id}"
                 data-elseif-index="${elseIfIndex}"
                 data-condition-id="${conditionId}">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1151,8 +1129,8 @@ function createConditionalBlockElement(component, depth = 0) {
         </button>
       </div>
     </div>
-    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-elseif-btn" 
-            data-component-id="${component.id}" 
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-elseif-btn"
+            data-component-id="${component.id}"
             data-elseif-index="${elseIfIndex}"
             title="Remove else-if block">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1197,7 +1175,7 @@ function createConditionalBlockElement(component, depth = 0) {
         elseHeader.className = 'flex items-center justify-between group';
         elseHeader.innerHTML = `
     <span class="font-medium text-yellow-300">else</span>
-    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-else-btn" 
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-else-btn"
             data-component-id="${component.id}"
             title="Remove else block">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1646,23 +1624,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
         });
-        
+
         // Add click handler for play buttons
         document.addEventListener('click', function (event) {
             const playBtn = event.target.closest('.play-btn');
             if (playBtn) {
                 event.preventDefault();
                 event.stopPropagation();
-                
+
                 const componentId = playBtn.getAttribute('data-component-id');
                 const isConditional = playBtn.getAttribute('data-is-conditional') === 'true';
                 const componentElement = document.querySelector(`[data-id="${componentId}"]`);
-                
+
                 if (!componentElement) return;
-                
+
                 // Check if already selected
                 const isSelected = componentElement.classList.contains('simulation-selected');
-                
+
                 if (isSelected) {
                     // Deselect
                     if (isConditional) {
@@ -1708,10 +1686,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (deleteBtn) {
             event.stopPropagation();
             event.preventDefault();
-            
+
             const componentId = deleteBtn.getAttribute('data-component-id');
             const elseIfIndex = parseInt(deleteBtn.getAttribute('data-elseif-index'), 10);
-            
+
             if (componentId && !isNaN(elseIfIndex)) {
                 deleteElseIfBlock(componentId, elseIfIndex);
             }
@@ -1724,9 +1702,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (deleteBtn) {
             event.stopPropagation();
             event.preventDefault();
-            
+
             const componentId = deleteBtn.getAttribute('data-component-id');
-            
+
             if (componentId) {
                 deleteElseBlock(componentId);
             }
@@ -1970,7 +1948,7 @@ function addElseIfToConditional(componentId) {
                 window.PluginConfigModal.show(newPlugin);
             }, 50);
         }
-        
+
         // Dispatch event to mark UI as changed
         document.body.dispatchEvent(new CustomEvent('componentAdded'));
 
@@ -2090,7 +2068,7 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
                 window.PluginConfigModal.show(newPlugin);
             }, 50);
         }
-        
+
         // Dispatch event to mark UI as changed
         document.body.dispatchEvent(new CustomEvent('componentAdded'));
     };
@@ -2258,7 +2236,7 @@ function deleteElseIfBlock(componentId, elseIfIndex) {
 
     // Refresh the UI
     loadExistingComponents();
-    
+
     // Trigger pipeline warming and checking after removal
     triggerPipelineWarmingAndChecking();
 }
@@ -2285,7 +2263,7 @@ function deleteElseBlock(componentId) {
 
     // Refresh the UI
     loadExistingComponents();
-    
+
     // Trigger pipeline warming and checking after removal
     triggerPipelineWarmingAndChecking();
 }
@@ -2298,10 +2276,10 @@ document.addEventListener('click', function(e) {
         const componentId = collapseToggle.dataset.componentId;
         const content = document.querySelector(`.conditional-content[data-component-id="${componentId}"]`);
         const svg = collapseToggle.querySelector('svg');
-        
+
         if (content && svg) {
             const isCollapsed = content.classList.contains('collapsed');
-            
+
             if (isCollapsed) {
                 // Expand
                 content.classList.remove('collapsed');
@@ -2318,13 +2296,13 @@ document.addEventListener('click', function(e) {
 // Function to toggle sensitive value visibility in component row preview
 window.toggleSensitiveValue = function(button, event) {
     event.stopPropagation();
-    
+
     const valueSpan = button.previousElementSibling;
     if (!valueSpan || !valueSpan.classList.contains('sensitive-value')) return;
-    
+
     const actualValue = valueSpan.dataset.actual;
     const currentText = valueSpan.textContent;
-    
+
     if (currentText === '••••••••') {
         // Show actual value
         valueSpan.textContent = actualValue;
@@ -2352,13 +2330,13 @@ window.openSimulateModal = function() {
     // Reset subset mode when opening regular simulation
     isSubsetSimulation = false;
     selectedComponentIds = [];
-    
+
     // Check for memory-intensive filter plugins
     checkMemoryIntensivePlugins();
-    
+
     // Check for plugins requiring file paths
     checkFilePathRequiredPlugins();
-    
+
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
@@ -2369,15 +2347,15 @@ window.openSimulateModal = function() {
 function checkMemoryIntensivePlugins() {
     const warningDiv = document.getElementById('memoryIntensiveWarning');
     const pluginListDiv = document.getElementById('memoryIntensivePluginList');
-    
+
     if (!warningDiv || !pluginListDiv) return;
-    
+
     // Get components to check (either subset or all)
     const componentsToCheck = isSubsetSimulation ? getSubsetComponents() : components;
-    
+
     // Find all memory-intensive filter plugins
     const memoryIntensivePlugins = [];
-    
+
     if (componentsToCheck.filter && Array.isArray(componentsToCheck.filter)) {
         componentsToCheck.filter.forEach(component => {
             // Check if this is a regular plugin (not a conditional block)
@@ -2387,7 +2365,7 @@ function checkMemoryIntensivePlugins() {
                     memoryIntensivePlugins.push(component.plugin);
                 }
             }
-            
+
             // Check plugins inside conditional blocks
             if (component.plugin === 'if') {
                 // Check plugins in the if block
@@ -2399,7 +2377,7 @@ function checkMemoryIntensivePlugins() {
                         }
                     });
                 }
-                
+
                 // Check plugins in else-if blocks
                 if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
                     component.config.else_ifs.forEach(elseIf => {
@@ -2413,7 +2391,7 @@ function checkMemoryIntensivePlugins() {
                         }
                     });
                 }
-                
+
                 // Check plugins in else block
                 if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
                     component.config.else.plugins.forEach(plugin => {
@@ -2426,10 +2404,10 @@ function checkMemoryIntensivePlugins() {
             }
         });
     }
-    
+
     // Remove duplicates
     const uniquePlugins = [...new Set(memoryIntensivePlugins)];
-    
+
     // Display warning if any memory-intensive plugins found
     if (uniquePlugins.length > 0) {
         let message = "Looks like you're using ";
@@ -2439,7 +2417,7 @@ function checkMemoryIntensivePlugins() {
             const pluginNames = uniquePlugins.map(p => `<strong>${p}</strong>`).join(', ');
             message += `${pluginNames}. These plugins can use a lot of memory. You may have to bump up your JVM heap if it fails.`;
         }
-        
+
         pluginListDiv.innerHTML = message;
         warningDiv.classList.remove('hidden');
     } else {
@@ -2451,22 +2429,22 @@ function checkMemoryIntensivePlugins() {
 function checkFilePathRequiredPlugins() {
     const warningDiv = document.getElementById('filePathRequiredWarning');
     const pluginListDiv = document.getElementById('filePathPluginList');
-    
+
     if (!warningDiv || !pluginListDiv) return;
-    
+
     // Get components to check (either subset or all)
     const componentsToCheck = isSubsetSimulation ? getSubsetComponents() : components;
-    
+
     // Find all plugins with fs_path options
     const pluginsWithFilePaths = [];
-    
+
     // Helper function to check a component for fs_path options
     function checkComponentForFilePaths(component, type) {
         if (!component.plugin || component.plugin === 'if') return;
-        
+
         const pluginInfo = pluginData?.[type]?.[component.plugin];
         if (!pluginInfo || !pluginInfo.options) return;
-        
+
         // Check if any option has input_type: "fs_path" AND has a value configured
         const fsPathOptionsWithValues = [];
         Object.entries(pluginInfo.options).forEach(([optionName, optionInfo]) => {
@@ -2478,7 +2456,7 @@ function checkFilePathRequiredPlugins() {
                 }
             }
         });
-        
+
         if (fsPathOptionsWithValues.length > 0) {
             pluginsWithFilePaths.push({
                 name: component.plugin,
@@ -2488,13 +2466,13 @@ function checkFilePathRequiredPlugins() {
             });
         }
     }
-    
+
     // Check all plugin types
     ['input', 'filter', 'output'].forEach(type => {
         if (componentsToCheck[type] && Array.isArray(componentsToCheck[type])) {
             componentsToCheck[type].forEach(component => {
                 checkComponentForFilePaths(component, type);
-                
+
                 // Check plugins inside conditional blocks (for filters)
                 if (type === 'filter' && component.plugin === 'if') {
                     // Check plugins in the if block
@@ -2503,7 +2481,7 @@ function checkFilePathRequiredPlugins() {
                             checkComponentForFilePaths(plugin, type);
                         });
                     }
-                    
+
                     // Check plugins in else-if blocks
                     if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
                         component.config.else_ifs.forEach(elseIf => {
@@ -2514,7 +2492,7 @@ function checkFilePathRequiredPlugins() {
                             }
                         });
                     }
-                    
+
                     // Check plugins in else block
                     if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
                         component.config.else.plugins.forEach(plugin => {
@@ -2525,14 +2503,14 @@ function checkFilePathRequiredPlugins() {
             });
         }
     });
-    
+
     // Display warning if any plugins with file paths found
     if (pluginsWithFilePaths.length > 0) {
         let html = '';
-        
+
         pluginsWithFilePaths.forEach((plugin, index) => {
             const pluginId = `file-path-plugin-${index}`;
-            
+
             html += `
                 <div class="bg-gray-800/50 rounded p-3 border border-gray-600">
                     ${plugin.options.map((optionName, optIndex) => {
@@ -2550,8 +2528,8 @@ function checkFilePathRequiredPlugins() {
                                     </label>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <input type="text" id="${inputId}" 
-                                           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" 
+                                    <input type="text" id="${inputId}"
+                                           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
                                            placeholder="Enter file path or click Browse..."
                                            data-plugin-name="${plugin.name}"
                                            data-plugin-type="${plugin.type}"
@@ -2570,7 +2548,7 @@ function checkFilePathRequiredPlugins() {
                 </div>
             `;
         });
-        
+
         pluginListDiv.innerHTML = html;
         warningDiv.classList.remove('hidden');
     } else {
@@ -2597,35 +2575,35 @@ window.browseFilePathForSimulation = function(inputId) {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.style.display = 'none';
-    
+
     fileInput.addEventListener('change', async function(e) {
         const file = e.target.files[0];
         if (file) {
             const textInput = document.getElementById(inputId);
             if (!textInput) return;
-            
+
             // Get metadata from data attributes
             const componentId = textInput.dataset.componentId;
             const optionName = textInput.dataset.optionName;
-            
+
             // Get file extension
             const originalExtension = file.name.split('.').pop();
-            
+
             // Generate filename for backend: {component_id}_{option_name}.{extension}
             const generatedFilename = `${componentId}_${optionName}.${originalExtension}`;
-            
+
             // Show the original filename to the user
             textInput.value = file.name;
-            
+
             // Store the generated filename in a data attribute for later use
             textInput.dataset.generatedFilename = generatedFilename;
-            
+
             // Upload the file to the API with the generated filename
             try {
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('filename', generatedFilename);
-                
+
                 const response = await fetch('/ConnectionManager/UploadFile/', {
                     method: 'POST',
                     body: formData,
@@ -2633,7 +2611,7 @@ window.browseFilePathForSimulation = function(inputId) {
                         'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                     }
                 });
-                
+
                 if (response.ok) {
                     // Show success toast
                     showToast('Upload successful', 'success');
@@ -2647,11 +2625,11 @@ window.browseFilePathForSimulation = function(inputId) {
                 showToast('Upload failed: ' + error.message, 'error');
             }
         }
-        
+
         // Clean up
         document.body.removeChild(fileInput);
     });
-    
+
     // Trigger the file picker
     document.body.appendChild(fileInput);
     fileInput.click();

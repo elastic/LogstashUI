@@ -13,10 +13,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Number of simulation slots available
-NUM_SLOTS = 10
+NUM_SLOTS = 6
 
-# Slot TTL in seconds (5 minutes)
-SLOT_TTL_SECONDS = 300
+# Slot TTL in seconds (2 minutes)
+SLOT_TTL_SECONDS = 120
 
 # Global slot state - thread-safe
 _slots_lock = Lock()
@@ -27,15 +27,43 @@ def _compute_pipeline_hash(pipelines: List[Dict[str, Any]]) -> str:
     """
     Compute a hash of the pipeline list to detect changes.
     
+    Only hashes fields that actually affect the created pipeline:
+    - filter_config: The filter configuration content
+    - index: The pipeline index/order
+
     Args:
         pipelines: List of pipeline configurations
-        
+
     Returns:
         SHA256 hash string
     """
+    # Extract only the fields that affect the actual pipeline
+    # (output_config is sent by UI but ignored by agent, so exclude it from hash)
+    normalized_pipelines = []
+    for pipeline in pipelines:
+        filter_config = pipeline.get('filter_config', '')
+        normalized_pipelines.append({
+            'filter_config': filter_config,
+            'index': pipeline.get('index', 1)
+        })
+
     # Convert to JSON string with sorted keys for consistent hashing
-    pipeline_str = json.dumps(pipelines, sort_keys=True)
-    return hashlib.sha256(pipeline_str.encode()).hexdigest()
+    pipeline_str = json.dumps(normalized_pipelines, sort_keys=True)
+    computed_hash = hashlib.sha256(pipeline_str.encode()).hexdigest()
+    
+    # Debug: Write full filter_config to temp file for comparison
+    if normalized_pipelines:
+        import tempfile
+        filter_config = normalized_pipelines[0]['filter_config']
+        debug_file = os.path.join(tempfile.gettempdir(), f"filter_config_{computed_hash[:8]}.txt")
+        try:
+            with open(debug_file, 'w', encoding='utf-8') as f:
+                f.write(filter_config)
+            logger.info(f"Hash {computed_hash[:8]}: Wrote filter_config to {debug_file} ({len(filter_config)} bytes)")
+        except Exception as e:
+            logger.error(f"Failed to write debug file: {e}")
+    
+    return computed_hash
 
 
 def get_slot_state() -> Dict[int, Dict[str, Any]]:
@@ -67,18 +95,39 @@ def allocate_slot(pipeline_name: str, pipelines: List[Dict[str, Any]]) -> Option
     old_slot_data_to_cleanup = None
     slot_id_to_cleanup = None
     
+    logger.info(f"allocate_slot: Looking for hash {content_hash[:8]}... in {len(_slots)} existing slots")
+
     with _slots_lock:
         # Check if we already have a slot with this exact configuration
         for slot_id, slot_data in _slots.items():
-            if slot_data.get('content_hash') == content_hash:
+            existing_hash = slot_data.get('content_hash', '')
+            logger.debug(f"  Slot {slot_id} hash: {existing_hash[:8]}...")
+            if existing_hash == content_hash:
                 # Update timestamps to reset log filtering for each new simulation
                 now = datetime.now(timezone.utc)
                 slot_data['last_accessed'] = now.isoformat()
                 slot_data['created_at'] = now.isoformat()
                 slot_data['created_at_millis'] = int(now.timestamp() * 1000)
+                logger.info(f"✓ Reusing slot {slot_id} with matching hash")
                 return slot_id
-        
+            else:
+                # Debug: Compare configs to see what's different
+                if pipelines and slot_data.get('pipelines'):
+                    new_config = pipelines[0].get('filter_config', '')
+                    old_config = slot_data['pipelines'][0].get('filter_config', '')
+                    if len(new_config) == len(old_config):
+                        # Same length but different hash - find first difference
+                        for i, (c1, c2) in enumerate(zip(new_config, old_config)):
+                            if c1 != c2:
+                                start = max(0, i - 50)
+                                end = min(len(new_config), i + 50)
+                                logger.warning(f"Hash mismatch at position {i}:")
+                                logger.warning(f"  Old (slot {slot_id}): ...{old_config[start:end]}...")
+                                logger.warning(f"  New: ...{new_config[start:end]}...")
+                                break
+
         # Find an empty slot
+        logger.info(f"No matching hash found, allocating new slot")
         for slot_id in range(1, NUM_SLOTS + 1):
             if slot_id not in _slots:
                 now = datetime.now(timezone.utc)
@@ -90,6 +139,7 @@ def allocate_slot(pipeline_name: str, pipelines: List[Dict[str, Any]]) -> Option
                     'pipeline_name': pipeline_name,
                     'pipelines': pipelines
                 }
+                logger.info(f"✓ Allocated new empty slot {slot_id}")
                 return slot_id
         
         # No empty slots - evict the oldest one (by created_at)

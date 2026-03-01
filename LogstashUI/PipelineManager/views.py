@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.template.loader import get_template
 from django.conf import settings
 
@@ -46,8 +46,15 @@ def PipelineEditor(request):
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
 
+        # Validate required parameters
+        if not es_id or not pipeline_name:
+            return HttpResponseBadRequest("Missing required parameters: es_id and pipeline")
 
         pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+        
+        # Handle case where pipeline couldn't be fetched
+        if not pipeline_config:
+            return HttpResponseBadRequest(f"Could not fetch pipeline '{pipeline_name}' from connection {es_id}")
 
         context['pipeline_text'] = pipeline_config['pipeline']
         
@@ -549,7 +556,17 @@ def GetPipeline(request):
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
 
-        pipeline_string = get_logstash_pipeline(es_id, pipeline_name)['pipeline']
+        # Validate required parameters
+        if not es_id or not pipeline_name:
+            return JsonResponse({"error": "Missing required parameters: es_id and pipeline"}, status=400)
+
+        pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+        
+        # Handle case where pipeline couldn't be fetched
+        if not pipeline_config:
+            return JsonResponse({"error": f"Could not fetch pipeline '{pipeline_name}' from connection {es_id}"}, status=400)
+
+        pipeline_string = pipeline_config['pipeline']
 
         return JsonResponse({"code": pipeline_string})
 

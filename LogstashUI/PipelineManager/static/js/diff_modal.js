@@ -95,30 +95,6 @@ function computeLineDiff(oldLines, newLines) {
     return changes;
 }
 
-/**
- * Render inline diff with highlighting for a specific side
- */
-function renderInlineDiff(changes, side) {
-    const escapeHtml = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
-
-    let html = '';
-    for (const change of changes) {
-        if (change.type === 'equal') {
-            html += escapeHtml(change.text);
-        } else if (change.type === 'delete' && side === 'old') {
-            html += `<span class="bg-red-500/50 font-bold">${escapeHtml(change.text)}</span>`;
-        } else if (change.type === 'insert' && side === 'new') {
-            html += `<span class="bg-green-500/50 font-bold">${escapeHtml(change.text)}</span>`;
-        }
-        // Don't render delete on new side or insert on old side
-    }
-    return html || ' ';
-}
-
 // ===== END DIFF ALGORITHMS =====
 
 // ===== QUOTE VALIDATION =====
@@ -203,12 +179,6 @@ function displayQuoteWarnings(warnings) {
         warningContainer.classList.add('hidden');
         return;
     }
-
-    const escapeHtml = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
 
     let warningHtml = `
         <div class="bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded">
@@ -492,13 +462,10 @@ async function loadDiffContent() {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
-        console.log('Fetching diff for:', { esId, pipelineName, addIds: currentAddIdsState, isTextMode });
-
         // If in Text mode, get the raw text from CodeMirror editor
         let newPipelineText = null;
         if (isTextMode && typeof codeMirrorEditor !== 'undefined' && codeMirrorEditor) {
             newPipelineText = codeMirrorEditor.getValue();
-            console.log('Using raw text from CodeMirror editor');
         }
 
         // Fetch diff from the server
@@ -522,16 +489,13 @@ async function loadDiffContent() {
             body: formData
         });
 
-        console.log('Diff response status:', diffResponse.status);
-
         if (!diffResponse.ok) {
             const errorText = await diffResponse.text();
-            console.error('Diff response error:', errorText);
+            console.error('[Diff Modal] Failed to fetch diff:', diffResponse.status, errorText);
             throw new Error(`Failed to fetch diff: ${diffResponse.status} - ${errorText}`);
         }
 
         const diffData = await diffResponse.json();
-        console.log('Diff data received:', diffData);
 
         // Store the new pipeline text for use when saving
         storedNewPipelineCode = diffData.new;
@@ -732,8 +696,6 @@ async function confirmSavePipeline() {
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
         const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
 
-        console.log('Saving pipeline:', { esId, pipelineName, isTextMode });
-
         const formData = new FormData();
         formData.append('save_pipeline', 'true');
         formData.append('es_id', esId);
@@ -743,11 +705,9 @@ async function confirmSavePipeline() {
         // Otherwise, use components (UI mode)
         if (isTextMode && storedNewPipelineCode) {
             formData.append('pipeline_config', storedNewPipelineCode);
-            console.log('Using stored pipeline text from Text mode');
         } else {
-            formData.append('components', JSON.stringify(components));
+            formData.append('components', JSON.dumps(components));
             formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
-            console.log('Using components from UI mode');
         }
 
         const saveResponse = await fetch('/ConnectionManager/SavePipeline/', {
@@ -758,13 +718,10 @@ async function confirmSavePipeline() {
             body: formData
         });
 
-        console.log('Save response status:', saveResponse.status);
-
         const responseText = await saveResponse.text();
 
         // Check if response is 403 (permission denied)
         if (saveResponse.status === 403) {
-            console.log('Permission denied (403)');
             // Manually show toast since we're using fetch API, not HTMX
             if (typeof showToast === 'function') {
                 showToast(responseText || 'Access denied: Admin role required', 'error');
@@ -787,8 +744,6 @@ async function confirmSavePipeline() {
 
             return; // Don't proceed with success flow
         }
-
-        console.log('Save response:', responseText);
 
         // Show success message
         document.getElementById('saveStatus').innerHTML = `
