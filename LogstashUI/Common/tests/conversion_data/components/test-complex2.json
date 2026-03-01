@@ -5,19 +5,11 @@
             "type": "input",
             "plugin": "comment",
             "config": {
-                "text": "\n\"LogstashUI kitchen sink\" pipeline\nGoal: be extremely feature-rich while staying within known-valid plugin options.\n"
+                "text": "\n\"LogstashUI kitchen sink\" pipeline\nGoal: be extremely feature-rich while staying within known-valid plugin options.\n\nBeats / Elastic Agent style shippers"
             }
         },
         {
-            "id": "input_comment_1",
-            "type": "input",
-            "plugin": "comment",
-            "config": {
-                "text": "Beats / Elastic Agent style shippers"
-            }
-        },
-        {
-            "id": "input_beats_2",
+            "id": "input_beats_1",
             "type": "input",
             "plugin": "beats",
             "config": {
@@ -32,7 +24,7 @@
             }
         },
         {
-            "id": "input_comment_3",
+            "id": "input_comment_2",
             "type": "input",
             "plugin": "comment",
             "config": {
@@ -40,7 +32,7 @@
             }
         },
         {
-            "id": "input_tcp_4",
+            "id": "input_tcp_3",
             "type": "input",
             "plugin": "tcp",
             "config": {
@@ -59,7 +51,7 @@
             }
         },
         {
-            "id": "input_comment_5",
+            "id": "input_comment_4",
             "type": "input",
             "plugin": "comment",
             "config": {
@@ -67,7 +59,7 @@
             }
         },
         {
-            "id": "input_udp_6",
+            "id": "input_udp_5",
             "type": "input",
             "plugin": "udp",
             "config": {
@@ -85,7 +77,7 @@
             }
         },
         {
-            "id": "input_comment_7",
+            "id": "input_comment_6",
             "type": "input",
             "plugin": "comment",
             "config": {
@@ -93,7 +85,7 @@
             }
         },
         {
-            "id": "input_http_8",
+            "id": "input_http_7",
             "type": "input",
             "plugin": "http",
             "config": {
@@ -111,7 +103,7 @@
             }
         },
         {
-            "id": "input_comment_9",
+            "id": "input_comment_8",
             "type": "input",
             "plugin": "comment",
             "config": {
@@ -119,7 +111,7 @@
             }
         },
         {
-            "id": "input_stdin_10",
+            "id": "input_stdin_9",
             "type": "input",
             "plugin": "stdin",
             "config": {
@@ -136,7 +128,7 @@
             }
         },
         {
-            "id": "input_comment_11",
+            "id": "input_comment_10",
             "type": "input",
             "plugin": "comment",
             "config": {
@@ -144,7 +136,7 @@
             }
         },
         {
-            "id": "input_generator_12",
+            "id": "input_generator_11",
             "type": "input",
             "plugin": "generator",
             "config": {
@@ -166,7 +158,7 @@
     ],
     "filter": [
         {
-            "id": "filter_comment_13",
+            "id": "filter_comment_12",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -174,7 +166,7 @@
             }
         },
         {
-            "id": "filter_mutate_14",
+            "id": "filter_mutate_13",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -186,7 +178,7 @@
             }
         },
         {
-            "id": "filter_comment_15",
+            "id": "filter_comment_14",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -194,14 +186,14 @@
             }
         },
         {
-            "id": "filter_if_16",
+            "id": "filter_if_15",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "![message] and [event][original]",
                 "plugins": [
                     {
-                        "id": "filter_mutate_17",
+                        "id": "filter_mutate_16",
                         "type": "filter",
                         "plugin": "mutate",
                         "config": {
@@ -217,7 +209,7 @@
             }
         },
         {
-            "id": "filter_comment_18",
+            "id": "filter_comment_17",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -225,14 +217,14 @@
             }
         },
         {
-            "id": "filter_if_19",
+            "id": "filter_if_18",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[message] =~ \"^[[:space:]]*\\\\{\"",
                 "plugins": [
                     {
-                        "id": "filter_json_20",
+                        "id": "filter_json_19",
                         "type": "filter",
                         "plugin": "json",
                         "config": {
@@ -245,7 +237,7 @@
                         }
                     },
                     {
-                        "id": "filter_comment_21",
+                        "id": "filter_comment_20",
                         "type": "filter",
                         "plugin": "comment",
                         "config": {
@@ -253,14 +245,14 @@
                         }
                     },
                     {
-                        "id": "filter_if_22",
+                        "id": "filter_if_21",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[json][@timestamp]",
                             "plugins": [
                                 {
-                                    "id": "filter_mutate_23",
+                                    "id": "filter_mutate_22",
                                     "type": "filter",
                                     "plugin": "mutate",
                                     "config": {
@@ -276,14 +268,14 @@
                         }
                     },
                     {
-                        "id": "filter_if_24",
+                        "id": "filter_if_23",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[json][source_ip]",
                             "plugins": [
                                 {
-                                    "id": "filter_mutate_25",
+                                    "id": "filter_mutate_24",
                                     "type": "filter",
                                     "plugin": "mutate",
                                     "config": {
@@ -299,14 +291,14 @@
                         }
                     },
                     {
-                        "id": "filter_if_26",
+                        "id": "filter_if_25",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[json][user_agent]",
                             "plugins": [
                                 {
-                                    "id": "filter_mutate_27",
+                                    "id": "filter_mutate_26",
                                     "type": "filter",
                                     "plugin": "mutate",
                                     "config": {
@@ -327,7 +319,7 @@
             }
         },
         {
-            "id": "filter_comment_28",
+            "id": "filter_comment_27",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -335,14 +327,14 @@
             }
         },
         {
-            "id": "filter_if_29",
+            "id": "filter_if_28",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "\"from_udp\" in [tags] or \"from_tcp\" in [tags]",
                 "plugins": [
                     {
-                        "id": "filter_comment_30",
+                        "id": "filter_comment_29",
                         "type": "filter",
                         "plugin": "comment",
                         "config": {
@@ -350,7 +342,7 @@
                         }
                     },
                     {
-                        "id": "filter_dissect_31",
+                        "id": "filter_dissect_30",
                         "type": "filter",
                         "plugin": "dissect",
                         "config": {
@@ -364,14 +356,14 @@
                         }
                     },
                     {
-                        "id": "filter_if_32",
+                        "id": "filter_if_31",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "\"_dissectfailure_syslogish\" in [tags]",
                             "plugins": [
                                 {
-                                    "id": "filter_grok_33",
+                                    "id": "filter_grok_32",
                                     "type": "filter",
                                     "plugin": "grok",
                                     "config": {
@@ -392,7 +384,7 @@
                         }
                     },
                     {
-                        "id": "filter_comment_34",
+                        "id": "filter_comment_33",
                         "type": "filter",
                         "plugin": "comment",
                         "config": {
@@ -400,14 +392,14 @@
                         }
                     },
                     {
-                        "id": "filter_if_35",
+                        "id": "filter_if_34",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "[syslog_timestamp]",
                             "plugins": [
                                 {
-                                    "id": "filter_date_36",
+                                    "id": "filter_date_35",
                                     "type": "filter",
                                     "plugin": "date",
                                     "config": {
@@ -433,7 +425,7 @@
             }
         },
         {
-            "id": "filter_comment_37",
+            "id": "filter_comment_36",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -441,14 +433,14 @@
             }
         },
         {
-            "id": "filter_if_38",
+            "id": "filter_if_37",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[message] =~ \"([A-Za-z0-9_.-]+)=([^\\\"]\\\\S+|\\\"[^\\\"]*\\\")\"",
                 "plugins": [
                     {
-                        "id": "filter_kv_39",
+                        "id": "filter_kv_38",
                         "type": "filter",
                         "plugin": "kv",
                         "config": {
@@ -469,7 +461,7 @@
             }
         },
         {
-            "id": "filter_comment_40",
+            "id": "filter_comment_39",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -477,7 +469,7 @@
             }
         },
         {
-            "id": "filter_mutate_41",
+            "id": "filter_mutate_40",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -494,7 +486,7 @@
             }
         },
         {
-            "id": "filter_comment_42",
+            "id": "filter_comment_41",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -502,14 +494,14 @@
             }
         },
         {
-            "id": "filter_if_43",
+            "id": "filter_if_42",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[user_agent]",
                 "plugins": [
                     {
-                        "id": "filter_useragent_44",
+                        "id": "filter_useragent_43",
                         "type": "filter",
                         "plugin": "useragent",
                         "config": {
@@ -524,7 +516,7 @@
             }
         },
         {
-            "id": "filter_comment_45",
+            "id": "filter_comment_44",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -532,14 +524,14 @@
             }
         },
         {
-            "id": "filter_if_46",
+            "id": "filter_if_45",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "![source_ip] and [source][ip]",
                 "plugins": [
                     {
-                        "id": "filter_mutate_47",
+                        "id": "filter_mutate_46",
                         "type": "filter",
                         "plugin": "mutate",
                         "config": {
@@ -555,14 +547,14 @@
             }
         },
         {
-            "id": "filter_if_48",
+            "id": "filter_if_47",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[source_ip]",
                 "plugins": [
                     {
-                        "id": "filter_comment_49",
+                        "id": "filter_comment_48",
                         "type": "filter",
                         "plugin": "comment",
                         "config": {
@@ -570,7 +562,7 @@
                         }
                     },
                     {
-                        "id": "filter_cidr_50",
+                        "id": "filter_cidr_49",
                         "type": "filter",
                         "plugin": "cidr",
                         "config": {
@@ -589,7 +581,7 @@
                         }
                     },
                     {
-                        "id": "filter_comment_51",
+                        "id": "filter_comment_50",
                         "type": "filter",
                         "plugin": "comment",
                         "config": {
@@ -597,14 +589,14 @@
                         }
                     },
                     {
-                        "id": "filter_if_52",
+                        "id": "filter_if_51",
                         "type": "filter",
                         "plugin": "if",
                         "config": {
                             "condition": "\"src_private\" not in [tags]",
                             "plugins": [
                                 {
-                                    "id": "filter_geoip_53",
+                                    "id": "filter_geoip_52",
                                     "type": "filter",
                                     "plugin": "geoip",
                                     "config": {
@@ -619,7 +611,7 @@
                         }
                     },
                     {
-                        "id": "filter_comment_54",
+                        "id": "filter_comment_53",
                         "type": "filter",
                         "plugin": "comment",
                         "config": {
@@ -627,7 +619,7 @@
                         }
                     },
                     {
-                        "id": "filter_dns_55",
+                        "id": "filter_dns_54",
                         "type": "filter",
                         "plugin": "dns",
                         "config": {
@@ -644,7 +636,7 @@
             }
         },
         {
-            "id": "filter_comment_56",
+            "id": "filter_comment_55",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -652,7 +644,7 @@
             }
         },
         {
-            "id": "filter_translate_57",
+            "id": "filter_translate_56",
             "type": "filter",
             "plugin": "translate",
             "config": {
@@ -671,7 +663,7 @@
             }
         },
         {
-            "id": "filter_mutate_58",
+            "id": "filter_mutate_57",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -682,7 +674,7 @@
             }
         },
         {
-            "id": "filter_comment_59",
+            "id": "filter_comment_58",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -690,7 +682,7 @@
             }
         },
         {
-            "id": "filter_fingerprint_60",
+            "id": "filter_fingerprint_59",
             "type": "filter",
             "plugin": "fingerprint",
             "config": {
@@ -703,7 +695,7 @@
             }
         },
         {
-            "id": "filter_comment_61",
+            "id": "filter_comment_60",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -711,14 +703,14 @@
             }
         },
         {
-            "id": "filter_if_62",
+            "id": "filter_if_61",
             "type": "filter",
             "plugin": "if",
             "config": {
                 "condition": "[syslog_program] == \"sshd\" or [message] =~ \"(?i)failed password|authentication failure|invalid user\"",
                 "plugins": [
                     {
-                        "id": "filter_mutate_63",
+                        "id": "filter_mutate_62",
                         "type": "filter",
                         "plugin": "mutate",
                         "config": {
@@ -737,7 +729,7 @@
                         "condition": "[message] =~ \"(?i)GET\\\\s+/health|/ready|/live\"",
                         "plugins": [
                             {
-                                "id": "filter_mutate_64",
+                                "id": "filter_mutate_63",
                                 "type": "filter",
                                 "plugin": "mutate",
                                 "config": {
@@ -756,7 +748,7 @@
                 "else": {
                     "plugins": [
                         {
-                            "id": "filter_mutate_65",
+                            "id": "filter_mutate_64",
                             "type": "filter",
                             "plugin": "mutate",
                             "config": {
@@ -771,7 +763,7 @@
             }
         },
         {
-            "id": "filter_comment_66",
+            "id": "filter_comment_65",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -779,7 +771,7 @@
             }
         },
         {
-            "id": "filter_prune_67",
+            "id": "filter_prune_66",
             "type": "filter",
             "plugin": "prune",
             "config": {
@@ -804,7 +796,7 @@
     ],
     "output": [
         {
-            "id": "output_comment_68",
+            "id": "output_comment_67",
             "type": "output",
             "plugin": "comment",
             "config": {
@@ -812,7 +804,7 @@
             }
         },
         {
-            "id": "output_stdout_69",
+            "id": "output_stdout_68",
             "type": "output",
             "plugin": "stdout",
             "config": {
@@ -825,7 +817,7 @@
             }
         },
         {
-            "id": "output_comment_70",
+            "id": "output_comment_69",
             "type": "output",
             "plugin": "comment",
             "config": {
@@ -833,7 +825,7 @@
             }
         },
         {
-            "id": "output_file_71",
+            "id": "output_file_70",
             "type": "output",
             "plugin": "file",
             "config": {
@@ -845,7 +837,7 @@
             }
         },
         {
-            "id": "output_comment_72",
+            "id": "output_comment_71",
             "type": "output",
             "plugin": "comment",
             "config": {
@@ -853,7 +845,7 @@
             }
         },
         {
-            "id": "output_elasticsearch_73",
+            "id": "output_elasticsearch_72",
             "type": "output",
             "plugin": "elasticsearch",
             "config": {
@@ -866,7 +858,7 @@
             }
         },
         {
-            "id": "output_comment_74",
+            "id": "output_comment_73",
             "type": "output",
             "plugin": "comment",
             "config": {
@@ -874,7 +866,7 @@
             }
         },
         {
-            "id": "output_http_75",
+            "id": "output_http_74",
             "type": "output",
             "plugin": "http",
             "config": {
@@ -885,7 +877,7 @@
             }
         },
         {
-            "id": "output_comment_76",
+            "id": "output_comment_75",
             "type": "output",
             "plugin": "comment",
             "config": {
@@ -893,7 +885,7 @@
             }
         },
         {
-            "id": "output_kafka_77",
+            "id": "output_kafka_76",
             "type": "output",
             "plugin": "kafka",
             "config": {
@@ -903,7 +895,7 @@
             }
         },
         {
-            "id": "output_comment_78",
+            "id": "output_comment_77",
             "type": "output",
             "plugin": "comment",
             "config": {
@@ -911,7 +903,7 @@
             }
         },
         {
-            "id": "output_pipeline_79",
+            "id": "output_pipeline_78",
             "type": "output",
             "plugin": "pipeline",
             "config": {

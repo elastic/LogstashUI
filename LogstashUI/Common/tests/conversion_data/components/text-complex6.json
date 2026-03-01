@@ -57,7 +57,7 @@
                 "ssl_verify": "true",
                 "codec": {
                     "json": {
-                        "delimiter": "\n\t\t"
+                        "delimiter": "\n"
                     }
                 },
                 "tags": [

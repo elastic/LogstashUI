@@ -344,7 +344,7 @@
                                                 "type": "filter",
                                                 "plugin": "ruby",
                                                 "config": {
-                                                    "code": "\n\t\t\t\t            bytes = event.get(\"bytes\").to_i\n\t\t\t\t            if bytes > 10485760\n\t\t\t\t              event.set(\"size_class\", \"large\")\n\t\t\t\t            elsif bytes > 1048576\n\t\t\t\t              event.set(\"size_class\", \"medium\")\n\t\t\t\t            else\n\t\t\t\t              event.set(\"size_class\", \"small\")\n\t\t\t\t            end\n\t\t\t\t          "
+                                                    "code": "\n            bytes = event.get(\"bytes\").to_i\n            if bytes > 10485760\n              event.set(\"size_class\", \"large\")\n            elsif bytes > 1048576\n              event.set(\"size_class\", \"medium\")\n            else\n              event.set(\"size_class\", \"small\")\n            end\n          "
                                                 }
                                             },
                                             {
@@ -436,7 +436,7 @@
                                                                     "type": "filter",
                                                                     "plugin": "ruby",
                                                                     "config": {
-                                                                        "code": "\n\t\t\t\t\t              exc = event.get(\"[app][exception]\")\n\t\t\t\t\t              if exc.is_a?(Hash)\n\t\t\t\t\t                event.set(\"exception_class\", exc[\"class\"])\n\t\t\t\t\t                event.set(\"exception_msg\", exc[\"message\"])\n\t\t\t\t\t              end\n\t\t\t\t\t            "
+                                                                        "code": "\n              exc = event.get(\"[app][exception]\")\n              if exc.is_a?(Hash)\n                event.set(\"exception_class\", exc[\"class\"])\n                event.set(\"exception_msg\", exc[\"message\"])\n              end\n            "
                                                                     }
                                                                 }
                                                             ],
@@ -467,7 +467,7 @@
                                                         "type": "filter",
                                                         "plugin": "ruby",
                                                         "config": {
-                                                            "code": "\n\t\t\t\t            cpu = event.get(\"[system][cpu]\")\n\t\t\t\t            if cpu && cpu[\"cores\"]\n\t\t\t\t              total = 0.0\n\t\t\t\t              cpu[\"cores\"].each { |c| total += c[\"user\"][\"pct\"].to_f if c[\"user\"] }\n\t\t\t\t              avg = total / cpu[\"cores\"].length\n\t\t\t\t              event.set(\"[system][cpu][avg_pct]\", avg.round(2))\n\t\t\t\t              event.tag(\"cpu_warning\") if avg > 75\n\t\t\t\t              event.tag(\"cpu_critical\") if avg > 90\n\t\t\t\t            end\n\t\t\t\t          "
+                                                            "code": "\n            cpu = event.get(\"[system][cpu]\")\n            if cpu && cpu[\"cores\"]\n              total = 0.0\n              cpu[\"cores\"].each { |c| total += c[\"user\"][\"pct\"].to_f if c[\"user\"] }\n              avg = total / cpu[\"cores\"].length\n              event.set(\"[system][cpu][avg_pct]\", avg.round(2))\n              event.tag(\"cpu_warning\") if avg > 75\n              event.tag(\"cpu_critical\") if avg > 90\n            end\n          "
                                                         }
                                                     }
                                                 ],
@@ -487,7 +487,7 @@
                                                         "type": "filter",
                                                         "plugin": "ruby",
                                                         "config": {
-                                                            "code": "\n\t\t\t\t            pct = event.get(\"[system][memory][actual][used][pct]\").to_f * 100\n\t\t\t\t            event.set(\"mem_used_pct\", pct.round(2))\n\t\t\t\t            event.tag(\"memory_warning\") if pct > 85\n\t\t\t\t            event.tag(\"memory_critical\") if pct > 95\n\t\t\t\t          "
+                                                            "code": "\n            pct = event.get(\"[system][memory][actual][used][pct]\").to_f * 100\n            event.set(\"mem_used_pct\", pct.round(2))\n            event.tag(\"memory_warning\") if pct > 85\n            event.tag(\"memory_critical\") if pct > 95\n          "
                                                         }
                                                     }
                                                 ],
@@ -652,7 +652,7 @@
                                             "type": "filter",
                                             "plugin": "ruby",
                                             "config": {
-                                                "code": "\n\t\t\t          score = event.get(\"threat_score\").to_i\n\t\t\t          is_ext = event.get(\"tags\").include?(\"internal_ip\") ? 0 : 20\n\t\t\t          composite = score + is_ext\n\t\t\t          event.set(\"composite_risk\", [composite, 100].min)\n\n\t\t\t          if composite >= 100\n\t\t\t            event.set(\"risk\", \"critical\")\n\t\t\t          elsif composite >= 80\n\t\t\t            event.set(\"risk\", \"high\")\n\t\t\t          elsif composite >= 60\n\t\t\t            event.set(\"risk\", \"medium\")\n\t\t\t          else\n\t\t\t            event.set(\"risk\", \"low\")\n\t\t\t          end\n\t\t\t        "
+                                                "code": "\n          score = event.get(\"threat_score\").to_i\n          is_ext = event.get(\"tags\").include?(\"internal_ip\") ? 0 : 20\n          composite = score + is_ext\n          event.set(\"composite_risk\", [composite, 100].min)\n\t\t\t\t\t\t\n          if composite >= 100\n            event.set(\"risk\", \"critical\")\n          elsif composite >= 80\n            event.set(\"risk\", \"high\")\n          elsif composite >= 60\n            event.set(\"risk\", \"medium\")\n          else\n            event.set(\"risk\", \"low\")\n          end\n        "
                                             }
                                         }
                                     ],
@@ -682,7 +682,7 @@
                                                                 "type": "filter",
                                                                 "plugin": "ruby",
                                                                 "config": {
-                                                                    "code": "\n\t\t\t\t            val = event.get(\"value\").to_f\n\t\t\t\t            if val > 5000\n\t\t\t\t              event.set(\"perf_status\", \"critical\")\n\t\t\t\t            elsif val > 2000\n\t\t\t\t              event.set(\"perf_status\", \"slow\")\n\t\t\t\t            else\n\t\t\t\t              event.set(\"perf_status\", \"normal\")\n\t\t\t\t            end\n\t\t\t\t          "
+                                                                    "code": "\n            val = event.get(\"value\").to_f\n            if val > 5000\n              event.set(\"perf_status\", \"critical\")\n            elsif val > 2000\n              event.set(\"perf_status\", \"slow\")\n            else\n              event.set(\"perf_status\", \"normal\")\n            end\n          "
                                                                 }
                                                             }
                                                         ],
@@ -696,7 +696,7 @@
                                                     "plugin": "aggregate",
                                                     "config": {
                                                         "task_id": "%{service}_%{name}",
-                                                        "code": "\n\t\t\t          map[\"count\"] ||= 0\n\t\t\t          map[\"sum\"] ||= 0.0\n\t\t\t          map[\"min\"] ||= Float::INFINITY\n\t\t\t          map[\"max\"] ||= -Float::INFINITY\n\n\t\t\t          val = event.get(\"value\").to_f\n\t\t\t          map[\"count\"] += 1\n\t\t\t          map[\"sum\"] += val\n\t\t\t          map[\"min\"] = [map[\"min\"], val].min\n\t\t\t          map[\"max\"] = [map[\"max\"], val].max\n\n\t\t\t          avg = map[\"sum\"] / map[\"count\"]\n\t\t\t          event.set(\"rolling_avg\", avg.round(2))\n\t\t\t          event.set(\"rolling_min\", map[\"min\"])\n\t\t\t          event.set(\"rolling_max\", map[\"max\"])\n\t\t\t        ",
+                                                        "code": "\n          map[\"count\"] ||= 0\n          map[\"sum\"] ||= 0.0\n          map[\"min\"] ||= Float::INFINITY\n          map[\"max\"] ||= -Float::INFINITY\n\t\t\t\t\t\t\n          val = event.get(\"value\").to_f\n          map[\"count\"] += 1\n          map[\"sum\"] += val\n          map[\"min\"] = [map[\"min\"], val].min\n          map[\"max\"] = [map[\"max\"], val].max\n\t\t\t\t\t\t\n          avg = map[\"sum\"] / map[\"count\"]\n          event.set(\"rolling_avg\", avg.round(2))\n          event.set(\"rolling_min\", map[\"min\"])\n          event.set(\"rolling_max\", map[\"max\"])\n        ",
                                                         "timeout": "300"
                                                     }
                                                 }
@@ -838,7 +838,7 @@
                                             "plugin": "ruby",
                                             "config": {
                                                 "init": "require \"openssl\"",
-                                                "code": "\n\t\t\t          sig = event.get(\"[headers][x-signature]\")\n\t\t\t          payload = event.get(\"message\").to_s\n\t\t\t          secret = ENV[\"WEBHOOK_SECRET\"]\n\t\t\t          expected = \"sha256=\" + OpenSSL::HMAC.hexdigest(\"SHA256\", secret, payload)\n\n\t\t\t          if sig == expected\n\t\t\t            event.set(\"sig_valid\", true)\n\t\t\t          else\n\t\t\t            event.set(\"sig_valid\", false)\n\t\t\t            event.tag(\"invalid_signature\")\n\t\t\t          end\n\t\t\t        "
+                                                "code": "\n          sig = event.get(\"[headers][x-signature]\")\n          payload = event.get(\"message\").to_s\n          secret = ENV[\"WEBHOOK_SECRET\"]\n          expected = \"sha256=\" + OpenSSL::HMAC.hexdigest(\"SHA256\", secret, payload)\n\t\t\t\t\t\t\n          if sig == expected\n            event.set(\"sig_valid\", true)\n          else\n            event.set(\"sig_valid\", false)\n            event.tag(\"invalid_signature\")\n          end\n        "
                                             }
                                         }
                                     ],
@@ -852,7 +852,7 @@
                                 "plugin": "aggregate",
                                 "config": {
                                     "task_id": "%{[headers][x-forwarded-for]}",
-                                    "code": "\n\t\t        map[\"count\"] ||= 0\n\t\t        map[\"count\"] += 1\n\t\t        event.set(\"request_count\", map[\"count\"])\n\t\t      ",
+                                    "code": "\n        map[\"count\"] ||= 0\n        map[\"count\"] += 1\n        event.set(\"request_count\", map[\"count\"])\n      ",
                                     "timeout": "60"
                                 }
                             },
@@ -1128,7 +1128,7 @@
             "type": "filter",
             "plugin": "ruby",
             "config": {
-                "code": "\n\t      event.set(\"processed_at\", Time.now.utc.iso8601)\n\t      event.set(\"pipeline_v\", \"2.0\")\n\t    "
+                "code": "\n      event.set(\"processed_at\", Time.now.utc.iso8601)\n      event.set(\"pipeline_v\", \"2.0\")\n    "
             }
         }
     ],

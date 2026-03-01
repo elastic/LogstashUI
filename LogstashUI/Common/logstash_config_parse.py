@@ -107,8 +107,32 @@ class LogstashTransformer(Transformer):
     
     def multiline_string(self, s):
         # Remove quotes and unescape the content
-        # Don't strip or normalize - preserve original formatting
-        return self._unescape_string(s[0][1:-1])
+        raw_value = self._unescape_string(s[0][1:-1])
+        
+        # For multi-line strings, strip file indentation (tabs) from each line after the first
+        # When ComponentToPipeline writes single-quoted strings across multiple lines,
+        # each line picks up the file's indentation context (tabs from the f-string).
+        # We need to remove these file-context tabs while preserving intentional indentation.
+        lines = raw_value.split('\n')
+        if len(lines) > 1:
+            # Find the common leading tabs on lines after the first (file indentation)
+            # Count leading tabs on the second line (first line after opening quote)
+            if len(lines) > 1 and lines[1]:
+                # Count leading tabs (file indentation)
+                file_indent_tabs = len(lines[1]) - len(lines[1].lstrip('\t'))
+                
+                # Remove file indentation tabs from all lines after the first
+                normalized_lines = [lines[0]]
+                for line in lines[1:]:
+                    # Remove the file indentation tabs, but keep any additional indentation
+                    if line.startswith('\t' * file_indent_tabs):
+                        normalized_lines.append(line[file_indent_tabs:])
+                    else:
+                        # Line doesn't have expected file indentation, keep as-is
+                        normalized_lines.append(line)
+                return '\n'.join(normalized_lines)
+        
+        return raw_value
     
     def string(self, s):
         # Remove quotes and unescape the content
@@ -674,14 +698,13 @@ class ComponentToPipeline:
         if not isinstance(value, str):
             return value
         
-        # For multiline strings (like Ruby code), prefer single quotes to avoid escaping issues
-        # Multiline strings with escaped quotes can cause parsing issues in Logstash
-        if '\n' in value and '"' in value:
-            # Multiline with double quotes - use single quotes if possible
+        # For multiline strings (like Ruby code), use single quotes to preserve literal newlines/tabs
+        # Single quotes in Logstash don't interpret escape sequences, so \n stays as actual newline
+        if '\n' in value:
+            # Multiline with newlines - use single quotes if possible
             if "'" not in value:
                 return f"'{value}'"
-            # Has both quotes - escape single quotes and use single quotes
-            # This is safer for multiline Ruby code than escaping double quotes
+            # Has single quotes - escape them and use single quotes
             escaped_value = value.replace("'", "\\'")
             return f"'{escaped_value}'"
         
@@ -694,33 +717,21 @@ class ComponentToPipeline:
             return f'"{value}"'
         
         # If string contains both or neither, use double quotes and escape double quotes
-        # Also handle backslashes and special characters properly
+        # Also handle backslashes properly
         result = []
         i = 0
         while i < len(value):
             if value[i] == '"':
                 result.append('\\"')
                 i += 1
-            elif value[i] == '\n':
-                # Escape actual newline character as \n
-                result.append('\\n')
-                i += 1
-            elif value[i] == '\t':
-                # Escape actual tab character as \t
-                result.append('\\t')
-                i += 1
-            elif value[i] == '\r':
-                # Escape actual carriage return as \r
-                result.append('\\r')
-                i += 1
             elif value[i] == '\\' and i + 1 < len(value):
                 next_char = value[i + 1]
                 # Only escape backslash if it's followed by a char that creates an escape sequence
-                # in double-quoted strings: \n, \t, \r, \", \\
-                if next_char in ['n', 't', 'r', '"', '\\']:
+                # in double-quoted strings: \", \\
+                if next_char in ['"', '\\']:
                     result.append('\\\\')
                 else:
-                    # Keep backslash as-is for patterns like \[, \], \d, etc.
+                    # Keep backslash as-is for patterns like \[, \], \d, \s, etc.
                     result.append('\\')
                 i += 1
             else:
@@ -750,7 +761,8 @@ class ComponentToPipeline:
                     formatted_value = self._format_string_value(plugin_config_value)
                     config += f'\t{plugin_config_name} => {formatted_value}\n'
                 else:
-                    config += f'\t{plugin_config_name} => "{plugin_config_value}"\n'
+                    # Write numeric values without quotes to preserve their type
+                    config += f'\t{plugin_config_name} => {plugin_config_value}\n'
 
             elif type(plugin_config_value) is dict and plugin_config_name == "codec":
                 # Special handling for codec: {"codec_name": {config}}
@@ -910,7 +922,7 @@ class ComponentToPipeline:
                 comment_text = plugin['config'].get('text', '')
                 comment_lines = comment_text.split('\n')
                 for line in comment_lines:
-                    config += f"\t#{line}\n"
+                    config += f"\t# {line}\n"
             elif plugin['plugin'] == 'if':
                 config += self._add_tab_level(self._extract_condition_values(plugin, section))
             else:
@@ -927,7 +939,7 @@ class ComponentToPipeline:
                         comment_text = nested_plugin['config'].get('text', '')
                         comment_lines = comment_text.split('\n')
                         for line in comment_lines:
-                            config += f"\t#{line}\n"
+                            config += f"\t# {line}\n"
                     elif nested_plugin['plugin'] == 'if':
                         config += self._add_tab_level(self._extract_condition_values(nested_plugin, section))
                     else:
@@ -944,7 +956,7 @@ class ComponentToPipeline:
                     comment_text = plugin['config'].get('text', '')
                     comment_lines = comment_text.split('\n')
                     for line in comment_lines:
-                        config += f"\t#{line}\n"
+                        config += f"\t# {line}\n"
                 elif plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
@@ -986,10 +998,10 @@ class ComponentToPipeline:
                 if plugin['plugin'] == 'comment':
                     # Convert comment plugin back to comment lines
                     comment_text = plugin['config'].get('text', '')
-                    # Split by newlines and prefix each line with #
+                    # Split by newlines and prefix each line with # (with space)
                     comment_lines = comment_text.split('\n')
                     for line in comment_lines:
-                        config += f"\t#{line}\n"
+                        config += f"\t# {line}\n"
                 elif plugin['plugin'] == 'if':
                     config += self._add_tab_level(self._extract_condition_values(plugin, section))
                 else:
