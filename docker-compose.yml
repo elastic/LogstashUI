@@ -1,10 +1,10 @@
 services:
   logstashui:
-    image: codyjackson032/logstashui:latest
+    #image: codyjackson032/logstashui:latest
     # Uncomment below to build locally instead of pulling from Docker Hub
-    #build:
-    #  context: ./LogstashUI
-    #  dockerfile: Dockerfile
+    build:
+      context: ./LogstashUI
+      dockerfile: Dockerfile
     expose:
       - "8080"
     volumes:
@@ -25,15 +25,14 @@ services:
       - logstashui_network
 
   logstashagent:
-    image: codyjackson032/logstashagent:latest
+    #image: codyjackson032/logstashagent:latest
     # Uncomment below to build locally instead of pulling from Docker Hub
-    #build:
-    #  context: ./LogstashAgent
-    #  dockerfile: Dockerfile
+    build:
+      context: ./LogstashAgent
+      dockerfile: Dockerfile
     ports:
       - "9600:9600"  # Logstash API
       - "9449:9449"  # Logstash HTTP input (for sample events)
-      - "8082:8082"  # HTTP input for simulation pipelines
     expose:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
     environment:

@@ -45,8 +45,7 @@ FASTAPI_PID=$!
 echo "=========================================="
 echo "  LogstashAgent is ready!"
 echo "  - Logstash API: http://localhost:9600"
-echo "  - Logstash HTTP Input: http://localhost:9449"
-echo "  - Simulation HTTP Input: http://localhost:8082"
+echo "  - Simulation HTTP Input: http://localhost:9449"
 echo "  - FastAPI Sidecar: http://localhost:9500"
 echo "=========================================="
 

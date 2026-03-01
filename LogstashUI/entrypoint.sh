@@ -24,6 +24,7 @@ echo ""
 echo "=========================================="
 echo ""
 
+exec "$@"
 # Start the application with suppressed startup messages
 # Redirect Django's startup output to /dev/null but keep error output
-exec "$@" 2>&1 | grep -v "Starting development server" | grep -v "Quit the server" | grep -v "http://0.0.0.0:8080"
+#exec "$@" 2>&1 | grep -v "Starting development server" | grep -v "Quit the server" | grep -v "http://0.0.0.0:8080"

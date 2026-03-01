@@ -436,7 +436,7 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
         # If log_text is provided, send it through the pipeline
         if log_text:
             # Send the user's log input via LogstashAgent's simulate endpoint
-            # This proxies the request to the local Logstash HTTP input on port 8082
+            # This proxies the request to the local Logstash HTTP input on port 9449
             simulation_input_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/simulate"
             try:
                 # Parse log_text as JSON if it looks like JSON, otherwise send as message field

@@ -1,15 +1,16 @@
 # LogstashUI
 
-A web-based UI for managing and monitoring Logstash pipelines.
+The ultimate control plane for Logstash
 
-> ⚠️ **Alpha Release** - This project is in active development. Features may change and bugs are expected.
+> ⚠️ **Beta Release** - This project is in active development. Features may change and bugs are expected.
 
 ## Features
 
-- **Pipeline Management** - View and manage Logstash pipeline configurations (Centralized pipeline management required, for now)
+- **Pipeline Management** - View and manage Logstash pipeline configurations with a robust AI or text editor
 - **Real-time Monitoring** - Monitor pipeline metrics and performance
 - **Connection Manager** - Manage multiple Logstash instances in one UI
-- **Log Viewing** - View and filter Logstash logs
+- **Simulate pipelines** - Find issues before you deploy into production
+- **SNMP** - Implement polling, traps, and discovery using a UI
 
 ## Requirements
 
@@ -18,6 +19,7 @@ A web-based UI for managing and monitoring Logstash pipelines.
 - Python 3.10+
 - Node.js & npm (for Tailwind CSS)
 - Elasticsearch
+- Docker
 
 **OR** just use Docker Compose (see Quick Start below)
 
@@ -52,7 +54,6 @@ docker compose up --build
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. As long as the data is being indexed to one of your existing Elasticsearch connections, you'll see metrics and logs like this!
 <img width="1570" height="876" alt="image" src="https://github.com/user-attachments/assets/01f402ca-0a88-4eb0-a8b3-b6fba15fcba5" />
 
-
 ## Updating
 
 LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
@@ -73,13 +74,11 @@ docker-compose up -d
 Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
 
 ## Coming soon!
-- Re-implementation of the 'simulate' feature, which will allow the user to input a JSON and see how it gets transformed by each filter plugin
 - Reusable grok and regex patterns
 - Git backups for configuration
 - Loggy AI Assistant
-- Text editor for pipelines
-- Management of Logstash Nodes via SSH
-- Keychain management - JKS Management
+- Management of Logstash Nodes via external agent
+- JKS Keystore management
 
 ## Reporting Issues
 
@@ -87,6 +86,6 @@ Found a bug or have a feature request? [Open an issue](https://github.com/elasti
 
 ## License
 
-Copyright 2024–2025 Elasticsearch and contributors.
+Copyright 2024–2026 Elasticsearch and contributors.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

@@ -275,7 +275,7 @@ async def root():
 async def simulate_log(request: Request):
     """
     Proxy endpoint for simulation log input.
-    Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 8082.
+    Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 9449.
     
     This allows LogstashUI to send simulation logs over HTTPS (via nginx) while
     Logstash's HTTP input plugin only accepts HTTP on localhost.
@@ -284,9 +284,9 @@ async def simulate_log(request: Request):
         # Get the JSON body from the request
         log_data = await request.json()
         
-        # Forward to local Logstash HTTP input on port 8082
+        # Forward to local Logstash HTTP input on port 9449
         response = requests.post(
-            "http://127.0.0.1:8082",
+            "http://127.0.0.1:9449",
             json=log_data,
             timeout=10
         )
