@@ -11,10 +11,6 @@ import logging
 
 # Configure logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s [Slots] %(levelname)s: %(message)s'))
-logger.addHandler(handler)
 
 # Number of simulation slots available
 NUM_SLOTS = 10
@@ -121,25 +117,7 @@ def allocate_slot(pipeline_name: str, pipelines: List[Dict[str, Any]]) -> Option
         logger.info(f"Evicting slot {slot_id_to_cleanup}, cleaning up old pipelines")
         _delete_slot_pipelines(slot_id_to_cleanup, old_slot_data_to_cleanup)
     
-    return oldest_slot_id if old_slot_data_to_cleanup else slot_id
-
-
-def get_slot(slot_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Get the data for a specific slot.
-    
-    Args:
-        slot_id: Slot ID (1-10)
-        
-    Returns:
-        Slot data or None if slot doesn't exist
-    """
-    with _slots_lock:
-        slot_data = _slots.get(slot_id)
-        if slot_data:
-            # Update last accessed time
-            slot_data['last_accessed'] = datetime.now(timezone.utc).isoformat()
-        return slot_data.copy() if slot_data else None
+    return oldest_slot_id
 
 
 def release_slot(slot_id: int) -> bool:
@@ -402,7 +380,7 @@ def _load_config() -> Dict[str, Any]:
     config_path = os.path.join(os.path.dirname(__file__), 'logstashagent.yml')
     
     if not os.path.exists(config_path):
-        print(f"[Slots] Config file not found at {config_path}, using defaults")
+        logger.warning(f"[Slots] Config file not found at {config_path}, using defaults")
         return {}
     
     try:
@@ -410,7 +388,7 @@ def _load_config() -> Dict[str, Any]:
             config = yaml.safe_load(f)
             return config if config else {}
     except Exception as e:
-        print(f"[Slots] Error loading config: {e}, using defaults")
+        logger.error(f"[Slots] Error loading config: {e}, using defaults")
         return {}
 
 
@@ -421,6 +399,6 @@ _mode = _config.get('mode', '').lower()
 if _mode == 'simulation':
     _cleanup_thread = Thread(target=_background_cleanup_worker, daemon=True, name="SlotCleanupThread")
     _cleanup_thread.start()
-    print("[Slots] Started background cleanup thread (mode: simulation)")
+    logger.info("[Slots] Started background cleanup thread (mode: simulation)")
 else:
-    print(f"[Slots] Background cleanup thread NOT started (mode: {_mode or 'not set'})")
+    logger.warning(f"[Slots] Background cleanup thread NOT started (mode: {_mode or 'not set'})")

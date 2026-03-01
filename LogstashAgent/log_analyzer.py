@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Default log directory
@@ -343,51 +342,3 @@ def is_pipeline_running(pipeline_id: str, log_dir: str = LOG_DIR) -> bool:
         return False
     
     return pipeline_id in status.get('running_pipelines', [])
-
-
-def get_pipeline_errors(pipeline_id: str, log_dir: str = LOG_DIR,
-                       max_entries: int = 50,
-                       min_timestamp: Optional[int] = None) -> List[Dict[str, Any]]:
-    """
-    Get only ERROR and FATAL level logs for a specific pipeline.
-
-    Args:
-        pipeline_id: The pipeline ID to search for
-        log_dir: Directory containing log files
-        max_entries: Maximum number of errors to return
-        min_timestamp: Optional minimum timestamp in milliseconds. Only logs at or after this time will be included.
-
-    Returns:
-        List of error log entries for the pipeline
-    """
-    return find_related_logs(
-        pipeline_id=pipeline_id,
-        log_dir=log_dir,
-        max_entries=max_entries,
-        min_level="ERROR",
-        min_timestamp=min_timestamp
-    )
-
-
-def get_pipeline_warnings(pipeline_id: str, log_dir: str = LOG_DIR,
-                         max_entries: int = 50,
-                         min_timestamp: Optional[int] = None) -> List[Dict[str, Any]]:
-    """
-    Get WARNING, ERROR, and FATAL level logs for a specific pipeline.
-
-    Args:
-        pipeline_id: The pipeline ID to search for
-        log_dir: Directory containing log files
-        max_entries: Maximum number of warnings to return
-        min_timestamp: Optional minimum timestamp in milliseconds. Only logs at or after this time will be included.
-
-    Returns:
-        List of warning/error log entries for the pipeline
-    """
-    return find_related_logs(
-        pipeline_id=pipeline_id,
-        log_dir=log_dir,
-        max_entries=max_entries,
-        min_level="WARN",
-        min_timestamp=min_timestamp
-    )

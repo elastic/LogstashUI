@@ -7,11 +7,12 @@ import yaml
 import json
 import glob
 import logging
-import logging.handlers
-from pathlib import Path as PathLib
+import re
 import slots
 import log_analyzer
 import requests
+import time
+import base64
 
 # Configure logging
 logging.basicConfig(
@@ -33,6 +34,39 @@ os.makedirs(PIPELINES_DIR, exist_ok=True)
 os.makedirs(METADATA_DIR, exist_ok=True)
 
 
+def _validate_pipeline_id(pipeline_id: str) -> None:
+    """
+    Validate pipeline_id to prevent path traversal attacks.
+    
+    Args:
+        pipeline_id: The pipeline ID to validate
+        
+    Raises:
+        HTTPException: If pipeline_id contains unsafe characters
+    """
+    # Allow only alphanumeric, hyphens, underscores, and dots
+    # This prevents path traversal with ../ or absolute paths
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', pipeline_id):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid pipeline_id: must contain only alphanumeric characters, hyphens, underscores, and dots"
+        )
+    
+    # Additional check: prevent .. sequences even if they pass regex
+    if '..' in pipeline_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid pipeline_id: cannot contain '..' sequences"
+        )
+    
+    # Prevent starting with dot (hidden files) or hyphen
+    if pipeline_id.startswith('.') or pipeline_id.startswith('-'):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid pipeline_id: cannot start with '.' or '-'"
+        )
+
+
 def _load_pipelines_yml() -> list:
     """Load the pipelines.yml file"""
     if not os.path.exists(PIPELINES_YML_PATH):
@@ -47,7 +81,7 @@ def _load_pipelines_yml() -> list:
             pipelines = yaml.safe_load(content)
             return pipelines if pipelines else []
     except Exception as e:
-        print(f"Error loading pipelines.yml: {e}")
+        logger.error(f"Error loading pipelines.yml: {e}")
         return []
 
 
@@ -76,6 +110,8 @@ def delete_pipeline_internal(pipeline_id: str) -> bool:
         True if deleted successfully, False if not found or error occurred
     """
     try:
+        _validate_pipeline_id(pipeline_id)
+        
         # Load existing pipelines
         pipelines = _load_pipelines_yml()
         
@@ -147,7 +183,7 @@ def _load_pipeline_config(pipeline_id: str) -> Optional[str]:
                         with open(file_path, 'r') as f:
                             config_parts.append(f.read())
                     except Exception as e:
-                        print(f"Error reading {file_path}: {e}")
+                        logger.error(f"Error reading {file_path}: {e}")
                         continue
                 
                 return '\n'.join(config_parts) if config_parts else None
@@ -161,13 +197,17 @@ def _load_pipeline_config(pipeline_id: str) -> Optional[str]:
 
 def _load_pipeline_metadata(pipeline_id: str) -> Dict[str, Any]:
     """Load pipeline metadata (description, settings, etc.)"""
+    _validate_pipeline_id(pipeline_id)
     metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
     
     if os.path.exists(metadata_path):
-        with open(metadata_path, 'r') as f:
-            return json.load(f)
+        try:
+            with open(metadata_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading metadata for pipeline '{pipeline_id}': {e}")
     
-    # Return default metadata if file doesn't exist
+    # Return default metadata if file doesn't exist or failed to load
     return {
         "description": "",
         "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
@@ -189,6 +229,7 @@ def _load_pipeline_metadata(pipeline_id: str) -> Dict[str, Any]:
 
 def _save_pipeline_metadata(pipeline_id: str, metadata: Dict[str, Any]):
     """Save pipeline metadata"""
+    _validate_pipeline_id(pipeline_id)
     metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
     temp_path = f"{metadata_path}.tmp"
     
@@ -204,6 +245,7 @@ def _save_pipeline_metadata(pipeline_id: str, metadata: Dict[str, Any]):
 
 def _get_pipeline_settings_from_yml(pipeline_id: str) -> Dict[str, Any]:
     """Extract pipeline settings from pipelines.yml"""
+    _validate_pipeline_id(pipeline_id)
     pipelines = _load_pipelines_yml()
     settings = {}
     
@@ -312,6 +354,8 @@ async def list_pipelines():
 @app.get("/_logstash/pipeline/{pipeline_id}")
 async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
     """Get a specific pipeline (mimics Elasticsearch API)"""
+    _validate_pipeline_id(pipeline_id)
+    
     # Load pipeline config
     config = _load_pipeline_config(pipeline_id)
     if config is None:
@@ -347,6 +391,8 @@ async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
 @app.put("/_logstash/pipeline/{pipeline_id}")
 async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
     """Create or update a pipeline (mimics Elasticsearch API)"""
+    _validate_pipeline_id(pipeline_id)
+    
     pipeline_config = body.get('pipeline')
     if not pipeline_config:
         raise HTTPException(status_code=400, detail="Missing 'pipeline' field in request body")
@@ -422,6 +468,8 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
 @app.delete("/_logstash/pipeline/{pipeline_id}")
 async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
     """Delete a pipeline (mimics Elasticsearch API)"""
+    _validate_pipeline_id(pipeline_id)
+    
     # Load existing pipelines
     pipelines = _load_pipelines_yml()
     
@@ -597,7 +645,6 @@ output {{
     
     # Verify all slot pipelines loaded successfully
     # Uses adaptive timing based on pipeline count (default: 20 retries, 2s delay)
-    import time
     verify_start = time.time()
     verification_success = await slots.verify_slot_pipelines_loaded(
         slot_id, 
@@ -668,6 +715,8 @@ async def get_pipeline_logs(
         - log_count: Number of log entries found
         - logs: List of log entries with full context
     """
+    _validate_pipeline_id(pipeline_id)
+    
     try:
         # Fetch logs using log_analyzer
         logs = log_analyzer.find_related_logs(
@@ -761,7 +810,6 @@ async def write_file(request: Request):
         file_path = os.path.join(uploaded_dir, safe_filename)
         
         # Decode base64 content and write file
-        import base64
         logger.info(f"Received content length: {len(content)} characters")
         file_content = base64.b64decode(content)
         logger.info(f"Decoded to {len(file_content)} bytes")

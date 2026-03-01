@@ -39,7 +39,7 @@ sleep 5
 # Start FastAPI sidecar
 echo "Starting FastAPI sidecar on port 9500..."
 cd /app
-exec uvicorn main:app --host 0.0.0.0 --port 9500 &
+uvicorn main:app --host 0.0.0.0 --port 9500 &
 FASTAPI_PID=$!
 
 echo "=========================================="

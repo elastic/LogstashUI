@@ -1,7 +1,10 @@
 import pytest
 import os
 import re
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @pytest.mark.django_db
 class TestGrokPatternsFile:
@@ -111,4 +114,4 @@ class TestGrokPatternsFile:
         
         # This is a soft check - we'll warn but not fail
         if lines_with_trailing_ws:
-            print(f"Warning: Lines with trailing whitespace: {lines_with_trailing_ws[:10]}")
+            logger.warning(f"Lines with trailing whitespace: {lines_with_trailing_ws[:10]}")
