@@ -23,7 +23,7 @@ RUN rm -rf node_modules && npm install
 # Build Tailwind + collectstatic from where manage.py is
 WORKDIR /app
 RUN python manage.py tailwind build
-RUN python manage.py collectstatic --noinput
+RUN python manage.py collectstatic --noinput --clear
 
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN mkdir -p /app/LogstashUI/data && \

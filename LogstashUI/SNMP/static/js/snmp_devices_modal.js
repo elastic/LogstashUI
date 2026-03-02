@@ -12,9 +12,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // Open device modal (for add or edit)
 function openDeviceModal(deviceData = null) {
-  console.log('openDeviceModal called with data:', deviceData);
   const modal = document.getElementById('deviceFormModal');
-  console.log('Device modal element:', modal);
   const form = document.getElementById('deviceForm');
   const modalTitle = document.getElementById('modalTitle');
 

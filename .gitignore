@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+/LogstashUI/staticfiles/admin/
+/LogstashUI/staticfiles/css/
+/LogstashUI/staticfiles/django-browser-reload/
+/LogstashUI/staticfiles/django_htmx/
+/LogstashUI/staticfiles/images/
+/LogstashUI/staticfiles/js/
