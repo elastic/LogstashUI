@@ -1068,7 +1068,7 @@ function createForceDirectedGraph(graphData) {
         .on("click", function(event, d) {
             event.stopPropagation();
             // Show sticky tooltip on click
-            showLinkTooltip(event, d.eventJson, true);
+            showLinkTooltip(event, d.eventJson, true, d.changes);
         })
         .on("mouseover", function(event, d) {
             // Highlight the link
@@ -1077,7 +1077,7 @@ function createForceDirectedGraph(graphData) {
                 .attr("stroke-width", 3);
 
             // Show hover tooltip
-            showLinkTooltip(event, d.eventJson, false);
+            showLinkTooltip(event, d.eventJson, false, d.changes);
         })
         .on("mouseout", function(event, d) {
             // Reset link style
@@ -1334,9 +1334,9 @@ function createForceDirectedGraph(graphData) {
         .style("color", "#d1d5db")
         .style("pointer-events", "none");
 
-    function showLinkTooltip(event, eventJson, sticky = false) {
-        // Apply syntax highlighting
-        const highlightedJSON = highlightJSON(eventJson);
+    function showLinkTooltip(event, eventJson, sticky = false, changes = null) {
+        // Apply syntax highlighting with change context
+        const highlightedJSON = highlightJSON(eventJson, changes);
 
         if (sticky) {
             // Make tooltip interactive and draggable when pinned
@@ -2061,6 +2061,7 @@ function initSimulationResults(runId) {
                                                         source: currentNodeId,
                                                         target: pluginId,
                                                         eventJson: JSON.stringify(filteredSnap, null, 2),
+                                                        changes: changes, // Store changes for highlighting in tooltips
                                                         isConditional: false
                                                     });
 
@@ -2260,7 +2261,7 @@ window.viewSimulationLogs = function() {
                 return;
             }
             
-            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries</div>`;
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
             
             data.logs.forEach((log, idx) => {
                 const level = log.level || 'INFO';

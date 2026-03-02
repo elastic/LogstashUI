@@ -528,6 +528,96 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
     }
 }
 
+/**
+ * Update the blocking problems indicator based on current validation state
+ */
+function updateBlockingProblemsIndicator() {
+    const indicator = document.getElementById('blockingProblemsIndicator');
+    const content = document.getElementById('blockingProblemsContent');
+    
+    if (!indicator || !content) return;
+    
+    const problems = [];
+    
+    // Check for empty conditionals
+    const emptyConditionals = [];
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(component => {
+                if (component.plugin === 'if') {
+                    const emptyBlocks = getEmptyBlocksList(component);
+                    if (emptyBlocks.length > 0) {
+                        emptyConditionals.push({
+                            type: type,
+                            blocks: emptyBlocks
+                        });
+                    }
+                }
+            });
+        }
+    });
+    
+    // Check for missing required fields
+    const missingFields = [];
+    function checkComponentFields(component) {
+        if (component.plugin === 'comment' || component.plugin === 'if') {
+            if (component.plugin === 'if') {
+                // Check nested plugins in conditionals
+                if (component.config.plugins) {
+                    component.config.plugins.forEach(checkComponentFields);
+                }
+                if (component.config.else_ifs) {
+                    component.config.else_ifs.forEach(elseIf => {
+                        if (elseIf.plugins) elseIf.plugins.forEach(checkComponentFields);
+                    });
+                }
+                if (component.config.else && component.config.else.plugins) {
+                    component.config.else.plugins.forEach(checkComponentFields);
+                }
+            }
+            return;
+        }
+        
+        const validation = validateRequiredFields(component);
+        if (!validation.isValid) {
+            missingFields.push({
+                plugin: component.plugin,
+                fields: validation.missingFields
+            });
+        }
+    }
+    
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(checkComponentFields);
+        }
+    });
+    
+    // Build problems list
+    if (emptyConditionals.length > 0) {
+        problems.push('<div class="font-medium text-red-400">Empty Conditional Blocks:</div>');
+        emptyConditionals.forEach(item => {
+            problems.push(`<div class="ml-2">• ${item.type}: ${item.blocks.join(', ')}</div>`);
+        });
+    }
+    
+    if (missingFields.length > 0) {
+        if (problems.length > 0) problems.push('<div class="mt-2"></div>');
+        problems.push('<div class="font-medium text-red-400">Missing Required Fields:</div>');
+        missingFields.forEach(item => {
+            problems.push(`<div class="ml-2">• ${item.plugin}: ${item.fields.join(', ')}</div>`);
+        });
+    }
+    
+    // Update indicator visibility and content
+    if (problems.length > 0) {
+        content.innerHTML = problems.join('');
+        indicator.classList.remove('hidden');
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
 function loadExistingComponents() {
     // Check if we're in simulation mode before clearing
     const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
@@ -588,6 +678,9 @@ function loadExistingComponents() {
         // If we only have a pending ID, preserve it
         newlyAddedPluginId = pendingAnimationPluginId;
     }
+    
+    // Update blocking problems indicator
+    updateBlockingProblemsIndicator();
 
     // Restore simulation data if we were in simulation mode
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
@@ -615,7 +708,90 @@ function isSensitiveField(fieldName) {
 }
 
 /**
- * Validate that all required fields for a plugin are present and have values
+ * Check if a conditional component has any empty blocks (if/else-if/else)
+ * @param {Object} component - The conditional component to check
+ * @returns {boolean} - True if any block is empty or only contains comments
+ */
+function checkConditionalForEmptyBlocks(component) {
+    if (component.plugin !== 'if') {
+        return false;
+    }
+
+    // Check if main if block is empty or only has comments
+    if (isPluginsArrayEmpty(component.config.plugins)) {
+        return true;
+    }
+
+    // Check else-if blocks
+    if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+        for (const elseIf of component.config.else_ifs) {
+            if (isPluginsArrayEmpty(elseIf.plugins)) {
+                return true;
+            }
+        }
+    }
+
+    // Check else block
+    if (component.config.else) {
+        if (isPluginsArrayEmpty(component.config.else.plugins)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Helper to check if a plugins array is effectively empty (no plugins or only comments)
+ * @param {Array} plugins - Array of plugins to check
+ * @returns {boolean} - True if empty or only contains comments
+ */
+function isPluginsArrayEmpty(plugins) {
+    if (!plugins || plugins.length === 0) {
+        return true;
+    }
+    // Check if all plugins are comments
+    return plugins.every(plugin => plugin.plugin === 'comment');
+}
+
+/**
+ * Get list of empty blocks in a conditional component
+ * @param {Object} component - The conditional component to check
+ * @returns {Array<string>} - List of empty block names
+ */
+function getEmptyBlocksList(component) {
+    const emptyBlocks = [];
+    
+    if (component.plugin !== 'if') {
+        return emptyBlocks;
+    }
+
+    // Check if main if block is empty or only has comments
+    if (isPluginsArrayEmpty(component.config.plugins)) {
+        emptyBlocks.push('if');
+    }
+
+    // Check else-if blocks
+    if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+        component.config.else_ifs.forEach((elseIf, index) => {
+            if (isPluginsArrayEmpty(elseIf.plugins)) {
+                emptyBlocks.push(`else-if #${index + 1}`);
+            }
+        });
+    }
+
+    // Check else block
+    if (component.config.else) {
+        if (isPluginsArrayEmpty(component.config.else.plugins)) {
+            emptyBlocks.push('else');
+        }
+    }
+
+    return emptyBlocks;
+}
+
+/**
+ * Validate that all required fields for a plugin are filled in.
  * @param {Object} component - The component to validate
  * @returns {Object} - { isValid: boolean, missingFields: Array<string> }
  */
@@ -1087,6 +1263,8 @@ function createConditionalBlockElement(component, depth = 0) {
     ifPluginsContainer.dataset.conditionalId = component.id;
     ifPluginsContainer.dataset.blockType = 'if';
 
+    const isIfBlockEmpty = !component.config.plugins || component.config.plugins.length === 0;
+    
     if (component.config.plugins && component.config.plugins.length > 0) {
         component.config.plugins.forEach(plugin => {
             const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
@@ -1146,6 +1324,8 @@ function createConditionalBlockElement(component, depth = 0) {
             elseIfPluginsContainer.dataset.blockType = 'else_if';
             elseIfPluginsContainer.dataset.elseIfIndex = elseIfIndex;
 
+            const isElseIfBlockEmpty = !elseIf.plugins || elseIf.plugins.length === 0;
+            
             if (elseIf.plugins && elseIf.plugins.length > 0) {
                 elseIf.plugins.forEach(plugin => {
                     const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
@@ -1190,6 +1370,8 @@ function createConditionalBlockElement(component, depth = 0) {
         elsePluginsContainer.dataset.conditionalId = component.id;
         elsePluginsContainer.dataset.blockType = 'else';
 
+        const isElseBlockEmpty = !component.config.else.plugins || component.config.else.plugins.length === 0;
+        
         if (component.config.else.plugins && component.config.else.plugins.length > 0) {
             component.config.else.plugins.forEach(plugin => {
                 const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
@@ -1211,6 +1393,47 @@ function createConditionalBlockElement(component, depth = 0) {
 
     container.appendChild(collapsibleContent);
     el.appendChild(container);
+    
+    // Add warning badge and text if any block in this conditional is empty
+    const emptyBlocksList = getEmptyBlocksList(component);
+    if (emptyBlocksList.length > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'empty-conditional-badge';
+        badge.innerHTML = '!';
+        badge.title = `EMPTY CONDITIONAL BLOCKS\n${emptyBlocksList.join(', ')}`;
+        badge.style.cssText = `
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            background: #dc2626;
+            color: white;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            animation: badgePop 0.3s ease-out;
+        `;
+        el.appendChild(badge);
+
+        // Add text indicator below the conditional
+        const warningText = document.createElement('div');
+        warningText.className = 'empty-conditional-warning';
+        warningText.innerHTML = `
+            <div style="margin-top: 8px; padding: 6px 8px; background: rgba(220, 38, 38, 0.1); border-left: 3px solid #dc2626; border-radius: 4px;">
+                <div style="font-size: 11px; font-weight: 600; color: #fca5a5; margin-bottom: 2px;">Empty Conditional Blocks</div>
+                <div style="font-size: 10px; color: #fecaca;">${emptyBlocksList.join(', ')}</div>
+            </div>
+        `;
+        el.appendChild(warningText);
+    }
+    
     return el;
 }
 
@@ -1479,7 +1702,7 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
         type: type,
         plugin: 'if',
         config: {
-            condition: 'true',
+            condition: '[message]',
             plugins: []
         }
     };
@@ -1873,7 +2096,7 @@ function addElseIfToConditional(componentId) {
     }
 
 // Prompt for condition
-    const condition = prompt('Enter the else-if condition:', '[field] == "value"');
+    const condition = prompt('Enter the else-if condition:', '[message]');
     if (!condition) {
         return;
     }
@@ -1883,81 +2106,22 @@ function addElseIfToConditional(componentId) {
         component.config.else_ifs = [];
     }
 
-// Add new else-if block
+// Add new else-if block with empty plugins array
     const elseIfBlock = {
         condition: condition,
         plugins: []
     };
 
-    const elseIfIndex = component.config.else_ifs.push(elseIfBlock) - 1;
+    component.config.else_ifs.push(elseIfBlock);
 
-// Store the context in the modal's dataset
-    const modal = document.getElementById('pluginModal');
-    modal.dataset.context = JSON.stringify({
-        componentId,
-        blockType: 'else_if',
-        elseIfIndex
-    });
+// Refresh the UI to show the new empty else-if block
+    loadExistingComponents();
 
-// Show the plugin modal for the appropriate plugin type
-    PluginModal.show(component.type || 'output');
+// Dispatch event to mark UI as changed
+    document.body.dispatchEvent(new CustomEvent('componentAdded'));
 
-// Add a one-time event listener for plugin selection
-    const handlePluginSelect = function (event) {
-        const {pluginName, pluginType} = event.detail;
-        const context = JSON.parse(modal.dataset.context);
-
-        // Find the component again to ensure we have the latest state
-        const component = findComponentById(context.componentId);
-        if (!component) return;
-
-        // Ensure the else_ifs array and the specific else-if block exist
-        if (!component.config.else_ifs || !component.config.else_ifs[context.elseIfIndex]) {
-            console.error('Invalid else-if index or else_ifs not found');
-            return;
-        }
-
-        if (!component.config.else_ifs[context.elseIfIndex].plugins) {
-            component.config.else_ifs[context.elseIfIndex].plugins = [];
-        }
-
-        // Create the new plugin with default config
-        const newPlugin = {
-            id: `${pluginType}_${pluginName}_${Date.now()}`,
-            type: pluginType,
-            plugin: pluginName,
-            config: {}
-        };
-
-        // Track the newly added plugin for animation
-        newlyAddedPluginId = newPlugin.id;
-
-        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
-        pendingAnimationPluginId = newlyAddedPluginId;
-
-        // Add the plugin to the else-if block
-        component.config.else_ifs[context.elseIfIndex].plugins.push(newPlugin);
-
-        // Refresh the UI
-        loadExistingComponents();
-
-        // Show the config modal for the new plugin
-        if (typeof window.PluginConfigModal !== 'undefined') {
-            // Use a small timeout to ensure the UI is updated first
-            setTimeout(() => {
-                window.PluginConfigModal.show(newPlugin);
-            }, 50);
-        }
-
-        // Dispatch event to mark UI as changed
-        document.body.dispatchEvent(new CustomEvent('componentAdded'));
-
-        // Remove the event listener after handling the selection
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-    };
-
-// Listen for the plugin selection event
-    document.addEventListener('pluginSelected', handlePluginSelect);
+// Trigger pipeline warming and checking
+    triggerPipelineWarmingAndChecking();
 }
 
 function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
@@ -1989,7 +2153,6 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 // Add a one-time event listener for plugin selection
     const handlePluginSelect = function (event) {
         const {pluginName, pluginType} = event.detail;
-        // console.log(`Plugin selected: ${pluginType}.${pluginName} for block type: ${blockType}`);
 
 // Make sure we have a valid context
         if (!modal.dataset.context) {
@@ -2095,122 +2258,32 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 }
 
 function addElseToConditional(componentId) {
-    // console.log('addElseToConditional called with:', componentId);
 
 // Find the conditional component
     const component = findComponentById(componentId);
-    // console.log('Found component:', component);
 
     if (!component || component.plugin !== 'if') {
         console.error('Component not found or not a conditional:', componentId);
         return;
     }
 
-// Initialize the else block if it doesn't exist
-    if (!component.config.else) {
-        component.config.else = {plugins: []};
-    } else if (!component.config.else.plugins) {
-        component.config.else.plugins = [];
+// Check if else block already exists
+    if (component.config.else && component.config.else.plugins) {
+        alert('An else block already exists for this conditional.');
+        return;
     }
 
-// Store the context in the modal's dataset
-    const modal = document.getElementById('pluginModal');
+// Initialize the else block with empty plugins array
+    component.config.else = {plugins: []};
 
-// Clean up any existing context first
-    if (modal.dataset.context) {
-        delete modal.dataset.context;
-    }
+// Refresh the UI to show the new empty else block
+    loadExistingComponents();
 
-    const context = {
-        componentId,
-        blockType: 'else',
-        isNewElseBlock: true
-    };
+// Dispatch event to mark UI as changed
+    document.body.dispatchEvent(new CustomEvent('componentAdded'));
 
-    modal.dataset.context = JSON.stringify(context);
-
-// Show the plugin modal for the appropriate plugin type
-    PluginModal.show(component.type || 'output');
-
-// Add a one-time event listener for plugin selection
-    const handlePluginSelect = function (event) {
-        const {pluginName, pluginType} = event.detail;
-
-// Make sure we have a valid context
-        if (!modal.dataset.context) {
-            console.error('No context found for plugin selection');
-            return;
-        }
-
-        const context = JSON.parse(modal.dataset.context);
-
-// Find the component again to ensure we have the latest state
-        const component = findComponentById(context.componentId);
-        if (!component) return;
-
-// Ensure the else block exists
-        if (!component.config.else) {
-            component.config.else = {plugins: []};
-        } else if (!component.config.else.plugins) {
-            component.config.else.plugins = [];
-        }
-
-// Create the new plugin with default config
-        const newPlugin = {
-            id: `${pluginType}_${pluginName}_${Date.now()}`,
-            type: pluginType,
-            plugin: pluginName,
-            config: {}
-        };
-
-        // Track the newly added plugin for animation
-        newlyAddedPluginId = newPlugin.id;
-
-        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
-        pendingAnimationPluginId = newlyAddedPluginId;
-
-// Add the plugin to the else block
-        component.config.else.plugins.push(newPlugin);
-
-// Clean up the context
-        if (modal.dataset.context) {
-            delete modal.dataset.context;
-        }
-
-// Remove the event listener after handling the selection
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-
-// Refresh the UI
-        loadExistingComponents();
-
-// Show the config modal for the new plugin
-        if (typeof window.PluginConfigModal !== 'undefined') {
-            // Use a small timeout to ensure the UI is updated first
-            setTimeout(() => {
-                window.PluginConfigModal.show(newPlugin);
-            }, 50);
-        }
-    };
-
-// Listen for the plugin selection event
-    document.addEventListener('pluginSelected', handlePluginSelect);
-
-// Set a timeout to clean up the listener if the modal is closed without selecting a plugin
-    const cleanupTimer = setTimeout(() => {
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-        if (modal.dataset.context) {
-            delete modal.dataset.context;
-        }
-    }, 60000); // 60 second timeout
-
-// Clean up the timer when the modal is closed
-    const originalHide = PluginModal.hide;
-    PluginModal.hide = function () {
-        clearTimeout(cleanupTimer);
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-        originalHide.call(PluginModal);
-        PluginModal.hide = originalHide; // Restore original hide function
-    };
+// Trigger pipeline warming and checking
+    triggerPipelineWarmingAndChecking();
 }
 
 
@@ -2438,10 +2511,40 @@ function checkFilePathRequiredPlugins() {
     // Find all plugins with fs_path options
     const pluginsWithFilePaths = [];
 
-    // Helper function to check a component for fs_path options
+    // Helper function to check a component for fs_path options (recursive for nested conditionals)
     function checkComponentForFilePaths(component, type) {
-        if (!component.plugin || component.plugin === 'if') return;
+        if (!component.plugin) return;
 
+        // If this is a conditional, recursively check its nested plugins
+        if (component.plugin === 'if') {
+            // Check plugins in the if block
+            if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                component.config.plugins.forEach(plugin => {
+                    checkComponentForFilePaths(plugin, type);
+                });
+            }
+
+            // Check plugins in else-if blocks
+            if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                component.config.else_ifs.forEach(elseIf => {
+                    if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                        elseIf.plugins.forEach(plugin => {
+                            checkComponentForFilePaths(plugin, type);
+                        });
+                    }
+                });
+            }
+
+            // Check plugins in else block
+            if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                component.config.else.plugins.forEach(plugin => {
+                    checkComponentForFilePaths(plugin, type);
+                });
+            }
+            return; // Don't check the conditional itself for fs_path options
+        }
+
+        // For non-conditional plugins, check for fs_path options
         const pluginInfo = pluginData?.[type]?.[component.plugin];
         if (!pluginInfo || !pluginInfo.options) return;
 
@@ -2472,34 +2575,6 @@ function checkFilePathRequiredPlugins() {
         if (componentsToCheck[type] && Array.isArray(componentsToCheck[type])) {
             componentsToCheck[type].forEach(component => {
                 checkComponentForFilePaths(component, type);
-
-                // Check plugins inside conditional blocks (for filters)
-                if (type === 'filter' && component.plugin === 'if') {
-                    // Check plugins in the if block
-                    if (component.config.plugins && Array.isArray(component.config.plugins)) {
-                        component.config.plugins.forEach(plugin => {
-                            checkComponentForFilePaths(plugin, type);
-                        });
-                    }
-
-                    // Check plugins in else-if blocks
-                    if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
-                        component.config.else_ifs.forEach(elseIf => {
-                            if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
-                                elseIf.plugins.forEach(plugin => {
-                                    checkComponentForFilePaths(plugin, type);
-                                });
-                            }
-                        });
-                    }
-
-                    // Check plugins in else block
-                    if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
-                        component.config.else.plugins.forEach(plugin => {
-                            checkComponentForFilePaths(plugin, type);
-                        });
-                    }
-                }
             });
         }
     });

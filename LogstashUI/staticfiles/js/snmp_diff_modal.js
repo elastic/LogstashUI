@@ -135,7 +135,6 @@ async function prepareSnmpDiffModal() {
         }
 
         const diffData = await response.json();
-        console.log('SNMP Diff data received:', diffData);
 
         // Hide loading, show container
         document.getElementById('snmpDiffLoading').classList.add('hidden');
@@ -827,7 +826,6 @@ async function confirmCommitConfiguration() {
         }
 
         const result = await response.json();
-        console.log('Commit response:', result);
 
         if (result.success) {
             // Show success toast

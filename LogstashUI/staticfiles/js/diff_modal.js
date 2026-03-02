@@ -451,6 +451,9 @@ async function loadDiffContent() {
     if (!isTextMode) {
         quoteValidationWarnings = validateQuoteMixing(components);
         displayQuoteWarnings(quoteValidationWarnings);
+        
+        // Check and display validation errors
+        checkAndDisplayValidationErrors();
     }
 
     // Show loading state
@@ -681,10 +684,217 @@ async function loadDiffContent() {
     }
 }
 
+// Helper to check if a plugins array is effectively empty (no plugins or only comments)
+function isPluginsArrayEmpty(plugins) {
+    if (!plugins || plugins.length === 0) {
+        return true;
+    }
+    // Check if all plugins are comments
+    return plugins.every(plugin => plugin.plugin === 'comment');
+}
+
+// Function to check for empty conditional blocks recursively
+function findEmptyConditionals(components) {
+    const emptyConditionals = [];
+
+    function checkComponent(component, path = []) {
+        if (component.plugin === 'if') {
+            const componentPath = [...path, `${component.type} conditional`];
+            
+            // Check if main if block is empty or only has comments
+            if (isPluginsArrayEmpty(component.config.plugins)) {
+                emptyConditionals.push({
+                    path: componentPath.join(' > '),
+                    block: 'if',
+                    condition: component.config.condition || ''
+                });
+            } else {
+                // Recursively check nested plugins in if block
+                component.config.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+            }
+
+            // Check else-if blocks
+            if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                component.config.else_ifs.forEach((elseIf, index) => {
+                    if (isPluginsArrayEmpty(elseIf.plugins)) {
+                        emptyConditionals.push({
+                            path: componentPath.join(' > '),
+                            block: `else-if #${index + 1}`,
+                            condition: elseIf.condition || ''
+                        });
+                    } else {
+                        // Recursively check nested plugins in else-if block
+                        elseIf.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                    }
+                });
+            }
+
+            // Check else block
+            if (component.config.else) {
+                if (isPluginsArrayEmpty(component.config.else.plugins)) {
+                    emptyConditionals.push({
+                        path: componentPath.join(' > '),
+                        block: 'else',
+                        condition: ''
+                    });
+                } else {
+                    // Recursively check nested plugins in else block
+                    component.config.else.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                }
+            }
+        }
+    }
+
+    // Check all component types
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(component => checkComponent(component, []));
+        }
+    });
+
+    return emptyConditionals;
+}
+
+// Function to find components with missing required fields
+function findMissingRequiredFields(components) {
+    const componentsWithMissingFields = [];
+
+    function checkComponent(component, path = []) {
+        // Skip comment plugins and conditionals
+        if (component.plugin === 'comment' || component.plugin === 'if') {
+            // For conditionals, recursively check nested plugins
+            if (component.plugin === 'if') {
+                const componentPath = [...path, `${component.type} conditional`];
+                
+                // Check plugins in if block
+                if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                    component.config.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                }
+                
+                // Check plugins in else-if blocks
+                if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                    component.config.else_ifs.forEach(elseIf => {
+                        if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                            elseIf.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                        }
+                    });
+                }
+                
+                // Check plugins in else block
+                if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                    component.config.else.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                }
+            }
+            return;
+        }
+
+        // Get plugin definition
+        const pluginDataSource = typeof pluginData !== 'undefined' ? pluginData : window.pluginData;
+        const pluginDef = pluginDataSource?.[component.type]?.[component.plugin];
+        
+        if (!pluginDef || !pluginDef.options) {
+            return;
+        }
+
+        // Check for missing required fields
+        const missingFields = [];
+        Object.entries(pluginDef.options).forEach(([fieldName, fieldDef]) => {
+            if (fieldDef.required === 'Yes') {
+                const fieldValue = component.config?.[fieldName];
+                if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+                    missingFields.push(fieldName);
+                } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue) && Object.keys(fieldValue).length === 0) {
+                    missingFields.push(fieldName);
+                }
+            }
+        });
+
+        if (missingFields.length > 0) {
+            const componentPath = path.length > 0 ? path.join(' > ') + ' > ' : '';
+            componentsWithMissingFields.push({
+                path: componentPath + component.plugin,
+                fields: missingFields
+            });
+        }
+    }
+
+    // Check all component types
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(component => checkComponent(component, []));
+        }
+    });
+
+    return componentsWithMissingFields;
+}
+
+// Function to check and display validation errors
+function checkAndDisplayValidationErrors() {
+    const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
+    const errorContainer = document.getElementById('validationErrorsContainer');
+    const errorContent = document.getElementById('validationErrorsContent');
+    const confirmButton = document.getElementById('confirmSaveButton');
+    
+    if (!errorContainer || !errorContent || !confirmButton) return false;
+    
+    // Skip validation in text mode
+    if (isTextMode || typeof components === 'undefined') {
+        errorContainer.classList.add('hidden');
+        confirmButton.disabled = false;
+        confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        return false;
+    }
+    
+    const errorSections = [];
+    
+    // Check for empty conditionals
+    const emptyConditionals = findEmptyConditionals(components);
+    if (emptyConditionals.length > 0) {
+        let html = '<div><div class="font-medium mb-1">Empty Conditional Blocks:</div><ul class="list-disc pl-5 space-y-0.5">';
+        emptyConditionals.forEach(item => {
+            const conditionText = item.condition ? ` <span class="text-red-400">[${item.condition}]</span>` : '';
+            html += `<li>${item.path} - ${item.block}${conditionText}</li>`;
+        });
+        html += '</ul></div>';
+        errorSections.push(html);
+    }
+    
+    // Check for missing required fields
+    const missingFields = findMissingRequiredFields(components);
+    if (missingFields.length > 0) {
+        let html = '<div><div class="font-medium mb-1">Missing Required Fields:</div><ul class="list-disc pl-5 space-y-0.5">';
+        missingFields.forEach(item => {
+            html += `<li>${item.path}: <span class="text-red-400">${item.fields.join(', ')}</span></li>`;
+        });
+        html += '</ul></div>';
+        errorSections.push(html);
+    }
+    
+    // Display errors or hide container
+    if (errorSections.length > 0) {
+        errorContent.innerHTML = errorSections.join('');
+        errorContainer.classList.remove('hidden');
+        confirmButton.disabled = true;
+        confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
+        return true;
+    } else {
+        errorContainer.classList.add('hidden');
+        confirmButton.disabled = false;
+        confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        return false;
+    }
+}
+
 // Function to confirm and save the pipeline
 async function confirmSavePipeline() {
     const confirmButton = document.getElementById('confirmSaveButton');
     const originalText = confirmButton.textContent;
+
+    // Check for validation errors - if any exist, the button should be disabled
+    // This is a safety check in case the button is somehow enabled
+    if (checkAndDisplayValidationErrors()) {
+        return;
+    }
 
     // Disable button and show loading state
     confirmButton.disabled = true;
@@ -706,7 +916,7 @@ async function confirmSavePipeline() {
         if (isTextMode && storedNewPipelineCode) {
             formData.append('pipeline_config', storedNewPipelineCode);
         } else {
-            formData.append('components', JSON.dumps(components));
+            formData.append('components', JSON.stringify(components));
             formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
         }
 
