@@ -498,8 +498,133 @@ def _extract_error_context(config_text: str, line: int, column: int, context_lin
     return "\n".join(context_parts)
 
 
+def _strip_inline_comments(config_text: str) -> str:
+    """
+    Remove inline comments that appear beside plugin configuration values.
+    
+    This preprocessor handles comments that would break parsing, such as:
+    - Comments after plugin settings: path => "/file.log" # comment
+    - Comments on lines with closing braces: } # comment
+    - Standalone comment lines inside plugin blocks (grammar doesn't support these)
+    
+    Standalone comment lines inside conditional blocks (if/else) are preserved.
+    Standalone comment lines at the section level are preserved.
+    """
+    lines = config_text.split('\n')
+    result_lines = []
+    
+    # Track whether we're inside a plugin block (not a conditional or section block)
+    # We need to track the stack of block types
+    block_stack = []  # Stack of block types: 'section', 'conditional', 'plugin'
+    
+    for line in lines:
+        stripped = line.lstrip()
+        
+        # Detect what kind of block is opening on this line
+        # Check for section blocks (input/filter/output)
+        if stripped.startswith(('input {', 'filter {', 'output {')):
+            block_stack.append('section')
+        # Check for conditional blocks (if/else if/else)
+        elif stripped.startswith('if ') and '{' in line:
+            block_stack.append('conditional')
+        elif stripped.startswith('else if ') and '{' in line:
+            block_stack.append('conditional')
+        elif stripped.startswith('else {'):
+            block_stack.append('conditional')
+        # Check for plugin blocks (any other word followed by {)
+        elif '{' in line and not stripped.startswith('#'):
+            # This is likely a plugin block
+            # Make sure it's not just a closing brace or part of a condition
+            if not stripped.startswith('}') and '=>' not in line.split('{')[0]:
+                block_stack.append('plugin')
+        
+        # Count closing braces to pop from stack (ignore braces in strings)
+        in_string = False
+        string_char = None
+        escaped = False
+        
+        for char in line:
+            if escaped:
+                escaped = False
+                continue
+            if char == '\\':
+                escaped = True
+                continue
+            if char in ['"', "'"]:
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+                continue
+            
+            if not in_string and char == '}' and block_stack:
+                block_stack.pop()
+        
+        # Handle standalone comment lines
+        if stripped.startswith('#'):
+            # Only skip comments if we're directly inside a plugin block
+            # Preserve comments in sections and conditionals
+            if block_stack and block_stack[-1] == 'plugin':
+                # Skip comment lines inside plugin blocks
+                continue
+            else:
+                # Preserve comment lines in sections and conditionals
+                result_lines.append(line)
+                continue
+        
+        # For non-comment lines, remove inline comments while preserving # in strings
+        in_string = False
+        string_char = None
+        escaped = False
+        cleaned_chars = []
+        
+        for i, char in enumerate(line):
+            # Handle escape sequences
+            if escaped:
+                cleaned_chars.append(char)
+                escaped = False
+                continue
+            
+            if char == '\\':
+                cleaned_chars.append(char)
+                escaped = True
+                continue
+            
+            # Handle string boundaries
+            if char in ['"', "'"]:
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                    cleaned_chars.append(char)
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+                    cleaned_chars.append(char)
+                else:
+                    cleaned_chars.append(char)
+                continue
+            
+            # If we encounter # outside of a string, it's an inline comment - strip it and everything after
+            if char == '#' and not in_string:
+                # Remove trailing whitespace before the comment
+                while cleaned_chars and cleaned_chars[-1] in [' ', '\t']:
+                    cleaned_chars.pop()
+                break
+            
+            cleaned_chars.append(char)
+        
+        result_lines.append(''.join(cleaned_chars))
+    
+    return '\n'.join(result_lines)
+
+
 def parse_logstash_config(config_text: str) -> List[Dict[str, Any]]:
     """Parse Logstash config text into a structured format."""
+    # Preprocess to remove inline comments that would break parsing
+    config_text = _strip_inline_comments(config_text)
+    
     parser = Lark(LOGSTASH_GRAMMAR, parser='lalr', transformer=LogstashTransformer())
     try:
         return parser.parse(config_text)

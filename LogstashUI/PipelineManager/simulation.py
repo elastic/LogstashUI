@@ -432,10 +432,6 @@ event.set("[snapshots][{plugin['id']}]", snapshot)
             logger.debug(f"Returning error HTML: {error_html}")
             return HttpResponse(error_html)
 
-        # Wait for Logstash to reload the pipeline (only if new slot)
-        if not reused:
-            time.sleep(2)
-
         # Use the slot-based pipeline name
         pipeline_name = f"slot{slot_id}-filter1"
 

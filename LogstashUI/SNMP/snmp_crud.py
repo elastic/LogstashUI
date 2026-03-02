@@ -1216,7 +1216,10 @@ def _generate_filters(oid_mappings, network):
         }
     ]
 
-    # TODO: Implement filter generation logic based on OID mappings
+    # ATTENTION: This is where I'm planning on implementing special logic
+    # to preprocess some data. I'm avoiding having to have 'magic functions'
+    # where the user may not understand why one OID works one way and another works in a different way
+    # we'll see if we need to add that.
     # oid_mappings['get'] contains key-value pairs like {"host.hostname": "1.3.6.1.2.1.1.5.0", ...}
     # oid_mappings['walk'] contains walk OID mappings
     # oid_mappings['table'] contains table OID mappings

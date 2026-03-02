@@ -373,6 +373,24 @@ function attachFormListener() {
 event.preventDefault();
 event.stopPropagation();
 
+// Check if there are any filters in the pipeline
+let pipelineComponents;
+if (typeof getSubsetComponents === 'function') {
+  pipelineComponents = getSubsetComponents();
+} else {
+  pipelineComponents = typeof components !== 'undefined' ? components : (window.components || {});
+}
+
+// Validate that there are filters
+if (!pipelineComponents.filter || pipelineComponents.filter.length === 0) {
+  if (typeof showToast === 'function') {
+    showToast("There aren't any filters in your pipeline. Please add at least one filter and try again.", 'error');
+  } else {
+    alert("There aren't any filters in your pipeline. Please add at least one filter and try again.");
+  }
+  return;
+}
+
 const inputSource = document.querySelector('input[name="inputSource"]:checked').value;
 const logInput = document.getElementById('logInput');
 let documents = [];

@@ -1,18 +1,23 @@
 # LogstashUI
 
-The ultimate control plane for Logstash
+A visual authoring and simulation platform for building and managing Logstash pipelines.
 
 > ⚠️ **Beta Release** - This project is in active development. Features may change and bugs are expected.
 
 ## Features
 
-- **Pipeline Management** - View and manage Logstash pipeline configurations with a robust AI or text editor
-- **Real-time Monitoring** - Monitor pipeline metrics and performance
-- **Connection Manager** - Manage multiple Logstash instances in one UI
+- **Pipeline Management** - View and manage Logstash pipeline configurations with a robust UI or text editor
+- **Real-time Monitoring** - Monitor pipeline metrics and performance of Logstash nodes
+- **Connection Manager** - Manage pipelines of multiple Logstash instances in one place
 - **Simulate pipelines** - Find issues before you deploy into production
-- **SNMP** - Implement polling, traps, and discovery using a UI
+- **SNMP** - Implement polling, traps, and discovery using a web interface
 
 ## Requirements
+
+### System Requirements
+**Minimum:**
+- 4GB of RAM
+- 2 Cores
 
 ### For Local Development
 
@@ -21,15 +26,11 @@ The ultimate control plane for Logstash
 - Elasticsearch
 - Docker
 
-**OR** just use Docker Compose (see Quick Start below)
+### For General Use
+Use Docker Compose (see Quick Start below)
 
 
 ## Quick Start
-
-### 0. System setup - System Requirements
-**Minimum:**
-- 4GB of RAM
-- 2 Cores
 
 ### 1. Clone the Repository
 
@@ -78,12 +79,24 @@ docker-compose up -d
 
 Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
 
+## Limitations
+- As of right now, our translation engine cannot handle comments that are inside of plugin blocks. For example:
+
+```
+input {
+    udp {
+		port => 5119 # This is a comment that we can't convert
+	}
+}
+```
+
 ## Coming soon!
 - Reusable grok and regex patterns
 - Git backups for configuration
 - Loggy AI Assistant
 - Management of Logstash Nodes via external agent
 - JKS Keystore management
+- Expression editor for conditions
 
 ## Reporting Issues
 

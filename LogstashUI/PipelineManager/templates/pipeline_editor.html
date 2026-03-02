@@ -422,15 +422,29 @@
             </div>
             
             <!-- Right: Action Buttons -->
-            <div class="flex space-x-4">
-            <form onsubmit="return false;">
+            <div class="flex items-center space-x-4">
+            <form onsubmit="return false;" class="flex items-center space-x-4">
                 {% csrf_token %}
-                <button type="button"
-                        id="viewCode"
-                        class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-                        onclick="viewGeneratedCode()">
-                    View Code
-                </button>
+                <div class="flex items-center gap-2">
+                    <div id="blockingProblemsIndicator" class="hidden relative group">
+                        <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        <div id="blockingProblemsTooltip" class="hidden group-hover:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 bg-gray-800 text-white text-xs rounded-lg shadow-lg p-3 z-50 border border-red-500">
+                            <div class="font-semibold text-red-400 mb-2">Blocking Problems Detected</div>
+                            <div id="blockingProblemsContent" class="text-gray-300 space-y-1"></div>
+                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
+                                <div class="w-2 h-2 bg-gray-800 border-l border-t border-red-500 transform rotate-45"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button"
+                            id="viewCode"
+                            class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+                            onclick="viewGeneratedCode()">
+                        View Code
+                    </button>
+                </div>
                 <button
                         type="button"
                         id="simulatePipeline"
@@ -438,6 +452,7 @@
                         onclick="openSimulateModal()">
                     Simulate Pipeline
                 </button>
+            </form>
                 <button type="button"
                         id="savePipeline"
                         class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
