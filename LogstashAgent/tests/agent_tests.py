@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import main
 import slots
 import log_analyzer
+from logstash_api import LogstashAPI, PipelineNotFoundError
 
 
 @pytest.fixture
@@ -855,6 +856,254 @@ class TestEdgeCases:
         assert result == False
         
         slots.clear_all_slots()
+
+
+# ============================================================================
+# API-Based Slot Verification Tests
+# ============================================================================
+
+class TestAPIBasedSlotVerification:
+    """Test API-based slot verification (replacing log-based detection)"""
+    
+    @pytest.mark.asyncio
+    async def test_verify_successful_pipeline_load(self):
+        """Test verification succeeds when pipeline is loaded successfully"""
+        slot_id = 1
+        expected_count = 2
+        
+        # Mock API to return successful pipeline states
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.detect_pipeline_state = MagicMock(side_effect=['idle', 'idle'])
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count)
+        
+        assert result == True
+        assert mock_api.detect_pipeline_state.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_verify_running_pipeline(self):
+        """Test verification succeeds when pipeline is running (processing events)"""
+        slot_id = 1
+        expected_count = 1
+        
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.detect_pipeline_state = MagicMock(return_value='running')
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count)
+        
+        assert result == True
+    
+    @pytest.mark.asyncio
+    async def test_verify_fails_on_failed_pipeline(self):
+        """Test verification fails immediately when pipeline has reload failures"""
+        slot_id = 1
+        expected_count = 1
+        
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.detect_pipeline_state = MagicMock(return_value='failed')
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count)
+        
+        # Should fail immediately without retries
+        assert result == False
+        assert mock_api.detect_pipeline_state.call_count == 1
+    
+    @pytest.mark.asyncio
+    async def test_verify_retries_on_not_found(self):
+        """Test verification retries when pipeline is not found initially"""
+        slot_id = 1
+        expected_count = 1
+        
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        # First two attempts: not found, third attempt: idle
+        mock_api.detect_pipeline_state = MagicMock(side_effect=['not_found', 'not_found', 'idle'])
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count, max_retries=3, retry_delay=0.1)
+        
+        assert result == True
+        assert mock_api.detect_pipeline_state.call_count == 3
+    
+    @pytest.mark.asyncio
+    async def test_verify_fails_after_max_retries(self):
+        """Test verification fails after max retries if pipeline never appears"""
+        slot_id = 1
+        expected_count = 1
+        
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.detect_pipeline_state = MagicMock(return_value='not_found')
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count, max_retries=2, retry_delay=0.1)
+        
+        assert result == False
+        assert mock_api.detect_pipeline_state.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_verify_mixed_pipeline_states(self):
+        """Test verification with multiple pipelines in different states"""
+        slot_id = 1
+        expected_count = 3
+        
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        # Pipeline 1: idle, Pipeline 2: running, Pipeline 3: idle
+        mock_api.detect_pipeline_state = MagicMock(side_effect=['idle', 'running', 'idle'])
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count)
+        
+        assert result == True
+        assert mock_api.detect_pipeline_state.call_count == 3
+    
+    @pytest.mark.asyncio
+    async def test_verify_falls_back_on_api_error(self):
+        """Test verification falls back to log-based detection on API error"""
+        slot_id = 1
+        expected_count = 1
+        
+        # Mock API to raise an error
+        with patch('slots.LogstashAPI', side_effect=Exception("API unavailable")):
+            # Mock the fallback function
+            with patch('slots._verify_slot_pipelines_loaded_fallback', return_value=True) as mock_fallback:
+                result = await slots.verify_slot_pipelines_loaded(slot_id, expected_count)
+        
+        # Should have called fallback
+        mock_fallback.assert_called_once()
+
+
+# ============================================================================
+# API-Based Slot Eviction Tests
+# ============================================================================
+
+class TestAPIBasedSlotEviction:
+    """Test API-based slot eviction (replacing log-based detection)"""
+    
+    def setup_method(self):
+        """Clear slots before each test"""
+        slots.clear_all_slots()
+    
+    def teardown_method(self):
+        """Clear slots after each test"""
+        slots.clear_all_slots()
+    
+    def test_evict_slot_with_failed_pipeline(self):
+        """Test eviction of slot with failed pipeline"""
+        # Allocate a slot
+        pipelines = [{"config": "input { stdin {} }"}]
+        slot_id = slots.allocate_slot("test-pipeline", pipelines)
+        
+        # Mock API to return failed state
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.list_pipelines = MagicMock(return_value=[f'slot{slot_id}-filter1'])
+        mock_api.detect_pipeline_state = MagicMock(return_value='failed')
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            with patch.object(slots, '_delete_slot_pipelines'):
+                evicted = slots.evict_failed_slots()
+        
+        assert slot_id in evicted
+        assert len(slots.get_slot_state()) == 0
+    
+    def test_evict_slot_with_missing_pipeline(self):
+        """Test eviction of slot when pipeline is not found in Logstash"""
+        # Allocate a slot
+        pipelines = [{"config": "input { stdin {} }"}]
+        slot_id = slots.allocate_slot("test-pipeline", pipelines)
+        
+        # Mock API to return empty pipeline list
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.list_pipelines = MagicMock(return_value=[])  # Pipeline not in list
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            with patch.object(slots, '_delete_slot_pipelines'):
+                evicted = slots.evict_failed_slots()
+        
+        assert slot_id in evicted
+        assert len(slots.get_slot_state()) == 0
+    
+    def test_no_eviction_for_healthy_pipelines(self):
+        """Test that healthy pipelines are not evicted"""
+        # Allocate a slot
+        pipelines = [{"config": "input { stdin {} }"}]
+        slot_id = slots.allocate_slot("test-pipeline", pipelines)
+        
+        # Mock API to return healthy state
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.list_pipelines = MagicMock(return_value=[f'slot{slot_id}-filter1'])
+        mock_api.detect_pipeline_state = MagicMock(return_value='idle')
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            evicted = slots.evict_failed_slots()
+        
+        assert len(evicted) == 0
+        assert len(slots.get_slot_state()) == 1
+    
+    def test_evict_multiple_failed_slots(self):
+        """Test eviction of multiple slots with failures"""
+        # Allocate multiple slots
+        slot_ids = []
+        for i in range(3):
+            pipelines = [{"config": f"input {{ generator {{ count => {i} }} }}"}]
+            slot_id = slots.allocate_slot(f"pipeline-{i}", pipelines)
+            slot_ids.append(slot_id)
+        
+        # Mock API: first two failed, third is healthy
+        mock_api = MagicMock()
+        mock_api.__enter__ = MagicMock(return_value=mock_api)
+        mock_api.__exit__ = MagicMock(return_value=False)
+        mock_api.list_pipelines = MagicMock(return_value=[
+            f'slot{slot_ids[0]}-filter1',
+            f'slot{slot_ids[1]}-filter1',
+            f'slot{slot_ids[2]}-filter1'
+        ])
+        # First two return 'failed', third returns 'idle'
+        mock_api.detect_pipeline_state = MagicMock(side_effect=['failed', 'failed', 'idle'])
+        
+        with patch('slots.LogstashAPI', return_value=mock_api):
+            with patch.object(slots, '_delete_slot_pipelines'):
+                evicted = slots.evict_failed_slots()
+        
+        assert len(evicted) == 2
+        assert slot_ids[0] in evicted
+        assert slot_ids[1] in evicted
+        assert slot_ids[2] not in evicted
+        assert len(slots.get_slot_state()) == 1
+    
+    def test_eviction_falls_back_on_api_error(self):
+        """Test eviction falls back to log-based detection on API error"""
+        # Allocate a slot
+        pipelines = [{"config": "input { stdin {} }"}]
+        slots.allocate_slot("test-pipeline", pipelines)
+        
+        # Mock API to raise an error
+        with patch('slots.LogstashAPI', side_effect=Exception("API unavailable")):
+            # Mock the fallback function
+            with patch('slots._evict_failed_slots_fallback', return_value=[]) as mock_fallback:
+                evicted = slots.evict_failed_slots()
+        
+        # Should have called fallback
+        mock_fallback.assert_called_once()
 
 
 if __name__ == "__main__":

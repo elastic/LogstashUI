@@ -19,6 +19,7 @@ COPY main.py .
 COPY slots.py .
 COPY log_analyzer.py .
 COPY logstashagent.yml .
+COPY logstash_api.py .
 
 # Create directories for Logstash configs and pipelines
 RUN mkdir -p /etc/logstash \

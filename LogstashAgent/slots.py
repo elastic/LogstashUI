@@ -8,6 +8,7 @@ import yaml
 import os
 import log_analyzer
 import logging
+from logstash_api import LogstashAPI, PipelineNotFoundError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -233,72 +234,128 @@ def evict_expired_slots() -> List[int]:
 
 def evict_failed_slots() -> List[int]:
     """
-    Evict slots whose pipelines have failed to load (FailedAction errors).
+    Evict slots whose pipelines have failed to load or are not running.
     
-    This checks the Logstash logs for "Failed to execute action" errors
-    and automatically evicts those slots since they won't be usable anyway.
+    Uses the Logstash API to directly query pipeline state instead of parsing logs.
+    This is more reliable and faster than log-based detection.
     
     Returns:
         List of evicted slot IDs
     """
     evicted_slots = []
     
+    try:
+        with LogstashAPI(timeout=5.0) as api:
+            # Get all currently loaded pipelines from Logstash
+            all_pipelines = api.list_pipelines()
+            
+            with _slots_lock:
+                slots_to_evict = []
+                
+                for slot_id, slot_data in _slots.items():
+                    pipelines = slot_data.get('pipelines', [])
+                    
+                    # Check if any pipeline in this slot is missing, failed, or not running
+                    for idx in range(1, len(pipelines) + 1):
+                        pipeline_name = f"slot{slot_id}-filter{idx}"
+                        
+                        # Check if pipeline exists in Logstash
+                        if pipeline_name not in all_pipelines:
+                            logger.warning(f"Slot {slot_id} pipeline {pipeline_name} not found in Logstash - marking for eviction")
+                            slots_to_evict.append((slot_id, slot_data))
+                            break
+                        
+                        # Check pipeline state
+                        state = api.detect_pipeline_state(pipeline_name)
+                        if state == 'not_found':
+                            logger.warning(f"Slot {slot_id} pipeline {pipeline_name} state is 'not_found' - marking for eviction")
+                            slots_to_evict.append((slot_id, slot_data))
+                            break
+                        elif state == 'failed':
+                            logger.warning(f"Slot {slot_id} pipeline {pipeline_name} has failed (reload failures) - marking for eviction")
+                            slots_to_evict.append((slot_id, slot_data))
+                            break
+                
+                # Evict the failed slots
+                for slot_id, slot_data in slots_to_evict:
+                    del _slots[slot_id]
+                    evicted_slots.append(slot_id)
+            
+            # Delete Logstash pipelines for evicted slots (outside the lock)
+            for slot_id, slot_data in slots_to_evict:
+                _delete_slot_pipelines(slot_id, slot_data)
+                
+            if evicted_slots:
+                logger.info(f"Evicted {len(evicted_slots)} failed slots: {evicted_slots}")
+    
+    except Exception as e:
+        logger.error(f"Error during API-based slot eviction: {e}")
+        # Fall back to log-based detection if API fails
+        logger.warning("Falling back to log-based detection")
+        return _evict_failed_slots_fallback()
+    
+    return evicted_slots
+
+
+def _evict_failed_slots_fallback() -> List[int]:
+    """
+    Fallback to log-based eviction if API is unavailable.
+    This is the old implementation kept as a safety net.
+    """
+    evicted_slots = []
+    
+    try:
+        logs = log_analyzer._read_json_logs(max_lines=1000, reverse=True)
+    except Exception as e:
+        logger.error(f"Error reading logs for failed slot detection: {e}")
+        return evicted_slots
+    
+    failed_pipeline_ids = set()
+    
+    for log_entry in logs:
+        if log_entry.get('level') == 'ERROR':
+            log_event = log_entry.get('logEvent', {})
+            action_type = log_event.get('action_type', '')
+            if 'FailedAction' in action_type:
+                pipeline_id = log_event.get('id')
+                if pipeline_id and pipeline_id.startswith('slot'):
+                    failed_pipeline_ids.add(pipeline_id)
+    
+    if not failed_pipeline_ids:
+        return evicted_slots
+    
     with _slots_lock:
         slots_to_evict = []
-        
         for slot_id, slot_data in _slots.items():
             pipelines = slot_data.get('pipelines', [])
-            
-            # Check each pipeline in the slot for failures
             for idx in range(1, len(pipelines) + 1):
                 pipeline_name = f"slot{slot_id}-filter{idx}"
-                
-                try:
-                    # Check if this pipeline is running (which also checks for FailedAction errors)
-                    is_running = log_analyzer.is_pipeline_running(pipeline_name)
-                    
-                    if not is_running:
-                        # Pipeline is not running - check if it's due to a FailedAction error
-                        # by looking at the running_pipelines status
-                        pipeline_status = log_analyzer.get_running_pipelines()
-                        
-                        if pipeline_status:
-                            running_pipelines = pipeline_status.get('running_pipelines', [])
-                            
-                            # If the pipeline was expected but isn't running, it likely failed
-                            # The get_running_pipelines already filters out FailedAction pipelines
-                            if pipeline_name not in running_pipelines:
-                                logger.info(f"Pipeline {pipeline_name} failed to load - marking slot {slot_id} for eviction")
-                                slots_to_evict.append((slot_id, slot_data))
-                                break  # No need to check other pipelines in this slot
-                
-                except Exception as e:
-                    logger.error(f"Error checking pipeline {pipeline_name} status: {e}")
+                if pipeline_name in failed_pipeline_ids:
+                    slots_to_evict.append((slot_id, slot_data))
+                    break
         
-        # Evict the failed slots
         for slot_id, slot_data in slots_to_evict:
             del _slots[slot_id]
             evicted_slots.append(slot_id)
     
-    # Delete Logstash pipelines for evicted slots (outside the lock)
     for slot_id, slot_data in slots_to_evict:
         _delete_slot_pipelines(slot_id, slot_data)
     
     return evicted_slots
 
 
-async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_retries: int = 5, retry_delay: float = 2.0) -> bool:
+async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_retries: int = 3, retry_delay: float = 1.0) -> bool:
     """
     Verify that all pipelines for a slot have been successfully loaded by Logstash.
     
-    Uses log_analyzer.get_running_pipelines() to check the Logstash logs for
-    confirmation that the slot's pipelines are running.
+    Uses the Logstash API to directly query pipeline state instead of parsing logs.
+    This is faster, more reliable, and provides immediate feedback.
     
     Args:
         slot_id: Slot ID (1-10)
         expected_count: Number of pipelines expected for this slot
-        max_retries: Maximum number of times to check before giving up (default: 5 = ~12 seconds)
-        retry_delay: Seconds to wait between retries (default: 2.0 seconds)
+        max_retries: Maximum number of times to check before giving up (default: 3 = ~4-5 seconds)
+        retry_delay: Seconds to wait between retries (default: 1.0 seconds)
         
     Returns:
         True if all slot pipelines are running, False otherwise
@@ -306,14 +363,80 @@ async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_re
     import asyncio
     
     # Adaptive initial grace period based on pipeline count
-    # Larger pipelines need more time to initialize
-    initial_wait = min(2.0 + (expected_count * 0.5), 5.0)
+    # Reduced to fail faster and prevent memory accumulation
+    initial_wait = min(1.5 + (expected_count * 0.3), 3.0)
     logger.info(f"Waiting {initial_wait:.1f} seconds for slot {slot_id} pipelines to initialize...")
     await asyncio.sleep(initial_wait)
     
+    try:
+        with LogstashAPI(timeout=5.0) as api:
+            for attempt in range(max_retries):
+                try:
+                    # Check if all slot pipelines are loaded
+                    slot_pipelines = [f"slot{slot_id}-filter{i}" for i in range(1, expected_count + 1)]
+                    missing_pipelines = []
+                    failed_pipelines = []
+                    
+                    for pipeline_name in slot_pipelines:
+                        state = api.detect_pipeline_state(pipeline_name)
+                        
+                        if state == 'not_found':
+                            missing_pipelines.append(pipeline_name)
+                        elif state == 'failed':
+                            # Pipeline has reload failures (syntax errors, etc.)
+                            failed_pipelines.append(pipeline_name)
+                            logger.error(f"Pipeline {pipeline_name} has failed to load (reload failures detected)")
+                        elif state == 'idle':
+                            # Pipeline exists but hasn't processed events yet - this is OK
+                            logger.debug(f"Pipeline {pipeline_name} is idle (loaded but no events yet)")
+                        elif state == 'running':
+                            # Pipeline is actively processing - perfect
+                            logger.debug(f"Pipeline {pipeline_name} is running")
+                    
+                    # Check for failed pipelines first - fail immediately
+                    if failed_pipelines:
+                        logger.error(f"✗ Pipelines failed to load (syntax/config errors): {failed_pipelines}")
+                        return False
+                    
+                    # All pipelines found (either idle or running)
+                    if not missing_pipelines:
+                        logger.info(f"✓ All {expected_count} pipelines for slot {slot_id} are loaded")
+                        return True
+                    
+                    # Some pipelines are missing
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Attempt {attempt + 1}/{max_retries}: Missing pipelines: {missing_pipelines}")
+                        await asyncio.sleep(retry_delay)
+                    else:
+                        logger.error(f"✗ Pipelines still missing after {max_retries} attempts: {missing_pipelines}")
+                        return False
+                
+                except Exception as e:
+                    logger.error(f"Error checking pipeline status (attempt {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                    else:
+                        return False
+    
+    except Exception as e:
+        logger.error(f"Failed to verify slot {slot_id} pipelines via API: {e}")
+        # Fallback to log-based verification
+        logger.warning("Falling back to log-based verification")
+        return await _verify_slot_pipelines_loaded_fallback(slot_id, expected_count, max_retries, retry_delay)
+    
+    logger.error(f"✗ Failed to verify slot {slot_id} pipelines after {max_retries} attempts")
+    return False
+
+
+async def _verify_slot_pipelines_loaded_fallback(slot_id: int, expected_count: int, max_retries: int = 3, retry_delay: float = 1.0) -> bool:
+    """
+    Fallback to log-based verification if API is unavailable.
+    This is the old implementation kept as a safety net.
+    """
+    import asyncio
+    
     for attempt in range(max_retries):
         try:
-            # Get current running pipelines from logs
             pipeline_status = log_analyzer.get_running_pipelines()
             
             if not pipeline_status:
@@ -322,36 +445,12 @@ async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_re
                 continue
             
             running_pipelines = pipeline_status.get('running_pipelines', [])
-            
-            # Check if all slot pipelines are present
             slot_pipelines = [f"slot{slot_id}-filter{i}" for i in range(1, expected_count + 1)]
             missing_pipelines = [p for p in slot_pipelines if p not in running_pipelines]
             
             if not missing_pipelines:
-                logger.info(f"✓ All {expected_count} pipelines for slot {slot_id} are running")
-                # Return immediately on success - no need to wait
+                logger.info(f"✓ All {expected_count} pipelines for slot {slot_id} are running (fallback)")
                 return True
-            
-            # Early failure detection: Check if any missing pipelines have FailedAction errors
-            # This allows us to fail fast instead of waiting the full retry period
-            if attempt >= 2:  # Give pipelines at least 2 attempts before checking for failures
-                logs = log_analyzer._read_json_logs(max_lines=500, reverse=True)
-                failed_pipelines = set()
-                
-                for log_entry in logs:
-                    if log_entry.get('level') == 'ERROR':
-                        log_event = log_entry.get('logEvent', {})
-                        action_type = log_event.get('action_type', '')
-                        
-                        if 'FailedAction' in action_type:
-                            pipeline_id = log_event.get('id')
-                            if pipeline_id in missing_pipelines:
-                                failed_pipelines.add(pipeline_id)
-                
-                if failed_pipelines:
-                    logger.error(f"✗ Detected FailedAction errors for pipelines: {failed_pipelines}")
-                    logger.error(f"Failing fast instead of waiting full retry period")
-                    return False
             
             logger.warning(f"Attempt {attempt + 1}/{max_retries}: Waiting for pipelines: {missing_pipelines}")
             await asyncio.sleep(retry_delay)
@@ -400,11 +499,11 @@ def _delete_slot_pipelines(slot_id: int, slot_data: Dict[str, Any]):
 def _background_cleanup_worker():
     """
     Background worker thread that periodically evicts expired and failed slots.
-    Runs every 60 seconds.
+    Runs every 15 seconds to quickly catch and clean up failed pipelines.
     """
     while True:
         try:
-            time.sleep(60)  # Check every minute
+            time.sleep(15)  # Check every 15 seconds (reduced from 60 to prevent OOM)
             
             # Evict slots that have exceeded TTL
             expired_slots = evict_expired_slots()

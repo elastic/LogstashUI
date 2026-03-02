@@ -915,7 +915,7 @@
                 return;
             }
             
-            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries</div>`;
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
             
             data.logs.forEach((log, idx) => {
                 const level = log.level || 'INFO';

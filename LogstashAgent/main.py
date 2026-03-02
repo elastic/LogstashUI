@@ -10,6 +10,7 @@ import logging
 import re
 import slots
 import log_analyzer
+from logstash_api import LogstashAPI, PipelineNotFoundError
 import requests
 import time
 import base64
@@ -565,13 +566,16 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
     # They may have been deleted during previous failure cleanup or eviction
     pipelines_exist = False
     if reused:
-        # Check if the first pipeline exists in Logstash
+        # Check if the first pipeline exists in Logstash using API
         first_pipeline_name = f"slot{slot_id}-filter1"
-        pipeline_status = log_analyzer.get_running_pipelines()
-        if pipeline_status:
-            running_pipelines = pipeline_status.get('running_pipelines', [])
-            pipelines_exist = first_pipeline_name in running_pipelines
-            logger.info(f"Slot {slot_id} reused - pipelines exist: {pipelines_exist}")
+        try:
+            with LogstashAPI(timeout=3.0) as api:
+                all_pipelines = api.list_pipelines()
+                pipelines_exist = first_pipeline_name in all_pipelines
+                logger.info(f"Slot {slot_id} reused - pipelines exist: {pipelines_exist}")
+        except Exception as e:
+            logger.warning(f"Failed to check pipeline existence via API: {e}. Assuming pipelines don't exist.")
+            pipelines_exist = False
     
     # Create pipelines if they don't exist (new slot or reused slot with deleted pipelines)
     if not reused or not pipelines_exist:
@@ -741,31 +745,35 @@ async def get_pipeline_logs(
 @app.get("/_logstash/pipelines/status")
 async def get_pipelines_status():
     """
-    Get the current status of all running pipelines from Logstash logs.
+    Get the current status of all running pipelines from Logstash API.
     
     Returns:
-        JSON response with:
-        - running_pipelines: List of pipeline IDs currently running
-        - non_running_pipelines: List of pipeline IDs not running
-        - count: Total count of running pipelines
-        - timestamp: When this status was logged
+        - running_pipelines: List of pipeline IDs currently loaded in Logstash
+        - count: Total count of pipelines
+        - timestamp: When this status was retrieved
+        - states: Dictionary mapping pipeline names to their states (running/idle)
     """
     try:
-        status = log_analyzer.get_running_pipelines()
-        
-        if not status:
-            raise HTTPException(
-                status_code=404,
-                detail="No pipeline status found in logs. Logstash may not be running or logs not available."
-            )
-        
-        return status
-    except HTTPException:
-        raise
+        with LogstashAPI(timeout=5.0) as api:
+            # Get all pipelines
+            all_pipelines = api.list_pipelines()
+            
+            # Get state for each pipeline
+            pipeline_states = {}
+            for pipeline_name in all_pipelines:
+                state = api.detect_pipeline_state(pipeline_name)
+                pipeline_states[pipeline_name] = state
+            
+            return {
+                "running_pipelines": all_pipelines,
+                "count": len(all_pipelines),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "states": pipeline_states
+            }
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error fetching pipeline status: {str(e)}"
+            detail=f"Error fetching pipeline status from Logstash API: {str(e)}"
         )
 
 
