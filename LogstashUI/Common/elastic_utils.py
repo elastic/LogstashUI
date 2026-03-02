@@ -89,8 +89,6 @@ def get_elasticsearch_field_mappings(connection_id, index):
         return []
 
 
-
-
 def _extract_field_names(properties, prefix=''):
     """
     Recursively extract field names from Elasticsearch mappings

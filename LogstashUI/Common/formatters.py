@@ -1,4 +1,4 @@
-
+import re
 
 def _safe_get_numeric(data, default=0):
     """
@@ -58,3 +58,18 @@ def _format_uptime(milliseconds):
         return f"{minutes}m {seconds % 60}s"
     else:
         return f"{seconds}s"
+
+
+def _sanitize_pipeline_name_component(name):
+    """
+    Sanitize a name component for use in pipeline names.
+    Only allows letters, numbers, underscores, and hyphens.
+    Replaces any other characters with underscores.
+    """
+    # Replace any character that isn't a letter, number, underscore, or hyphen with underscore
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    # Remove consecutive underscores
+    sanitized = re.sub(r'_+', '_', sanitized)
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    return sanitized.lower()

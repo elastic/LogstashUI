@@ -6,6 +6,8 @@ from django.db.models import Q, Prefetch
 from Common.encryption import decrypt_credential
 from Common.elastic_utils import get_elastic_connection
 from Common.logstash_config_parse import ComponentToPipeline
+from Common.decorators import require_admin_role
+from Common.formatters import _sanitize_pipeline_name_component
 
 from PipelineManager.models import Connection
 
@@ -55,6 +57,7 @@ def GetNetworks(request):
         return HttpResponse(f"Error fetching networks: {str(e)}", status=500)
 
 
+@require_admin_role
 def AddCredential(request):
     """Add a new SNMP credential"""
     try:
@@ -101,6 +104,7 @@ def AddCredential(request):
         return HttpResponse(f"Error creating credential: {str(e)}", status=500)
 
 
+@require_admin_role
 def UpdateCredential(request, credential_id):
     """Update an existing SNMP credential"""
     try:
@@ -197,6 +201,7 @@ def GetCredential(request, credential_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def DeleteCredential(request, credential_id):
     """Delete a credential"""
     try:
@@ -218,21 +223,6 @@ def DeleteCredential(request, credential_id):
         return HttpResponse("Credential not found", status=404)
     except Exception as e:
         return HttpResponse(f"Error deleting credential: {str(e)}", status=500)
-
-
-def _sanitize_pipeline_name_component(name):
-    """
-    Sanitize a name component for use in pipeline names.
-    Only allows letters, numbers, underscores, and hyphens.
-    Replaces any other characters with underscores.
-    """
-    # Replace any character that isn't a letter, number, underscore, or hyphen with underscore
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-    # Remove consecutive underscores
-    sanitized = re.sub(r'_+', '_', sanitized)
-    # Remove leading/trailing underscores
-    sanitized = sanitized.strip('_')
-    return sanitized.lower()
 
 
 def _get_pipeline_name(network):
@@ -335,6 +325,7 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
 # Network CRUD Operations
 # ============================================================================
 
+@require_admin_role
 def AddNetwork(request):
     """Add a new SNMP network"""
     try:
@@ -385,6 +376,7 @@ def AddNetwork(request):
         return HttpResponse(f"Error creating network: {str(e)}", status=500)
 
 
+@require_admin_role
 def UpdateNetwork(request, network_id):
     """Update an existing SNMP network"""
     try:
@@ -465,6 +457,7 @@ def GetNetwork(request, network_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def DeleteNetwork(request, network_id):
     """Delete a network and its underlying Logstash pipeline"""
     try:
@@ -1581,6 +1574,7 @@ def GetCommitDiff(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+@require_admin_role
 def CommitConfiguration(request):
     """Commit SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
     try:
@@ -1961,6 +1955,7 @@ def CommitConfiguration(request):
         }, status=500)
 
 
+@require_admin_role
 def GenerateCommitConfiguration(request):
     """Commit SNMP configuration - builds and deploys Logstash pipelines"""
     try:
@@ -2110,6 +2105,7 @@ def GetDevices(request):
         return HttpResponse(f"Error fetching devices: {str(e)}", status=500)
 
 
+@require_admin_role
 def AddDevice(request):
     """Add a new SNMP device"""
     try:
@@ -2177,6 +2173,7 @@ def AddDevice(request):
         return HttpResponse(f"Error creating device: {str(e)}", status=500)
 
 
+@require_admin_role
 def UpdateDevice(request, device_id):
     """Update an existing SNMP device"""
     try:
@@ -2286,6 +2283,7 @@ def GetDevice(request, device_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def DeleteDevice(request, device_id):
     """Delete a device"""
     try:
@@ -2356,6 +2354,7 @@ def GetProfile(request, profile_name):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@require_admin_role
 def AddProfile(request):
     """Add a new user profile"""
     try:
@@ -2397,6 +2396,7 @@ def AddProfile(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@require_admin_role
 def UpdateProfile(request, profile_name):
     """Update an existing user profile"""
     try:
@@ -2434,6 +2434,7 @@ def UpdateProfile(request, profile_name):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+@require_admin_role
 def DeleteProfile(request, profile_name):
     """Delete a user profile"""
     try:
