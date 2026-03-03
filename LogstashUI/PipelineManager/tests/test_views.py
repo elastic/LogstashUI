@@ -62,10 +62,10 @@ class TestConnectionCRUD:
             'password': 'wrong'
         })
 
-        # NOTE: Currently returns 200 with HX-Retarget headers. Ideally should be 4xx.
-        # This test validates current behavior - if status code is fixed, test will break correctly.
         assert response.status_code == 200
-        assert b'Connection Test Failed' in response.content
+        response_data = json.loads(response.content)
+        assert response_data['success'] is False
+        assert 'Connection failed: Timeout' in response_data['error']
 
         # Verify connection was NOT created (deleted after failed test)
         assert not Connection.objects.filter(name='Bad Connection').exists()
@@ -78,7 +78,11 @@ class TestConnectionCRUD:
         })
 
         assert response.status_code == 200
-        assert b'Form Validation Error' in response.content
+        response_data = json.loads(response.content)
+        assert response_data['success'] is False
+        assert 'error' in response_data
+        # Check that the error contains form validation messages
+        assert 'name' in response_data['error'] or 'This field is required' in response_data['error']
 
     def test_delete_connection(self, authenticated_client, test_connection):
         """Test connection deletion"""

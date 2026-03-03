@@ -273,43 +273,95 @@ class LogstashAPI:
         """
         try:
             stats = self.get_pipeline_stats(pipeline_name)
-            pipeline_data = stats.get('pipelines', {}).get(pipeline_name)
+            pipelines_dict = stats.get('pipelines')
+            
+            # If pipelines key is missing or None, pipeline doesn't exist
+            if pipelines_dict is None:
+                logger.warning(f"Pipeline '{pipeline_name}' - API response missing 'pipelines' key")
+                return 'not_found'
+            
+            pipeline_data = pipelines_dict.get(pipeline_name)
             
             # If pipeline_name is not in the response at all, it doesn't exist
             if pipeline_data is None:
+                logger.warning(f"Pipeline '{pipeline_name}' - not found in pipelines dict")
                 return 'not_found'
             
-            # Check event processing first - if pipeline is processing events, it's definitely running
-            events = pipeline_data.get('events', {})
-            events_in = events.get('in', 0)
+            # Check if pipeline_data is a dict (valid structure)
+            if not isinstance(pipeline_data, dict):
+                logger.warning(f"Pipeline '{pipeline_name}' - pipeline_data is not a dict: {type(pipeline_data)}")
+                return 'not_found'
             
-            if events_in > 0:
-                return 'running'
+            # Debug: Log the full pipeline_data structure to understand what we're getting
+            logger.debug(f"Pipeline '{pipeline_name}' - pipeline_data keys: {list(pipeline_data.keys())}")
             
-            # Check reload status to determine if pipeline loaded successfully
-            # Note: reload counters are cumulative and include historical attempts
-            reloads = pipeline_data.get('reloads', {})
-            reload_successes = reloads.get('successes', 0) if reloads else 0
-            reload_failures = reloads.get('failures', 0) if reloads else 0
+            # Check reloads first to determine actual state
+            # Reloads tell us if Logstash has attempted to load the pipeline
+            reloads = pipeline_data.get('reloads')
             
-            # If we have at least one successful reload, the pipeline is currently loaded
-            # (even if there were previous failures)
-            if reload_successes > 0:
-                return 'idle'
+            # If reloads is None, pipeline is still being registered by Logstash
+            # This is normal for newly created pipelines - they appear in API before initialization
+            if reloads is None:
+                logger.debug(f"Pipeline '{pipeline_name}' - no 'reloads' structure yet (still registering)")
+                return 'not_found'
             
-            # If we only have failures and no successes, the pipeline failed to load
-            if reload_failures > 0 and reload_successes == 0:
-                logger.warning(f"Pipeline '{pipeline_name}' has {reload_failures} reload failure(s) and no successes")
+            if not isinstance(reloads, dict):
+                logger.warning(f"Pipeline '{pipeline_name}' - 'reloads' is not a dict: {type(reloads)}")
                 return 'failed'
             
-            # Pipeline exists but has no reload data yet - consider it idle (newly created)
-            return 'idle'
+            reload_successes = reloads.get('successes', 0)
+            reload_failures = reloads.get('failures', 0)
+            
+            # NOTE: We do NOT check absolute failure counts here because reload counters
+            # are cumulative and persist across pipeline deletions in Logstash.
+            # The verification logic in slots.py tracks baseline counters to detect NEW failures.
+            # Here we only check if the pipeline has successfully initialized.
+            
+            # Check events structure to determine if pipeline has started
+            # IMPORTANT: Logstash does NOT increment reload_successes for initial pipeline load
+            # It only increments for subsequent reloads (config changes)
+            # So we need to check if the pipeline has a valid events structure
+            events = pipeline_data.get('events')
+            
+            if events is None:
+                # No events structure yet - pipeline is still initializing
+                logger.debug(f"Pipeline '{pipeline_name}' - no events structure yet (initializing)")
+                return 'not_found'
+            
+            if not isinstance(events, dict):
+                logger.warning(f"Pipeline '{pipeline_name}' - 'events' is not a dict: {type(events)}")
+                return 'failed'
+            
+            # If events structure exists and has valid data, pipeline has started successfully
+            # Check for required event fields that indicate pipeline is running
+            events_in = events.get('in', 0)
+            events_filtered = events.get('filtered', 0)
+            events_out = events.get('out', 0)
+            
+            # Log the actual values we're seeing
+            logger.info(f"Pipeline '{pipeline_name}' - events(in={events_in}, filtered={events_filtered}, out={events_out}), reloads(successes={reload_successes}, failures={reload_failures})")
+            
+            # If events structure has the required fields (even if all are 0), pipeline is loaded
+            # The presence of these fields means Logstash has initialized the pipeline
+            if 'in' in events or 'filtered' in events or 'out' in events:
+                if events_in > 0:
+                    return 'running'
+                else:
+                    logger.info(f"Pipeline '{pipeline_name}' - successfully loaded and idle")
+                    return 'idle'
+            
+            # Events structure exists but doesn't have expected fields - still initializing
+            logger.debug(f"Pipeline '{pipeline_name}' - events structure incomplete, still initializing")
+            return 'not_found'
                 
         except PipelineNotFoundError:
             return 'not_found'
         except LogstashAPIError as e:
             logger.error(f"Error detecting state for pipeline '{pipeline_name}': {e}")
             return 'not_found'
+        except Exception as e:
+            logger.error(f"Unexpected error detecting state for pipeline '{pipeline_name}': {e}")
+            return 'failed'
     
     def get_pipeline_uptime(self, pipeline_name: str) -> Optional[float]:
         """
@@ -333,6 +385,40 @@ class LogstashAPI:
             
         except (PipelineNotFoundError, LogstashAPIError):
             return None
+    
+    def has_pipeline_attempted_load(self, pipeline_name: str) -> bool:
+        """
+        Check if a pipeline has attempted to load (has non-zero reload counters).
+        
+        This helps distinguish between:
+        - Pipelines that are still initializing (reload counters are 0)
+        - Pipelines that have attempted to load (reload counters > 0)
+        
+        Args:
+            pipeline_name: Name of the pipeline
+        
+        Returns:
+            True if pipeline has attempted to load, False otherwise
+        """
+        try:
+            stats = self.get_pipeline_stats(pipeline_name)
+            pipeline_data = stats.get('pipelines', {}).get(pipeline_name, {})
+            
+            if not pipeline_data:
+                return False
+            
+            reloads = pipeline_data.get('reloads', {})
+            if not isinstance(reloads, dict):
+                return False
+            
+            reload_successes = reloads.get('successes', 0)
+            reload_failures = reloads.get('failures', 0)
+            
+            # If either counter is non-zero, the pipeline has attempted to load
+            return (reload_successes + reload_failures) > 0
+            
+        except (PipelineNotFoundError, LogstashAPIError):
+            return False
 
 
 # Convenience functions for common operations

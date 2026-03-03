@@ -26,6 +26,213 @@
     const pluginData = JSON.parse(document.getElementById('plugin-data').textContent);
     window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
     
+    // Global variable to store current slot ID for logs viewer
+    let currentSlotId = null;
+    
+    /**
+     * Check if the pipeline successfully loaded in Logstash
+     * Called after slot preallocation completes
+     */
+    async function checkPipelineLoadStatus() {
+        const statusContainer = document.getElementById('pipelineLoadStatus');
+        const statusIcon = document.getElementById('pipelineStatusIcon');
+        const statusMessage = document.getElementById('pipelineStatusMessage');
+        
+        if (!statusContainer || !statusIcon || !statusMessage) {
+            console.error('Pipeline status elements not found');
+            return;
+        }
+        
+        // Get slot_id from preallocation result
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+        
+        const slotElement = preallocationResult?.querySelector('[data-slot-id]');
+        
+        const slotId = slotElement?.getAttribute('data-slot-id');
+        const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
+        
+        // Store slot_id globally for logs viewer (even if pipeline failed)
+        if (slotId) {
+            currentSlotId = slotId;
+        }
+        
+        // If pipeline already failed during allocation, show failure immediately
+        if (pipelineFailed) {
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+            statusIcon.className = 'w-5 h-5 text-red-400';
+            statusMessage.textContent = 'Pipeline configuration had a problem';
+            statusMessage.className = 'text-sm font-medium text-red-400';
+            return;
+        }
+        
+        if (!slotId) {
+            // No slot_id means the pipeline failed to allocate a slot entirely
+            console.error('Slot ID not found in preallocation result - pipeline failed to allocate');
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+            statusIcon.className = 'w-5 h-5 text-red-400';
+            statusMessage.textContent = 'Pipeline fails with a configuration error';
+            statusMessage.className = 'text-sm font-medium text-red-400';
+            return;
+        }
+        
+        // The actual pipeline name in Logstash is slot{id}-filter1
+        const slotPipelineName = `slot${slotId}-filter1`;
+        
+        // Show loading state
+        statusContainer.classList.remove('hidden');
+        statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
+        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
+        statusIcon.classList.add('animate-spin', 'w-5', 'h-5', 'text-gray-300');
+        statusMessage.textContent = 'Checking pipeline load status...';
+        statusMessage.className = 'text-sm font-medium text-gray-300';
+        
+        try {
+            // Backend already verifies pipelines are running before returning slot allocation
+            // No need to wait - check status immediately
+            
+            // Check pipeline status using the slot pipeline name
+            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch pipeline status');
+            }
+            
+            const data = await response.json();
+            const isRunning = data.is_running;
+            
+            statusIcon.classList.remove('animate-spin');
+            
+            if (isRunning) {
+                // Success - Pipeline is running
+                statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-green-600 bg-green-900/30';
+                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                statusIcon.className = 'w-5 h-5 text-green-400';
+                statusMessage.textContent = 'Pipeline configuration loads without failure';
+                statusMessage.className = 'text-sm font-medium text-green-400';
+            } else {
+                // Failure - Pipeline not running
+                statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
+                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                statusIcon.className = 'w-5 h-5 text-red-400';
+                statusMessage.textContent = 'Pipeline configuration had a problem';
+                statusMessage.className = 'text-sm font-medium text-red-400';
+            }
+            
+        } catch (error) {
+            console.error('Error checking pipeline status:', error);
+            
+            // Unknown - Error occurred
+            statusIcon.classList.remove('animate-spin');
+            statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-yellow-600 bg-yellow-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+            statusIcon.className = 'w-5 h-5 text-yellow-400';
+            statusMessage.textContent = 'Unable to verify pipeline status';
+            statusMessage.className = 'text-sm font-medium text-yellow-400';
+        }
+    }
+    
+    /**
+     * Helper function to escape HTML for safe display
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
+     * View logs for the current pipeline slot
+     */
+    async function viewPipelineLogs() {
+        if (!currentSlotId) {
+            console.error('No slot ID available for logs');
+            alert('Unable to fetch logs - slot information not available');
+            return;
+        }
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'pipeline-logs-modal';
+        modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('pipeline-logs-modal').remove()"></div>
+            <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+                <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${currentSlotId}-filter1</h3>
+                    <button onclick="document.getElementById('pipeline-logs-modal').remove()" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow">
+                    <div id="pipeline-logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+                        <div class="flex items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                            <span class="ml-3">Loading logs...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Fetch logs from API
+        try {
+            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            const data = await response.json();
+            
+            const logsContent = document.getElementById('pipeline-logs-content');
+            
+            if (!data.logs || data.logs.length === 0) {
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                return;
+            }
+            
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
+            
+            data.logs.forEach((log, idx) => {
+                const level = log.level || 'INFO';
+                const levelColor = {
+                    'ERROR': 'text-red-400',
+                    'WARN': 'text-yellow-400',
+                    'INFO': 'text-blue-400',
+                    'DEBUG': 'text-gray-400'
+                }[level] || 'text-gray-400';
+                
+                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
+                const logEvent = log.logEvent || {};
+                const message = logEvent.message || log.message || 'No message';
+                const logger = log.loggerName || 'unknown';
+                
+                html += `
+                    <div class="mb-4 pb-4 border-b border-gray-700">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="${levelColor} font-bold">[${level}]</span>
+                            <span class="text-gray-500 text-xs">${timestamp}</span>
+                            <span class="text-gray-400 text-xs">${logger}</span>
+                        </div>
+                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
+                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            });
+            
+            logsContent.innerHTML = html;
+        } catch (error) {
+            const logsContent = document.getElementById('pipeline-logs-content');
+            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
+        }
+    }
+    
     // Register htmx:afterSwap listener EARLY to catch the initial page load preallocation
     // This must be done before the slotPreallocation element is parsed
     document.addEventListener('DOMContentLoaded', function() {
@@ -805,7 +1012,7 @@
 
 <script>
     const pipelineName = "{{ pipeline_name }}";
-    let currentSlotId = null;  // Store slot_id for logs viewer
+    // currentSlotId is declared in the early script block above
     
     // Store original pipeline text for Text mode
     originalPipelineText = `{{ pipeline_text|escapejs }}`;

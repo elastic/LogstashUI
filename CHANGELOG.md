@@ -1,32 +1,69 @@
-## [0.1.13] - TBD
+## [0.2.0] - 03/02/2026
+
 ### Added
-- Toggle button for simulation that turns on/off simulation metadat
+- Toggle button for simulation that turns on/off simulation metadata
 - Simulate now shows time in ms of plugin and entire execution
 - Visual indicator of parsing failure / tag on failure in simulate
 - Popular plugins float to the top of the plugin selector page
-- Added fs_path type
+- Added `fs_path` type
 - Added file upload for simulate when a pipeline requires it
-- Comments are now supported!
+- Comments are now supported
 - Pipelines are now tested every time plugins are added/changed/removed
 - Warning badge (!) appears on plugins with missing required fields
 - Copy button in simulation result tooltips to copy JSON data to clipboard
-- Discovery for SNMP - Tested the end-to-end process of discovery and adding a device
-- Added initial implementation of the text editor
-- Added Favicon
+- SNMP discovery workflows (tested end-to-end: discovery → device → scheduled monitoring)
+- Initial implementation of the pipeline text editor
+- Autocomplete, improved bracket matching, and syntax highlighting in the text editor
+- Visual indicators when conditions are empty
+- Save button is blocked when required fields or conditions are invalid
+- SNMP test coverage improvements
+- SDK-like script for interacting with the Logstash API (replaces older log analyzer)
+- “Memory intensive” plugin flag with visual indicator
+- `key_list_hash` type to ensure consistent grok match ordering
+- Additional SNMP profiles (new + tuned existing)
+- Added traps file (and related `.gitignore` updates)
+- Favicon
 
 ### Changed
-- Colorized the "after" json output to be more readable and clearly convey what was changed
-- Overhaul of plugin config modal to be more user friendly
-- View Full Event and Original Event in the editor during a simulate is more obviously clickable
-- Default condition is now 'if [message]'
-- Migrated to Gunicorn
+- Colorized the "after" JSON output for clearer visibility into changes
+- Overhauled plugin configuration modal for improved usability
+- View Full Event and Original Event in simulate are now more clearly clickable
+- Default condition is now `if [message]`
+- Migrated to Gunicorn (removed runserver + eliminated unnecessary logstashagent port)
+- Updated Docker Compose configuration for 0.2.0
+- Updated Nginx configuration to resolve Docker Compose issues
+- Refreshed `collectstatic` workflow and removed tracking of staticfiles
+- Moved pipeline renaming functionality to common module for reuse
+- Adjusted Logstash configuration to optimize performance
+- Simulation API endpoints now route through ConnectionManager
+- Hardened and cleaned up ConnectionManager (including model updates and removal of SSH references)
+- Monitoring overhaul with additional tests and refreshed static assets
+- Error page overhaul and removal of public CDN calls
+- Standardized on a single visualization engine
+- Removed legacy Core/API layer and distributed functionality into appropriate apps
+- Refactored Ruby code injection to standardize quoting and reduce escaping issues
+- Cleaned up legacy JavaScript and consolidated shared utilities into `base.js`
 
 ### Fixed
 - Drops no longer time out in the simulation feature
 - Chevron icon when expanding advanced options in pipeline settings
-- Bug that caused null lists to be inserted into the list
-- Simulation no longer hangs when events don't match any conditions (shows proper message instead)
-- Logs showing up in the wrong pipeline's error logs because they shared the same slot
+- Null list values no longer insert the string `"null"` into configs
+- Simulation no longer hangs when events don't match conditions (proper message shown)
+- Logs no longer appear in the wrong pipeline slot
+- Fixed bug when adding Elastic connections via URL after moving away from HTML-returning views
+- Fixed regression with hovering over edges in the UI
+- Fixed JavaScript bug using `json.dumps` instead of `JSON.stringify`
+- Inline comments inside plugins no longer break parsing (inline comments are stripped to preserve round-trip stability)
+- Fixed pipeline hashing issues affecting configuration load progress
+- Fixed SNMP timeout/retry settings not being applied to generated configs
+- Fixed profile caching confusion when pipelines were updated
+- Fixed interface hover UI positioning
+- Fixed incorrect pipeline count in commit toast
+- Fixed bug caused by renaming SNMP data streams
+- Simulation now detects success faster and gives pipelines sufficient time to complete
+- Fixed race condition when simulating file-dependent plugins
+- Fixed simulation file-path handling (user file paths are no longer modified)
+- Updated bug report links to correct targets
 
 ## [0.1.11-12] - 02/12/2026
 ### Added

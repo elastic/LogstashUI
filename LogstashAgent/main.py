@@ -38,10 +38,10 @@ os.makedirs(METADATA_DIR, exist_ok=True)
 def _validate_pipeline_id(pipeline_id: str) -> None:
     """
     Validate pipeline_id to prevent path traversal attacks.
-    
+
     Args:
         pipeline_id: The pipeline ID to validate
-        
+
     Raises:
         HTTPException: If pipeline_id contains unsafe characters
     """
@@ -49,17 +49,17 @@ def _validate_pipeline_id(pipeline_id: str) -> None:
     # This prevents path traversal with ../ or absolute paths
     if not re.match(r'^[a-zA-Z0-9_\-\.]+$', pipeline_id):
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid pipeline_id: must contain only alphanumeric characters, hyphens, underscores, and dots"
         )
-    
+
     # Additional check: prevent .. sequences even if they pass regex
     if '..' in pipeline_id:
         raise HTTPException(
             status_code=400,
             detail="Invalid pipeline_id: cannot contain '..' sequences"
         )
-    
+
     # Prevent starting with dot (hidden files) or hyphen
     if pipeline_id.startswith('.') or pipeline_id.startswith('-'):
         raise HTTPException(
@@ -72,7 +72,7 @@ def _load_pipelines_yml() -> list:
     """Load the pipelines.yml file"""
     if not os.path.exists(PIPELINES_YML_PATH):
         return []
-    
+
     try:
         with open(PIPELINES_YML_PATH, 'r') as f:
             content = f.read()
@@ -103,34 +103,34 @@ def delete_pipeline_internal(pipeline_id: str) -> bool:
     """
     Delete a pipeline directly without going through the HTTP API.
     This is used by slots.py to avoid HTTP overhead during cleanup.
-    
+
     Args:
         pipeline_id: The pipeline ID to delete
-        
+
     Returns:
         True if deleted successfully, False if not found or error occurred
     """
     try:
         _validate_pipeline_id(pipeline_id)
-        
+
         # Load existing pipelines
         pipelines = _load_pipelines_yml()
-        
+
         # Find and remove the pipeline
         pipeline_found = False
         config_path = None
         new_pipelines = []
-        
+
         for pipeline in pipelines:
             if pipeline.get('pipeline.id') == pipeline_id:
                 pipeline_found = True
                 config_path = pipeline.get('path.config')
             else:
                 new_pipelines.append(pipeline)
-        
+
         if not pipeline_found:
             return False
-        
+
         # Delete pipeline config file
         if config_path and os.path.exists(config_path):
             try:
@@ -138,7 +138,7 @@ def delete_pipeline_internal(pipeline_id: str) -> bool:
             except Exception as e:
                 logger.error(f"Failed to delete pipeline config {config_path}: {e}")
                 return False
-        
+
         # Delete metadata file
         metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
         if os.path.exists(metadata_path):
@@ -146,14 +146,14 @@ def delete_pipeline_internal(pipeline_id: str) -> bool:
                 os.remove(metadata_path)
             except Exception:
                 pass  # Non-critical if metadata deletion fails
-        
+
         # Save updated pipelines.yml
         try:
             _save_pipelines_yml(new_pipelines)
         except Exception as e:
             logger.error(f"Failed to update pipelines.yml: {e}")
             return False
-        
+
         return True
     except Exception as e:
         logger.error(f"Error deleting pipeline {pipeline_id}: {e}")
@@ -163,20 +163,20 @@ def delete_pipeline_internal(pipeline_id: str) -> bool:
 def _load_pipeline_config(pipeline_id: str) -> Optional[str]:
     """Load the pipeline configuration file(s) - supports wildcards"""
     pipelines = _load_pipelines_yml()
-    
+
     for pipeline in pipelines:
         if pipeline.get('pipeline.id') == pipeline_id:
             config_path = pipeline.get('path.config')
             if not config_path:
                 continue
-            
+
             # Check if path contains wildcards
             if '*' in config_path or '?' in config_path:
                 # Expand wildcards and read all matching files
                 matching_files = sorted(glob.glob(config_path))
                 if not matching_files:
                     return None
-                
+
                 # Concatenate all matching files
                 config_parts = []
                 for file_path in matching_files:
@@ -186,7 +186,7 @@ def _load_pipeline_config(pipeline_id: str) -> Optional[str]:
                     except Exception as e:
                         logger.error(f"Error reading {file_path}: {e}")
                         continue
-                
+
                 return '\n'.join(config_parts) if config_parts else None
             else:
                 # Single file path
@@ -200,14 +200,14 @@ def _load_pipeline_metadata(pipeline_id: str) -> Dict[str, Any]:
     """Load pipeline metadata (description, settings, etc.)"""
     _validate_pipeline_id(pipeline_id)
     metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
-    
+
     if os.path.exists(metadata_path):
         try:
             with open(metadata_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Error loading metadata for pipeline '{pipeline_id}': {e}")
-    
+
     # Return default metadata if file doesn't exist or failed to load
     return {
         "description": "",
@@ -233,7 +233,7 @@ def _save_pipeline_metadata(pipeline_id: str, metadata: Dict[str, Any]):
     _validate_pipeline_id(pipeline_id)
     metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
     temp_path = f"{metadata_path}.tmp"
-    
+
     try:
         with open(temp_path, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -249,7 +249,7 @@ def _get_pipeline_settings_from_yml(pipeline_id: str) -> Dict[str, Any]:
     _validate_pipeline_id(pipeline_id)
     pipelines = _load_pipelines_yml()
     settings = {}
-    
+
     for pipeline in pipelines:
         if pipeline.get('pipeline.id') == pipeline_id:
             # Extract all pipeline.* and queue.* settings
@@ -257,7 +257,7 @@ def _get_pipeline_settings_from_yml(pipeline_id: str) -> Dict[str, Any]:
                 if key.startswith('pipeline.') or key.startswith('queue.'):
                     settings[key] = value
             break
-    
+
     return settings
 
 
@@ -277,14 +277,14 @@ async def simulate_log(request: Request):
     """
     Proxy endpoint for simulation log input.
     Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 9449.
-    
+
     This allows LogstashUI to send simulation logs over HTTPS (via nginx) while
     Logstash's HTTP input plugin only accepts HTTP on localhost.
     """
     try:
         # Get the JSON body from the request
         log_data = await request.json()
-        
+
         # Forward to local Logstash HTTP input on port 9449
         response = requests.post(
             "http://127.0.0.1:9449",
@@ -292,9 +292,10 @@ async def simulate_log(request: Request):
             timeout=10
         )
         response.raise_for_status()
-        
-        logger.info(f"Forwarded simulation log to Logstash: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
-        
+
+        logger.info(
+            f"Forwarded simulation log to Logstash: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
+
         return JSONResponse(
             status_code=200,
             content={"status": "success", "message": "Log forwarded to Logstash"}
@@ -318,7 +319,7 @@ async def list_pipelines():
     """List all pipelines (mimics Elasticsearch API)"""
     pipelines = _load_pipelines_yml()
     result = {}
-    
+
     for pipeline in pipelines:
         pipeline_id = pipeline.get('pipeline.id')
         if pipeline_id:
@@ -326,17 +327,17 @@ async def list_pipelines():
             config = _load_pipeline_config(pipeline_id)
             if config is None:
                 continue
-            
+
             # Load metadata
             metadata = _load_pipeline_metadata(pipeline_id)
-            
+
             # Get settings from pipelines.yml
             yml_settings = _get_pipeline_settings_from_yml(pipeline_id)
-            
+
             # Merge settings (yml takes precedence)
             pipeline_settings = metadata.get('pipeline_settings', {})
             pipeline_settings.update(yml_settings)
-            
+
             result[pipeline_id] = {
                 "description": metadata.get('description', ''),
                 "last_modified": metadata.get('last_modified'),
@@ -348,7 +349,7 @@ async def list_pipelines():
                 "pipeline": config,
                 "pipeline_settings": pipeline_settings
             }
-    
+
     return result
 
 
@@ -356,22 +357,22 @@ async def list_pipelines():
 async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
     """Get a specific pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
-    
+
     # Load pipeline config
     config = _load_pipeline_config(pipeline_id)
     if config is None:
         raise HTTPException(status_code=404, detail=f"Pipeline '{pipeline_id}' not found")
-    
+
     # Load metadata
     metadata = _load_pipeline_metadata(pipeline_id)
-    
+
     # Get settings from pipelines.yml
     yml_settings = _get_pipeline_settings_from_yml(pipeline_id)
-    
+
     # Merge settings (yml takes precedence)
     pipeline_settings = metadata.get('pipeline_settings', {})
     pipeline_settings.update(yml_settings)
-    
+
     result = {
         pipeline_id: {
             "description": metadata.get('description', ''),
@@ -385,7 +386,7 @@ async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
             "pipeline_settings": pipeline_settings
         }
     }
-    
+
     return result
 
 
@@ -393,17 +394,17 @@ async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
 async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
     """Create or update a pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
-    
+
     pipeline_config = body.get('pipeline')
     if not pipeline_config:
         raise HTTPException(status_code=400, detail="Missing 'pipeline' field in request body")
-    
+
     # Prepare pipeline settings for pipelines.yml
     pipeline_settings = body.get('pipeline_settings', {})
-    
+
     # Load existing pipelines
     pipelines = _load_pipelines_yml()
-    
+
     # Check if pipeline exists
     pipeline_exists = False
     for i, pipeline in enumerate(pipelines):
@@ -417,7 +418,7 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
                 **{k: v for k, v in pipeline_settings.items() if k.startswith('pipeline.') or k.startswith('queue.')}
             }
             break
-    
+
     if not pipeline_exists:
         # Add new pipeline entry
         config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf"
@@ -427,7 +428,7 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
             **{k: v for k, v in pipeline_settings.items() if k.startswith('pipeline.') or k.startswith('queue.')}
         }
         pipelines.append(new_pipeline)
-    
+
     # Save pipeline configuration file
     config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf"
     temp_config_path = f"{config_path}.tmp"
@@ -439,13 +440,13 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
         if os.path.exists(temp_config_path):
             os.remove(temp_config_path)
         raise HTTPException(status_code=500, detail=f"Failed to write pipeline config: {str(e)}")
-    
+
     # Save pipelines.yml
     try:
         _save_pipelines_yml(pipelines)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update pipelines.yml: {str(e)}")
-    
+
     # Save metadata
     metadata = {
         "description": body.get('description', ''),
@@ -457,12 +458,12 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
         "username": body.get('username', 'LogstashAgent'),
         "pipeline_settings": pipeline_settings
     }
-    
+
     try:
         _save_pipeline_metadata(pipeline_id, metadata)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save metadata: {str(e)}")
-    
+
     return {"acknowledged": True}
 
 
@@ -470,32 +471,32 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
 async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
     """Delete a pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
-    
+
     # Load existing pipelines
     pipelines = _load_pipelines_yml()
-    
+
     # Find and remove the pipeline
     pipeline_found = False
     config_path = None
     new_pipelines = []
-    
+
     for pipeline in pipelines:
         if pipeline.get('pipeline.id') == pipeline_id:
             pipeline_found = True
             config_path = pipeline.get('path.config')
         else:
             new_pipelines.append(pipeline)
-    
+
     if not pipeline_found:
         raise HTTPException(status_code=404, detail=f"Pipeline '{pipeline_id}' not found")
-    
+
     # Delete pipeline config file
     if config_path and os.path.exists(config_path):
         try:
             os.remove(config_path)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete pipeline config: {str(e)}")
-    
+
     # Delete metadata file
     metadata_path = os.path.join(METADATA_DIR, f"{pipeline_id}.json")
     if os.path.exists(metadata_path):
@@ -503,13 +504,13 @@ async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID"
             os.remove(metadata_path)
         except Exception:
             pass  # Non-critical if metadata deletion fails
-    
+
     # Save updated pipelines.yml
     try:
         _save_pipelines_yml(new_pipelines)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update pipelines.yml: {str(e)}")
-    
+
     return {"acknowledged": True}
 
 
@@ -517,7 +518,7 @@ async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID"
 async def allocate_simulation_slot(body: Dict[str, Any]):
     """
     Allocate a slot for simulation pipelines.
-    
+
     Request body:
     {
         "pipeline_name": "name of the pipeline being simulated",
@@ -527,7 +528,7 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
             ...
         ]
     }
-    
+
     Returns:
     {
         "slot_id": 1-10,
@@ -536,32 +537,32 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
     """
     pipeline_name = body.get('pipeline_name')
     pipelines = body.get('pipelines', [])
-    
+
     if not pipeline_name:
         raise HTTPException(status_code=400, detail="Missing 'pipeline_name' field")
-    
+
     if not pipelines:
         raise HTTPException(status_code=400, detail="Missing 'pipelines' field or empty pipeline list")
-    
+
     # Check if a slot with this exact configuration already exists
     content_hash = slots._compute_pipeline_hash(pipelines)
     existing_slots = slots.get_slot_state()
     slot_existed_before = any(
-        slot_data.get('content_hash') == content_hash 
+        slot_data.get('content_hash') == content_hash
         for slot_data in existing_slots.values()
     )
-    
+
     # Allocate or reuse slot (allocate_slot handles hash checking internally)
     slot_id = slots.allocate_slot(pipeline_name, pipelines)
-    
+
     if slot_id is None:
         raise HTTPException(status_code=500, detail="Failed to allocate slot")
-    
+
     # If the slot existed before with the same hash, it's reused
     reused = slot_existed_before
-    
+
     logger.info(f"Slot {slot_id} - reused: {reused}, hash: {content_hash[:8]}...")
-    
+
     # Check if pipelines actually exist when reusing a slot
     # They may have been deleted during previous failure cleanup or eviction
     pipelines_exist = False
@@ -576,16 +577,28 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
         except Exception as e:
             logger.warning(f"Failed to check pipeline existence via API: {e}. Assuming pipelines don't exist.")
             pipelines_exist = False
-    
+
     # Create pipelines if they don't exist (new slot or reused slot with deleted pipelines)
     if not reused or not pipelines_exist:
         try:
             await _create_slot_pipelines(slot_id, pipelines)
+        except HTTPException as e:
+            # Release the slot if pipeline creation fails
+            slots.release_slot(slot_id)
+            # Re-raise HTTPException as-is to preserve detail structure (may contain slot_id dict)
+            raise
         except Exception as e:
             # Release the slot if pipeline creation fails
             slots.release_slot(slot_id)
-            raise HTTPException(status_code=500, detail=f"Failed to create slot pipelines: {str(e)}")
-    
+            # For non-HTTP exceptions, include slot_id in detail for error tracking
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": f"Failed to create slot pipelines: {str(e)}",
+                    "slot_id": slot_id
+                }
+            )
+
     logger.info(f"Returning HTTP response for slot {slot_id}")
     return {
         "slot_id": slot_id,
@@ -597,7 +610,7 @@ async def allocate_simulation_slot(body: Dict[str, Any]):
 async def _create_slot_pipelines(slot_id: int, pipelines: List[Dict[str, Any]]):
     """
     Create the filter pipelines for a specific slot.
-    
+
     Args:
         slot_id: Slot ID (1-10)
         pipelines: List of pipeline configurations
@@ -608,13 +621,13 @@ async def _create_slot_pipelines(slot_id: int, pipelines: List[Dict[str, Any]]):
 
         if not filter_config:
             continue
-        
+
         # Determine next filter address
         if idx < len(pipelines):
             next_filter_id = f"slot{slot_id}-filter{idx + 1}"
         else:
             next_filter_id = "filter-final"
-        
+
         # Generate pipeline config with both pipeline and HTTP outputs
         pipeline_config = f"""input {{
   pipeline {{ address => "slot{slot_id}-filter{idx}" }}
@@ -628,7 +641,7 @@ output {{
   pipeline {{ send_to => "simulate-end" }}
 }}
 """
-        
+
         # Create the pipeline
         pipeline_name = f"slot{slot_id}-filter{idx}"
         pipeline_body = {
@@ -643,20 +656,20 @@ output {{
                 "pipeline.workers": 1
             }
         }
-        
+
         # Use the existing put_pipeline logic
         await put_pipeline(pipeline_name, pipeline_body)
-    
+
     # Verify all slot pipelines loaded successfully
     # Uses adaptive timing based on pipeline count (default: 20 retries, 2s delay)
     verify_start = time.time()
     verification_success = await slots.verify_slot_pipelines_loaded(
-        slot_id, 
+        slot_id,
         len(pipelines)
     )
     verify_end = time.time()
     logger.info(f"Verification completed in {verify_end - verify_start:.2f}s")
-    
+
     if not verification_success:
         # Delete the failed pipelines from Logstash to prevent log pollution
         logger.warning(f"Verification failed for slot {slot_id}, cleaning up pipelines")
@@ -667,9 +680,30 @@ output {{
                 logger.info(f"Deleted failed pipeline {pipeline_name}")
             except Exception as cleanup_error:
                 logger.error(f"Error deleting failed pipeline {pipeline_name}: {cleanup_error}")
-        
+
+        # Wait for pipelines to actually disappear from Logstash API
+        # This prevents stale failure state when slot is reused
+        import asyncio
+        logger.info(f"Waiting for slot {slot_id} pipelines to be removed from Logstash...")
+        max_wait = 5.0
+        start_wait = time.time()
+        while time.time() - start_wait < max_wait:
+            try:
+                with LogstashAPI(timeout=3.0) as api:
+                    all_pipelines = api.list_pipelines()
+                    slot_pipelines_still_exist = any(
+                        f"slot{slot_id}-filter{idx}" in all_pipelines
+                        for idx in range(1, len(pipelines) + 1)
+                    )
+                    if not slot_pipelines_still_exist:
+                        logger.info(f"Slot {slot_id} pipelines successfully removed from Logstash")
+                        break
+            except Exception as e:
+                logger.warning(f"Error checking pipeline removal: {e}")
+            await asyncio.sleep(0.5)
+
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail={
                 "message": f"Slot {slot_id} pipelines created but failed to load in Logstash. Check logs for errors.",
                 "slot_id": slot_id
@@ -687,32 +721,33 @@ async def get_slots():
 async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=10)):
     """Release a specific slot."""
     success = slots.release_slot(slot_id)
-    
+
     if not success:
         raise HTTPException(status_code=404, detail=f"Slot {slot_id} not found")
-    
+
     return {"acknowledged": True, "slot_id": slot_id}
 
 
 @app.get("/_logstash/pipeline/{pipeline_id}/logs")
 async def get_pipeline_logs(
-    pipeline_id: str = Path(..., description="Pipeline ID"),
-    max_entries: int = Query(50, description="Maximum number of log entries to return", ge=1, le=500),
-    min_level: str = Query("WARN", description="Minimum log level (DEBUG, INFO, WARN, ERROR)"),
-    min_timestamp: int = Query(None, description="Minimum timestamp in milliseconds. Only logs at or after this time will be included.")
+        pipeline_id: str = Path(..., description="Pipeline ID"),
+        max_entries: int = Query(50, description="Maximum number of log entries to return", ge=1, le=500),
+        min_level: str = Query("WARN", description="Minimum log level (DEBUG, INFO, WARN, ERROR)"),
+        min_timestamp: int = Query(None,
+                                   description="Minimum timestamp in milliseconds. Only logs at or after this time will be included.")
 ):
     """
     Get log entries related to a specific pipeline.
-    
+
     This endpoint searches Logstash JSON logs for entries related to the given pipeline,
     including errors, warnings, and other diagnostic information.
-    
+
     Args:
         pipeline_id: The pipeline ID to search for (e.g., "slot4-filter1")
         max_entries: Maximum number of log entries to return (default: 50, max: 500)
         min_level: Minimum log level to include (default: WARN)
         min_timestamp: Optional minimum timestamp in milliseconds. Only logs at or after this time will be included.
-    
+
     Returns:
         JSON response with:
         - pipeline_id: The pipeline ID searched
@@ -720,7 +755,7 @@ async def get_pipeline_logs(
         - logs: List of log entries with full context
     """
     _validate_pipeline_id(pipeline_id)
-    
+
     try:
         # Fetch logs using log_analyzer
         logs = log_analyzer.find_related_logs(
@@ -729,7 +764,7 @@ async def get_pipeline_logs(
             min_level=min_level.upper(),
             min_timestamp=min_timestamp
         )
-        
+
         return {
             "pipeline_id": pipeline_id,
             "log_count": len(logs),
@@ -746,24 +781,29 @@ async def get_pipeline_logs(
 async def get_pipelines_status():
     """
     Get the current status of all running pipelines from Logstash API.
-    
+
     Returns:
         - running_pipelines: List of pipeline IDs currently loaded in Logstash
         - count: Total count of pipelines
         - timestamp: When this status was retrieved
-        - states: Dictionary mapping pipeline names to their states (running/idle)
+        - states: Dictionary mapping pipeline names to their states (running/idle/failed/unknown)
     """
     try:
         with LogstashAPI(timeout=5.0) as api:
             # Get all pipelines
             all_pipelines = api.list_pipelines()
-            
+
             # Get state for each pipeline
+            # Use defensive error handling - if one pipeline fails, don't crash the whole endpoint
             pipeline_states = {}
             for pipeline_name in all_pipelines:
-                state = api.detect_pipeline_state(pipeline_name)
-                pipeline_states[pipeline_name] = state
-            
+                try:
+                    state = api.detect_pipeline_state(pipeline_name)
+                    pipeline_states[pipeline_name] = state
+                except Exception as e:
+                    logger.error(f"Error detecting state for pipeline '{pipeline_name}': {e}")
+                    pipeline_states[pipeline_name] = 'unknown'
+
             return {
                 "running_pipelines": all_pipelines,
                 "count": len(all_pipelines),
@@ -771,6 +811,7 @@ async def get_pipelines_status():
                 "states": pipeline_states
             }
     except Exception as e:
+        logger.error(f"Error in get_pipelines_status: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching pipeline status from Logstash API: {str(e)}"
@@ -782,7 +823,7 @@ async def write_file(request: Request):
     """
     Write a file to the uploaded directory for simulation use.
     Only enabled when SIMULATION_MODE environment variable is set to true.
-    
+
     Request body:
     {
         "filename": "filter_translate_10_dictionary_path.json",
@@ -797,37 +838,37 @@ async def write_file(request: Request):
             status_code=403,
             detail="File upload is only allowed in simulation mode"
         )
-    
+
     try:
         body = await request.json()
         filename = body.get("filename")
         content = body.get("content")
-        
+
         if not filename or not content:
             raise HTTPException(
                 status_code=400,
                 detail="Both 'filename' and 'content' are required"
             )
-        
+
         # Create uploaded directory in /tmp if it doesn't exist
         uploaded_dir = "/tmp/uploaded"
         os.makedirs(uploaded_dir, exist_ok=True)
-        
+
         # Sanitize filename to prevent path traversal
         safe_filename = os.path.basename(filename)
         file_path = os.path.join(uploaded_dir, safe_filename)
-        
+
         # Decode base64 content and write file
         logger.info(f"Received content length: {len(content)} characters")
         file_content = base64.b64decode(content)
         logger.info(f"Decoded to {len(file_content)} bytes")
-        
+
         with open(file_path, 'wb') as f:
             bytes_written = f.write(file_content)
             logger.info(f"Wrote {bytes_written} bytes to {file_path}")
-        
+
         logger.info(f"File written successfully: {file_path}")
-        
+
         return JSONResponse(
             status_code=200,
             content={
@@ -836,7 +877,7 @@ async def write_file(request: Request):
                 "path": file_path
             }
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

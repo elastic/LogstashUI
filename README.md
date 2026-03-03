@@ -106,4 +106,4 @@ Found a bug or have a feature request? [Open an issue](https://github.com/elasti
 
 Copyright 2024–2026 Elasticsearch and contributors.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE.txt) for details.

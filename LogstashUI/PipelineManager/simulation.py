@@ -20,7 +20,6 @@ import base64
 import time
 import re
 
-
 logger = logging.getLogger(__name__)
 
 # Global storage for simulation results (in-memory for now)
@@ -111,10 +110,10 @@ def SimulatePipeline(request):
                             "type": "filter",
                             "plugin": "ruby",
                             "config": {
-                                "code": f"""
-event.set("[simulation][conditional_branches][{conditional_id}]", "if")
-event.set("[simulation][conditional_conditions][{conditional_id}]", "{escaped_condition}")
-""".strip()
+                                "code": (
+                                    f"event.set(\"[simulation][conditional_branches][{conditional_id}]\", \"if\")\n"
+                                    f"event.set(\"[simulation][conditional_conditions][{conditional_id}]\", \"{escaped_condition}\")"
+                                )
                             }
                         }
                         conditional_plugin['config']['plugins'] = [branch_tracker] + instrument_plugins(
@@ -136,10 +135,10 @@ event.set("[simulation][conditional_conditions][{conditional_id}]", "{escaped_co
                                     "type": "filter",
                                     "plugin": "ruby",
                                     "config": {
-                                        "code": f"""
-event.set("[simulation][conditional_branches][{conditional_id}]", "else_if_{else_if_idx}")
-event.set("[simulation][conditional_conditions][{conditional_id}]", "{escaped_else_if_condition}")
-""".strip()
+                                        "code": (
+                                            f"event.set(\"[simulation][conditional_branches][{conditional_id}]\", \"else_if_{else_if_idx}\")\n"
+                                            f"event.set(\"[simulation][conditional_conditions][{conditional_id}]\", \"{escaped_else_if_condition}\")"
+                                        )
                                     }
                                 }
                                 else_if_copy['plugins'] = [branch_tracker] + instrument_plugins(else_if_copy['plugins'])
@@ -156,9 +155,7 @@ event.set("[simulation][conditional_conditions][{conditional_id}]", "{escaped_el
                                 "type": "filter",
                                 "plugin": "ruby",
                                 "config": {
-                                    "code": f"""
-event.set("[simulation][conditional_branches][{conditional_id}]", "else")
-""".strip()
+                                    "code": f"event.set(\"[simulation][conditional_branches][{conditional_id}]\", \"else\")"
                                 }
                             }
                             else_block['plugins'] = [branch_tracker] + instrument_plugins(else_block['plugins'])
@@ -229,19 +226,19 @@ end
                             }
                         }
                         instrumented.append(pre_drop_plugin)
-                        
+
                         # Add the actual drop plugin
                         instrumented.append(plugin)
-                        
+
                         # Skip the normal timing instrumentation for drop plugins
                         # The event is already sent to the API, and the drop will prevent any further processing
                     else:
                         # Regular plugin - add normal timing instrumentation
                         # Add pre-plugin timing instrumentation
-                        pre_instrumentation_code = f"""
-# Capture start time in nanoseconds before plugin execution
-event.set("[simulation][timing][start_ns]", (Time.now.to_f * 1_000_000_000).to_i)
-""".strip()
+                        pre_instrumentation_code = (
+                            f"# Capture start time in nanoseconds before plugin execution\n"
+                            f"event.set(\"[simulation][timing][start_ns]\", (Time.now.to_f * 1_000_000_000).to_i)"
+                        )
 
                         pre_instrumentation_plugin = {
                             "id": f"pre_instrumentation_{current_step}",
@@ -258,25 +255,26 @@ event.set("[simulation][timing][start_ns]", (Time.now.to_f * 1_000_000_000).to_i
                         instrumented.append(plugin)
 
                         # Add Ruby instrumentation after this plugin
-                        instrumentation_code = f"""event.set("[simulation][step]", {current_step})
-event.set("[simulation][id]", "{plugin['id']}")
-end_ns = (Time.now.to_f * 1_000_000_000).to_i
-start_ns = event.get("[simulation][timing][start_ns]")
-if start_ns
-  execution_ns = end_ns - start_ns
-  event.set("[simulation][timing][execution_ns]", execution_ns)
-  event.set("[simulation][timing][end_ns]", end_ns)
-end
-
-snapshot = {{}}
-event.to_hash.each do |key, value|
-  next if key.start_with?("@metadata") || key == "snapshots"
-  snapshot[key] = value
-end
-
-# Store snapshot under the plugin ID
-event.set("[snapshots][{plugin['id']}]", snapshot)
-""".strip()
+                        instrumentation_code = (
+                            f"event.set(\"[simulation][step]\", {current_step})\n"
+                            f"event.set(\"[simulation][id]\", \"{plugin['id']}\")\n"
+                            f"end_ns = (Time.now.to_f * 1_000_000_000).to_i\n"
+                            f"start_ns = event.get(\"[simulation][timing][start_ns]\")\n"
+                            f"if start_ns\n"
+                            f"  execution_ns = end_ns - start_ns\n"
+                            f"  event.set(\"[simulation][timing][execution_ns]\", execution_ns)\n"
+                            f"  event.set(\"[simulation][timing][end_ns]\", end_ns)\n"
+                            f"end\n"
+                            f"\n"
+                            f"snapshot = {{}}\n"
+                            f"event.to_hash.each do |key, value|\n"
+                            f"  next if key.start_with?(\"@metadata\") || key == \"snapshots\"\n"
+                            f"  snapshot[key] = value\n"
+                            f"end\n"
+                            f"\n"
+                            f"# Store snapshot under the plugin ID\n"
+                            f"event.set(\"[snapshots][{plugin['id']}]\", snapshot)"
+                        )
 
                         instrumentation_plugin = {
                             "id": f"instrumentation_{current_step}",
@@ -661,8 +659,9 @@ def GetRelatedLogs(request):
             slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
             slots_response.raise_for_status()
             slots_data = slots_response.json()
-            
-            logger.debug(f"Slots data type: {type(slots_data)}, Keys: {list(slots_data.keys()) if isinstance(slots_data, dict) else 'N/A'}")
+
+            logger.debug(
+                f"Slots data type: {type(slots_data)}, Keys: {list(slots_data.keys()) if isinstance(slots_data, dict) else 'N/A'}")
             logger.debug(f"Looking for slot_id: {slot_id} (type: {type(slot_id)})")
 
             # Find the slot and get its creation timestamp
@@ -675,7 +674,8 @@ def GetRelatedLogs(request):
                 min_timestamp = slot_info.get('created_at_millis')
                 current_time_millis = int(time.time() * 1000)
                 time_diff_seconds = (current_time_millis - min_timestamp) / 1000 if min_timestamp else 0
-                logger.debug(f"Slot {slot_id} - Current time: {current_time_millis}, Min timestamp: {min_timestamp}, Diff: {time_diff_seconds:.1f}s ago")
+                logger.debug(
+                    f"Slot {slot_id} - Current time: {current_time_millis}, Min timestamp: {min_timestamp}, Diff: {time_diff_seconds:.1f}s ago")
             else:
                 # Slot not found - use recent time window as fallback (last 30 seconds)
                 current_time_millis = int(time.time() * 1000)
@@ -712,7 +712,7 @@ def GetRelatedLogs(request):
 
             log_count = data.get('log_count', 0)
             logger.info(f"GetRelatedLogs: Retrieved {log_count} logs for slot {slot_id}")
-            
+
             # Log timestamp range of returned logs for debugging
             if log_count > 0 and 'logs' in data:
                 logs = data['logs']
@@ -720,9 +720,11 @@ def GetRelatedLogs(request):
                 if timestamps:
                     oldest = min(timestamps)
                     newest = max(timestamps)
-                    logger.info(f"Log timestamp range - Oldest: {oldest}, Newest: {newest}, Min filter was: {min_timestamp}")
+                    logger.info(
+                        f"Log timestamp range - Oldest: {oldest}, Newest: {newest}, Min filter was: {min_timestamp}")
                     if min_timestamp and oldest < min_timestamp:
-                        logger.error(f"FILTERING FAILED: Found log older ({oldest}) than min_timestamp ({min_timestamp})")
+                        logger.error(
+                            f"FILTERING FAILED: Found log older ({oldest}) than min_timestamp ({min_timestamp})")
 
             return JsonResponse(data, status=200)
 
@@ -805,6 +807,3 @@ def UploadFile(request):
         logger.error(f"Error in UploadFile: {e}")
         logger.error(traceback.format_exc())
         return JsonResponse({"error": str(e)}, status=500)
-
-
-
