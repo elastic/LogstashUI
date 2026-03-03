@@ -23,6 +23,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Reduce httpx logging noise - only show warnings and errors
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
 
 # Configuration paths

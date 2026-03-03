@@ -222,3 +222,4 @@ __marimo__/
 /LogstashUI/staticfiles/django_htmx/
 /LogstashUI/staticfiles/images/
 /LogstashUI/staticfiles/js/
+/.plans/

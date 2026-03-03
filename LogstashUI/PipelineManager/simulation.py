@@ -193,10 +193,8 @@ event.to_hash.each do |key, value|
 end
 event.set("[snapshots][{drop_plugin_id}]", snapshot)
 
-# Ensure run_id is set (should already be in the event from input)
-if !event.get("run_id")
-  event.set("run_id", "{run_id}")
-end
+# Note: run_id is added to the event at runtime via the simulate endpoint
+# Do NOT hardcode it here as it would change the pipeline hash for each simulation
 
 # Convert event to hash and send to API
 event_hash = event.to_hash
@@ -432,6 +430,10 @@ end
 
         # Use the slot-based pipeline name
         pipeline_name = f"slot{slot_id}-filter1"
+
+        # Note: No need to verify pipeline here - the slot allocation endpoint already
+        # performs comprehensive verification with polling and retries. If we got here,
+        # the pipelines are guaranteed to be loaded and ready.
 
         # If log_text is provided, send it through the pipeline
         if log_text:

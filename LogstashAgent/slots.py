@@ -104,12 +104,12 @@ def allocate_slot(pipeline_name: str, pipelines: List[Dict[str, Any]]) -> Option
             existing_hash = slot_data.get('content_hash', '')
             logger.debug(f"  Slot {slot_id} hash: {existing_hash[:8]}...")
             if existing_hash == content_hash:
-                # Update timestamps to reset log filtering for each new simulation
+                # Update last_accessed to prevent TTL eviction
+                # DO NOT update created_at - keep original creation time to prevent race conditions
+                # with eviction logic during active simulations
                 now = datetime.now(timezone.utc)
                 slot_data['last_accessed'] = now.isoformat()
-                slot_data['created_at'] = now.isoformat()
-                slot_data['created_at_millis'] = int(now.timestamp() * 1000)
-                logger.info(f"✓ Reusing slot {slot_id} with matching hash")
+                logger.info(f"+ Reusing slot {slot_id} with matching hash")
                 return slot_id
             else:
                 # Debug: Compare configs to see what's different
@@ -140,7 +140,7 @@ def allocate_slot(pipeline_name: str, pipelines: List[Dict[str, Any]]) -> Option
                     'pipeline_name': pipeline_name,
                     'pipelines': pipelines
                 }
-                logger.info(f"✓ Allocated new empty slot {slot_id}")
+                logger.info(f"+ Allocated new empty slot {slot_id}")
                 return slot_id
 
         # No empty slots - evict the oldest one (by created_at)
@@ -456,11 +456,25 @@ async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_wa
                         if state == 'not_found':
                             not_found_pipelines.append(pipeline_name)
                         elif state == 'idle':
-                            # Pipeline exists and loaded successfully - this is what we want!
-                            loaded_pipelines.append(pipeline_name)
-                            logger.debug(f"Pipeline {pipeline_name} is idle (loaded successfully)")
+                            # Pipeline exists and loaded successfully - but check if it's truly ready
+                            # Logstash can report a pipeline as 'idle' while it's still initializing
+                            # (events structure exists but pipeline isn't accepting events yet)
+                            # Wait at least 2 seconds after first seeing the pipeline to ensure it's started
+                            if pipeline_name in first_seen:
+                                time_since_first_seen = time.time() - first_seen[pipeline_name]
+                                if time_since_first_seen >= 2.0:
+                                    loaded_pipelines.append(pipeline_name)
+                                    logger.debug(f"Pipeline {pipeline_name} is idle (loaded successfully, stable for {time_since_first_seen:.1f}s)")
+                                else:
+                                    # Pipeline just appeared, wait a bit longer to ensure it's truly ready
+                                    logger.debug(f"Pipeline {pipeline_name} is idle but only seen for {time_since_first_seen:.1f}s, waiting for stability")
+                                    not_found_pipelines.append(pipeline_name)
+                            else:
+                                # First time seeing this pipeline as idle, wait for next check
+                                logger.debug(f"Pipeline {pipeline_name} is idle (first detection, waiting for stability)")
+                                not_found_pipelines.append(pipeline_name)
                         elif state == 'running':
-                            # Pipeline is actively processing - even better!
+                            # Pipeline is actively processing - it's definitely ready!
                             loaded_pipelines.append(pipeline_name)
                             logger.debug(f"Pipeline {pipeline_name} is running")
 

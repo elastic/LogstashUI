@@ -1816,7 +1816,7 @@ function initSimulationResults(runId) {
                     const warning = document.createElement('span');
                     warning.id = 'loading-timeout-warning';
                     warning.className = 'text-xs text-yellow-400 ml-2';
-                    warning.textContent = 'This is taking a while, you should check the logs. If you drop logs or execute a "sleep" function, you wont see a response here and this is normal.';
+                    warning.textContent = 'This is taking a while, you should check the logs using the button to the right.';
                     loadingIndicator.appendChild(warning);
                 }
             }
