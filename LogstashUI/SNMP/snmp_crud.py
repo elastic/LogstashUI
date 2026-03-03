@@ -1109,33 +1109,33 @@ def _get_special_case_filters(oid_mappings):
             if isinstance(columns, dict) and columns:
                 # Generate the row rename statements using list comprehension
                 rename_statements = '\n'.join([
-                    f"    row['{field_name}'] = row.delete('{oid}')"
+                    f"    row[\"{field_name}\"] = row.delete(\"{oid}\")"
                     for field_name, oid in columns.items()
                 ])
 
                 # Build the Ruby code for this table
                 ruby_code = (
-                    f"rows = event.get('[{table_name}]')\n"
+                    f"rows = event.get(\"[{table_name}]\")\n"
                     f"if rows.is_a?(Array)\n"
-                    f"  host_name = event.get('[host][name]')\n"
-                    f"  host_hostname = event.get('[host][hostname]')\n"
-                    f"  network_name = event.get('[network][name]')\n"
-                    f"  timestamp = event.get('@timestamp')\n"
+                    f"  host_name = event.get(\"[host][name]\")\n"
+                    f"  host_hostname = event.get(\"[host][hostname]\")\n"
+                    f"  network_name = event.get(\"[network][name]\")\n"
+                    f"  timestamp = event.get(\"@timestamp\")\n"
                     f"  rows.each do |row|\n"
                     f"    next unless row.is_a?(Hash)\n"
                     f"{rename_statements}\n"
                     f"    new_event = LogStash::Event.new({{\n"
-                    f"      '@timestamp' => timestamp,\n"
-                    f"      'host' => {{ 'name' => host_name, 'hostname' => host_hostname }},\n"
-                    f"      'network' => {{ 'name' => network_name }},\n"
-                    f"      'table' => row,\n"
-                    f"      'metricset' => {{ 'module' => 'snmp' }},\n"
-                    f"      'event' => {{ 'kind' => '{table_name.lower()}' }}\n"
+                    f"      \"@timestamp\" => timestamp,\n"
+                    f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname }},\n"
+                    f"      \"network\" => {{ \"name\" => network_name }},\n"
+                    f"      \"table\" => row,\n"
+                    f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
+                    f"      \"event\" => {{ \"kind\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
-                    f"  event.remove('[{table_name}]')\n"
-                    f"  event.set('[event][kind]', 'metrics')\n"
+                    f"  event.remove(\"[{table_name}]\")\n"
+                    f"  event.set(\"[event][kind]\", \"metrics\")\n"
                     f"end"
                 )
 

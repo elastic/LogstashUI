@@ -176,23 +176,11 @@ def AddConnection(request):
                 # If test fails, delete the connection and return JSON error
                 new_connection.delete()
                 logger.error(f"User '{request.user.username}' failed to add connection, {new_connection.id}")
-                # Escape HTML in error message to prevent injection but preserve formatting
-
-                escaped_message = escape(str(message))
-                response = HttpResponse(f"""
-                    <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
-                        <h3 class="font-bold mb-2 text-lg">❌ Connection Test Failed</h3>
-                        <p class="mb-3">The connection could not be established. Please check your credentials and try again.</p>
-                        <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded">
-                            <p class="font-semibold mb-1 text-sm">Error Details:</p>
-                            <pre class="text-xs overflow-auto whitespace-pre-wrap break-words max-h-64">{escaped_message}</pre>
-                        </div>
-                    </div>
-                """)
-                response['HX-Retarget'] = '#connectionErrorContainer'
-                response['HX-Reswap'] = 'innerHTML'
-
-                return response
+                
+                return JsonResponse({
+                    'success': False,
+                    'error': str(message)
+                }, status=200)
 
             # Connection test succeeded, return JSON response
             logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
@@ -204,15 +192,10 @@ def AddConnection(request):
             }, status=200)
         else:
             logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
-            response = HttpResponse(f"""
-                <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg">
-                    <h3 class="font-bold mb-2">Form Validation Error</h3>
-                    <div class="text-sm">{escape(str(form.errors))}</div>
-                </div>
-            """)
-            response['HX-Retarget'] = '#connectionErrorContainer'
-            response['HX-Reswap'] = 'innerHTML'
-            return response
+            return JsonResponse({
+                'success': False,
+                'error': str(form.errors)
+            }, status=200)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 

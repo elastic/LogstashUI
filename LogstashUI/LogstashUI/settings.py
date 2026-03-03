@@ -34,7 +34,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-__VERSION__ = "0.1.12"
+__VERSION__ = "0.2.0"
 # Application definition
 
 INSTALLED_APPS = [
@@ -157,7 +157,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_DIRS = [
-    BASE_DIR / "Sites/static"
+    BASE_DIR / "Site/static"
 ]
 
 if platform.system() == "Windows":
