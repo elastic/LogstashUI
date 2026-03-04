@@ -1,3 +1,9 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
 let currentDiffMode = 'save'; // 'save' or 'view'
 let storedNewPipelineCode = '';
 let currentAddIdsState = false;
@@ -64,7 +70,7 @@ function computeLineDiff(oldLines, newLines) {
                 k++;
             }
             if (equalLines.length > 0) {
-                changes.push({type: 'equal', lines: equalLines});
+                changes.push({ type: 'equal', lines: equalLines });
             }
         } else {
             // Collect deletions and insertions
@@ -83,92 +89,16 @@ function computeLineDiff(oldLines, newLines) {
 
             // If we have both deletions and insertions, treat as replacement
             if (deletedLines.length > 0 && insertedLines.length > 0) {
-                changes.push({type: 'replace', oldLines: deletedLines, newLines: insertedLines});
+                changes.push({ type: 'replace', oldLines: deletedLines, newLines: insertedLines });
             } else if (deletedLines.length > 0) {
-                changes.push({type: 'delete', lines: deletedLines});
+                changes.push({ type: 'delete', lines: deletedLines });
             } else if (insertedLines.length > 0) {
-                changes.push({type: 'insert', lines: insertedLines});
+                changes.push({ type: 'insert', lines: insertedLines });
             }
         }
     }
 
     return changes;
-}
-
-/**
- * Compute character-level inline diff for two strings
- */
-function computeInlineDiff(oldStr, newStr) {
-    const oldChars = oldStr.split('');
-    const newChars = newStr.split('');
-    const lcs = computeLCS(oldChars, newChars);
-
-    const changes = [];
-    let i = 0, j = 0, k = 0;
-
-    while (i < oldChars.length || j < newChars.length) {
-        if (k < lcs.length && i < oldChars.length && j < newChars.length &&
-            oldChars[i] === lcs[k] && newChars[j] === lcs[k]) {
-            // Equal character
-            const equalChars = [];
-            while (k < lcs.length && i < oldChars.length && j < newChars.length &&
-                oldChars[i] === lcs[k] && newChars[j] === lcs[k]) {
-                equalChars.push(oldChars[i]);
-                i++;
-                j++;
-                k++;
-            }
-            if (equalChars.length > 0) {
-                changes.push({type: 'equal', text: equalChars.join('')});
-            }
-        } else {
-            const deletedChars = [];
-            const insertedChars = [];
-
-            while (i < oldChars.length && (k >= lcs.length || oldChars[i] !== lcs[k])) {
-                deletedChars.push(oldChars[i]);
-                i++;
-            }
-
-            while (j < newChars.length && (k >= lcs.length || newChars[j] !== lcs[k])) {
-                insertedChars.push(newChars[j]);
-                j++;
-            }
-
-            if (deletedChars.length > 0) {
-                changes.push({type: 'delete', text: deletedChars.join('')});
-            }
-            if (insertedChars.length > 0) {
-                changes.push({type: 'insert', text: insertedChars.join('')});
-            }
-        }
-    }
-
-    return changes;
-}
-
-/**
- * Render inline diff with highlighting for a specific side
- */
-function renderInlineDiff(changes, side) {
-    const escapeHtml = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
-
-    let html = '';
-    for (const change of changes) {
-        if (change.type === 'equal') {
-            html += escapeHtml(change.text);
-        } else if (change.type === 'delete' && side === 'old') {
-            html += `<span class="bg-red-500/50 font-bold">${escapeHtml(change.text)}</span>`;
-        } else if (change.type === 'insert' && side === 'new') {
-            html += `<span class="bg-green-500/50 font-bold">${escapeHtml(change.text)}</span>`;
-        }
-        // Don't render delete on new side or insert on old side
-    }
-    return html || ' ';
 }
 
 // ===== END DIFF ALGORITHMS =====
@@ -181,7 +111,7 @@ function renderInlineDiff(changes, side) {
  */
 function validateQuoteMixing(components) {
     const warnings = [];
-    
+
     function checkValue(value, path) {
         if (typeof value === 'string') {
             // Check if string contains both single and double quotes
@@ -195,17 +125,17 @@ function validateQuoteMixing(components) {
         }
         return null;
     }
-    
+
     function scanObject(obj, basePath) {
         const issues = [];
-        
+
         if (typeof obj !== 'object' || obj === null) {
             return issues;
         }
-        
+
         for (const [key, value] of Object.entries(obj)) {
             const currentPath = basePath ? `${basePath}.${key}` : key;
-            
+
             if (typeof value === 'string') {
                 const issue = checkValue(value, currentPath);
                 if (issue) {
@@ -215,22 +145,22 @@ function validateQuoteMixing(components) {
                 issues.push(...scanObject(value, currentPath));
             }
         }
-        
+
         return issues;
     }
-    
+
     // Scan all sections
     for (const section of ['input', 'filter', 'output']) {
         if (!components[section]) continue;
-        
+
         for (let i = 0; i < components[section].length; i++) {
             const component = components[section][i];
             const pluginName = component.plugin || 'unknown';
             const pluginId = component.id || `${section}_${i}`;
-            
+
             // Scan the config object for quote mixing
             const issues = scanObject(component.config, 'config');
-            
+
             if (issues.length > 0) {
                 warnings.push({
                     section: section,
@@ -241,7 +171,7 @@ function validateQuoteMixing(components) {
             }
         }
     }
-    
+
     return warnings;
 }
 
@@ -250,18 +180,12 @@ function validateQuoteMixing(components) {
  */
 function displayQuoteWarnings(warnings) {
     const warningContainer = document.getElementById('quoteWarningContainer');
-    
+
     if (warnings.length === 0) {
         warningContainer.classList.add('hidden');
         return;
     }
-    
-    const escapeHtml = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
-    
+
     let warningHtml = `
         <div class="bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded">
             <div class="flex items-start">
@@ -271,11 +195,11 @@ function displayQuoteWarnings(warnings) {
                 <div class="flex-1">
                     <h4 class="text-yellow-400 font-semibold mb-2">Quote Mixing Warning</h4>
                     <p class="text-yellow-200 text-sm mb-3">
-                        The following fields contain both single (') and double (") quotes. Logstash cannot properly escape these values, which may cause parsing errors.
+                        The following fields contain both single (') and double (") quotes. Escaping them can be tricky, be sure to review.
                     </p>
                     <div class="space-y-3">
     `;
-    
+
     for (const warning of warnings) {
         warningHtml += `
             <div class="bg-gray-800/50 p-3 rounded text-sm">
@@ -283,7 +207,7 @@ function displayQuoteWarnings(warnings) {
                     ${escapeHtml(warning.section)} → ${escapeHtml(warning.plugin)} <span class="text-gray-400">(${escapeHtml(warning.id)})</span>
                 </div>
         `;
-        
+
         for (const issue of warning.issues) {
             warningHtml += `
                 <div class="ml-4 mt-2 text-gray-300">
@@ -292,10 +216,10 @@ function displayQuoteWarnings(warnings) {
                 </div>
             `;
         }
-        
+
         warningHtml += `</div>`;
     }
-    
+
     warningHtml += `
                     </div>
                     <p class="text-yellow-200 text-sm mt-3">
@@ -305,7 +229,7 @@ function displayQuoteWarnings(warnings) {
             </div>
         </div>
     `;
-    
+
     warningContainer.innerHTML = warningHtml;
     warningContainer.classList.remove('hidden');
 }
@@ -362,7 +286,7 @@ async function viewGeneratedCode() {
         const formData = new FormData();
         formData.append('components', JSON.stringify(components));
 
-        const response = await fetch('/API/GetCurrentPipelineCode/', {
+        const response = await fetch('/ConnectionManager/GetCurrentPipelineCode/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -462,7 +386,7 @@ function copyDiffCodeToClipboard() {
 function handleAddIdsChange() {
     const checkbox = document.getElementById('addIdsCheckbox');
     currentAddIdsState = checkbox.checked;
-    
+
     // Only reload if we're in save mode (diff comparison)
     if (currentDiffMode === 'save') {
         loadDiffContent();
@@ -497,19 +421,28 @@ async function prepareDiffModal() {
     `;
     document.getElementById('confirmSaveButton').classList.remove('hidden');
     document.getElementById('copyCodeButton').classList.add('hidden');
-    document.getElementById('addIdsContainer').classList.remove('hidden');
-    
+
+    // Hide add IDs checkbox if in Text mode (not applicable)
+    const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
+    if (isTextMode) {
+        document.getElementById('addIdsContainer').classList.add('hidden');
+    } else {
+        document.getElementById('addIdsContainer').classList.remove('hidden');
+    }
+
     // Reset checkbox state
     const checkbox = document.getElementById('addIdsCheckbox');
     checkbox.checked = false;
     currentAddIdsState = false;
-    
+
     // Show the modal first
     showDiffModal();
 
-    // Validate for quote mixing
-    quoteValidationWarnings = validateQuoteMixing(components);
-    displayQuoteWarnings(quoteValidationWarnings);
+    // Validate for quote mixing only if in UI mode
+    if (!isTextMode) {
+        quoteValidationWarnings = validateQuoteMixing(components);
+        displayQuoteWarnings(quoteValidationWarnings);
+    }
 
     // Load the diff content
     await loadDiffContent();
@@ -517,10 +450,18 @@ async function prepareDiffModal() {
 
 // Separate function to load diff content (can be called when checkbox changes)
 async function loadDiffContent() {
-    // Re-validate and display warnings (in case components changed)
-    quoteValidationWarnings = validateQuoteMixing(components);
-    displayQuoteWarnings(quoteValidationWarnings);
-    
+    // Check if we're in Text mode
+    const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
+
+    // Re-validate and display warnings only if in UI mode
+    if (!isTextMode) {
+        quoteValidationWarnings = validateQuoteMixing(components);
+        displayQuoteWarnings(quoteValidationWarnings);
+        
+        // Check and display validation errors
+        checkAndDisplayValidationErrors();
+    }
+
     // Show loading state
     document.getElementById('diffLoading').classList.remove('hidden');
     document.getElementById('diffContainer').classList.add('hidden');
@@ -530,16 +471,26 @@ async function loadDiffContent() {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
-        console.log('Fetching diff for:', {esId, pipelineName, addIds: currentAddIdsState});
+        // If in Text mode, get the raw text from CodeMirror editor
+        let newPipelineText = null;
+        if (isTextMode && typeof codeMirrorEditor !== 'undefined' && codeMirrorEditor) {
+            newPipelineText = codeMirrorEditor.getValue();
+        }
 
         // Fetch diff from the server
         const formData = new FormData();
         formData.append('es_id', esId);
         formData.append('pipeline', pipelineName);
-        formData.append('components', JSON.stringify(components));
-        formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
 
-        const diffResponse = await fetch('/API/GetDiff/', {
+        // If in Text mode, send the raw text; otherwise send components
+        if (isTextMode && newPipelineText) {
+            formData.append('pipeline_text', newPipelineText);
+        } else {
+            formData.append('components', JSON.stringify(components));
+            formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
+        }
+
+        const diffResponse = await fetch('/ConnectionManager/GetDiff/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -547,16 +498,16 @@ async function loadDiffContent() {
             body: formData
         });
 
-        console.log('Diff response status:', diffResponse.status);
-
         if (!diffResponse.ok) {
             const errorText = await diffResponse.text();
-            console.error('Diff response error:', errorText);
+            console.error('[Diff Modal] Failed to fetch diff:', diffResponse.status, errorText);
             throw new Error(`Failed to fetch diff: ${diffResponse.status} - ${errorText}`);
         }
 
         const diffData = await diffResponse.json();
-        console.log('Diff data received:', diffData);
+
+        // Store the new pipeline text for use when saving
+        storedNewPipelineCode = diffData.new;
 
         // Hide loading, show container
         document.getElementById('diffLoading').classList.add('hidden');
@@ -739,10 +690,217 @@ async function loadDiffContent() {
     }
 }
 
+// Helper to check if a plugins array is effectively empty (no plugins or only comments)
+function isPluginsArrayEmpty(plugins) {
+    if (!plugins || plugins.length === 0) {
+        return true;
+    }
+    // Check if all plugins are comments
+    return plugins.every(plugin => plugin.plugin === 'comment');
+}
+
+// Function to check for empty conditional blocks recursively
+function findEmptyConditionals(components) {
+    const emptyConditionals = [];
+
+    function checkComponent(component, path = []) {
+        if (component.plugin === 'if') {
+            const componentPath = [...path, `${component.type} conditional`];
+            
+            // Check if main if block is empty or only has comments
+            if (isPluginsArrayEmpty(component.config.plugins)) {
+                emptyConditionals.push({
+                    path: componentPath.join(' > '),
+                    block: 'if',
+                    condition: component.config.condition || ''
+                });
+            } else {
+                // Recursively check nested plugins in if block
+                component.config.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+            }
+
+            // Check else-if blocks
+            if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                component.config.else_ifs.forEach((elseIf, index) => {
+                    if (isPluginsArrayEmpty(elseIf.plugins)) {
+                        emptyConditionals.push({
+                            path: componentPath.join(' > '),
+                            block: `else-if #${index + 1}`,
+                            condition: elseIf.condition || ''
+                        });
+                    } else {
+                        // Recursively check nested plugins in else-if block
+                        elseIf.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                    }
+                });
+            }
+
+            // Check else block
+            if (component.config.else) {
+                if (isPluginsArrayEmpty(component.config.else.plugins)) {
+                    emptyConditionals.push({
+                        path: componentPath.join(' > '),
+                        block: 'else',
+                        condition: ''
+                    });
+                } else {
+                    // Recursively check nested plugins in else block
+                    component.config.else.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                }
+            }
+        }
+    }
+
+    // Check all component types
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(component => checkComponent(component, []));
+        }
+    });
+
+    return emptyConditionals;
+}
+
+// Function to find components with missing required fields
+function findMissingRequiredFields(components) {
+    const componentsWithMissingFields = [];
+
+    function checkComponent(component, path = []) {
+        // Skip comment plugins and conditionals
+        if (component.plugin === 'comment' || component.plugin === 'if') {
+            // For conditionals, recursively check nested plugins
+            if (component.plugin === 'if') {
+                const componentPath = [...path, `${component.type} conditional`];
+                
+                // Check plugins in if block
+                if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                    component.config.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                }
+                
+                // Check plugins in else-if blocks
+                if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                    component.config.else_ifs.forEach(elseIf => {
+                        if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                            elseIf.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                        }
+                    });
+                }
+                
+                // Check plugins in else block
+                if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                    component.config.else.plugins.forEach(plugin => checkComponent(plugin, componentPath));
+                }
+            }
+            return;
+        }
+
+        // Get plugin definition
+        const pluginDataSource = typeof pluginData !== 'undefined' ? pluginData : window.pluginData;
+        const pluginDef = pluginDataSource?.[component.type]?.[component.plugin];
+        
+        if (!pluginDef || !pluginDef.options) {
+            return;
+        }
+
+        // Check for missing required fields
+        const missingFields = [];
+        Object.entries(pluginDef.options).forEach(([fieldName, fieldDef]) => {
+            if (fieldDef.required === 'Yes') {
+                const fieldValue = component.config?.[fieldName];
+                if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+                    missingFields.push(fieldName);
+                } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue) && Object.keys(fieldValue).length === 0) {
+                    missingFields.push(fieldName);
+                }
+            }
+        });
+
+        if (missingFields.length > 0) {
+            const componentPath = path.length > 0 ? path.join(' > ') + ' > ' : '';
+            componentsWithMissingFields.push({
+                path: componentPath + component.plugin,
+                fields: missingFields
+            });
+        }
+    }
+
+    // Check all component types
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(component => checkComponent(component, []));
+        }
+    });
+
+    return componentsWithMissingFields;
+}
+
+// Function to check and display validation errors
+function checkAndDisplayValidationErrors() {
+    const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
+    const errorContainer = document.getElementById('validationErrorsContainer');
+    const errorContent = document.getElementById('validationErrorsContent');
+    const confirmButton = document.getElementById('confirmSaveButton');
+    
+    if (!errorContainer || !errorContent || !confirmButton) return false;
+    
+    // Skip validation in text mode
+    if (isTextMode || typeof components === 'undefined') {
+        errorContainer.classList.add('hidden');
+        confirmButton.disabled = false;
+        confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        return false;
+    }
+    
+    const errorSections = [];
+    
+    // Check for empty conditionals
+    const emptyConditionals = findEmptyConditionals(components);
+    if (emptyConditionals.length > 0) {
+        let html = '<div><div class="font-medium mb-1">Empty Conditional Blocks:</div><ul class="list-disc pl-5 space-y-0.5">';
+        emptyConditionals.forEach(item => {
+            const conditionText = item.condition ? ` <span class="text-red-400">[${item.condition}]</span>` : '';
+            html += `<li>${item.path} - ${item.block}${conditionText}</li>`;
+        });
+        html += '</ul></div>';
+        errorSections.push(html);
+    }
+    
+    // Check for missing required fields
+    const missingFields = findMissingRequiredFields(components);
+    if (missingFields.length > 0) {
+        let html = '<div><div class="font-medium mb-1">Missing Required Fields:</div><ul class="list-disc pl-5 space-y-0.5">';
+        missingFields.forEach(item => {
+            html += `<li>${item.path}: <span class="text-red-400">${item.fields.join(', ')}</span></li>`;
+        });
+        html += '</ul></div>';
+        errorSections.push(html);
+    }
+    
+    // Display errors or hide container
+    if (errorSections.length > 0) {
+        errorContent.innerHTML = errorSections.join('');
+        errorContainer.classList.remove('hidden');
+        confirmButton.disabled = true;
+        confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
+        return true;
+    } else {
+        errorContainer.classList.add('hidden');
+        confirmButton.disabled = false;
+        confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        return false;
+    }
+}
+
 // Function to confirm and save the pipeline
 async function confirmSavePipeline() {
     const confirmButton = document.getElementById('confirmSaveButton');
     const originalText = confirmButton.textContent;
+
+    // Check for validation errors - if any exist, the button should be disabled
+    // This is a safety check in case the button is somehow enabled
+    if (checkAndDisplayValidationErrors()) {
+        return;
+    }
 
     // Disable button and show loading state
     confirmButton.disabled = true;
@@ -752,17 +910,23 @@ async function confirmSavePipeline() {
     try {
         const esId = new URLSearchParams(window.location.search).get('es_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
-
-        console.log('Saving pipeline:', {esId, pipelineName});
+        const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
 
         const formData = new FormData();
         formData.append('save_pipeline', 'true');
         formData.append('es_id', esId);
         formData.append('pipeline', pipelineName);
-        formData.append('components', JSON.stringify(components));
-        formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
 
-        const saveResponse = await fetch('/API/SavePipeline/', {
+        // If in Text mode, use the stored pipeline text directly
+        // Otherwise, use components (UI mode)
+        if (isTextMode && storedNewPipelineCode) {
+            formData.append('pipeline_config', storedNewPipelineCode);
+        } else {
+            formData.append('components', JSON.stringify(components));
+            formData.append('add_ids', currentAddIdsState ? 'true' : 'false');
+        }
+
+        const saveResponse = await fetch('/ConnectionManager/SavePipeline/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -770,13 +934,10 @@ async function confirmSavePipeline() {
             body: formData
         });
 
-        console.log('Save response status:', saveResponse.status);
-
         const responseText = await saveResponse.text();
-        
+
         // Check if response is 403 (permission denied)
         if (saveResponse.status === 403) {
-            console.log('Permission denied (403)');
             // Manually show toast since we're using fetch API, not HTMX
             if (typeof showToast === 'function') {
                 showToast(responseText || 'Access denied: Admin role required', 'error');
@@ -785,22 +946,20 @@ async function confirmSavePipeline() {
             hideDiffModal();
             return;
         }
-        
+
         if (!saveResponse.ok) {
             console.error('Save error:', responseText);
-            
+
             // Display the error HTML in the modal
             document.getElementById('diffLoading').classList.add('hidden');
             document.getElementById('diffContainer').innerHTML = responseText;
             document.getElementById('diffContainer').classList.remove('hidden');
-            
+
             // Hide the save button since we can't proceed
             confirmButton.classList.add('hidden');
-            
+
             return; // Don't proceed with success flow
         }
-
-        console.log('Save response:', responseText);
 
         // Show success message
         document.getElementById('saveStatus').innerHTML = `

@@ -1,14 +1,256 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
 <!DOCTYPE html>
 {% extends "base.html" %}
 
 {% block content %}
 
 {% load static %}
+<script src="{% static 'js/d3.v7.js' %}"></script>
+<script src="{% static 'js/codemirror.min.js' %}"></script>
+<script src="{% static 'js/show-hint.min.js' %}"></script>
+
 <script src="{% static 'js/pipeline_editor.js' %}"></script>
 <script src="{% static 'js/pipeline_settings.js' %}"></script>
 <script src="{% static 'js/move_mode.js' %}"></script>
 <script src="{% static 'js/simulation_results.js' %}"></script>
+<script src="{% static 'js/pipeline_text_editor.js' %}"></script>
+
 <link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
+<link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/monokai.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/show-hint.min.css' %}">
+{{ component_data|json_script:"component-data" }}
+{{ plugin_data|json_script:"plugin-data" }}
+<script>
+    // Define components and pluginData early so HTMX hx-vals can reference them
+    const components = JSON.parse(document.getElementById('component-data').textContent);
+    const pluginData = JSON.parse(document.getElementById('plugin-data').textContent);
+    window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
+    
+    // Global variable to store current slot ID for logs viewer
+    let currentSlotId = null;
+    
+    /**
+     * Check if the pipeline successfully loaded in Logstash
+     * Called after slot preallocation completes
+     */
+    async function checkPipelineLoadStatus() {
+        const statusContainer = document.getElementById('pipelineLoadStatus');
+        const statusIcon = document.getElementById('pipelineStatusIcon');
+        const statusMessage = document.getElementById('pipelineStatusMessage');
+        
+        if (!statusContainer || !statusIcon || !statusMessage) {
+            console.error('Pipeline status elements not found');
+            return;
+        }
+        
+        // Get slot_id from preallocation result
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+        
+        const slotElement = preallocationResult?.querySelector('[data-slot-id]');
+        
+        const slotId = slotElement?.getAttribute('data-slot-id');
+        const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
+        
+        // Store slot_id globally for logs viewer (even if pipeline failed)
+        if (slotId) {
+            currentSlotId = slotId;
+        }
+        
+        // If pipeline already failed during allocation, show failure immediately
+        if (pipelineFailed) {
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+            statusIcon.className = 'w-5 h-5 text-red-400';
+            statusMessage.textContent = 'Pipeline configuration had a problem';
+            statusMessage.className = 'text-sm font-medium text-red-400';
+            return;
+        }
+        
+        if (!slotId) {
+            // No slot_id means the pipeline failed to allocate a slot entirely
+            console.error('Slot ID not found in preallocation result - pipeline failed to allocate');
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+            statusIcon.className = 'w-5 h-5 text-red-400';
+            statusMessage.textContent = 'Pipeline fails with a configuration error';
+            statusMessage.className = 'text-sm font-medium text-red-400';
+            return;
+        }
+        
+        // The actual pipeline name in Logstash is slot{id}-filter1
+        const slotPipelineName = `slot${slotId}-filter1`;
+        
+        // Show loading state
+        statusContainer.classList.remove('hidden');
+        statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
+        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
+        statusIcon.classList.add('animate-spin', 'w-5', 'h-5', 'text-gray-300');
+        statusMessage.textContent = 'Checking pipeline load status...';
+        statusMessage.className = 'text-sm font-medium text-gray-300';
+        
+        try {
+            // Backend already verifies pipelines are running before returning slot allocation
+            // No need to wait - check status immediately
+            
+            // Check pipeline status using the slot pipeline name
+            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch pipeline status');
+            }
+            
+            const data = await response.json();
+            const isRunning = data.is_running;
+            
+            statusIcon.classList.remove('animate-spin');
+            
+            if (isRunning) {
+                // Success - Pipeline is running
+                statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-green-600 bg-green-900/30';
+                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                statusIcon.className = 'w-5 h-5 text-green-400';
+                statusMessage.textContent = 'Pipeline configuration loads without failure';
+                statusMessage.className = 'text-sm font-medium text-green-400';
+            } else {
+                // Failure - Pipeline not running
+                statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
+                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                statusIcon.className = 'w-5 h-5 text-red-400';
+                statusMessage.textContent = 'Pipeline configuration had a problem';
+                statusMessage.className = 'text-sm font-medium text-red-400';
+            }
+            
+        } catch (error) {
+            console.error('Error checking pipeline status:', error);
+            
+            // Unknown - Error occurred
+            statusIcon.classList.remove('animate-spin');
+            statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-yellow-600 bg-yellow-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+            statusIcon.className = 'w-5 h-5 text-yellow-400';
+            statusMessage.textContent = 'Unable to verify pipeline status';
+            statusMessage.className = 'text-sm font-medium text-yellow-400';
+        }
+    }
+    
+    /**
+     * Helper function to escape HTML for safe display
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
+     * View logs for the current pipeline slot
+     */
+    async function viewPipelineLogs() {
+        if (!currentSlotId) {
+            console.error('No slot ID available for logs');
+            alert('Unable to fetch logs - slot information not available');
+            return;
+        }
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'pipeline-logs-modal';
+        modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('pipeline-logs-modal').remove()"></div>
+            <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+                <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${currentSlotId}-filter1</h3>
+                    <button onclick="document.getElementById('pipeline-logs-modal').remove()" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow">
+                    <div id="pipeline-logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+                        <div class="flex items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                            <span class="ml-3">Loading logs...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Fetch logs from API
+        try {
+            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            const data = await response.json();
+            
+            const logsContent = document.getElementById('pipeline-logs-content');
+            
+            if (!data.logs || data.logs.length === 0) {
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                return;
+            }
+            
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
+            
+            data.logs.forEach((log, idx) => {
+                const level = log.level || 'INFO';
+                const levelColor = {
+                    'ERROR': 'text-red-400',
+                    'WARN': 'text-yellow-400',
+                    'INFO': 'text-blue-400',
+                    'DEBUG': 'text-gray-400'
+                }[level] || 'text-gray-400';
+                
+                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
+                const logEvent = log.logEvent || {};
+                const message = logEvent.message || log.message || 'No message';
+                const logger = log.loggerName || 'unknown';
+                
+                html += `
+                    <div class="mb-4 pb-4 border-b border-gray-700">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="${levelColor} font-bold">[${level}]</span>
+                            <span class="text-gray-500 text-xs">${timestamp}</span>
+                            <span class="text-gray-400 text-xs">${logger}</span>
+                        </div>
+                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
+                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            });
+            
+            logsContent.innerHTML = html;
+        } catch (error) {
+            const logsContent = document.getElementById('pipeline-logs-content');
+            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
+        }
+    }
+    
+    // Register htmx:afterSwap listener EARLY to catch the initial page load preallocation
+    // This must be done before the slotPreallocation element is parsed
+    document.addEventListener('DOMContentLoaded', function() {
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+        if (preallocationResult) {
+            preallocationResult.addEventListener('htmx:afterSwap', function(event) {
+                // Small delay to ensure DOM is fully updated
+                setTimeout(checkPipelineLoadStatus, 100);
+            });
+        }
+    });
+</script>
 <style>
     .insertion-point {
         position: relative;
@@ -167,6 +409,18 @@
         }
     }
 
+    /* Failure pulse animation for parsing failure badges */
+    @keyframes failurePulse {
+        0%, 100% {
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.8), 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: scale(1);
+        }
+        50% {
+            box-shadow: 0 0 30px rgba(220, 38, 38, 1), 0 0 40px rgba(220, 38, 38, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: scale(1.05);
+        }
+    }
+
     /* Dim non-executed plugins during simulation */
     .simulation-dimmed {
         opacity: 0.3;
@@ -250,13 +504,68 @@
         transform: translateY(-2px);
         box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
     }
+
+    /* Comment plugin special styling */
+    .comment-plugin {
+        border: 2px solid #4b5563 !important;
+        border-left: 4px solid #6b7280 !important;
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-style: italic;
+        opacity: 0.85;
+        transition: all 0.2s ease;
+    }
+
+    .comment-plugin:hover {
+        opacity: 1;
+        border-color: #6b7280 !important;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .comment-plugin .font-medium {
+        color: #9ca3af !important;
+        font-weight: 400 !important;
+    }
+
+    .comment-plugin .text-gray-400 {
+        color: #6b7280 !important;
+    }
+
+    /* Toggle button flash animation */
+    @keyframes flash-sweep {
+        0% {
+            left: -100%;
+            opacity: 0;
+        }
+        50% {
+            opacity: 1;
+        }
+        100% {
+            left: 100%;
+            opacity: 0;
+        }
+    }
+
+    .toggle-flash::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.6), transparent);
+        animation: flash-sweep 0.6s ease-out;
+        z-index: 5;
+        pointer-events: none;
+    }
 </style>
 <!--- Pipeline Component Layout-->
 <div class="p-6">
     
     <!-- Parsing Error Alert -->
     {% if parsing_error %}
-    <div class="mb-6 p-6 bg-yellow-900/30 border-2 border-yellow-600 rounded-lg">
+    <div class="mb-6 p-6 bg-yellow-900/30 border-2 border-yellow-600 rounded-lg" id="parsingErrorBanner">
         <div class="flex items-start">
             <div class="flex-shrink-0">
                 <svg class="h-6 w-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,7 +588,7 @@
                     </div>
                 </details>
                 <div class="flex items-center gap-4">
-                    <a href="https://github.com/elastic/LogstashUI/issues/new?title=Pipeline%20Parsing%20Error&body=Please%20describe%20your%20pipeline%20configuration%20and%20paste%20the%20error%20above"
+                    <a href="https://github.com/elastic/LogstashUI/issues/new?template=issue.md"
                        target="_blank"
                        class="inline-flex items-center px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md font-medium transition-colors">
                         <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -296,31 +605,59 @@
     </div>
     {% endif %}
     
-    <div class="flex justify-between items-center mb-6">
-        <div class="flex items-center gap-4">
-            <h1 class="text-2xl font-bold text-white">Editing: {{ pipeline_name }}</h1>
-            <!-- Pipeline Load Validation Status -->
-            <div id="pipelineLoadStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700">
-                <svg id="pipelineStatusIcon" class="w-5 h-5 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span id="pipelineStatusMessage" class="text-sm font-medium text-gray-300">Allocating pipeline slot...</span>
-                <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
-                        class="ml-2 text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors underline">
-                    Logs
+    <div class="mb-6">
+        <div class="flex justify-between items-center">
+            <!-- Left: Title and Status -->
+            <div>
+                <h1 class="text-2xl font-bold text-white mb-2">Editing: {{ pipeline_name }}</h1>
+                <!-- Pipeline Load Validation Status -->
+                <div id="pipelineLoadStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700">
+                    <svg id="pipelineStatusIcon" class="w-5 h-5 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="pipelineStatusMessage" class="text-sm font-medium text-gray-300">Allocating pipeline slot...</span>
+                    <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
+                            class="ml-2 text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors underline">
+                        Logs
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Center: UI/Text Toggle -->
+            <div class="flex items-center gap-2 bg-gray-700 rounded-lg p-1 relative overflow-hidden">
+                <button id="uiModeBtn" class="px-4 py-2 rounded-md font-medium transition-colors bg-green-600 text-white relative z-10" onclick="switchToUIMode()">
+                    UI
+                </button>
+                <button id="textModeBtn" class="px-4 py-2 rounded-md font-medium transition-colors text-gray-300 hover:bg-gray-600 relative z-10" onclick="switchToTextMode()">
+                    Text
                 </button>
             </div>
-        </div>
-        <div class="flex space-x-4">
-            <form>
+            
+            <!-- Right: Action Buttons -->
+            <div class="flex items-center space-x-4">
+            <form onsubmit="return false;" class="flex items-center space-x-4">
                 {% csrf_token %}
-                <button type="button"
-                        id="viewCode"
-                        class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-                        onclick="viewGeneratedCode()">
-                    View Code
-                </button>
+                <div class="flex items-center gap-2">
+                    <div id="blockingProblemsIndicator" class="hidden relative group">
+                        <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        <div id="blockingProblemsTooltip" class="hidden group-hover:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 bg-gray-800 text-white text-xs rounded-lg shadow-lg p-3 z-50 border border-red-500">
+                            <div class="font-semibold text-red-400 mb-2">Blocking Problems Detected</div>
+                            <div id="blockingProblemsContent" class="text-gray-300 space-y-1"></div>
+                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
+                                <div class="w-2 h-2 bg-gray-800 border-l border-t border-red-500 transform rotate-45"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button"
+                            id="viewCode"
+                            class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+                            onclick="viewGeneratedCode()">
+                        View Code
+                    </button>
+                </div>
                 <button
                         type="button"
                         id="simulatePipeline"
@@ -328,10 +665,11 @@
                         onclick="openSimulateModal()">
                     Simulate Pipeline
                 </button>
+            </form>
                 <button type="button"
                         id="savePipeline"
                         class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                        hx-post="/API/SavePipeline/"
+                        hx-post="/ConnectionManager/SavePipeline/"
                         hx-include="#pipelineForm"
                         hx-trigger="none"
                         hx-target="#saveStatus"
@@ -341,6 +679,7 @@
                 </button>
                 <span id="saveStatus" class="ml-2"></span>
             </form>
+            </div>
         </div>
     </div>
 
@@ -505,7 +844,8 @@
     <div class="flex h-[calc(100vh-180px)] gap-4">
         <!-- Main Content Area -->
         <div class="flex-1">
-            <div class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+            <!-- UI Mode Container -->
+            <div id="uiModeContainer" class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
                 <div id="pipelineCanvas" class="min-h-full space-y-8">
                     <!-- Input Section -->
                     <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
@@ -619,6 +959,11 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Text Mode Container (hidden by default) -->
+            <div id="textModeContainer" class="hidden flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+                {% include 'pipeline_text_editor.html' %}
+            </div>
         </div>
     </div>
 </div>
@@ -659,22 +1004,62 @@
 
 <!-- Slot preallocation - warm up a slot when page loads so simulations are fast -->
 <!-- Empty log_text means only allocate slot, don't run simulation -->
+<!-- Also triggers on pipelineChanged event when plugins are added/removed/changed -->
 <div id="slotPreallocation"
-     hx-post="/API/SimulatePipeline/"
+     hx-post="/ConnectionManager/SimulatePipeline/"
      hx-target="#slotPreallocationResult"
      hx-swap="innerHTML"
      hx-vals="js:{components: components, log_text: ''}"
      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-     hx-trigger="load"
+     hx-trigger="load, pipelineChanged"
      class="hidden">
 </div>
 <div id="slotPreallocationResult" class="hidden"></div>
 
 <script>
-    const components = {{component_data | safe}};
-    const pluginData = {{plugin_data | safe}};
     const pipelineName = "{{ pipeline_name }}";
-    let currentSlotId = null;  // Store slot_id for logs viewer
+    // currentSlotId is declared in the early script block above
+    
+    // Store original pipeline text for Text mode
+    originalPipelineText = `{{ pipeline_text|escapejs }}`;
+    
+    // Set up change tracking for UI mode
+    // Track when components are added, modified, or deleted
+    function markUIAsChanged() {
+        if (!uiHasChanges) {
+            uiHasChanges = true;
+        }
+    }
+    
+    // Listen for component changes via HTMX events
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        // Check if the swap was related to component modifications
+        if (event.detail.target && (
+            event.detail.target.id === 'uiModeContainer' ||
+            event.detail.target.closest('#uiModeContainer')
+        )) {
+            markUIAsChanged();
+        }
+    });
+    
+    // Listen for component additions/deletions
+    document.body.addEventListener('componentAdded', markUIAsChanged);
+    document.body.addEventListener('componentDeleted', markUIAsChanged);
+    document.body.addEventListener('componentModified', markUIAsChanged);
+    
+    // Auto-switch to Text mode if parsing error is present
+    // Wait for all scripts to load before attempting to switch modes
+    window.addEventListener('load', function() {
+        const parsingErrorBanner = document.getElementById('parsingErrorBanner');
+        if (parsingErrorBanner) {
+            // Parsing error detected - automatically switch to Text mode
+            if (typeof switchToTextMode === 'function') {
+                switchToTextMode();
+            } else {
+                console.error('switchToTextMode function not available');
+            }
+        }
+    });
     
     // Check if there are any filter components
     const hasFilters = components && components.filter && components.filter.length > 0;
@@ -733,7 +1118,7 @@
         
         // Fetch logs from API
         try {
-            const response = await fetch(`/API/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
             const data = await response.json();
             
             const logsContent = document.getElementById('pipeline-logs-content');
@@ -743,7 +1128,7 @@
                 return;
             }
             
-            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries</div>`;
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
             
             data.logs.forEach((log, idx) => {
                 const level = log.level || 'INFO';
@@ -766,7 +1151,7 @@
                             <span class="text-gray-500 text-xs">${timestamp}</span>
                             <span class="text-gray-400 text-xs">${logger}</span>
                         </div>
-                        <div class="text-gray-200 mb-2">${message}</div>
+                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
                         <details class="text-xs">
                             <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
                             <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
@@ -799,16 +1184,10 @@
         // Get slot_id from preallocation result
         const preallocationResult = document.getElementById('slotPreallocationResult');
         
-        // Debug: log the HTML content
-        console.log('Preallocation result HTML:', preallocationResult?.innerHTML);
-        
         const slotElement = preallocationResult?.querySelector('[data-slot-id]');
-        console.log('Slot element found:', slotElement);
         
         const slotId = slotElement?.getAttribute('data-slot-id');
         const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
-        console.log('Extracted slot_id:', slotId);
-        console.log('Pipeline failed during allocation:', pipelineFailed);
         
         // Store slot_id globally for logs viewer (even if pipeline failed)
         if (slotId) {
@@ -817,7 +1196,6 @@
         
         // If pipeline already failed during allocation, show failure immediately
         if (pipelineFailed) {
-            console.log('Pipeline failed during allocation - showing failure status');
             statusContainer.classList.remove('hidden');
             statusContainer.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-600 bg-red-900/30';
             statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
@@ -841,7 +1219,6 @@
         
         // The actual pipeline name in Logstash is slot{id}-filter1
         const slotPipelineName = `slot${slotId}-filter1`;
-        console.log(`Checking for slot pipeline: ${slotPipelineName}`);
         
         // Show loading state
         statusContainer.classList.remove('hidden');
@@ -852,11 +1229,11 @@
         statusMessage.className = 'text-sm font-medium text-gray-300';
         
         try {
-            // Wait for Logstash to process and initialize the pipeline
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // Backend already verifies pipelines are running before returning slot allocation
+            // No need to wait - check status immediately
             
             // Check pipeline status using the slot pipeline name
-            const response = await fetch(`/API/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
             
             if (!response.ok) {
                 throw new Error('Failed to fetch pipeline status');
@@ -864,9 +1241,6 @@
             
             const data = await response.json();
             const isRunning = data.is_running;
-            
-            console.log(`Pipeline ${slotPipelineName} running:`, isRunning);
-            console.log('Running pipelines:', data.running_pipelines);
             
             statusIcon.classList.remove('animate-spin');
             
@@ -898,14 +1272,6 @@
             statusMessage.className = 'text-sm font-medium text-yellow-400';
         }
     }
-    
-    // Check pipeline status after HTMX completes the slot preallocation swap
-    // The event fires on the TARGET element (slotPreallocationResult), not the trigger
-    document.getElementById('slotPreallocationResult')?.addEventListener('htmx:afterSwap', (event) => {
-        console.log('HTMX afterSwap event fired, checking pipeline status...');
-        // Small delay to ensure DOM is fully updated
-        setTimeout(checkPipelineLoadStatus, 100);
-    });
 
 
 </script>

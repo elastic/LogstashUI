@@ -1,3 +1,9 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -55,6 +61,8 @@
     <div id="logContent" class="p-4 max-h-[600px] overflow-y-auto">
       <div class="font-mono text-sm space-y-1">
         {% for line in log_lines %}
+        {# SECURITY: DO NOT use {{ line|safe }} here. Log files may contain user-generated content. #}
+        {# Django's auto-escaping protects against XSS. The LogsFilter view uses html.escape() for consistency. #}
         <div class="text-gray-300 hover:bg-gray-700/50 px-2 py-1 rounded {% if 'ERROR' in line or 'CRITICAL' in line %}text-red-400{% elif 'WARNING' in line %}text-yellow-400{% elif 'INFO' in line %}text-blue-400{% endif %}">
           {{ line }}
         </div>

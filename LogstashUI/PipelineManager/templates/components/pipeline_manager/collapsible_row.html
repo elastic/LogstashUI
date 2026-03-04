@@ -1,3 +1,9 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
 
 
 <td colspan=6>
@@ -13,14 +19,31 @@
         <table class="w-full">
             <thead>
                 <th class="text-left">Pipeline Name</th>
+                <th class="text-left">Description</th>
+                <th class="text-left">Last Updated</th>
+                <th class="text-right">Actions</th>
             </thead>
             <tbody>
                 {% for pipeline in pipelines %}
                 <tr>
-                    <td>
+                    <td class="px-4 py-2">
                         <a href="/ConnectionManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
                     </td>
-                    <td class="text-right">
+                    <td class="px-4 py-2 text-gray-300">
+                        {% if pipeline.description %}
+                            {{ pipeline.description|truncatechars:80 }}
+                        {% else %}
+                            <span class="text-gray-500 italic">No description</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-gray-300">
+                        {% if pipeline.last_modified %}
+                            {{ pipeline.last_modified }}
+                        {% else %}
+                            <span class="text-gray-500 italic">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right px-4 py-2">
                         <div class="action-menu relative">
                             <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
                                 <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -38,12 +61,12 @@
                                         </svg>
                                         Clone
                                     </button>
-                                    <button hx-post="/API/DeletePipeline/"
+                                    <button hx-post="/ConnectionManager/DeletePipeline/"
                                        hx-confirm="Are you sure you want to delete this pipeline?"
                                        hx-vals='{"es_id": "{{ pipeline.es_id }}", "pipeline": "{{ pipeline.name }}"}'
                                        hx-on::after-request="
                                          if (event.detail.xhr.status !== 403) {
-                                           htmx.ajax('GET', '/API/GetPipelines/{{ es_id }}/', {target: '#pipelines-{{ es_id }}', swap: 'innerHTML'});
+                                           htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {target: '#pipelines-{{ es_id }}', swap: 'innerHTML'});
                                          }
                                        "
                                        class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
@@ -73,7 +96,7 @@
             <!-- Error container -->
             <div id="createPipelineError" class="mb-4"></div>
             
-            <form hx-post="/API/CreatePipeline/" 
+            <form hx-post="/ConnectionManager/CreatePipeline/"
                   hx-target="#pipelineList" 
                   hx-swap="innerHTML"
                   hx-on::before-request="document.getElementById('createPipelineError').innerHTML = ''"
@@ -135,7 +158,7 @@
             <!-- Error container -->
             <div id="clonePipelineError" class="mb-4"></div>
             
-            <form hx-post="/API/ClonePipeline/" 
+            <form hx-post="/ConnectionManager/ClonePipeline/"
                   hx-target="#pipelineList" 
                   hx-swap="innerHTML"
                   hx-on::before-request="document.getElementById('clonePipelineError').innerHTML = ''"
@@ -180,23 +203,6 @@
         </div>
     </dialog>
 </td>
-
-<!-- DISABLED: Instances table can cause issues
-<td colspan=2 class="overflow-x-auto">
-    <table class="w-full">
-        <thead>
-            <th class="text-left">Instances</th>
-        </thead>
-        <tbody>
-            {% for node in instances %}
-            <tr>
-                <td>{{ node }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</td>
--->
 
 <script>
     document.body.addEventListener('htmx:configRequest', function(event) {

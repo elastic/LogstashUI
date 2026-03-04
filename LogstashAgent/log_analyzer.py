@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Default log directory
@@ -149,10 +148,10 @@ def get_running_pipelines(log_dir: str = LOG_DIR) -> Optional[Dict[str, Any]]:
             "timestamp": 1771269108232
         }
     """
-    # Read recent logs (last 1000 lines should be enough)
-    logs = _read_json_logs(log_dir=log_dir, max_lines=1000, reverse=True)
+    # Read recent logs (200 lines should be enough for pipeline status)
+    logs = _read_json_logs(log_dir=log_dir, max_lines=200, reverse=True)
 
-    logger.info(f"Read {len(logs)} log entries from {log_dir}")
+    logger.debug(f"Read {len(logs)} log entries from {log_dir}")
 
     # Collect ALL entries with running_pipelines and find the most recent by timestamp
     pipeline_status_entries = []
@@ -181,8 +180,8 @@ def get_running_pipelines(log_dir: str = LOG_DIR) -> Optional[Dict[str, Any]]:
     result = pipeline_status_entries[0]
 
     # Debug: show the raw log entry
-    logger.info(f"Found {len(pipeline_status_entries)} pipeline status entries")
-    logger.info(f"Most recent timestamp: {result['timestamp']}")
+    logger.debug(f"Found {len(pipeline_status_entries)} pipeline status entries")
+    logger.debug(f"Most recent timestamp: {result['timestamp']}")
     logger.debug(f"Raw logEvent: {json.dumps(result['raw_event'], indent=2)}")
 
     # Remove raw_event from result before returning
@@ -208,17 +207,17 @@ def get_running_pipelines(log_dir: str = LOG_DIR) -> Optional[Dict[str, Any]]:
                 pipeline_id = log_event.get('id')
                 if pipeline_id:
                     failed_pipelines.add(pipeline_id)
-                    logger.info(f"Found FailedAction for pipeline {pipeline_id} at timestamp {log_timestamp}")
+                    logger.debug(f"Found FailedAction for pipeline {pipeline_id} at timestamp {log_timestamp}")
     
     # Remove failed pipelines from running_pipelines list
     if failed_pipelines:
         original_running = result['running_pipelines'][:]
         result['running_pipelines'] = [p for p in result['running_pipelines'] if p not in failed_pipelines]
-        logger.info(f"Removed {len(failed_pipelines)} failed pipelines from running list: {failed_pipelines}")
-        logger.info(f"Running pipelines before: {original_running}")
-        logger.info(f"Running pipelines after: {result['running_pipelines']}")
+        logger.warning(f"Removed {len(failed_pipelines)} failed pipelines from running list: {failed_pipelines}")
+        logger.debug(f"Running pipelines before: {original_running}")
+        logger.debug(f"Running pipelines after: {result['running_pipelines']}")
 
-    logger.info(f"Found running_pipelines: {result['running_pipelines']}")
+    logger.debug(f"Found running_pipelines: {result['running_pipelines']}")
     return result
 
 
@@ -343,45 +342,3 @@ def is_pipeline_running(pipeline_id: str, log_dir: str = LOG_DIR) -> bool:
         return False
     
     return pipeline_id in status.get('running_pipelines', [])
-
-
-def get_pipeline_errors(pipeline_id: str, log_dir: str = LOG_DIR,
-                       max_entries: int = 50) -> List[Dict[str, Any]]:
-    """
-    Get only ERROR and FATAL level logs for a specific pipeline.
-
-    Args:
-        pipeline_id: The pipeline ID to search for
-        log_dir: Directory containing log files
-        max_entries: Maximum number of errors to return
-
-    Returns:
-        List of error log entries for the pipeline
-    """
-    return find_related_logs(
-        pipeline_id=pipeline_id,
-        log_dir=log_dir,
-        max_entries=max_entries,
-        min_level="ERROR"
-    )
-
-
-def get_pipeline_warnings(pipeline_id: str, log_dir: str = LOG_DIR,
-                         max_entries: int = 50) -> List[Dict[str, Any]]:
-    """
-    Get WARNING, ERROR, and FATAL level logs for a specific pipeline.
-
-    Args:
-        pipeline_id: The pipeline ID to search for
-        log_dir: Directory containing log files
-        max_entries: Maximum number of warnings to return
-
-    Returns:
-        List of warning/error log entries for the pipeline
-    """
-    return find_related_logs(
-        pipeline_id=pipeline_id,
-        log_dir=log_dir,
-        max_entries=max_entries,
-        min_level="WARN"
-    )

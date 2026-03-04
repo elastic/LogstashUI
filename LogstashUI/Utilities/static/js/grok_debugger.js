@@ -1,6 +1,12 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
 // Grok Debugger JavaScript
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Get all textarea elements and their line number containers
     const sampleDataInput = document.getElementById('sampleDataInput');
     const sampleDataLineNumbers = document.getElementById('sampleDataLineNumbers');
@@ -53,13 +59,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to get all available patterns (grok + custom)
     function getAllPatterns() {
         return { ...grokPatterns, ...getCustomPatterns() };
-    }
-
-    // Function to escape HTML
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     // Function to create autocomplete dropdown
@@ -123,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Add click handlers
         autocompleteDropdown.querySelectorAll('.autocomplete-item').forEach(item => {
-            item.addEventListener('click', function() {
+            item.addEventListener('click', function () {
                 insertPattern(this.dataset.pattern);
             });
         });
@@ -345,35 +344,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Set up event listener for multiline checkbox
-    multilineCheckbox.addEventListener('change', function() {
+    multilineCheckbox.addEventListener('change', function () {
         updateBanners();
     });
 
     // Set up event listeners for sample data input
-    sampleDataInput.addEventListener('input', function() {
+    sampleDataInput.addEventListener('input', function () {
         updateLineNumbers(sampleDataInput, sampleDataLineNumbers);
         updateBanners();
     });
 
-    sampleDataInput.addEventListener('scroll', function() {
+    sampleDataInput.addEventListener('scroll', function () {
         sampleDataLineNumbers.scrollTop = sampleDataInput.scrollTop;
         syncScroll(sampleDataInput, grokPatternInput, sampleDataLineNumbers, grokPatternLineNumbers);
     });
 
     // Set up event listeners for grok pattern input
-    grokPatternInput.addEventListener('input', function(e) {
+    grokPatternInput.addEventListener('input', function (e) {
         updateLineNumbers(grokPatternInput, grokPatternLineNumbers);
         updateBanners();
         handleAutocompleteInput(grokPatternInput, e);
     });
 
-    grokPatternInput.addEventListener('scroll', function() {
+    grokPatternInput.addEventListener('scroll', function () {
         grokPatternLineNumbers.scrollTop = grokPatternInput.scrollTop;
         syncScroll(grokPatternInput, sampleDataInput, grokPatternLineNumbers, sampleDataLineNumbers);
     });
 
     // Keyboard navigation for autocomplete
-    grokPatternInput.addEventListener('keydown', function(e) {
+    grokPatternInput.addEventListener('keydown', function (e) {
         if (!autocompleteVisible) return;
 
         if (e.key === 'ArrowDown') {
@@ -397,7 +396,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Close autocomplete when clicking outside
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         if (autocompleteVisible && !autocompleteDropdown.contains(e.target) &&
             e.target !== grokPatternInput) {
             hideAutocomplete();
@@ -405,11 +404,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Set up event listeners for custom patterns input
-    customPatternsInput.addEventListener('input', function() {
+    customPatternsInput.addEventListener('input', function () {
         updateLineNumbers(customPatternsInput, customPatternsLineNumbers);
     });
 
-    customPatternsInput.addEventListener('scroll', function() {
+    customPatternsInput.addEventListener('scroll', function () {
         customPatternsLineNumbers.scrollTop = customPatternsInput.scrollTop;
     });
 
@@ -430,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // HTMX integration - prepare data before sending
-    document.body.addEventListener('htmx:configRequest', function(event) {
+    document.body.addEventListener('htmx:configRequest', function (event) {
         if (event.detail.path === '/Utilities/GrokDebugger/simulate/') {
             // Validate required fields
             const sampleData = sampleDataInput.value.trim();
@@ -477,7 +476,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Handle HTMX response errors
-    document.body.addEventListener('htmx:responseError', function(event) {
+    document.body.addEventListener('htmx:responseError', function (event) {
         if (event.detail.pathInfo.requestPath === '/Utilities/GrokDebugger/simulate/') {
             const outputArea = document.getElementById('outputArea');
             outputArea.innerHTML = `

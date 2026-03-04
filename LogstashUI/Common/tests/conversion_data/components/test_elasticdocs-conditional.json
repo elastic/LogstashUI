@@ -1,0 +1,108 @@
+{
+    "input": [
+        {
+            "id": "input_file_0",
+            "type": "input",
+            "plugin": "file",
+            "config": {
+                "path": "/tmp/*_log"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_1",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[path] =~ \"access\"",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_2",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "replace": {
+                                "type": "apache_access"
+                            }
+                        }
+                    },
+                    {
+                        "id": "filter_grok_3",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "message": "%{COMBINEDAPACHELOG}"
+                            }
+                        }
+                    },
+                    {
+                        "id": "filter_date_4",
+                        "type": "filter",
+                        "plugin": "date",
+                        "config": {
+                            "match": [
+                                "timestamp",
+                                "dd/MMM/yyyy:HH:mm:ss Z"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[path] =~ \"error\"",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_5",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "replace": {
+                                        "type": "apache_error"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": {
+                    "plugins": [
+                        {
+                            "id": "filter_mutate_6",
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "replace": {
+                                    "type": "random_logs"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_7",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        },
+        {
+            "id": "output_stdout_8",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": "5044"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_1",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "message": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_2",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "http://elasticsearch:9200"
+                ],
+                "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+            }
+        },
+        {
+            "id": "output_stdout_3",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

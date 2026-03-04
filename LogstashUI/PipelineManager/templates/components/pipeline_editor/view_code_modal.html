@@ -1,3 +1,9 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
 <!-- Code Viewer Modal -->
 <div id="codeModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
   <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="hideCodeModal()"></div>
@@ -33,16 +39,37 @@ function showCodeModal() {
   codeElement.textContent = 'Loading pipeline code...';
   modal.classList.remove('hidden');
   
-  // Fetch the pipeline code
-  fetch('/API/GetCurrentPipelineCode')
+  // Get components from global scope
+  const componentsData = typeof components !== 'undefined' ? components : (window.components || {});
+  
+  // Create FormData for POST request
+  const formData = new FormData();
+  formData.append('components', JSON.stringify(componentsData));
+  
+  // Fetch the pipeline code using POST
+  fetch('/ConnectionManager/GetCurrentPipelineCode/', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+    }
+  })
     .then(response => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return response.json();
+      return response.text();
     })
-    .then(data => {
-      codeElement.textContent = data.code || 'No pipeline code available';
+    .then(html => {
+      // The response is already formatted HTML with <pre><code>
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      const codeContent = tempDiv.querySelector('code');
+      if (codeContent) {
+        codeElement.textContent = codeContent.textContent;
+      } else {
+        codeElement.textContent = 'No pipeline code available';
+      }
       // Re-run syntax highlighting if you're using a highlighter like Prism or Highlight.js
       if (window.Prism) {
         Prism.highlightElement(codeElement);

@@ -1,0 +1,45 @@
+{
+    "input": [
+        {
+            "id": "input_elasticsearch_0",
+            "type": "input",
+            "plugin": "elasticsearch",
+            "config": {
+                "api_key": "test",
+                "cloud_id": "test",
+                "index": "kibana_sample_data_ecommerce",
+                "query": "{\"query\":{\"match_all\":{}}}",
+                "slices": "6",
+                "ssl_enabled": "true",
+                "connect_timeout_seconds": "120",
+                "request_timeout_seconds": "600",
+                "socket_timeout_seconds": "600"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_mutate_1",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "test": "test"
+                }
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_csv_2",
+            "type": "output",
+            "plugin": "csv",
+            "config": {
+                "fields": [
+                    "test"
+                ],
+                "path": "/home/ubuntu/test.csv"
+            }
+        }
+    ]
+}

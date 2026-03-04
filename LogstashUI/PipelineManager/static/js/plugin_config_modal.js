@@ -1,3 +1,9 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
 // Plugin Configuration Modal Controller
 window.PluginConfigModal = (function () {
     let currentComponent = null;
@@ -41,7 +47,7 @@ window.PluginConfigModal = (function () {
           ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
         </span>
         ${pluginInfo.deprecated ?
-            '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+                '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
       </div>
     `;
 
@@ -70,7 +76,7 @@ window.PluginConfigModal = (function () {
                 const isRequired = option.required === 'Yes';
                 const isImportant = option.important === 'Yes';
                 const isExplicitlyNotImportant = option.important === 'No';
-                
+
                 // A field is "advanced" only if it's explicitly marked as not important AND not required
                 // If the important field is missing (undefined), treat it as important by default
                 if (isRequired || isImportant || !isExplicitlyNotImportant) {
@@ -172,7 +178,7 @@ window.PluginConfigModal = (function () {
                     const containerId = `array-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     const hashOptions = option.options || {};
                     const optionsJson = escapeHtml(JSON.stringify(hashOptions));
-                    
+
                     inputField = `
             <div id="${containerId}" class="space-y-3" data-hash-options='${optionsJson}'>
               <div class="p-3 bg-gray-900/50 border border-gray-600 rounded">
@@ -186,6 +192,70 @@ window.PluginConfigModal = (function () {
               <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array_of_hashes" value='${escapeHtml(JSON.stringify(arrayValue))}'>
             </div>
           `;
+                } else if (inputType === 'key_list_hash') {
+                    // Handle key_list_hash input type (e.g., grok match field)
+                    let keyListHashValue = {};
+                    try {
+                        if (typeof value === 'string' && value.trim() !== '') {
+                            keyListHashValue = JSON.parse(value);
+                        } else if (typeof value === 'object' && value !== null) {
+                            keyListHashValue = { ...value };
+                        }
+                    } catch (e) {
+                        console.error('Error parsing key_list_hash value:', e);
+                    }
+
+                    const containerId = `key-list-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                    inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3" data-section-id="${sectionId}">
+                <div class="flex items-center gap-2">
+                  <input type="text"
+                         class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                         placeholder="Key (e.g., message, field1)"
+                         onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                  <button type="button"
+                          class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                          onclick="removeKeyListHashSection('${containerId}', '${fieldId}', this)">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove Section
+                  </button>
+                </div>
+                <div class="ml-4 space-y-2 section-values">
+                  <div class="flex items-center gap-2">
+                    <span class="text-gray-400 text-sm">=></span>
+                    <input type="text"
+                           class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                           placeholder="Value (e.g., pattern1)"
+                           onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                    <button type="button"
+                            class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                            onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Remove
+                    </button>
+                  </div>
+                </div>
+                <button type="button"
+                        class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                        onclick="addKeyListHashValue('${containerId}', '${fieldId}', this)">
+                    + Add Value
+                </button>
+              </div>
+              <button type="button"
+                      class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition-colors"
+                      onclick="addKeyListHashSection('${containerId}', '${fieldId}')">
+                + Add Section
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="key_list_hash" value='${escapeHtml(JSON.stringify(keyListHashValue))}'>
+            </div>
+          `;
                 } else if (inputType.includes('hash') || inputType === 'object') {
                     // Handle hash/object input type
                     let hashValue = {};
@@ -193,7 +263,7 @@ window.PluginConfigModal = (function () {
                         if (typeof value === 'string' && value.trim() !== '') {
                             hashValue = JSON.parse(value);
                         } else if (typeof value === 'object' && value !== null) {
-                            hashValue = {...value};
+                            hashValue = { ...value };
                         }
                     } catch (e) {
                         console.error('Error parsing hash value:', e);
@@ -201,7 +271,7 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -213,13 +283,16 @@ window.PluginConfigModal = (function () {
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addHashPair('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -247,20 +320,23 @@ window.PluginConfigModal = (function () {
 
                     const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addArrayItem('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -282,6 +358,15 @@ window.PluginConfigModal = (function () {
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
           `;
+                } else if (component.plugin === 'comment' && (key === 'string' || key.toLowerCase() === 'message' || key.toLowerCase() === 'text')) {
+                    // Special handling for comment plugin - use textarea for multiline comments
+                    inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="5"
+                      class="${inputClasses} font-mono text-sm"
+                      style="resize: vertical; min-height: 100px;"
+                      placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
+          `;
                 } else if (inputType === 'password') {
                     // Handle password input type with show/hide functionality
                     inputField = `
@@ -297,6 +382,25 @@ window.PluginConfigModal = (function () {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
+              </button>
+            </div>
+          `;
+                } else if (inputType === 'fs_path') {
+                    // Handle filesystem path input type with file picker button
+                    inputField = `
+            <div class="flex items-center space-x-2">
+              <input type="text" id="${fieldId}" name="${key}"
+                     value="${escapeHtml(value)}"
+                     class="${inputClasses} flex-1"
+                     placeholder="Enter file path or click Browse...">
+              <button type="button" 
+                      class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap"
+                      onclick="browseFilePath('${fieldId}')"
+                      title="Browse for file">
+                <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Browse...
               </button>
             </div>
           `;
@@ -335,7 +439,7 @@ window.PluginConfigModal = (function () {
           ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
           ${inputField}
           ${option.default_value !== undefined ?
-                    `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+                        `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
         `;
 
                 configForm.appendChild(fieldGroup);
@@ -345,31 +449,28 @@ window.PluginConfigModal = (function () {
             if (advancedOptions.length > 0) {
                 const advancedSection = document.createElement('div');
                 advancedSection.className = 'mt-6 border-t border-gray-700 pt-4';
-                
+
                 const advancedHeader = document.createElement('div');
                 advancedHeader.className = 'flex items-center justify-between cursor-pointer mb-4';
-                advancedHeader.onclick = function() {
+                advancedHeader.onclick = function () {
                     const content = advancedSection.querySelector('.advanced-content');
                     const icon = advancedSection.querySelector('.toggle-icon');
-                    if (content.classList.contains('hidden')) {
-                        content.classList.remove('hidden');
-                        icon.textContent = '▼';
-                    } else {
-                        content.classList.add('hidden');
-                        icon.textContent = '▶';
-                    }
+                    content.classList.toggle('hidden');
+                    icon.classList.toggle('rotate-180');
                 };
-                
+
                 advancedHeader.innerHTML = `
                     <h4 class="text-sm font-semibold text-gray-300">Advanced Settings</h4>
-                    <span class="toggle-icon text-gray-400 text-xs">▶</span>
+                    <svg class="toggle-icon w-5 h-5 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
                 `;
-                
+
                 advancedSection.appendChild(advancedHeader);
-                
+
                 const advancedContent = document.createElement('div');
                 advancedContent.className = 'advanced-content hidden space-y-4';
-                
+
                 // Render advanced fields
                 advancedOptions.forEach(([key, option]) => {
                     const fieldId = `config-${key}`;
@@ -458,7 +559,7 @@ window.PluginConfigModal = (function () {
                         const containerId = `array-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         const hashOptions = option.options || {};
                         const optionsJson = escapeHtml(JSON.stringify(hashOptions));
-                        
+
                         inputField = `
             <div id="${containerId}" class="space-y-3" data-hash-options='${optionsJson}'>
               <div class="p-3 bg-gray-900/50 border border-gray-600 rounded">
@@ -472,6 +573,70 @@ window.PluginConfigModal = (function () {
               <input type="hidden" id="${fieldId}" name="${key}" data-field-type="array_of_hashes" value='${escapeHtml(JSON.stringify(arrayValue))}'>
             </div>
           `;
+                    } else if (inputType === 'key_list_hash') {
+                        // Handle key_list_hash input type (e.g., grok match field)
+                        let keyListHashValue = {};
+                        try {
+                            if (typeof value === 'string' && value.trim() !== '') {
+                                keyListHashValue = JSON.parse(value);
+                            } else if (typeof value === 'object' && value !== null) {
+                                keyListHashValue = { ...value };
+                            }
+                        } catch (e) {
+                            console.error('Error parsing key_list_hash value:', e);
+                        }
+
+                        const containerId = `key-list-hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                        const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                        inputField = `
+            <div id="${containerId}" class="space-y-2">
+              <div class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3" data-section-id="${sectionId}">
+                <div class="flex items-center gap-2">
+                  <input type="text"
+                         class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                         placeholder="Key (e.g., message, field1)"
+                         onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                  <button type="button"
+                          class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                          onclick="removeKeyListHashSection('${containerId}', '${fieldId}', this)">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove Section
+                  </button>
+                </div>
+                <div class="ml-4 space-y-2 section-values">
+                  <div class="flex items-center gap-2">
+                    <span class="text-gray-400 text-sm">=></span>
+                    <input type="text"
+                           class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                           placeholder="Value (e.g., pattern1)"
+                           onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                    <button type="button"
+                            class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                            onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Remove
+                    </button>
+                  </div>
+                </div>
+                <button type="button"
+                        class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                        onclick="addKeyListHashValue('${containerId}', '${fieldId}', this)">
+                    + Add Value
+                </button>
+              </div>
+              <button type="button"
+                      class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition-colors"
+                      onclick="addKeyListHashSection('${containerId}', '${fieldId}')">
+                + Add Section
+              </button>
+              <input type="hidden" id="${fieldId}" name="${key}" data-field-type="key_list_hash" value='${escapeHtml(JSON.stringify(keyListHashValue))}'>
+            </div>
+          `;
                     } else if (inputType.includes('hash') || inputType === 'object') {
                         // Handle hash/object input type
                         let hashValue = {};
@@ -479,7 +644,7 @@ window.PluginConfigModal = (function () {
                             if (typeof value === 'string' && value.trim() !== '') {
                                 hashValue = JSON.parse(value);
                             } else if (typeof value === 'object' && value !== null) {
-                                hashValue = {...value};
+                                hashValue = { ...value };
                             }
                         } catch (e) {
                             console.error('Error parsing hash value:', e);
@@ -487,7 +652,7 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `hash-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -499,13 +664,16 @@ window.PluginConfigModal = (function () {
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addHashPair('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -533,20 +701,23 @@ window.PluginConfigModal = (function () {
 
                         const containerId = `array-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                         inputField = `
-            <div id="${containerId}" class="space-y-2">
+            <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
                        class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
                 <button type="button"
-                        class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                        class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Remove
                 </button>
               </div>
               <button type="button"
-                      class="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                      class="mt-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
                       onclick="addArrayItem('${containerId}', '${fieldId}')">
                 + Add More
               </button>
@@ -568,6 +739,15 @@ window.PluginConfigModal = (function () {
                       class="${inputClasses} font-mono text-sm whitespace-pre"
                       style="resize: vertical; min-height: 200px;">${escapeHtml(value)}</textarea>
           `;
+                    } else if (component.plugin === 'comment' && (key === 'string' || key.toLowerCase() === 'message' || key.toLowerCase() === 'text')) {
+                        // Special handling for comment plugin - use textarea for multiline comments
+                        inputField = `
+            <textarea id="${fieldId}" name="${key}"
+                      rows="5"
+                      class="${inputClasses} font-mono text-sm"
+                      style="resize: vertical; min-height: 100px;"
+                      placeholder="Enter your comment here...">${escapeHtml(value)}</textarea>
+          `;
                     } else if (inputType === 'password') {
                         // Handle password input type with show/hide functionality
                         inputField = `
@@ -583,6 +763,25 @@ window.PluginConfigModal = (function () {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
+              </button>
+            </div>
+          `;
+                    } else if (inputType === 'fs_path') {
+                        // Handle filesystem path input type with file picker button
+                        inputField = `
+            <div class="flex items-center space-x-2">
+              <input type="text" id="${fieldId}" name="${key}"
+                     value="${escapeHtml(value)}"
+                     class="${inputClasses} flex-1"
+                     placeholder="Enter file path or click Browse...">
+              <button type="button" 
+                      class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap"
+                      onclick="browseFilePath('${fieldId}')"
+                      title="Browse for file">
+                <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Browse...
               </button>
             </div>
           `;
@@ -621,12 +820,12 @@ window.PluginConfigModal = (function () {
           ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
           ${inputField}
           ${option.default_value !== undefined ?
-                        `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
+                            `<p class="text-xs text-gray-400 mt-1">Default: <code class="bg-gray-900 px-1 rounded">${escapeHtml(option.default_value)}</code></p>` : ''}
         `;
 
                     advancedContent.appendChild(fieldGroup);
                 });
-                
+
                 advancedSection.appendChild(advancedContent);
                 configForm.appendChild(advancedSection);
             }
@@ -645,28 +844,28 @@ window.PluginConfigModal = (function () {
         const eventDataBefore = document.getElementById('eventDataBefore');
         const eventDataAfter = document.getElementById('eventDataAfter');
         const modalContainer = document.getElementById('configModalContainer');
-        
+
         // Check if simulation mode is active by looking for simulation badges
         const isSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
-        
+
         if (isSimulationMode && eventDataPanel && eventDataBefore && eventDataAfter) {
             // Find the component element for this plugin
             const componentElement = document.querySelector(`[data-id="${component.id}"]`);
-            
+
             if (componentElement) {
                 // Find all "Original Event" or "View Full Event" elements
                 const allDataFlows = document.querySelectorAll('.simulation-data-flow');
-                
+
                 // Find the data flow elements that come BEFORE and AFTER this component in the DOM
                 let beforeDataFlow = null;
                 let afterDataFlow = null;
-                
+
                 for (let i = 0; i < allDataFlows.length; i++) {
                     const dataFlow = allDataFlows[i];
-                    
+
                     // Check if this data flow comes before the component element in the DOM
                     const position = componentElement.compareDocumentPosition(dataFlow);
-                    
+
                     // If dataFlow comes before componentElement (position & 2 means PRECEDING)
                     if (position & Node.DOCUMENT_POSITION_PRECEDING) {
                         beforeDataFlow = dataFlow;
@@ -677,21 +876,33 @@ window.PluginConfigModal = (function () {
                         }
                     }
                 }
-                
+
                 // Populate before section
                 if (beforeDataFlow && beforeDataFlow.dataset.eventJson) {
-                    eventDataBefore.textContent = beforeDataFlow.dataset.eventJson;
+                    // Use highlightJSON if available (from simulation_results.js)
+                    if (typeof highlightJSON === 'function') {
+                        const beforeChanges = beforeDataFlow.dataset.changes ? JSON.parse(beforeDataFlow.dataset.changes) : null;
+                        eventDataBefore.innerHTML = highlightJSON(beforeDataFlow.dataset.eventJson, beforeChanges);
+                    } else {
+                        eventDataBefore.textContent = beforeDataFlow.dataset.eventJson;
+                    }
                 } else {
                     eventDataBefore.textContent = 'No event data available';
                 }
-                
+
                 // Populate after section
                 if (afterDataFlow && afterDataFlow.dataset.eventJson) {
-                    eventDataAfter.textContent = afterDataFlow.dataset.eventJson;
+                    // Use highlightJSON if available (from simulation_results.js)
+                    if (typeof highlightJSON === 'function') {
+                        const afterChanges = afterDataFlow.dataset.changes ? JSON.parse(afterDataFlow.dataset.changes) : null;
+                        eventDataAfter.innerHTML = highlightJSON(afterDataFlow.dataset.eventJson, afterChanges);
+                    } else {
+                        eventDataAfter.textContent = afterDataFlow.dataset.eventJson;
+                    }
                 } else {
                     eventDataAfter.textContent = 'No event data available (plugin may be last in pipeline)';
                 }
-                
+
                 // Show the panel
                 eventDataPanel.classList.remove('hidden');
                 modalContainer.style.maxWidth = '1400px';
@@ -709,11 +920,12 @@ window.PluginConfigModal = (function () {
             }
         }
 
-        // Populate existing hash, array, and array_of_hashes values
+        // Populate existing hash, array, array_of_hashes, and key_list_hash values
         setTimeout(() => {
             populateExistingValues(component);
             populateCodecValues(component);
             populateArrayOfHashesValues(component);
+            populateKeyListHashValues(component);
         }, 10);
 
         // Focus the first input field
@@ -763,8 +975,11 @@ window.PluginConfigModal = (function () {
                      value="${escapeHtml(value)}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'value')">
               <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeHashPair('${container.id}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
                 Remove
               </button>
             `;
@@ -806,8 +1021,11 @@ window.PluginConfigModal = (function () {
                      value="${escapeHtml(value)}"
                      onchange="updateArrayItem('${container.id}', '${hiddenField.id}', this, ${index})">
               <button type="button"
-                      class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                      class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeArrayItem('${container.id}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
                 Remove
               </button>
             `;
@@ -934,7 +1152,7 @@ window.PluginConfigModal = (function () {
             firstEmptyField.focus();
             return;
         }
-        
+
         const formData = new FormData(form);
         const config = {};
 
@@ -956,7 +1174,7 @@ window.PluginConfigModal = (function () {
                     if (Object.keys(parsedValue).length > 0) {
                         config[key] = parsedValue;
                     }
-                } else if (fieldType === 'hash' || fieldType === 'array' || fieldType === 'array_of_hashes') {
+                } else if (fieldType === 'hash' || fieldType === 'array' || fieldType === 'array_of_hashes' || fieldType === 'key_list_hash') {
                     const parsedValue = JSON.parse(value);
                     // Only add if the hash/array is not empty
                     if (Object.keys(parsedValue).length > 0 || (Array.isArray(parsedValue) && parsedValue.length > 0)) {
@@ -1012,22 +1230,32 @@ window.PluginConfigModal = (function () {
 
         // Hide the modal (this will trigger the animation)
         hide();
+
+        // Trigger pipeline warming synchronously (same as delete behavior)
+        if (typeof triggerPipelineWarmingAndChecking === 'function') {
+            triggerPipelineWarmingAndChecking();
+        } else {
+            console.error('[Plugin Config Modal] triggerPipelineWarmingAndChecking function not found - pipeline warming will not occur');
+        }
+
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentModified'));
     }
 
     // Validate required fields
     function validateRequiredFields() {
         const form = document.getElementById('configForm');
         const requiredFields = form.querySelectorAll('[data-required="true"]');
-        
+
         for (const fieldGroup of requiredFields) {
             const fieldName = fieldGroup.dataset.fieldName;
             const fieldType = fieldGroup.dataset.fieldType;
             const input = fieldGroup.querySelector('input:not([type="hidden"]), select, textarea');
-            
+
             if (!input) continue;
-            
+
             let isEmpty = false;
-            
+
             // Check based on field type
             if (fieldType === 'codec') {
                 const hiddenInput = fieldGroup.querySelector('input[type="hidden"]');
@@ -1039,7 +1267,7 @@ window.PluginConfigModal = (function () {
                         isEmpty = true;
                     }
                 }
-            } else if (fieldType === 'hash' || fieldType === 'object') {
+            } else if (fieldType === 'hash' || fieldType === 'object' || fieldType === 'key_list_hash') {
                 const hiddenInput = fieldGroup.querySelector('input[type="hidden"]');
                 if (hiddenInput) {
                     try {
@@ -1063,26 +1291,14 @@ window.PluginConfigModal = (function () {
                 // Regular input field
                 isEmpty = !input.value || input.value.trim() === '';
             }
-            
+
             if (isEmpty) {
                 // Return the first visible input to focus
                 return input;
             }
         }
-        
-        return null;
-    }
 
-    // Helper function to escape HTML
-    function escapeHtml(unsafe) {
-        if (unsafe === undefined || unsafe === null) return '';
-        return unsafe
-            .toString()
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+        return null;
     }
 
     // Helper function to get color based on plugin type
@@ -1102,11 +1318,11 @@ window.PluginConfigModal = (function () {
     // Helper function to check if a field is sensitive (password/api_key)
     function isSensitiveField(fieldName) {
         const lowerFieldName = fieldName.toLowerCase();
-        return lowerFieldName.includes('password') || 
-               lowerFieldName.includes('api_key') || 
-               lowerFieldName.includes('apikey') ||
-               lowerFieldName === 'token' ||
-               lowerFieldName.includes('secret');
+        return lowerFieldName.includes('password') ||
+            lowerFieldName.includes('api_key') ||
+            lowerFieldName.includes('apikey') ||
+            lowerFieldName === 'token' ||
+            lowerFieldName.includes('secret');
     }
 
     // Public API
@@ -1141,8 +1357,11 @@ window.addHashPair = function (containerId, fieldId) {
            placeholder="Value"
            onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
     <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeHashPair('${containerId}', this)">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
       Remove
     </button>
   `;
@@ -1209,8 +1428,11 @@ window.addArrayItem = function (containerId, fieldId) {
            placeholder="Value"
            onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${newIndex})">
     <button type="button"
-            class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+            class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeArrayItem('${containerId}', this)">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
       Remove
     </button>
   `;
@@ -1286,7 +1508,7 @@ window.addArrayOfHashesItem = function (containerId, fieldId) {
 
     // Create unique ID for this hash entry
     const entryId = `hash-entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Build the hash entry with fields based on options
     const entryDiv = document.createElement('div');
     entryDiv.className = 'p-3 bg-gray-900/50 border border-gray-600 rounded space-y-2';
@@ -1296,7 +1518,7 @@ window.addArrayOfHashesItem = function (containerId, fieldId) {
     for (const [optKey, optInfo] of Object.entries(hashOptions)) {
         const optType = (optInfo.type || 'string').toLowerCase();
         const inputClass = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
-        
+
         let inputHtml = '';
         if (optType === 'number') {
             inputHtml = `<input type="number" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" onchange="updateArrayOfHashesField('${containerId}', '${fieldId}')">`;
@@ -1331,7 +1553,7 @@ window.addArrayOfHashesItem = function (containerId, fieldId) {
 
     // Insert before the add button
     addButton.parentNode.insertBefore(entryDiv, addButton);
-    
+
     // Update the hidden field
     updateArrayOfHashesField(containerId, fieldId);
 };
@@ -1343,7 +1565,7 @@ window.removeArrayOfHashesItem = function (containerId, fieldId, button) {
     const entryDiv = button.closest('[data-entry-id]');
     if (entryDiv) {
         entryDiv.remove();
-        
+
         // Check if there are any entries left
         const remainingEntries = container.querySelectorAll('[data-entry-id]');
         if (remainingEntries.length === 0) {
@@ -1356,7 +1578,7 @@ window.removeArrayOfHashesItem = function (containerId, fieldId, button) {
                 addButton.parentNode.insertBefore(placeholder, addButton);
             }
         }
-        
+
         // Update the hidden field
         updateArrayOfHashesField(containerId, fieldId);
     }
@@ -1373,18 +1595,18 @@ window.updateArrayOfHashesField = function (containerId, fieldId) {
     entries.forEach(entry => {
         const hashObj = {};
         const inputs = entry.querySelectorAll('[data-field]');
-        
+
         inputs.forEach(input => {
             const fieldName = input.dataset.field;
             let value = input.value.trim();
-            
+
             if (value !== '') {
                 // Convert boolean strings to actual booleans
                 if (value === 'true') value = true;
                 else if (value === 'false') value = false;
                 // Convert numbers
                 else if (input.type === 'number' && !isNaN(value)) value = Number(value);
-                
+
                 hashObj[fieldName] = value;
             }
         });
@@ -1443,7 +1665,7 @@ function populateArrayOfHashesValues(component) {
                         const optType = (optInfo.type || 'string').toLowerCase();
                         const inputClass = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
                         const existingValue = hashObj[optKey] || '';
-                        
+
                         let inputHtml = '';
                         if (optType === 'number') {
                             inputHtml = `<input type="number" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" value="${existingValue}" onchange="updateArrayOfHashesField('${container.id}', '${hiddenField.id}')">`;
@@ -1486,6 +1708,254 @@ function populateArrayOfHashesValues(component) {
     });
 }
 
+// Key List Hash helper functions (for fields like grok match)
+window.addKeyListHashSection = function (containerId, fieldId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const addButton = container.querySelector('button[onclick*="addKeyListHashSection"]');
+    if (!addButton) return;
+
+    // Create unique ID for this section
+    const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const sectionDiv = document.createElement('div');
+    sectionDiv.className = 'p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3';
+    sectionDiv.dataset.sectionId = sectionId;
+
+    sectionDiv.innerHTML = `
+        <div class="flex items-center gap-2">
+            <input type="text"
+                   class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                   placeholder="Key (e.g., message, field1)"
+                   onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+            <button type="button"
+                    class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                    onclick="removeKeyListHashSection('${containerId}', '${fieldId}', this)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Remove Section
+            </button>
+        </div>
+        <div class="ml-4 space-y-2 section-values">
+            <div class="flex items-center gap-2">
+                <span class="text-gray-400 text-sm">=></span>
+                <input type="text"
+                       class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                       placeholder="Value (e.g., pattern1)"
+                       onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+                <button type="button"
+                        class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                        onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Remove
+                </button>
+            </div>
+        </div>
+        <button type="button"
+                class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                onclick="addKeyListHashValue('${containerId}', '${fieldId}', this)">
+            + Add Value
+        </button>
+    `;
+
+    addButton.parentNode.insertBefore(sectionDiv, addButton);
+    updateKeyListHashField(containerId, fieldId);
+};
+
+window.removeKeyListHashSection = function (containerId, fieldId, button) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const sectionDiv = button.closest('[data-section-id]');
+    if (sectionDiv) {
+        // Check if there are any sections left
+        const remainingSections = container.querySelectorAll('[data-section-id]');
+
+        // Only remove if there's more than one section (keep at least one)
+        if (remainingSections.length > 1) {
+            sectionDiv.remove();
+            updateKeyListHashField(containerId, fieldId);
+        } else {
+            // Clear the inputs instead of removing the last section
+            const keyInput = sectionDiv.querySelector('.section-key');
+            const valueInputs = sectionDiv.querySelectorAll('.section-values input[type="text"]');
+
+            if (keyInput) keyInput.value = '';
+            valueInputs.forEach(input => input.value = '');
+
+            updateKeyListHashField(containerId, fieldId);
+        }
+    }
+};
+
+window.addKeyListHashValue = function (containerId, fieldId, button) {
+    const sectionDiv = button.closest('[data-section-id]');
+    if (!sectionDiv) return;
+
+    const valuesContainer = sectionDiv.querySelector('.section-values');
+    if (!valuesContainer) return;
+
+    const newValue = document.createElement('div');
+    newValue.className = 'flex items-center gap-2';
+    newValue.innerHTML = `
+        <span class="text-gray-400 text-sm">=></span>
+        <input type="text"
+               class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+               placeholder="Value"
+               onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
+        <button type="button"
+                class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Remove
+        </button>
+    `;
+
+    valuesContainer.appendChild(newValue);
+    updateKeyListHashField(containerId, fieldId);
+};
+
+window.removeKeyListHashValue = function (containerId, fieldId, button) {
+    const valueDiv = button.closest('.flex.items-center.space-x-2');
+    if (valueDiv) {
+        valueDiv.remove();
+        updateKeyListHashField(containerId, fieldId);
+    }
+};
+
+window.updateKeyListHashField = function (containerId, fieldId) {
+    const container = document.getElementById(containerId);
+    const hiddenField = document.getElementById(fieldId);
+    if (!container || !hiddenField) return;
+
+    const sections = container.querySelectorAll('[data-section-id]');
+    const result = {};
+
+    sections.forEach(section => {
+        const keyInput = section.querySelector('.section-key');
+        if (!keyInput) return;
+
+        const key = keyInput.value.trim();
+        if (!key) return;
+
+        const valueInputs = section.querySelectorAll('.section-values input[type="text"]');
+        const values = [];
+
+        valueInputs.forEach(input => {
+            const value = input.value.trim();
+            if (value) {
+                values.push(value);
+            }
+        });
+
+        // Store as single value if only one, or array if multiple
+        if (values.length === 1) {
+            result[key] = values[0];
+        } else if (values.length > 1) {
+            result[key] = values;
+        }
+    });
+
+    hiddenField.value = JSON.stringify(result);
+};
+
+// Populate existing key_list_hash values
+function populateKeyListHashValues(component) {
+    const configForm = document.getElementById('configForm');
+    if (!configForm) return;
+
+    configForm.querySelectorAll('[id^="key-list-hash-container-"]').forEach(container => {
+        const hiddenField = container.querySelector('input[type="hidden"]');
+        if (!hiddenField) return;
+
+        try {
+            const keyListHashValue = JSON.parse(hiddenField.value);
+            const entries = Object.entries(keyListHashValue);
+
+            if (entries.length > 0) {
+                // Remove the default empty section first
+                const defaultSection = container.querySelector('[data-section-id]');
+                if (defaultSection) {
+                    const keyInput = defaultSection.querySelector('.section-key');
+                    if (keyInput && !keyInput.value) {
+                        defaultSection.remove();
+                    }
+                }
+
+                const addButton = container.querySelector('button[onclick*="addKeyListHashSection"]');
+
+                entries.forEach(([key, value]) => {
+                    const sectionId = `key-list-hash-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-3';
+                    sectionDiv.dataset.sectionId = sectionId;
+
+                    // Normalize value to array
+                    const values = Array.isArray(value) ? value : [value];
+
+                    let valuesHtml = '';
+                    values.forEach(val => {
+                        valuesHtml += `
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-400 text-sm">=></span>
+                                <input type="text"
+                                       class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                                       placeholder="Value"
+                                       value="${escapeHtml(val)}"
+                                       onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
+                                <button type="button"
+                                        class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
+                                        onclick="removeKeyListHashValue('${container.id}', '${hiddenField.id}', this)">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Remove
+                                </button>
+                            </div>
+                        `;
+                    });
+
+                    sectionDiv.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <input type="text"
+                                   class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
+                                   placeholder="Key (e.g., message, field1)"
+                                   value="${escapeHtml(key)}"
+                                   onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
+                            <button type="button"
+                                    class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
+                                    onclick="removeKeyListHashSection('${container.id}', '${hiddenField.id}', this)">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Remove Section
+                            </button>
+                        </div>
+                        <div class="ml-4 space-y-2 section-values">
+                            ${valuesHtml}
+                        </div>
+                        <button type="button"
+                                class="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs transition-colors"
+                                onclick="addKeyListHashValue('${container.id}', '${hiddenField.id}', this)">
+                            + Add Value
+                        </button>
+                    `;
+
+                    addButton.parentNode.insertBefore(sectionDiv, addButton);
+                });
+            }
+        } catch (e) {
+            console.error('Error populating key_list_hash values:', e);
+        }
+    });
+}
+
 // Codec helper functions
 window.handleCodecChange = function (containerId, fieldId, codecName) {
     const container = document.getElementById(containerId);
@@ -1511,7 +1981,7 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
 
     if (!codecInfo || !codecInfo.options) {
         // Codec has no options, just store the codec name with empty config
-        hiddenField.value = JSON.stringify({[codecName]: {}});
+        hiddenField.value = JSON.stringify({ [codecName]: {} });
         return;
     }
 
@@ -1592,7 +2062,7 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
     });
 
     // Initialize with empty config for the selected codec
-    const currentValue = {[codecName]: existingConfig};
+    const currentValue = { [codecName]: existingConfig };
     hiddenField.value = JSON.stringify(currentValue);
 };
 
@@ -1643,10 +2113,10 @@ window.showConfigModal = function (component) {
 };
 
 // Toggle password visibility function
-window.togglePasswordVisibility = function(fieldId, button) {
+window.togglePasswordVisibility = function (fieldId, button) {
     const input = document.getElementById(fieldId);
     if (!input) return;
-    
+
     if (input.type === 'password') {
         input.type = 'text';
         // Change icon to eye-slash (hidden)
@@ -1665,6 +2135,35 @@ window.togglePasswordVisibility = function(fieldId, button) {
             </svg>
         `;
     }
+};
+
+// Browse file path function for fs_path input type
+window.browseFilePath = function (fieldId) {
+    const targetInput = document.getElementById(fieldId);
+    if (!targetInput) return;
+
+    // Create a hidden file input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.style.display = 'none';
+
+    // Handle file selection
+    fileInput.addEventListener('change', function (e) {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            // Get the file path (webkitRelativePath or name)
+            // Note: For security reasons, browsers don't expose the full file system path
+            // We'll use the file name as a placeholder
+            const filePath = file.webkitRelativePath || file.name;
+            targetInput.value = filePath;
+        }
+        // Clean up the temporary file input
+        document.body.removeChild(fileInput);
+    });
+
+    // Add to DOM and trigger click
+    document.body.appendChild(fileInput);
+    fileInput.click();
 };
 
 // Initialize when the DOM is ready

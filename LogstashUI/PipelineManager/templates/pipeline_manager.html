@@ -1,3 +1,9 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
 {% extends "base.html" %}
 {% load static %}
 
@@ -49,8 +55,8 @@
               <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
                 Centralized Pipeline Management
               </a>
-              <a id="sshPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
-                Logstash Server (SSH) - Coming soon!
+              <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
+                Logstash Agent - Coming soon!
               </a>
             </div>
           </div>
@@ -78,8 +84,8 @@
           <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
             Centralized Pipeline Management
           </a>
-          <a id="sshPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
-            Logstash Server (SSH) - Coming soon!
+          <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
+            Logstash Agent - Coming soon!
           </a>
         </div>
       </div>
@@ -108,7 +114,7 @@
                       const target = document.getElementById('pipelines-{{ connection.pk }}');
                       if (target.classList.contains('hidden')) {
                         target.classList.remove('hidden');
-                        htmx.ajax('GET', '/API/GetPipelines/{{ connection.pk }}/', {target: '#pipelines-{{ connection.pk }}', swap: 'innerHTML'});
+                        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ connection.pk }}/', {target: '#pipelines-{{ connection.pk }}', swap: 'innerHTML'});
                       } else {
                         target.classList.add('hidden');
                         target.innerHTML = '';
@@ -125,7 +131,7 @@
                 {% if connection.connection_type == "CENTRALIZED" %}
                   <img src="{% static 'images/ElasticIcon.png' %}" alt="Centralized" width="52" height="52" class="inline-block">
                 {% else %}
-                  <img src="{% static 'images/LoggyIcon.png' %}" alt="SSH" class="inline-block">
+                  <img src="{% static 'images/LoggyIcon.png' %}" alt="Agent" class="inline-block">
                 {% endif %}
               </td>
 
@@ -133,7 +139,7 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300" title="{{ connection.cloud_id }}">{{ connection.cloud_id|truncatechars:12 }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
-                      hx-get="/API/TestConnectivity?test={{ connection.pk }}"
+                      hx-get="/ConnectionManager/TestConnectivity?test={{ connection.pk }}"
                       hx-trigger="click"
                       hx-target="#toast-container"
                       hx-indicator=".loading"
@@ -169,7 +175,7 @@
                       <div class="px-1 py-1">
                         <form method="POST">
                           {% csrf_token %}
-                          <a hx-post="/API/DeleteConnection/{{ connection.pk }}/"
+                          <a hx-post="/ConnectionManager/DeleteConnection/{{ connection.pk }}/"
                            hx-trigger="click" 
                            hx-confirm="Are you sure you want to delete this connection?" 
                            hx-swap="beforeend" 
@@ -235,22 +241,46 @@
     }
   });
 
-  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
-    document.getElementById('connectionFormFlyout').classList.remove('hidden');
+  document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Do nothing - this feature is coming soon
   });
 
   // Set connection type based on which button was clicked
   document.getElementById('centralizedPipelineBtn').addEventListener('click', function() {
     document.getElementById('connectionTypeField').value = 'CENTRALIZED';
     document.getElementById('centralizedFields').classList.remove('hidden');
-    document.getElementById('sshFields').classList.add('hidden');
+    document.getElementById('agentFields').classList.add('hidden');
   });
 
-  document.getElementById('sshPipelineBtn').addEventListener('click', function() {
-    document.getElementById('connectionTypeField').value = 'SSH';
-    document.getElementById('centralizedFields').classList.add('hidden');
-    document.getElementById('sshFields').classList.remove('hidden');
+  document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Do nothing - this feature is coming soon
   });
+
+  // Set flag to indicate we're on the pipeline manager page
+  window.isPipelineManagerPage = true;
+
+  // Override closeFlyout to reload page after connection creation on this page only
+  const originalCloseFlyout = window.closeFlyout;
+  window.closeFlyout = function() {
+    // Check if a connection was just created
+    const wasConnectionCreated = window.lastCreatedConnectionId !== undefined && window.lastCreatedConnectionId !== null;
+    
+    // Call original close function
+    if (originalCloseFlyout) {
+      originalCloseFlyout();
+    }
+    
+    // Reload page if connection was created and we're on pipeline manager page
+    if (wasConnectionCreated && window.isPipelineManagerPage) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    }
+  };
 
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {

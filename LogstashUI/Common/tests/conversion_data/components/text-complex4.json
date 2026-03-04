@@ -1,0 +1,369 @@
+{
+    "input": [
+        {
+            "id": "input_generator_0",
+            "type": "input",
+            "plugin": "generator",
+            "config": {
+                "id": "gen_edgeA",
+                "count": 1,
+                "lines": [
+                    "2026-02-22T01:23:45Z level=INFO service=api trace.id=abc123 method=GET path=\"/api/v2/items/42\" ip=8.8.8.8 ua=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64)\" msg=\"hello\\world\""
+                ],
+                "add_field": {
+                    "[@metadata][source]": "generator",
+                    "event.original": "%{message}"
+                }
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_comment_1",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Fast split: timestamp + remainder"
+            }
+        },
+        {
+            "id": "filter_dissect_2",
+            "type": "filter",
+            "plugin": "dissect",
+            "config": {
+                "id": "dissect_ts_rest",
+                "mapping": {
+                    "message": "%{ts} %{rest}"
+                },
+                "tag_on_failure": [
+                    "_dissectfailure_ts_rest"
+                ]
+            }
+        },
+        {
+            "id": "filter_date_3",
+            "type": "filter",
+            "plugin": "date",
+            "config": {
+                "id": "date_ts",
+                "match": [
+                    "ts",
+                    "ISO8601"
+                ],
+                "tag_on_failure": [
+                    "_dateparsefailure_ts"
+                ]
+            }
+        },
+        {
+            "id": "filter_comment_4",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Parse key=value in rest"
+            }
+        },
+        {
+            "id": "filter_kv_5",
+            "type": "filter",
+            "plugin": "kv",
+            "config": {
+                "id": "kv_rest",
+                "source": "rest",
+                "trim_key": " ",
+                "trim_value": " ",
+                "value_split": "=",
+                "field_split_pattern": "\\s+",
+                "include_brackets": "false",
+                "tag_on_failure": [
+                    "_kvfailure_rest"
+                ]
+            }
+        },
+        {
+            "id": "filter_comment_6",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Normalize: remove surrounding quotes on selected fields (common log format)"
+            }
+        },
+        {
+            "id": "filter_mutate_7",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "id": "mutate_strip_quotes",
+                "gsub": [
+                    "path",
+                    "^\"|\"$",
+                    "",
+                    "ua",
+                    "^\"|\"$",
+                    "",
+                    "msg",
+                    "^\"|\"$",
+                    ""
+                ]
+            }
+        },
+        {
+            "id": "filter_comment_8",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Promote a few fields into ECS-ish places"
+            }
+        },
+        {
+            "id": "filter_mutate_9",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "id": "mutate_promote",
+                "rename": {
+                    "ip": "[source][ip]",
+                    "ua": "[user_agent][original]",
+                    "method": "[http][request][method]",
+                    "path": "[url][path]",
+                    "trace.id": "[trace][id]"
+                },
+                "lowercase": [
+                    "level"
+                ]
+            }
+        },
+        {
+            "id": "filter_comment_10",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Route key uses nested refs in sprintf (great UI test)"
+            }
+        },
+        {
+            "id": "filter_mutate_11",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "id": "mutate_route_key",
+                "add_field": {
+                    "route_key": "%{[@metadata][source]}::%{[service]}::%{[http][request][method]}::%{[url][path]}"
+                }
+            }
+        },
+        {
+            "id": "filter_comment_12",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Regex literals (escaped slashes)"
+            }
+        },
+        {
+            "id": "filter_if_13",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[url][path] =~ /^\\/api\\/v2\\/items\\/[0-9]+$/",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_14",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "id": "tag_items",
+                            "add_tag": [
+                                "route_items"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[url][path] =~ /^\\/api\\/v2\\/[A-Za-z0-9._-]+$/",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_15",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "id": "tag_api_generic",
+                                    "add_tag": [
+                                        "route_api_generic"
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": {
+                    "plugins": [
+                        {
+                            "id": "filter_mutate_16",
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "id": "tag_other",
+                                "add_tag": [
+                                    "route_other"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "filter_comment_17",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "useragent parsing"
+            }
+        },
+        {
+            "id": "filter_if_18",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[user_agent][original]",
+                "plugins": [
+                    {
+                        "id": "filter_useragent_19",
+                        "type": "filter",
+                        "plugin": "useragent",
+                        "config": {
+                            "id": "ua_parse",
+                            "source": "[user_agent][original]",
+                            "target": "[user_agent][parsed]"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_comment_20",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "geoip on public source.ip"
+            }
+        },
+        {
+            "id": "filter_if_21",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[source][ip]",
+                "plugins": [
+                    {
+                        "id": "filter_geoip_22",
+                        "type": "filter",
+                        "plugin": "geoip",
+                        "config": {
+                            "id": "geoip_source",
+                            "source": "[source][ip]",
+                            "target": "[source][geo]"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_comment_23",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "fingerprint based on nested refs + message"
+            }
+        },
+        {
+            "id": "filter_fingerprint_24",
+            "type": "filter",
+            "plugin": "fingerprint",
+            "config": {
+                "id": "fp_event",
+                "source": [
+                    "route_key",
+                    "message"
+                ],
+                "method": "MURMUR3",
+                "target": "[@metadata][fp]"
+            }
+        },
+        {
+            "id": "filter_comment_25",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Replace literal backslash with slash in msg (escape-heavy but valid)"
+            }
+        },
+        {
+            "id": "filter_mutate_26",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "id": "mutate_gsub_backslash",
+                "gsub": [
+                    "msg",
+                    "\\\\",
+                    "/"
+                ]
+            }
+        },
+        {
+            "id": "filter_prune_27",
+            "type": "filter",
+            "plugin": "prune",
+            "config": {
+                "id": "prune_edgeA",
+                "whitelist_names": [
+                    "^@timestamp$",
+                    "^message$",
+                    "^tags$",
+                    "^level$",
+                    "^service$",
+                    "^route_key$",
+                    "^trace\\..*$",
+                    "^http\\..*$",
+                    "^url\\..*$",
+                    "^source\\..*$",
+                    "^user_agent\\..*$",
+                    "^msg$",
+                    "^@metadata\\..*$"
+                ]
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_stdout_28",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {
+                        "metadata": "true"
+                    }
+                }
+            }
+        },
+        {
+            "id": "output_file_29",
+            "type": "output",
+            "plugin": "file",
+            "config": {
+                "path": "/tmp/edgeA-%{+YYYY.MM.dd}.jsonl",
+                "codec": {
+                    "json_lines": {}
+                }
+            }
+        }
+    ]
+}

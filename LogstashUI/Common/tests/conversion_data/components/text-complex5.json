@@ -1,0 +1,89 @@
+{
+    "input": [
+        {
+            "id": "input_generator_0",
+            "type": "input",
+            "plugin": "generator",
+            "config": {
+                "id": "gen_edgecase_3",
+                "count": 1,
+                "lines": [
+                    "path=\"C:\\Program Files\\App\\\" msg=\"quote:\" and backslash:\\\\\""
+                ]
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_comment_1",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "This ruby code contains both quote styles and backslashes."
+            }
+        },
+        {
+            "id": "filter_ruby_2",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "id": "ruby_edgecase_3",
+                "code": "\n      # Double quotes inside single-quoted LSCL string\n      event.set(\"[edge][note]\", \"He said: \"hello\"\")\n      # Single quote inside Ruby string\n      event.set(\"[edge][apostrophe]\", \"it's fine\")\n      # Trailing backslash in a field value (nasty for serializers)\n      event.set(\"[edge][trail]\", \"C:\temp\")\n    "
+            }
+        },
+        {
+            "id": "filter_comment_3",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Parse key=val"
+            }
+        },
+        {
+            "id": "filter_kv_4",
+            "type": "filter",
+            "plugin": "kv",
+            "config": {
+                "id": "kv_edgecase_3",
+                "source": "message",
+                "value_split": "=",
+                "field_split_pattern": "\\s+"
+            }
+        },
+        {
+            "id": "filter_comment_5",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "Replace literal backslash \"\\\" with \"/\""
+            }
+        },
+        {
+            "id": "filter_mutate_6",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "id": "gsub_edgecase_3",
+                "gsub": [
+                    "path",
+                    "\\\\",
+                    "/"
+                ]
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_stdout_7",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {
+                        "metadata": "true"
+                    }
+                }
+            }
+        }
+    ]
+}

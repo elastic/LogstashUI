@@ -19,6 +19,7 @@ COPY main.py .
 COPY slots.py .
 COPY log_analyzer.py .
 COPY logstashagent.yml .
+COPY logstash_api.py .
 
 # Create directories for Logstash configs and pipelines
 RUN mkdir -p /etc/logstash \
@@ -55,8 +56,7 @@ USER logstash
 # 9600: Logstash API
 # 9449: Logstash HTTP input (for sample events)
 # 9500: FastAPI sidecar API
-# 8082: HTTP input for simulation pipelines
-EXPOSE 9600 9449 9500 8082
+EXPOSE 9600 9449 9500
 
 # Use custom entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

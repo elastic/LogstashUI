@@ -1,0 +1,53 @@
+{
+  "name": "dell_idrac",
+  "description": "[Dell iDRAC] Hardware health: system status, PSU, fans, temperature, memory, CPU, RAID",
+  "type": "Compute",
+  "vendor": "Dell",
+  "pinned": true,
+  "get": {
+    "idracGlobalSystemStatus": "1.3.6.1.4.1.674.10892.5.2.1.0"
+  },
+  "walk": {},
+  "table": {
+
+    "idracPowerSupplyTable": {
+      "columns": {
+        "psuIndex": "1.3.6.1.4.1.674.10892.5.4.600.12.1.1",
+        "psuLocation": "1.3.6.1.4.1.674.10892.5.4.600.12.1.7",
+        "psuStatus": "1.3.6.1.4.1.674.10892.5.4.600.12.1.5"
+      }
+    },
+
+    "idracFanTable": {
+      "columns": {
+        "fanIndex": "1.3.6.1.4.1.674.10892.5.4.700.12.1.1",
+        "fanLocation": "1.3.6.1.4.1.674.10892.5.4.700.12.1.7",
+        "fanStatus": "1.3.6.1.4.1.674.10892.5.4.700.12.1.5",
+        "fanReadingRPM": "1.3.6.1.4.1.674.10892.5.4.700.12.1.6"
+      }
+    },
+
+    "idracMemoryTable": {
+      "columns": {
+        "memoryIndex": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.1",
+        "memoryLocation": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.5",
+        "memoryStatus": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.4",
+        "memorySizeMB": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.14"
+      }
+    },
+    "idracRaidControllerTable": {
+      "columns": {
+        "raidIndex": "1.3.6.1.4.1.674.10892.5.4.300.50.1.1",
+        "raidName": "1.3.6.1.4.1.674.10892.5.4.300.50.1.5",
+        "raidStatus": "1.3.6.1.4.1.674.10892.5.4.300.50.1.4"
+      }
+    },
+    "cpus": {
+      "columns": {
+        "status": "1.3.6.1.4.1.674.10892.5.4.1100.30.1.5",
+        "id": "1.3.6.1.4.1.674.10892.5.4.1100.30.1.2",
+        "chassis_id": "1.3.6.1.4.1.674.10892.5.4.1100.30.1.1"
+      }
+    }
+  }
+}

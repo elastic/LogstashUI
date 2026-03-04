@@ -1,0 +1,1424 @@
+{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": "5044",
+                "ssl": "true",
+                "ssl_certificate": "/etc/logstash/certs/server.crt",
+                "ssl_key": "/etc/logstash/certs/server.key",
+                "ssl_verify_mode": "force_peer",
+                "ssl_certificate_authorities": [
+                    "/etc/logstash/certs/ca.crt"
+                ],
+                "codec": {
+                    "json": {}
+                },
+                "type": "beats",
+                "tags": [
+                    "beats_ssl"
+                ]
+            }
+        },
+        {
+            "id": "input_http_1",
+            "type": "input",
+            "plugin": "http",
+            "config": {
+                "port": "8080",
+                "codec": {
+                    "json": {}
+                },
+                "ssl": "true",
+                "ssl_certificate": "/etc/logstash/certs/http.crt",
+                "ssl_key": "/etc/logstash/certs/http.key",
+                "threads": "4",
+                "max_pending_requests": "100",
+                "response_headers": {
+                    "Content-Type": "application/json"
+                },
+                "type": "webhook",
+                "tags": [
+                    "http_api"
+                ]
+            }
+        },
+        {
+            "id": "input_kafka_2",
+            "type": "input",
+            "plugin": "kafka",
+            "config": {
+                "bootstrap_servers": "kafka1:9092,kafka2:9092,kafka3:9092",
+                "topics": [
+                    "app-logs",
+                    "security-events",
+                    "metrics"
+                ],
+                "group_id": "logstash-consumer",
+                "consumer_threads": "3",
+                "codec": {
+                    "avro": {
+                        "schema_uri": "http://schema-registry:8081/schemas/ids/1"
+                    }
+                },
+                "decorate_events": "true",
+                "security_protocol": "SASL_SSL",
+                "sasl_mechanism": "SCRAM-SHA-512",
+                "sasl_jaas_config": "org.apache.kafka.common.security.scram.ScramLoginModule required username='logstash' password='${KAFKA_PASS}';",
+                "type": "kafka",
+                "tags": [
+                    "kafka_stream"
+                ]
+            }
+        },
+        {
+            "id": "input_jdbc_3",
+            "type": "input",
+            "plugin": "jdbc",
+            "config": {
+                "jdbc_driver_library": "/usr/share/logstash/vendor/jar/jdbc/postgresql.jar",
+                "jdbc_driver_class": "org.postgresql.Driver",
+                "jdbc_connection_string": "jdbc:postgresql://db:5432/prod",
+                "jdbc_user": "${DB_USER}",
+                "jdbc_password": "${DB_PASS}",
+                "schedule": "*/5 * * * *",
+                "statement": "SELECT * FROM events WHERE created_at > :sql_last_value",
+                "use_column_value": "true",
+                "tracking_column": "created_at",
+                "tracking_column_type": "timestamp",
+                "type": "database",
+                "tags": [
+                    "jdbc_poll"
+                ]
+            }
+        },
+        {
+            "id": "input_file_4",
+            "type": "input",
+            "plugin": "file",
+            "config": {
+                "path": [
+                    "/var/log/nginx/*.log",
+                    "/var/log/app/**/*.log"
+                ],
+                "start_position": "beginning",
+                "sincedb_path": "/var/lib/logstash/sincedb",
+                "codec": {
+                    "multiline": {
+                        "pattern": "^%{TIMESTAMP_ISO8601}",
+                        "negate": "true",
+                        "what": "previous",
+                        "max_lines": 500
+                    }
+                },
+                "type": "file",
+                "tags": [
+                    "file_input"
+                ]
+            }
+        },
+        {
+            "id": "input_tcp_5",
+            "type": "input",
+            "plugin": "tcp",
+            "config": {
+                "port": "5000",
+                "codec": {
+                    "json_lines": {}
+                },
+                "ssl_enable": "true",
+                "ssl_cert": "/etc/logstash/certs/tcp.crt",
+                "ssl_key": "/etc/logstash/certs/tcp.key",
+                "type": "tcp_json",
+                "tags": [
+                    "tcp_secure"
+                ]
+            }
+        },
+        {
+            "id": "input_udp_6",
+            "type": "input",
+            "plugin": "udp",
+            "config": {
+                "port": "514",
+                "codec": {
+                    "cef": {}
+                },
+                "type": "syslog",
+                "tags": [
+                    "syslog_udp"
+                ]
+            }
+        },
+        {
+            "id": "input_rabbitmq_7",
+            "type": "input",
+            "plugin": "rabbitmq",
+            "config": {
+                "host": "rabbitmq",
+                "port": "5672",
+                "user": "${RABBIT_USER}",
+                "password": "${RABBIT_PASS}",
+                "queue": "logs",
+                "exchange": "logs-exchange",
+                "exchange_type": "topic",
+                "key": "logs.#",
+                "durable": "true",
+                "codec": {
+                    "json": {}
+                },
+                "type": "rabbitmq",
+                "tags": [
+                    "amqp"
+                ]
+            }
+        },
+        {
+            "id": "input_redis_8",
+            "type": "input",
+            "plugin": "redis",
+            "config": {
+                "host": "redis",
+                "port": "6379",
+                "password": "${REDIS_PASS}",
+                "data_type": "list",
+                "key": "logstash:queue",
+                "codec": {
+                    "json": {}
+                },
+                "type": "redis",
+                "tags": [
+                    "redis_queue"
+                ]
+            }
+        },
+        {
+            "id": "input_s3_9",
+            "type": "input",
+            "plugin": "s3",
+            "config": {
+                "bucket": "logs-archive",
+                "region": "us-east-1",
+                "access_key_id": "${AWS_KEY}",
+                "secret_access_key": "${AWS_SECRET}",
+                "interval": "300",
+                "codec": {
+                    "json_lines": {}
+                },
+                "type": "s3",
+                "tags": [
+                    "s3_archive"
+                ]
+            }
+        },
+        {
+            "id": "input_kinesis_10",
+            "type": "input",
+            "plugin": "kinesis",
+            "config": {
+                "kinesis_stream_name": "app-stream",
+                "region": "us-west-2",
+                "codec": {
+                    "json": {}
+                },
+                "type": "kinesis",
+                "tags": [
+                    "aws_kinesis"
+                ]
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_11",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[type] == \"beats\"",
+                "plugins": [
+                    {
+                        "id": "filter_if_12",
+                        "type": "filter",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "[agent][type] == \"filebeat\"",
+                            "plugins": [
+                                {
+                                    "id": "filter_if_13",
+                                    "type": "filter",
+                                    "plugin": "if",
+                                    "config": {
+                                        "condition": "[log][file][path] =~ /nginx/",
+                                        "plugins": [
+                                            {
+                                                "id": "filter_grok_14",
+                                                "type": "filter",
+                                                "plugin": "grok",
+                                                "config": {
+                                                    "match": {
+                                                        "message": "%{IPORHOST:client_ip} - %{DATA:user} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{DATA:path} HTTP/%{NUMBER:version}\" %{NUMBER:status:int} %{NUMBER:bytes:int} \"%{DATA:referrer}\" \"%{DATA:agent}\""
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                "id": "filter_date_15",
+                                                "type": "filter",
+                                                "plugin": "date",
+                                                "config": {
+                                                    "match": [
+                                                        "timestamp",
+                                                        "dd/MMM/yyyy:HH:mm:ss Z"
+                                                    ],
+                                                    "target": "@timestamp"
+                                                }
+                                            },
+                                            {
+                                                "id": "filter_useragent_16",
+                                                "type": "filter",
+                                                "plugin": "useragent",
+                                                "config": {
+                                                    "source": "agent",
+                                                    "target": "ua"
+                                                }
+                                            },
+                                            {
+                                                "id": "filter_geoip_17",
+                                                "type": "filter",
+                                                "plugin": "geoip",
+                                                "config": {
+                                                    "source": "client_ip",
+                                                    "target": "geo",
+                                                    "database": "/usr/share/GeoIP/GeoLite2-City.mmdb"
+                                                }
+                                            },
+                                            {
+                                                "id": "filter_if_18",
+                                                "type": "filter",
+                                                "plugin": "if",
+                                                "config": {
+                                                    "condition": "[status] >= 500",
+                                                    "plugins": [
+                                                        {
+                                                            "id": "filter_mutate_19",
+                                                            "type": "filter",
+                                                            "plugin": "mutate",
+                                                            "config": {
+                                                                "add_tag": [
+                                                                    "error",
+                                                                    "server_error"
+                                                                ],
+                                                                "add_field": {
+                                                                    "severity": "critical"
+                                                                }
+                                                            }
+                                                        }
+                                                    ],
+                                                    "else_ifs": [
+                                                        {
+                                                            "condition": "[status] >= 400",
+                                                            "plugins": [
+                                                                {
+                                                                    "id": "filter_mutate_20",
+                                                                    "type": "filter",
+                                                                    "plugin": "mutate",
+                                                                    "config": {
+                                                                        "add_tag": [
+                                                                            "error",
+                                                                            "client_error"
+                                                                        ],
+                                                                        "add_field": {
+                                                                            "severity": "warning"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    ],
+                                                    "else": null
+                                                }
+                                            },
+                                            {
+                                                "id": "filter_ruby_21",
+                                                "type": "filter",
+                                                "plugin": "ruby",
+                                                "config": {
+                                                    "code": "\n            bytes = event.get(\"bytes\").to_i\n            if bytes > 10485760\n              event.set(\"size_class\", \"large\")\n            elsif bytes > 1048576\n              event.set(\"size_class\", \"medium\")\n            else\n              event.set(\"size_class\", \"small\")\n            end\n          "
+                                                }
+                                            },
+                                            {
+                                                "id": "filter_fingerprint_22",
+                                                "type": "filter",
+                                                "plugin": "fingerprint",
+                                                "config": {
+                                                    "source": [
+                                                        "client_ip",
+                                                        "path",
+                                                        "timestamp"
+                                                    ],
+                                                    "target": "[@metadata][fingerprint]",
+                                                    "method": "SHA256"
+                                                }
+                                            }
+                                        ],
+                                        "else_ifs": [
+                                            {
+                                                "condition": "[log][file][path] =~ /application/",
+                                                "plugins": [
+                                                    {
+                                                        "id": "filter_json_23",
+                                                        "type": "filter",
+                                                        "plugin": "json",
+                                                        "config": {
+                                                            "source": "message",
+                                                            "target": "app"
+                                                        }
+                                                    },
+                                                    {
+                                                        "id": "filter_if_24",
+                                                        "type": "filter",
+                                                        "plugin": "if",
+                                                        "config": {
+                                                            "condition": "[app][level]",
+                                                            "plugins": [
+                                                                {
+                                                                    "id": "filter_translate_25",
+                                                                    "type": "filter",
+                                                                    "plugin": "translate",
+                                                                    "config": {
+                                                                        "field": "[app][level]",
+                                                                        "destination": "severity_num",
+                                                                        "dictionary": {
+                                                                            "DEBUG": "1",
+                                                                            "INFO": "2",
+                                                                            "WARN": "3",
+                                                                            "ERROR": "4",
+                                                                            "FATAL": "5"
+                                                                        },
+                                                                        "fallback": "2"
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "id": "filter_mutate_26",
+                                                                    "type": "filter",
+                                                                    "plugin": "mutate",
+                                                                    "config": {
+                                                                        "convert": {
+                                                                            "severity_num": "integer"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            ],
+                                                            "else_ifs": [],
+                                                            "else": null
+                                                        }
+                                                    },
+                                                    {
+                                                        "id": "filter_if_27",
+                                                        "type": "filter",
+                                                        "plugin": "if",
+                                                        "config": {
+                                                            "condition": "[app][exception]",
+                                                            "plugins": [
+                                                                {
+                                                                    "id": "filter_mutate_28",
+                                                                    "type": "filter",
+                                                                    "plugin": "mutate",
+                                                                    "config": {
+                                                                        "add_tag": [
+                                                                            "exception"
+                                                                        ]
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "id": "filter_ruby_29",
+                                                                    "type": "filter",
+                                                                    "plugin": "ruby",
+                                                                    "config": {
+                                                                        "code": "\n              exc = event.get(\"[app][exception]\")\n              if exc.is_a?(Hash)\n                event.set(\"exception_class\", exc[\"class\"])\n                event.set(\"exception_msg\", exc[\"message\"])\n              end\n            "
+                                                                    }
+                                                                }
+                                                            ],
+                                                            "else_ifs": [],
+                                                            "else": null
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ],
+                                        "else": null
+                                    }
+                                }
+                            ],
+                            "else_ifs": [
+                                {
+                                    "condition": "[agent][type] == \"metricbeat\"",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_if_30",
+                                            "type": "filter",
+                                            "plugin": "if",
+                                            "config": {
+                                                "condition": "[system][cpu]",
+                                                "plugins": [
+                                                    {
+                                                        "id": "filter_ruby_31",
+                                                        "type": "filter",
+                                                        "plugin": "ruby",
+                                                        "config": {
+                                                            "code": "\n            cpu = event.get(\"[system][cpu]\")\n            if cpu && cpu[\"cores\"]\n              total = 0.0\n              cpu[\"cores\"].each { |c| total += c[\"user\"][\"pct\"].to_f if c[\"user\"] }\n              avg = total / cpu[\"cores\"].length\n              event.set(\"[system][cpu][avg_pct]\", avg.round(2))\n              event.tag(\"cpu_warning\") if avg > 75\n              event.tag(\"cpu_critical\") if avg > 90\n            end\n          "
+                                                        }
+                                                    }
+                                                ],
+                                                "else_ifs": [],
+                                                "else": null
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_if_32",
+                                            "type": "filter",
+                                            "plugin": "if",
+                                            "config": {
+                                                "condition": "[system][memory][actual][used][pct]",
+                                                "plugins": [
+                                                    {
+                                                        "id": "filter_ruby_33",
+                                                        "type": "filter",
+                                                        "plugin": "ruby",
+                                                        "config": {
+                                                            "code": "\n            pct = event.get(\"[system][memory][actual][used][pct]\").to_f * 100\n            event.set(\"mem_used_pct\", pct.round(2))\n            event.tag(\"memory_warning\") if pct > 85\n            event.tag(\"memory_critical\") if pct > 95\n          "
+                                                        }
+                                                    }
+                                                ],
+                                                "else_ifs": [],
+                                                "else": null
+                                            }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "else": null
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[type] == \"kafka\"",
+                        "plugins": [
+                            {
+                                "id": "filter_if_34",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[kafka][topic] == \"security-events\"",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_json_35",
+                                            "type": "filter",
+                                            "plugin": "json",
+                                            "config": {
+                                                "source": "message",
+                                                "target": "security"
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_if_36",
+                                            "type": "filter",
+                                            "plugin": "if",
+                                            "config": {
+                                                "condition": "[security][ip]",
+                                                "plugins": [
+                                                    {
+                                                        "id": "filter_cidr_37",
+                                                        "type": "filter",
+                                                        "plugin": "cidr",
+                                                        "config": {
+                                                            "address": [
+                                                                "%{[security][ip]}"
+                                                            ],
+                                                            "network": [
+                                                                "10.0.0.0/8",
+                                                                "172.16.0.0/12",
+                                                                "192.168.0.0/16"
+                                                            ],
+                                                            "add_tag": [
+                                                                "internal_ip"
+                                                            ]
+                                                        }
+                                                    },
+                                                    {
+                                                        "id": "filter_if_38",
+                                                        "type": "filter",
+                                                        "plugin": "if",
+                                                        "config": {
+                                                            "condition": "\"internal_ip\" not in [tags]",
+                                                            "plugins": [
+                                                                {
+                                                                    "id": "filter_geoip_39",
+                                                                    "type": "filter",
+                                                                    "plugin": "geoip",
+                                                                    "config": {
+                                                                        "source": "[security][ip]",
+                                                                        "target": "threat_geo",
+                                                                        "database": "/usr/share/GeoIP/GeoLite2-City.mmdb"
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "id": "filter_geoip_40",
+                                                                    "type": "filter",
+                                                                    "plugin": "geoip",
+                                                                    "config": {
+                                                                        "source": "[security][ip]",
+                                                                        "target": "threat_asn",
+                                                                        "database": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
+                                                                        "default_database_type": "ASN"
+                                                                    }
+                                                                }
+                                                            ],
+                                                            "else_ifs": [],
+                                                            "else": null
+                                                        }
+                                                    }
+                                                ],
+                                                "else_ifs": [],
+                                                "else": null
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_if_41",
+                                            "type": "filter",
+                                            "plugin": "if",
+                                            "config": {
+                                                "condition": "[security][event_type]",
+                                                "plugins": [
+                                                    {
+                                                        "id": "filter_translate_42",
+                                                        "type": "filter",
+                                                        "plugin": "translate",
+                                                        "config": {
+                                                            "field": "[security][event_type]",
+                                                            "destination": "threat_score",
+                                                            "dictionary": {
+                                                                "brute_force": "75",
+                                                                "sql_injection": "90",
+                                                                "xss": "85",
+                                                                "unauthorized": "80",
+                                                                "privilege_escalation": "95",
+                                                                "malware": "100"
+                                                            },
+                                                            "fallback": "50"
+                                                        }
+                                                    },
+                                                    {
+                                                        "id": "filter_mutate_43",
+                                                        "type": "filter",
+                                                        "plugin": "mutate",
+                                                        "config": {
+                                                            "convert": {
+                                                                "threat_score": "integer"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "id": "filter_if_44",
+                                                        "type": "filter",
+                                                        "plugin": "if",
+                                                        "config": {
+                                                            "condition": "[threat_score] >= 90",
+                                                            "plugins": [
+                                                                {
+                                                                    "id": "filter_mutate_45",
+                                                                    "type": "filter",
+                                                                    "plugin": "mutate",
+                                                                    "config": {
+                                                                        "add_tag": [
+                                                                            "critical_threat"
+                                                                        ]
+                                                                    }
+                                                                }
+                                                            ],
+                                                            "else_ifs": [],
+                                                            "else": null
+                                                        }
+                                                    }
+                                                ],
+                                                "else_ifs": [],
+                                                "else": null
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_ruby_46",
+                                            "type": "filter",
+                                            "plugin": "ruby",
+                                            "config": {
+                                                "code": "\n          score = event.get(\"threat_score\").to_i\n          is_ext = event.get(\"tags\").include?(\"internal_ip\") ? 0 : 20\n          composite = score + is_ext\n          event.set(\"composite_risk\", [composite, 100].min)\n\t\t\t\t\t\t\n          if composite >= 100\n            event.set(\"risk\", \"critical\")\n          elsif composite >= 80\n            event.set(\"risk\", \"high\")\n          elsif composite >= 60\n            event.set(\"risk\", \"medium\")\n          else\n            event.set(\"risk\", \"low\")\n          end\n        "
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [
+                                        {
+                                            "condition": "[kafka][topic] == \"metrics\"",
+                                            "plugins": [
+                                                {
+                                                    "id": "filter_dissect_47",
+                                                    "type": "filter",
+                                                    "plugin": "dissect",
+                                                    "config": {
+                                                        "mapping": {
+                                                            "metric": "%{env}.%{dc}.%{host}.%{service}.%{type}.%{name}"
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "id": "filter_if_48",
+                                                    "type": "filter",
+                                                    "plugin": "if",
+                                                    "config": {
+                                                        "condition": "[type] == \"response_time\"",
+                                                        "plugins": [
+                                                            {
+                                                                "id": "filter_ruby_49",
+                                                                "type": "filter",
+                                                                "plugin": "ruby",
+                                                                "config": {
+                                                                    "code": "\n            val = event.get(\"value\").to_f\n            if val > 5000\n              event.set(\"perf_status\", \"critical\")\n            elsif val > 2000\n              event.set(\"perf_status\", \"slow\")\n            else\n              event.set(\"perf_status\", \"normal\")\n            end\n          "
+                                                                }
+                                                            }
+                                                        ],
+                                                        "else_ifs": [],
+                                                        "else": null
+                                                    }
+                                                },
+                                                {
+                                                    "id": "filter_aggregate_50",
+                                                    "type": "filter",
+                                                    "plugin": "aggregate",
+                                                    "config": {
+                                                        "task_id": "%{service}_%{name}",
+                                                        "code": "\n          map[\"count\"] ||= 0\n          map[\"sum\"] ||= 0.0\n          map[\"min\"] ||= Float::INFINITY\n          map[\"max\"] ||= -Float::INFINITY\n\t\t\t\t\t\t\n          val = event.get(\"value\").to_f\n          map[\"count\"] += 1\n          map[\"sum\"] += val\n          map[\"min\"] = [map[\"min\"], val].min\n          map[\"max\"] = [map[\"max\"], val].max\n\t\t\t\t\t\t\n          avg = map[\"sum\"] / map[\"count\"]\n          event.set(\"rolling_avg\", avg.round(2))\n          event.set(\"rolling_min\", map[\"min\"])\n          event.set(\"rolling_max\", map[\"max\"])\n        ",
+                                                        "timeout": "300"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "else": null
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[type] == \"database\"",
+                        "plugins": [
+                            {
+                                "id": "filter_if_51",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[event_data]",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_json_52",
+                                            "type": "filter",
+                                            "plugin": "json",
+                                            "config": {
+                                                "source": "event_data",
+                                                "target": "evt"
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": null
+                                }
+                            },
+                            {
+                                "id": "filter_date_53",
+                                "type": "filter",
+                                "plugin": "date",
+                                "config": {
+                                    "match": [
+                                        "created_at",
+                                        "ISO8601",
+                                        "yyyy-MM-dd HH:mm:ss"
+                                    ],
+                                    "target": "@timestamp"
+                                }
+                            },
+                            {
+                                "id": "filter_elasticsearch_54",
+                                "type": "filter",
+                                "plugin": "elasticsearch",
+                                "config": {
+                                    "hosts": [
+                                        "http://elasticsearch:9200"
+                                    ],
+                                    "index": "user-profiles",
+                                    "query_template": "user_lookup.json",
+                                    "fields": {
+                                        "department": "user_dept",
+                                        "role": "user_role"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "filter_if_55",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[event_type] =~ /^(login|logout|password_change)$/",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_mutate_56",
+                                            "type": "filter",
+                                            "plugin": "mutate",
+                                            "config": {
+                                                "add_tag": [
+                                                    "auth_event"
+                                                ]
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [
+                                        {
+                                            "condition": "[event_type] =~ /^(create|update|delete)$/",
+                                            "plugins": [
+                                                {
+                                                    "id": "filter_mutate_57",
+                                                    "type": "filter",
+                                                    "plugin": "mutate",
+                                                    "config": {
+                                                        "add_tag": [
+                                                            "data_operation"
+                                                        ]
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "else": null
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "condition": "[type] == \"webhook\"",
+                        "plugins": [
+                            {
+                                "id": "filter_if_58",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[headers][user-agent]",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_useragent_59",
+                                            "type": "filter",
+                                            "plugin": "useragent",
+                                            "config": {
+                                                "source": "[headers][user-agent]",
+                                                "target": "webhook_ua"
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": null
+                                }
+                            },
+                            {
+                                "id": "filter_if_60",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[headers][x-signature]",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_ruby_61",
+                                            "type": "filter",
+                                            "plugin": "ruby",
+                                            "config": {
+                                                "init": "require \"openssl\"",
+                                                "code": "\n          sig = event.get(\"[headers][x-signature]\")\n          payload = event.get(\"message\").to_s\n          secret = ENV[\"WEBHOOK_SECRET\"]\n          expected = \"sha256=\" + OpenSSL::HMAC.hexdigest(\"SHA256\", secret, payload)\n\t\t\t\t\t\t\n          if sig == expected\n            event.set(\"sig_valid\", true)\n          else\n            event.set(\"sig_valid\", false)\n            event.tag(\"invalid_signature\")\n          end\n        "
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": null
+                                }
+                            },
+                            {
+                                "id": "filter_aggregate_62",
+                                "type": "filter",
+                                "plugin": "aggregate",
+                                "config": {
+                                    "task_id": "%{[headers][x-forwarded-for]}",
+                                    "code": "\n        map[\"count\"] ||= 0\n        map[\"count\"] += 1\n        event.set(\"request_count\", map[\"count\"])\n      ",
+                                    "timeout": "60"
+                                }
+                            },
+                            {
+                                "id": "filter_if_63",
+                                "type": "filter",
+                                "plugin": "if",
+                                "config": {
+                                    "condition": "[request_count] and [request_count] > 100",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_mutate_64",
+                                            "type": "filter",
+                                            "plugin": "mutate",
+                                            "config": {
+                                                "add_tag": [
+                                                    "rate_limit_exceeded"
+                                                ]
+                                            }
+                                        }
+                                    ],
+                                    "else_ifs": [],
+                                    "else": null
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_65",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[message] =~ /=/",
+                "plugins": [
+                    {
+                        "id": "filter_kv_66",
+                        "type": "filter",
+                        "plugin": "kv",
+                        "config": {
+                            "source": "message",
+                            "field_split": "&",
+                            "value_split": "=",
+                            "target": "parsed"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_67",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[user_agent] and ![ua]",
+                "plugins": [
+                    {
+                        "id": "filter_useragent_68",
+                        "type": "filter",
+                        "plugin": "useragent",
+                        "config": {
+                            "source": "user_agent",
+                            "target": "ua"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_69",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[source_ip]",
+                "plugins": [
+                    {
+                        "id": "filter_dns_70",
+                        "type": "filter",
+                        "plugin": "dns",
+                        "config": {
+                            "reverse": [
+                                "source_ip"
+                            ],
+                            "action": "append",
+                            "nameserver": [
+                                "8.8.8.8"
+                            ],
+                            "hit_cache_size": "10000",
+                            "hit_cache_ttl": "3600"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_prune_71",
+            "type": "filter",
+            "plugin": "prune",
+            "config": {
+                "whitelist_names": [
+                    "^@",
+                    "^_",
+                    "type",
+                    "tags",
+                    "message"
+                ]
+            }
+        },
+        {
+            "id": "filter_mutate_72",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "env": "${ENVIRONMENT:prod}",
+                    "cluster": "${CLUSTER:default}"
+                },
+                "remove_field": [
+                    "@version"
+                ]
+            }
+        },
+        {
+            "id": "filter_if_73",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[env] == \"production\" and ([tags] and \"debug\" in [tags])",
+                "plugins": [
+                    {
+                        "id": "filter_drop_74",
+                        "type": "filter",
+                        "plugin": "drop",
+                        "config": {}
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_throttle_75",
+            "type": "filter",
+            "plugin": "throttle",
+            "config": {
+                "before_count": "3",
+                "after_count": "1",
+                "period": "60",
+                "key": "%{fingerprint}",
+                "add_tag": [
+                    "throttled"
+                ]
+            }
+        },
+        {
+            "id": "filter_if_76",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "\"critical_threat\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "filter_clone_77",
+                        "type": "filter",
+                        "plugin": "clone",
+                        "config": {
+                            "clones": [
+                                "siem"
+                            ],
+                            "add_field": {
+                                "cloned": "true"
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_metrics_78",
+            "type": "filter",
+            "plugin": "metrics",
+            "config": {
+                "meter": [
+                    "events"
+                ],
+                "add_tag": [
+                    "metric"
+                ],
+                "flush_interval": "30",
+                "rates": [
+                    1,
+                    5,
+                    15
+                ]
+            }
+        },
+        {
+            "id": "filter_if_79",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "([severity] == \"critical\" or [severity] == \"error\") and ([status] >= 500 or [threat_score] >= 90)",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_80",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "add_field": {
+                                "priority": "P1",
+                                "oncall": "true"
+                            },
+                            "add_tag": [
+                                "p1"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "([severity] == \"warning\") and ([status] >= 400 or [threat_score] >= 70)",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_81",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_field": {
+                                        "priority": "P2"
+                                    },
+                                    "add_tag": [
+                                        "p2"
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_fingerprint_82",
+            "type": "filter",
+            "plugin": "fingerprint",
+            "config": {
+                "source": "message",
+                "target": "event_hash",
+                "method": "MURMUR3"
+            }
+        },
+        {
+            "id": "filter_uuid_83",
+            "type": "filter",
+            "plugin": "uuid",
+            "config": {
+                "target": "event_id"
+            }
+        },
+        {
+            "id": "filter_ruby_84",
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {
+                "code": "\n      event.set(\"processed_at\", Time.now.utc.iso8601)\n      event.set(\"pipeline_v\", \"2.0\")\n    "
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_if_85",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"throttled\" not in [tags] and \"metric\" not in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_elasticsearch_86",
+                        "type": "output",
+                        "plugin": "elasticsearch",
+                        "config": {
+                            "hosts": [
+                                "https://es1:9200",
+                                "https://es2:9200"
+                            ],
+                            "user": "${ES_USER}",
+                            "password": "${ES_PASS}",
+                            "ssl": "true",
+                            "cacert": "/etc/logstash/certs/ca.crt",
+                            "index": "%{type}-%{+YYYY.MM.dd}",
+                            "document_id": "%{event_id}",
+                            "pipeline": "enrich",
+                            "ilm_enabled": "true",
+                            "ilm_rollover_alias": "%{type}",
+                            "ilm_pattern": "{now/d}-000001",
+                            "ilm_policy": "logs-policy",
+                            "http_compression": "true"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_87",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"siem\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_elasticsearch_88",
+                        "type": "output",
+                        "plugin": "elasticsearch",
+                        "config": {
+                            "hosts": [
+                                "https://siem-es:9200"
+                            ],
+                            "user": "${SIEM_USER}",
+                            "password": "${SIEM_PASS}",
+                            "ssl": "true",
+                            "cacert": "/etc/logstash/certs/siem-ca.crt",
+                            "index": "security-%{+YYYY.MM.dd}"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_89",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "[env] == \"production\"",
+                "plugins": [
+                    {
+                        "id": "output_s3_90",
+                        "type": "output",
+                        "plugin": "s3",
+                        "config": {
+                            "access_key_id": "${AWS_KEY}",
+                            "secret_access_key": "${AWS_SECRET}",
+                            "region": "us-east-1",
+                            "bucket": "logs-archive",
+                            "size_file": "104857600",
+                            "time_file": "15",
+                            "codec": {
+                                "json_lines": {}
+                            },
+                            "prefix": "logs/%{type}/year=%{+YYYY}/month=%{+MM}/day=%{+dd}",
+                            "encoding": "gzip",
+                            "server_side_encryption": "true"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_kafka_91",
+            "type": "output",
+            "plugin": "kafka",
+            "config": {
+                "bootstrap_servers": "kafka1:9092,kafka2:9092",
+                "topic_id": "processed-%{type}",
+                "codec": {
+                    "json": {}
+                },
+                "compression_type": "snappy",
+                "acks": "all",
+                "security_protocol": "SASL_SSL",
+                "sasl_mechanism": "SCRAM-SHA-512",
+                "sasl_jaas_config": "org.apache.kafka.common.security.scram.ScramLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASS}';"
+            }
+        },
+        {
+            "id": "output_if_92",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"p1\" in [tags] or \"critical\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_redis_93",
+                        "type": "output",
+                        "plugin": "redis",
+                        "config": {
+                            "host": [
+                                "redis1",
+                                "redis2"
+                            ],
+                            "port": "26379",
+                            "password": "${REDIS_PASS}",
+                            "data_type": "list",
+                            "key": "alerts:critical"
+                        }
+                    },
+                    {
+                        "id": "output_http_94",
+                        "type": "output",
+                        "plugin": "http",
+                        "config": {
+                            "url": "https://alerts.example.com/api/events",
+                            "http_method": "post",
+                            "format": "json",
+                            "headers": {
+                                "Authorization": "Bearer ${ALERT_TOKEN}",
+                                "Content-Type": "application/json"
+                            },
+                            "automatic_retries": "3"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_95",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "[env] != \"production\"",
+                "plugins": [
+                    {
+                        "id": "output_file_96",
+                        "type": "output",
+                        "plugin": "file",
+                        "config": {
+                            "path": "/var/log/logstash/debug-%{type}.log",
+                            "codec": {
+                                "json_lines": {}
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_97",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"metric\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_graphite_98",
+                        "type": "output",
+                        "plugin": "graphite",
+                        "config": {
+                            "host": "graphite",
+                            "port": "2003",
+                            "metrics_format": "logstash.%{env}.%{type}.count",
+                            "fields_are_metrics": "true"
+                        }
+                    },
+                    {
+                        "id": "output_influxdb_99",
+                        "type": "output",
+                        "plugin": "influxdb",
+                        "config": {
+                            "host": "influxdb",
+                            "port": "8086",
+                            "db": "metrics",
+                            "user": "${INFLUX_USER}",
+                            "password": "${INFLUX_PASS}",
+                            "measurement": "%{type}_metrics",
+                            "use_event_fields_for_data_points": "true"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_100",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "[type] == \"rabbitmq\"",
+                "plugins": [
+                    {
+                        "id": "output_mongodb_101",
+                        "type": "output",
+                        "plugin": "mongodb",
+                        "config": {
+                            "uri": "mongodb://${MONGO_USER}:${MONGO_PASS}@mongo:27017/logs",
+                            "database": "logs",
+                            "collection": "%{type}",
+                            "isodate": "true",
+                            "bulk": "true",
+                            "bulk_size": "100"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_if_102",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"p1\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_email_103",
+                        "type": "output",
+                        "plugin": "email",
+                        "config": {
+                            "to": "oncall@example.com",
+                            "from": "alerts@example.com",
+                            "subject": "P1 Alert: %{type}",
+                            "body": "Event: %{event_id}\nTime: %{@timestamp}\nSeverity: %{severity}\nMessage: %{message}",
+                            "address": "smtp.example.com",
+                            "port": "587",
+                            "use_tls": "true",
+                            "username": "${SMTP_USER}",
+                            "password": "${SMTP_PASS}"
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_tcp_104",
+            "type": "output",
+            "plugin": "tcp",
+            "config": {
+                "host": "logstash-secondary",
+                "port": "5005",
+                "codec": {
+                    "json_lines": {}
+                }
+            }
+        },
+        {
+            "id": "output_stdout_105",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

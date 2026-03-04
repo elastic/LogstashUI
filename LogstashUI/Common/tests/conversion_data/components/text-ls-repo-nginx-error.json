@@ -1,0 +1,170 @@
+{
+    "input": [
+        {
+            "id": "input_stdin_0",
+            "type": "input",
+            "plugin": "stdin",
+            "config": {
+                "codec": {
+                    "line": {}
+                }
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_mutate_1",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "event.dataset": "nginx.access",
+                    "service.name": "nginx"
+                }
+            }
+        },
+        {
+            "id": "filter_grok_2",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "message": [
+                        "%{IPORHOST:source.address} %{DATA:nginx.ident} %{DATA:user.name} \\[%{HTTPDATE:nginx.access.time}\\] \"%{WORD:http.request.method} %{DATA:url.original} HTTP/%{NUMBER:http.version}\" %{NUMBER:http.response.status_code:int} (?:%{NUMBER:http.response.body.bytes:int}|-) \"%{DATA:http.request.referrer}\" \"%{DATA:user_agent.original}\" %{NUMBER:nginx.access.request_time:float}",
+                        "%{IPORHOST:source.address} %{DATA:nginx.ident} %{DATA:user.name} \\[%{HTTPDATE:nginx.access.time}\\] \"%{WORD:http.request.method} %{DATA:url.original} HTTP/%{NUMBER:http.version}\" %{NUMBER:http.response.status_code:int} (?:%{NUMBER:http.response.body.bytes:int}|-) \"%{DATA:http.request.referrer}\" \"%{DATA:user_agent.original}\"",
+                        "%{IPORHOST:source.address} %{DATA:nginx.ident} %{DATA:user.name} \\[%{HTTPDATE:nginx.access.time}\\] \"%{WORD:http.request.method} %{DATA:url.original} HTTP/%{NUMBER:http.version}\" %{NUMBER:http.response.status_code:int} (?:%{NUMBER:http.response.body.bytes:int}|-) \"%{DATA:http.request.referrer}\" \"%{DATA:user_agent.original}\" (?:rt=%{NUMBER:nginx.access.request_time:float}\\s+uct=%{NUMBER:nginx.access.upstream_connect_time:float}\\s+uht=%{NUMBER:nginx.access.upstream_header_time:float}\\s+urt=%{NUMBER:nginx.access.upstream_response_time:float})"
+                    ]
+                },
+                "tag_on_failure": [
+                    "_grok_nginx_access_fail"
+                ]
+            }
+        },
+        {
+            "id": "filter_date_3",
+            "type": "filter",
+            "plugin": "date",
+            "config": {
+                "match": [
+                    "nginx.access.time",
+                    "dd/MMM/yyyy:HH:mm:ss Z"
+                ],
+                "target": "@timestamp"
+            }
+        },
+        {
+            "id": "filter_urldecode_4",
+            "type": "filter",
+            "plugin": "urldecode",
+            "config": {
+                "field": "url.original"
+            }
+        },
+        {
+            "id": "filter_dissect_5",
+            "type": "filter",
+            "plugin": "dissect",
+            "config": {
+                "mapping": {
+                    "url.original": "%{url.path}?%{url.query}"
+                }
+            }
+        },
+        {
+            "id": "filter_useragent_6",
+            "type": "filter",
+            "plugin": "useragent",
+            "config": {
+                "source": "user_agent.original",
+                "target": "user_agent"
+            }
+        },
+        {
+            "id": "filter_mutate_7",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "copy": {
+                    "source.address": "source.ip"
+                }
+            }
+        },
+        {
+            "id": "filter_geoip_8",
+            "type": "filter",
+            "plugin": "geoip",
+            "config": {
+                "source": "source.ip",
+                "target": "source.geo",
+                "tag_on_failure": [
+                    "_geoip_fail"
+                ]
+            }
+        },
+        {
+            "id": "filter_mutate_9",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "gsub": [
+                    "http.request.referrer",
+                    "^-$",
+                    "",
+                    "user.name",
+                    "^-$",
+                    ""
+                ]
+            }
+        },
+        {
+            "id": "filter_if_10",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[http][response][status_code] >= 500",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_11",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "add_tag": [
+                                "nginx_server_error"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[http][response][status_code] >= 400",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_12",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_tag": [
+                                        "nginx_client_error"
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_stdout_13",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

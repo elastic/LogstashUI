@@ -1,3 +1,9 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
 // ============================================================================
 // Pipeline Settings Functions
 // ============================================================================
@@ -20,7 +26,7 @@ let pipelineSettings = {
 function togglePipelineSettings() {
     const content = document.getElementById('pipelineSettingsContent');
     const icon = document.getElementById('toggleIcon');
-    
+
     if (content.classList.contains('hidden')) {
         content.classList.remove('hidden');
         icon.classList.add('rotate-90');
@@ -29,44 +35,6 @@ function togglePipelineSettings() {
         icon.classList.remove('rotate-90');
     }
 }
-
-/**
- * Load pipeline settings - now handled by Django template rendering
- * This function is kept for backward compatibility but is no longer needed
- */
-function loadPipelineSettings() {
-    // Settings are now loaded directly from Django context in the HTML template
-    // No need to load from localStorage or make additional API calls
-}
-
-
-/**
- * Save pipeline settings (no longer needed - form submission handled by HTMX)
- * Kept for backward compatibility
- */
-function savePipelineSettings() {
-    // This function is now handled by the form's HTMX submission
-    // Just trigger the form submit
-    const form = document.getElementById('pipelineSettingsForm');
-    if (form) {
-        // Populate hidden fields with URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const pipelineId = urlParams.get('pipeline');
-        const esId = urlParams.get('es_id');
-        
-        if (!pipelineId || !esId) {
-            showSettingsErrorNotification('Error: Pipeline ID or ES ID not found');
-            return;
-        }
-        
-        document.getElementById('hiddenEsId').value = esId;
-        document.getElementById('hiddenPipelineName').value = pipelineId;
-        
-        // Trigger HTMX form submission
-        htmx.trigger(form, 'submit');
-    }
-}
-
 
 /**
  * Show a temporary notification that settings were saved
@@ -80,9 +48,9 @@ function showSettingsSavedNotification(message = 'Pipeline settings saved succes
         </svg>
         ${message}
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Remove notification after 3 seconds
     setTimeout(() => {
         notification.style.opacity = '0';
@@ -105,9 +73,9 @@ function showSettingsErrorNotification(message = 'Failed to save pipeline settin
         </svg>
         ${message}
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Remove notification after 5 seconds
     setTimeout(() => {
         notification.style.opacity = '0';
@@ -121,32 +89,30 @@ function showSettingsErrorNotification(message = 'Failed to save pipeline settin
 /**
  * Get current pipeline settings (for use when saving the entire pipeline)
  */
-window.getPipelineSettings = function() {
+window.getPipelineSettings = function () {
     return pipelineSettings;
 };
 
 // Initialize pipeline settings on page load
-document.addEventListener('DOMContentLoaded', function() {
-    loadPipelineSettings();
-    
+document.addEventListener('DOMContentLoaded', function () {
     // Populate hidden fields with URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const pipelineId = urlParams.get('pipeline');
     const esId = urlParams.get('es_id');
-    
+
     if (pipelineId && esId) {
         document.getElementById('hiddenEsId').value = esId;
         document.getElementById('hiddenPipelineName').value = pipelineId;
     }
-    
+
     // Handle form submission with regular fetch (no HTMX)
     const form = document.getElementById('pipelineSettingsForm');
     if (form) {
-        form.addEventListener('submit', async function(event) {
+        form.addEventListener('submit', async function (event) {
             event.preventDefault(); // Prevent default form submission
-            
+
             const btn = document.getElementById('applySettingsBtn');
-            
+
             // Show loading state
             if (btn) {
                 btn.disabled = true;
@@ -158,23 +124,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     Saving...
                 `;
             }
-            
+
             try {
                 // Get form data
                 const formData = new FormData(form);
-                
+
                 // Send request
-                const response = await fetch('/API/UpdatePipelineSettings/', {
+                const response = await fetch('/ConnectionManager/UpdatePipelineSettings/', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 // Reset button state
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = 'Apply Settings';
                 }
-                
+
                 // Check response status
                 if (response.ok) {
                     showSettingsSavedNotification();
@@ -189,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     btn.disabled = false;
                     btn.innerHTML = 'Apply Settings';
                 }
-                
+
                 // Show error notification
                 showSettingsErrorNotification('Network error: ' + error.message);
             }

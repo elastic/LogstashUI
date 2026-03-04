@@ -1,0 +1,147 @@
+{
+    "input": [
+        {
+            "id": "input_beats_0",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": 5044,
+                "host": "0.0.0.0"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_1",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[fileset][module] == \"mysql\"",
+                "plugins": [
+                    {
+                        "id": "filter_if_2",
+                        "type": "filter",
+                        "plugin": "if",
+                        "config": {
+                            "condition": "[fileset][name] == \"error\"",
+                            "plugins": [
+                                {
+                                    "id": "filter_grok_3",
+                                    "type": "filter",
+                                    "plugin": "grok",
+                                    "config": {
+                                        "match": {
+                                            "message": [
+                                                "%{LOCALDATETIME:[mysql][error][timestamp]} (\\[%{DATA:[mysql][error][level]}\\] )?%{GREEDYDATA:[mysql][error][message]}",
+                                                "%{TIMESTAMP_ISO8601:[mysql][error][timestamp]} %{NUMBER:[mysql][error][thread_id]} \\[%{DATA:[mysql][error][level]}\\] %{GREEDYDATA:[mysql][error][message1]}",
+                                                "%{GREEDYDATA:[mysql][error][message2]}"
+                                            ]
+                                        },
+                                        "pattern_definitions": {
+                                            "LOCALDATETIME": "[0-9]+ %{TIME}"
+                                        },
+                                        "remove_field": "message"
+                                    }
+                                },
+                                {
+                                    "id": "filter_mutate_4",
+                                    "type": "filter",
+                                    "plugin": "mutate",
+                                    "config": {
+                                        "rename": {
+                                            "[mysql][error][message1]": "[mysql][error][message]"
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "filter_mutate_5",
+                                    "type": "filter",
+                                    "plugin": "mutate",
+                                    "config": {
+                                        "rename": {
+                                            "[mysql][error][message2]": "[mysql][error][message]"
+                                        }
+                                    }
+                                },
+                                {
+                                    "id": "filter_date_6",
+                                    "type": "filter",
+                                    "plugin": "date",
+                                    "config": {
+                                        "match": [
+                                            "[mysql][error][timestamp]",
+                                            "ISO8601",
+                                            "YYMMdd H:m:s"
+                                        ],
+                                        "remove_field": "[mysql][error][time]"
+                                    }
+                                }
+                            ],
+                            "else_ifs": [
+                                {
+                                    "condition": "[fileset][name] == \"slowlog\"",
+                                    "plugins": [
+                                        {
+                                            "id": "filter_grok_7",
+                                            "type": "filter",
+                                            "plugin": "grok",
+                                            "config": {
+                                                "match": {
+                                                    "message": [
+                                                        "^# User@Host: %{USER:[mysql][slowlog][user]}(\\[[^\\]]+\\])? @ %{HOSTNAME:[mysql][slowlog][host]} \\[(IP:[mysql][slowlog][ip])?\\](\\s*Id:\\s* %{NUMBER:[mysql][slowlog][id]})?\n# Query_time: %{NUMBER:[mysql][slowlog][query_time][sec]}\\s* Lock_time: %{NUMBER:[mysql][slowlog][lock_time][sec]}\\s* Rows_sent: %{NUMBER:[mysql][slowlog][rows_sent]}\\s* Rows_examined: %{NUMBER:[mysql][slowlog][rows_examined]}\n(SET timestamp=%{NUMBER:[mysql][slowlog][timestamp]};\n)?%{GREEDYMULTILINE:[mysql][slowlog][query]}"
+                                                    ]
+                                                },
+                                                "pattern_definitions": {
+                                                    "GREEDYMULTILINE": "(.|\n)*"
+                                                },
+                                                "remove_field": "message"
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_date_8",
+                                            "type": "filter",
+                                            "plugin": "date",
+                                            "config": {
+                                                "match": [
+                                                    "[mysql][slowlog][timestamp]",
+                                                    "UNIX"
+                                                ]
+                                            }
+                                        },
+                                        {
+                                            "id": "filter_mutate_9",
+                                            "type": "filter",
+                                            "plugin": "mutate",
+                                            "config": {
+                                                "gsub": [
+                                                    "[mysql][slowlog][query]",
+                                                    "\n# Time: [0-9]+ [0-9][0-9]:[0-9][0-9]:[0-9][0-9](\\.[0-9]+)?$",
+                                                    ""
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "else": null
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_10",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": "localhost",
+                "manage_template": "false",
+                "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+            }
+        }
+    ]
+}

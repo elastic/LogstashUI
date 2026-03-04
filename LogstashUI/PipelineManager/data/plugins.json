@@ -157,7 +157,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "beats": {
             "name": "beats",
@@ -238,7 +239,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-beats-ssl_certificate",
                     "important": "Yes"
@@ -289,7 +290,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-beats-ssl_key",
                     "important": "Yes"
@@ -355,7 +356,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "cloudwatch": {
             "name": "cloudwatch",
@@ -576,7 +578,7 @@
                 },
                 "ca_file": {
                     "setting": "ca_file",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-couchdb_changes-ca_file",
                     "important": "No"
@@ -774,7 +776,7 @@
                 },
                 "path": {
                     "setting": "path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-dead_letter_queue-path",
                     "important": "Yes"
@@ -928,7 +930,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_agent-ssl_certificate",
                     "important": "Yes"
@@ -979,7 +981,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_agent-ssl_key",
                     "important": "Yes"
@@ -1094,7 +1096,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_serverless_forwarder-ssl_certificate",
                     "important": "No"
@@ -1145,7 +1147,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_serverless_forwarder-ssl_key",
                     "important": "No"
@@ -1420,7 +1422,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_certificate",
                     "important": "No"
@@ -1452,7 +1454,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_key",
                     "important": "No"
@@ -1466,7 +1468,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_keystore_path",
                     "important": "No"
@@ -1494,7 +1496,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ssl_truststore_path",
                     "important": "No"
@@ -1927,7 +1929,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "ganglia": {
             "name": "ganglia",
@@ -2317,7 +2320,7 @@
                 },
                 "json_key_file": {
                     "setting": "json_key_file",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-google_cloud_storage-json_key_file",
                     "important": "Yes"
@@ -2352,7 +2355,7 @@
                 },
                 "processed_db_path": {
                     "setting": "processed_db_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-google_cloud_storage-processed_db_path",
                     "important": "No"
@@ -2436,7 +2439,7 @@
             "options": {
                 "json_key_file": {
                     "setting": "json_key_file",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-google_pubsub-json_key_file",
                     "important": "Yes"
@@ -2538,7 +2541,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "important": "Yes"
         },
         "graphite": {
             "name": "graphite",
@@ -2584,7 +2588,7 @@
                 },
                 "ssl_cert": {
                     "setting": "ssl_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-graphite-ssl_cert",
                     "important": "No"
@@ -2609,7 +2613,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-graphite-ssl_key",
                     "important": "No"
@@ -2847,7 +2851,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_certificate",
                     "important": "Yes"
@@ -2898,7 +2902,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_key",
                     "important": "Yes"
@@ -2919,7 +2923,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_keystore_path",
                     "important": "No"
@@ -2947,7 +2951,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ssl_truststore_path",
                     "important": "No"
@@ -3020,7 +3024,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "http_poller": {
             "name": "http_poller",
@@ -3151,7 +3156,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ssl_certificate",
                     "important": "No"
@@ -3190,7 +3195,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ssl_keystore_path",
                     "important": "No"
@@ -3211,7 +3216,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ssl_truststore_path",
                     "important": "No"
@@ -3938,7 +3943,7 @@
                 },
                 "jdbc_password_filepath": {
                     "setting": "jdbc_password_filepath",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jdbc-jdbc_password_filepath",
                     "important": "No"
@@ -4073,7 +4078,7 @@
                 },
                 "statement_filepath": {
                     "setting": "statement_filepath",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jdbc-statement_filepath",
                     "important": "No"
@@ -4186,7 +4191,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "jms": {
             "name": "jms",
@@ -4328,7 +4334,7 @@
                 },
                 "keystore": {
                     "setting": "keystore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jms-keystore",
                     "important": "No"
@@ -4441,7 +4447,7 @@
                 },
                 "truststore": {
                     "setting": "truststore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jms-truststore",
                     "important": "No"
@@ -4770,14 +4776,14 @@
                 },
                 "jaas_path": {
                     "setting": "jaas_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-jaas_path",
                     "important": "No"
                 },
                 "kerberos_config": {
                     "setting": "kerberos_config",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-kerberos_config",
                     "important": "No"
@@ -4966,7 +4972,7 @@
                 },
                 "schema_registry_ssl_keystore_location": {
                     "setting": "schema_registry_ssl_keystore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-schema_registry_ssl_keystore_location",
                     "important": "No"
@@ -4991,7 +4997,7 @@
                 },
                 "schema_registry_ssl_truststore_location": {
                     "setting": "schema_registry_ssl_truststore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-schema_registry_ssl_truststore_location",
                     "important": "No"
@@ -5071,7 +5077,7 @@
                 },
                 "ssl_keystore_location": {
                     "setting": "ssl_keystore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-ssl_keystore_location",
                     "important": "No"
@@ -5096,7 +5102,7 @@
                 },
                 "ssl_truststore_location": {
                     "setting": "ssl_truststore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-ssl_truststore_location",
                     "important": "No"
@@ -5187,7 +5193,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "kinesis": {
             "name": "kinesis",
@@ -5452,7 +5459,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-logstash-ssl_certificate",
                     "important": "No"
@@ -5489,7 +5496,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-logstash-ssl_key",
                     "important": "No"
@@ -5503,7 +5510,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-logstash-ssl_keystore_path",
                     "important": "No"
@@ -5593,14 +5600,14 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-lumberjack-ssl_certificate",
                     "important": "Yes"
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-lumberjack-ssl_key",
                     "important": "Yes"
@@ -5870,14 +5877,14 @@
                 },
                 "private_key": {
                     "setting": "private_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-puppet_facter-private_key",
                     "important": "No"
                 },
                 "public_key": {
                     "setting": "public_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-puppet_facter-public_key",
                     "important": "No"
@@ -6129,7 +6136,7 @@
                 },
                 "ssl_certificate_path": {
                     "setting": "ssl_certificate_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-rabbitmq-ssl_certificate_path",
                     "important": "No"
@@ -6364,7 +6371,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "relp": {
             "name": "relp",
@@ -6388,14 +6396,14 @@
                 },
                 "ssl_cacert": {
                     "setting": "ssl_cacert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-relp-ssl_cacert",
                     "important": "No"
                 },
                 "ssl_cert": {
                     "setting": "ssl_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-relp-ssl_cert",
                     "important": "No"
@@ -6413,7 +6421,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-relp-ssl_key",
                     "important": "No"
@@ -6805,7 +6813,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "s3-sns-sqs": {
             "name": "s3-sns-sqs",
@@ -7155,7 +7164,7 @@
                 },
                 "mib_paths": {
                     "setting": "mib_paths",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-mib_paths",
                     "important": "No"
@@ -7378,7 +7387,7 @@
                 },
                 "mib_paths": {
                     "setting": "mib_paths",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-mib_paths",
                     "important": "No"
@@ -7436,10 +7445,10 @@
                 },
                 "supported_versions": {
                     "setting": "supported_versions",
-                    "input_type": "string",
+                    "input_type": "list",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-supported_versions",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "target": {
                     "setting": "target",
@@ -7478,14 +7487,14 @@
                     "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-auth_pass",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "auth_protocol": {
                     "setting": "auth_protocol",
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-auth_protocol",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "md5",
                         "sha",
@@ -7501,14 +7510,14 @@
                     "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-priv_pass",
-                    "important": "No"
+                    "important": "Yes"
                 },
                 "priv_protocol": {
                     "setting": "priv_protocol",
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-priv_protocol",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "des",
                         "3des",
@@ -7523,7 +7532,7 @@
                     "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-security_level",
-                    "important": "No",
+                    "important": "Yes",
                     "options": [
                         "noAuthNoPriv",
                         "authNoPriv",
@@ -7549,7 +7558,7 @@
                     "input_type": "codec",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-codec",
-                    "important": "Yes"
+                    "important": "No"
                 },
                 "enable_metric": {
                     "setting": "enable_metric",
@@ -8169,7 +8178,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "tcp": {
             "name": "tcp",
@@ -8233,7 +8243,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-tcp-ssl_certificate",
                     "important": "Yes"
@@ -8284,7 +8294,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-inputs-tcp-ssl_key",
                     "important": "Yes"
@@ -8372,7 +8382,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "twitter": {
             "name": "twitter",
@@ -8673,7 +8684,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "unix": {
             "name": "unix",
@@ -9093,6 +9105,23 @@
                 }
             },
             "bundled": "No"
+        },
+        "comment": {
+            "name": "comment",
+            "link": "https://github.com/elastic/LogstashUI",
+            "description": "Add comments to your Logstash pipelines!",
+            "repo_link": "https://github.com/elastic/LogstashUI",
+            "options": {
+                "text": {
+                    "setting": "text",
+                    "input_type": "string",
+                    "required": "Yes",
+                    "setting_link": "https://github.com/elastic/LogstashUI",
+                    "important": "Yes"
+                }
+            },
+            "Bundled": "Yes",
+            "important": "Yes"
         },
         "pipeline": {
             "name": "pipeline",
@@ -9916,7 +9945,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elastic_workplace_search-ssl_truststore_path",
                     "important": "No"
@@ -10393,7 +10422,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_certificate",
                     "important": "No"
@@ -10425,7 +10454,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_key",
                     "important": "No"
@@ -10439,7 +10468,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_keystore_path",
                     "important": "No"
@@ -10467,7 +10496,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ssl_truststore_path",
                     "important": "No"
@@ -10492,7 +10521,7 @@
                 },
                 "template": {
                     "setting": "template",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-template",
                     "important": "No"
@@ -10595,7 +10624,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "email": {
             "name": "email",
@@ -10746,7 +10776,7 @@
                 },
                 "template_file": {
                     "setting": "template_file",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-email-template_file",
                     "important": "No"
@@ -10934,7 +10964,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "ganglia": {
             "name": "ganglia",
@@ -11555,7 +11586,7 @@
                 },
                 "json_key_file": {
                     "setting": "json_key_file",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-google_pubsub-json_key_file",
                     "important": "Yes"
@@ -11614,7 +11645,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "important": "Yes"
         },
         "graphite": {
             "name": "graphite",
@@ -12024,7 +12056,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-http-ssl_certificate",
                     "important": "No"
@@ -12063,7 +12095,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-http-ssl_keystore_path",
                     "important": "No"
@@ -12091,7 +12123,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-http-ssl_truststore_path",
                     "important": "No"
@@ -12154,7 +12186,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "influxdb": {
             "name": "influxdb",
@@ -12658,14 +12691,14 @@
                 },
                 "jaas_path": {
                     "setting": "jaas_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-jaas_path",
                     "important": "No"
                 },
                 "kerberos_config": {
                     "setting": "kerberos_config",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-kerberos_config",
                     "important": "No"
@@ -12881,7 +12914,7 @@
                 },
                 "ssl_keystore_location": {
                     "setting": "ssl_keystore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-ssl_keystore_location",
                     "important": "No"
@@ -12902,7 +12935,7 @@
                 },
                 "ssl_truststore_location": {
                     "setting": "ssl_truststore_location",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-ssl_truststore_location",
                     "important": "No"
@@ -12961,7 +12994,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "librato": {
             "name": "librato",
@@ -13205,7 +13239,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_certificate",
                     "important": "No"
@@ -13219,14 +13253,14 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_key",
                     "important": "No"
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_keystore_path",
                     "important": "No"
@@ -13240,7 +13274,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-logstash-ssl_truststore_path",
                     "important": "No"
@@ -13327,7 +13361,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "Yes",
                     "setting_link": "#plugins-outputs-lumberjack-ssl_certificate",
                     "important": "Yes"
@@ -13670,7 +13704,7 @@
                 },
                 "send_nsca_config": {
                     "setting": "send_nsca_config",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-nagios_nsca-send_nsca_config",
                     "important": "No"
@@ -14048,7 +14082,7 @@
                 },
                 "ssl_certificate_path": {
                     "setting": "ssl_certificate_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-rabbitmq-ssl_certificate_path",
                     "important": "No"
@@ -14100,7 +14134,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "redis": {
             "name": "redis",
@@ -14213,7 +14248,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-redis-ssl_certificate",
                     "important": "No"
@@ -14245,7 +14280,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-redis-ssl_key",
                     "important": "No"
@@ -14301,7 +14336,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "redmine": {
             "name": "redmine",
@@ -14948,7 +14984,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "sink": {
             "name": "sink",
@@ -15451,7 +15488,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "stomp": {
             "name": "stomp",
@@ -15655,21 +15693,21 @@
                 },
                 "ssl_cacert": {
                     "setting": "ssl_cacert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-syslog-ssl_cacert",
                     "important": "No"
                 },
                 "ssl_cert": {
                     "setting": "ssl_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-syslog-ssl_cert",
                     "important": "No"
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-syslog-ssl_key",
                     "important": "No"
@@ -15729,7 +15767,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "important": "Yes"
         },
         "tcp": {
             "name": "tcp",
@@ -15771,7 +15810,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-tcp-ssl_certificate",
                     "important": "No"
@@ -15815,7 +15854,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-tcp-ssl_key",
                     "important": "No"
@@ -15871,7 +15910,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "timber": {
             "name": "timber",
@@ -15888,21 +15928,21 @@
                 },
                 "cacert": {
                     "setting": "cacert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-cacert",
                     "important": "No"
                 },
                 "client_cert": {
                     "setting": "client_cert",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-client_cert",
                     "important": "No"
                 },
                 "client_key": {
                     "setting": "client_key",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-client_key",
                     "important": "No"
@@ -15916,7 +15956,7 @@
                 },
                 "keystore": {
                     "setting": "keystore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-keystore",
                     "important": "No"
@@ -15965,7 +16005,7 @@
                 },
                 "truststore": {
                     "setting": "truststore",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-truststore",
                     "important": "No"
@@ -16072,7 +16112,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "important": "Yes"
         },
         "webhdfs": {
             "name": "webhdfs",
@@ -16505,6 +16546,23 @@
             },
             "bundled": "No"
         },
+        "comment": {
+            "name": "comment",
+            "link": "https://github.com/elastic/LogstashUI",
+            "description": "Add comments to your Logstash pipelines!",
+            "repo_link": "https://github.com/elastic/LogstashUI",
+            "options": {
+                "text": {
+                    "setting": "text",
+                    "input_type": "string",
+                    "required": "Yes",
+                    "setting_link": "https://github.com/elastic/LogstashUI",
+                    "important": "Yes"
+                }
+            },
+            "Bundled": "Yes",
+            "important": "Yes"
+        },
         "pipeline": {
             "name": "pipeline",
             "link": "https://www.elastic.co/docs/reference/logstash/pipeline-to-pipeline",
@@ -16601,7 +16659,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "aggregate": {
             "name": "aggregate",
@@ -16611,7 +16670,7 @@
             "options": {
                 "aggregate_maps_path": {
                     "setting": "aggregate_maps_path",
-                    "input_type": "string, a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-aggregate-aggregate_maps_path",
                     "important": "No"
@@ -16775,7 +16834,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         },
         "alter": {
             "name": "alter",
@@ -16862,7 +16922,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "bytes": {
             "name": "bytes",
@@ -16949,7 +17010,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "cidr": {
             "name": "cidr",
@@ -16973,7 +17035,7 @@
                 },
                 "network_path": {
                     "setting": "network_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-cidr-network_path",
                     "important": "No"
@@ -17050,7 +17112,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "cipher": {
             "name": "cipher",
@@ -17197,7 +17260,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "clone": {
             "name": "clone",
@@ -17277,7 +17341,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "csv": {
             "name": "csv",
@@ -17447,7 +17512,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "date": {
             "name": "date",
@@ -17548,7 +17615,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "de_dot": {
             "name": "de_dot",
@@ -17650,7 +17719,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "dissect": {
             "name": "dissect",
@@ -17737,7 +17807,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "dns": {
             "name": "dns",
@@ -17891,7 +17963,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "drop": {
             "name": "drop",
@@ -17964,7 +18037,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "elapsed": {
             "name": "elapsed",
@@ -18076,7 +18150,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "elastic_integration": {
             "name": "elastic_integration",
@@ -18107,7 +18182,7 @@
                 },
                 "geoip_database_directory": {
                     "setting": "geoip_database_directory",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-geoip_database_directory",
                     "important": "No"
@@ -18142,7 +18217,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_certificate",
                     "important": "No"
@@ -18167,7 +18242,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_key",
                     "important": "No"
@@ -18181,7 +18256,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_keystore_path",
                     "important": "No"
@@ -18195,7 +18270,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elastic_integration-ssl_truststore_path",
                     "important": "No"
@@ -18284,7 +18359,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "elasticsearch": {
             "name": "elasticsearch",
@@ -18431,7 +18507,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_certificate",
                     "important": "No"
@@ -18463,7 +18539,7 @@
                 },
                 "ssl_key": {
                     "setting": "ssl_key",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_key",
                     "important": "No"
@@ -18477,7 +18553,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_keystore_path",
                     "important": "No"
@@ -18505,7 +18581,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-ssl_truststore_path",
                     "important": "No"
@@ -18607,7 +18683,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         },
         "environment": {
             "name": "environment",
@@ -18680,7 +18757,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "extractnumbers": {
             "name": "extractnumbers",
@@ -18753,7 +18831,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "fingerprint": {
             "name": "fingerprint",
@@ -18899,7 +18978,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "geoip": {
             "name": "geoip",
@@ -18916,7 +18997,7 @@
                 },
                 "database": {
                     "setting": "database",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-geoip-database",
                     "important": "Yes"
@@ -19021,7 +19102,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "grok": {
             "name": "grok",
@@ -19060,7 +19143,7 @@
                 },
                 "match": {
                     "setting": "match",
-                    "input_type": "hash",
+                    "input_type": "key_list_hash",
                     "required": "No",
                     "setting_link": "#plugins-filters-grok-match",
                     "important": "Yes"
@@ -19190,7 +19273,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "http": {
             "name": "http",
@@ -19363,7 +19448,7 @@
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ssl_certificate",
                     "important": "No"
@@ -19402,7 +19487,7 @@
                 },
                 "ssl_keystore_path": {
                     "setting": "ssl_keystore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ssl_keystore_path",
                     "important": "No"
@@ -19430,7 +19515,7 @@
                 },
                 "ssl_truststore_path": {
                     "setting": "ssl_truststore_path",
-                    "input_type": "path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ssl_truststore_path",
                     "important": "No"
@@ -19525,7 +19610,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "i18n": {
             "name": "i18n",
@@ -19598,7 +19684,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "java_uuid": {
             "name": "java_uuid",
@@ -19682,7 +19769,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "jdbc_streaming": {
             "name": "jdbc_streaming",
@@ -19727,7 +19815,7 @@
                 },
                 "jdbc_driver_library": {
                     "setting": "jdbc_driver_library",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-jdbc_streaming-jdbc_driver_library",
                     "important": "Yes"
@@ -19911,7 +19999,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
         },
         "json": {
             "name": "json",
@@ -20016,7 +20105,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "json_encode": {
             "name": "json_encode",
@@ -20096,7 +20187,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "kv": {
             "name": "kv",
@@ -20367,7 +20459,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "memcached": {
             "name": "memcached",
@@ -20475,7 +20569,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "metricize": {
             "name": "metricize",
@@ -20573,7 +20668,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "metrics": {
             "name": "metrics",
@@ -20688,7 +20784,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "mutate": {
             "name": "mutate",
@@ -20859,7 +20956,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "prune": {
             "name": "prune",
@@ -20964,7 +21063,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "range": {
             "name": "range",
@@ -21048,7 +21148,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "ruby": {
             "name": "ruby",
@@ -21160,7 +21261,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "sleep": {
             "name": "sleep",
@@ -21251,7 +21354,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "split": {
             "name": "split",
@@ -21338,7 +21442,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "syslog_pri": {
             "name": "syslog_pri",
@@ -21443,7 +21548,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "threats_classifier": {
             "name": "threats_classifier",
@@ -21466,7 +21572,8 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "throttle": {
             "name": "throttle",
@@ -21574,7 +21681,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "tld": {
             "name": "tld",
@@ -21654,7 +21762,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "translate": {
             "name": "translate",
@@ -21678,7 +21787,7 @@
                 },
                 "dictionary_path": {
                     "setting": "dictionary_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-translate-dictionary_path",
                     "important": "Yes"
@@ -21837,7 +21946,9 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         },
         "truncate": {
             "name": "truncate",
@@ -21917,7 +22028,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "urldecode": {
             "name": "urldecode",
@@ -22187,7 +22299,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "useragent": {
             "name": "useragent",
@@ -22295,7 +22408,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "uuid": {
             "name": "uuid",
@@ -22379,7 +22493,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "wurfl_device_detection": {
             "name": "wurfl_device_detection",
@@ -22456,7 +22571,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "No"
+            "bundled": "No",
+            "memory_intensive": "No"
         },
         "xml": {
             "name": "xml",
@@ -22612,7 +22728,8 @@
                     "important": "No"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "No"
         },
         "jdbc_static": {
             "name": "jdbc_static",
@@ -22635,7 +22752,7 @@
                 },
                 "jdbc_driver_library": {
                     "setting": "jdbc_driver_library",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-filters-jdbc_static-jdbc_driver_library",
                     "important": "Yes"
@@ -22704,7 +22821,26 @@
                     "important": "Yes"
                 }
             },
-            "bundled": "Yes"
+            "bundled": "Yes",
+            "memory_intensive": "Yes"
+        },
+        "comment": {
+            "name": "comment",
+            "link": "https://github.com/elastic/LogstashUI",
+            "description": "Add comments to your Logstash pipelines!",
+            "repo_link": "https://github.com/elastic/LogstashUI",
+            "options": {
+                "text": {
+                    "setting": "text",
+                    "input_type": "string",
+                    "required": "Yes",
+                    "setting_link": "https://github.com/elastic/LogstashUI",
+                    "important": "Yes"
+                }
+            },
+            "Bundled": "Yes",
+            "memory_intensive": "No",
+            "important": "Yes"
         }
     },
     "codec": {
@@ -25234,7 +25370,7 @@
             "options": {
                 "cache_save_path": {
                     "setting": "cache_save_path",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-codecs-netflow-cache_save_path",
                     "important": "No"
@@ -25259,14 +25395,14 @@
                 },
                 "ipfix_definitions": {
                     "setting": "ipfix_definitions",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-codecs-netflow-ipfix_definitions",
                     "important": "No"
                 },
                 "netflow_definitions": {
                     "setting": "netflow_definitions",
-                    "input_type": "a valid filesystem path",
+                    "input_type": "fs_path",
                     "required": "No",
                     "setting_link": "#plugins-codecs-netflow-netflow_definitions",
                     "important": "No"

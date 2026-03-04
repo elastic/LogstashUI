@@ -1,0 +1,80 @@
+{
+    "input": [
+        {
+            "id": "input_file_0",
+            "type": "input",
+            "plugin": "file",
+            "config": {
+                "path": "/tmp/access_log",
+                "start_position": "beginning"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_1",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[path] =~ \"access\"",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_2",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "replace": {
+                                "type": "apache_access"
+                            }
+                        }
+                    },
+                    {
+                        "id": "filter_grok_3",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "message": "%{COMBINEDAPACHELOG}"
+                            }
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_date_4",
+            "type": "filter",
+            "plugin": "date",
+            "config": {
+                "match": [
+                    "timestamp",
+                    "dd/MMM/yyyy:HH:mm:ss Z"
+                ]
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_5",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        },
+        {
+            "id": "output_stdout_6",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

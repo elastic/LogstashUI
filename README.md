@@ -1,92 +1,120 @@
 # LogstashUI
 
-A web-based UI for managing and monitoring Logstash pipelines.
+> A visual tool for authoring, simulating, and managing Logstash pipelines.
+> 
+> ⚠️ **Beta Release** - This project is under active development. Features may change.
 
-> ⚠️ **Alpha Release** - This project is in active development. Features may change and bugs are expected.
+<img src="Docs/images/simulate.png" width="100%">
+
+## Overview
+
+LogstashUI provides a visual interface for designing, testing, and operating Logstash pipelines.
+
+Instead of editing configuration files manually, pipelines can be authored visually, simulated against sample events, and deployed to multiple Logstash nodes from a single interface.
 
 ## Features
 
-- **Pipeline Management** - View and manage Logstash pipeline configurations (Centralized pipeline management required, for now)
-- **Real-time Monitoring** - Monitor pipeline metrics and performance
-- **Connection Manager** - Manage multiple Logstash instances in one UI
-- **Log Viewing** - View and filter Logstash logs
+- **Visual Pipeline Editor** — Build and modify Logstash pipelines using a graphical interface or raw configuration
+- **Pipeline Simulation** — Execute pipelines against sample events and inspect transformations step-by-step
+- **Multi-Instance Management** — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management
+- **Pipeline Monitoring** — View metrics and performance for running pipelines
+- **SNMP Support** — Configure polling, traps, and discovery through a web interface
+
 
 ## Requirements
 
+### System Requirements
+**Minimum:**
+- 4 GB RAM
+- 2 CPU Cores
+
 ### For Local Development
-
-- Python 3.10+
-- Node.js & npm (for Tailwind CSS)
-- Elasticsearch
-
-**OR** just use Docker Compose (see Quick Start below)
+- [Python 3.10+](https://www.python.org/downloads/)
+- [Node.js & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
+- [Elasticsearch 8.x or later](https://cloud.elastic.co)
+- [Docker](https://www.docker.com/get-started/)
 
 
 ## Quick Start
 
-### 1. Clone the Repository
+Run LogstashUI with Docker compose:
 
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
+cd LogstashUI
+docker compose up -d
 ````
 
-### 2. Start the docker compose
-```bash
-docker compose up --build
-```
+Once the containers are running, navigate to your host in your browser:
 
-### 3. Navigate to https://{your_server_ip_or_hostname} and create your initial user
-<img width="729" height="887" alt="image" src="https://github.com/user-attachments/assets/c19c6dfb-ce8c-427b-be40-c9cfeaf6ab50" />
+https://<your_server_ip_or_hostname>
 
-### 4. Navigate to the Connection Manager
-<img width="939" height="475" alt="image" src="https://github.com/user-attachments/assets/7b093ee3-1148-4208-80db-e6f5722b37d3" />
+And that's it!
 
-### 5. Add a connection
-![addconnection](https://github.com/user-attachments/assets/0ab9330d-c9fe-434d-a322-6524d1bc4098)
+---
+## Add Your First Connection
 
-### 6. Start managing pipelines!
-![addmoveplugin](https://github.com/user-attachments/assets/f2f8013d-b8d6-4deb-8a7a-689e1258d450)
+### 1. Create an initial user
+<img src="Docs/images/login.png" width="400px">
+
+### 2. Add a connection
+<img src="Docs/images/new_connection.gif" width="800px">
+
+### 3. Start managing pipelines!
+<img src="Docs/images/simulate.gif" width="800px">
 
 
-### 7. [Optional] Add monitoring to your connections:
-Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. As long as the data is being indexed to one of your existing Elasticsearch connections, you'll see metrics and logs like this!
-<img width="1570" height="876" alt="image" src="https://github.com/user-attachments/assets/01f402ca-0a88-4eb0-a8b3-b6fba15fcba5" />
+### Optional: Add monitoring to your connections:
+Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. Once Logstash monitoring data is indexed into Elasticsearch, metrics and logs will appear in the UI.
 
+<img src="Docs/images/monitoring.png" width="800px">
 
 ## Updating
 
 LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
 
+To update LogstashUI to the latest version:
 ```bash
 git pull
-docker-compose down
-docker-compose pull
-docker-compose up -d
+docker compose down
+docker compose pull
+docker compose up -d
 ```
 
-**What this does:**
-- `git pull` - Updates configuration files (nginx.conf, docker-compose.yml, entrypoint.sh, etc.)
-- `docker-compose down` - Stops and removes the containers
-- `docker-compose pull` - Pulls the latest image from Docker Hub
-- `docker-compose up -d` - Starts the containers with the new version
 
 Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
 
-## Coming soon!
-- Re-implementation of the 'simulate' feature, which will allow the user to input a JSON and see how it gets transformed by each filter plugin
+## Limitations
+- Currently, the translation engine cannot process comments inside plugin blocks. For example:
+
+```
+input {
+    udp { # Translation engine doesn't like this
+		port => 5119 # This is a comment that we can't convert
+	}
+}
+```
+
+## Roadmap
 - Reusable grok and regex patterns
 - Git backups for configuration
-- Loggy AI Assistant
-- Text editor for pipelines
-- Management of Logstash Nodes via SSH
-- Keychain management - JKS Management
+- Loggy AI Assistant for pipeline failure analysis
+- Management of Logstash Nodes via external agent
+- JKS Keystore management
+- Expression editor for conditions
 
 ## Reporting Issues
 
 Found a bug or have a feature request? [Open an issue](https://github.com/elastic/LogstashUI/issues/new?template=issue.md).
 
+## Contributing
+
+Contributions are welcome!
+
+Please open an issue to discuss large changes before submitting a pull request.
+
 ## License
 
-Copyright 2024–2025 Elasticsearch and contributors.
+Copyright 2024–2026 Elasticsearch and contributors.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE.txt) for details.

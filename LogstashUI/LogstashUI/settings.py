@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os, platform
-from Core.encryption import get_django_secret_key
+from Common.encryption import get_django_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +34,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-__VERSION__ = "0.1.12"
+__VERSION__ = "0.2.0"
 # Application definition
 
 INSTALLED_APPS = [
@@ -48,10 +48,11 @@ INSTALLED_APPS = [
 
     # Apps of LogstashUI
     'PipelineManager',
-    'API',
-    'Core',
     'Management',
     'Utilities',
+    'SNMP',
+    'Monitoring',
+    'Site',
 
     # Frameworks
     'django_htmx',
@@ -91,7 +92,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'Core.context_processors.version_update_info',
+                'Common.context_processors.version_update_info',
+                'Common.context_processors.navigation_highlight',
             ],
         },
     },
@@ -155,7 +157,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_DIRS = [
-    BASE_DIR / "Core/static"
+    BASE_DIR / "Site/static"
 ]
 
 if platform.system() == "Windows":
@@ -179,8 +181,9 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/Management/Login/",
     "/Management/Logout/",
     "/static/",
-    "/API/StreamSimulate/",
-    "/API/StreamSimulate"
+    "/health/",
+    "/ConnectionManager/StreamSimulate/",
+    "/ConnectionManager/StreamSimulate"
 ]
 
 # Session Configuration

@@ -1,8 +1,23 @@
+"""
+Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+or more contributor license agreements. Licensed under the Elastic License;
+you may not use this file except in compliance with the Elastic License.
+"""
+
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
+
 from pygrok import Grok
+
 import json
 import os
+import re
+import html
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def GrokDebugger(request):
     return render(request, 'grok_debugger.html')
@@ -25,7 +40,9 @@ def get_grok_patterns(request):
                     if len(parts) == 2:
                         pattern_name, pattern_def = parts
                         patterns[pattern_name] = pattern_def
+        logger.debug(f"Loaded {len(patterns)} grok patterns from file")
     except Exception as e:
+        logger.error(f"Failed to load grok patterns file: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'patterns': patterns})
@@ -42,7 +59,6 @@ def simulate_grok(request):
         dot_fields = set()
         
         def convert_dots_to_underscores(pattern):
-            import re
             # Match field names with dots like :field.name or :field.name.nested
             # Pattern: %{PATTERN:field.name} or %{PATTERN:field.name:type}
             def replace_dots(match):
@@ -116,6 +132,7 @@ def simulate_grok(request):
                 grok = Grok(pygrok_pattern, custom_patterns=custom_patterns_dict)
             except Exception as e:
                 # Pattern compilation failed - this is a syntax error
+                logger.warning(f"Grok pattern compilation failed: {pattern[:100]}... - Error: {str(e)}")
                 pattern_result['pattern_error'] = str(e)
                 # Add entries for each sample line showing the pattern error
                 for line_idx, sample_line in enumerate(sample_lines, 1):
@@ -155,6 +172,7 @@ def simulate_grok(request):
                         })
                 except Exception as e:
                     # Runtime error during matching
+                    logger.error(f"Grok runtime error on line {line_idx}: {str(e)}")
                     pattern_result['matches'].append({
                         'line_number': line_idx,
                         'sample': sample_line,
@@ -164,6 +182,13 @@ def simulate_grok(request):
                     })
             
             results.append(pattern_result)
+        
+        # Calculate statistics for logging
+        total_patterns = len(results)
+        total_matches = sum(sum(1 for m in r['matches'] if m['success']) for r in results)
+        total_attempts = sum(len(r['matches']) for r in results)
+        
+        logger.info(f"Grok simulation completed: {total_patterns} pattern(s), {total_matches}/{total_attempts} successful matches")
         
         # Generate HTML response
         html_response = generate_results_html(results)
@@ -195,7 +220,7 @@ def generate_results_html(results):
                 </div>
             </div>
             <div class="bg-base-300 rounded p-3 mb-4">
-                <code class="text-sm font-mono text-base-content">{pattern}</code>
+                <code class="text-sm font-mono text-base-content">{html.escape(pattern)}</code>
             </div>
         ''')
         
@@ -215,10 +240,10 @@ def generate_results_html(results):
                         </svg>
                         <div class="flex-1">
                             <p class="text-xs font-semibold text-success mb-1">Line {line_num} - Match Found</p>
-                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded">{sample}</p>
+                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded">{html.escape(sample)}</p>
                             <div class="bg-base-200 rounded p-2">
                                 <p class="text-xs font-semibold mb-1">Extracted Fields:</p>
-                                <pre class="text-xs font-mono overflow-auto">{json.dumps(parsed_data, indent=2)}</pre>
+                                <pre class="text-xs font-mono overflow-auto">{html.escape(json.dumps(parsed_data, indent=2))}</pre>
                             </div>
                         </div>
                     </div>
@@ -234,8 +259,8 @@ def generate_results_html(results):
                         </svg>
                         <div class="flex-1">
                             <p class="text-xs font-semibold text-error mb-1">Line {line_num} - No Match</p>
-                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded">{sample}</p>
-                            <p class="text-xs text-error/80"><strong>Reason:</strong> {error}</p>
+                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded">{html.escape(sample)}</p>
+                            <p class="text-xs text-error/80"><strong>Reason:</strong> {html.escape(error)}</p>
                         </div>
                     </div>
                 </div>

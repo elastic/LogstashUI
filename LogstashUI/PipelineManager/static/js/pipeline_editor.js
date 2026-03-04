@@ -1,3 +1,9 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
 // Track newly added plugin IDs for animation
 let newlyAddedPluginId = null;
 let pendingAnimationPluginId = null; // Plugin waiting for config modal to close
@@ -7,16 +13,73 @@ let isSelectionMode = false;
 
 // Note: moveMode is now defined in move_mode.js as window.moveMode
 
+/**
+ * Trigger pipeline warming and checking after plugin changes
+ * This function reuses the existing slot preallocation mechanism
+ */
+function triggerPipelineWarmingAndChecking() {
+    // Check if there are any filter components
+    const hasFilters = components && components.filter && components.filter.length > 0;
+
+    if (!hasFilters) {
+        // No filters, hide status banner
+        const statusBanner = document.getElementById('pipelineStatusBanner');
+        if (statusBanner) {
+            statusBanner.style.display = 'none';
+        }
+        return;
+    }
+
+    // Show the status banner and immediately set to loading state
+    const statusBanner = document.getElementById('pipelineLoadStatus');
+    const statusIcon = document.getElementById('pipelineStatusIcon');
+    const statusMessage = document.getElementById('pipelineStatusMessage');
+
+    if (statusBanner && statusIcon && statusMessage) {
+        statusBanner.style.display = 'flex';
+        statusBanner.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
+
+        // Set loading spinner - statusIcon is already an SVG element
+        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
+        statusIcon.setAttribute('class', 'w-5 h-5 animate-spin text-gray-300');
+        statusIcon.setAttribute('fill', 'currentColor');
+        statusIcon.setAttribute('viewBox', '0 0 24 24');
+
+        statusMessage.textContent = 'Allocating pipeline slot...';
+        statusMessage.className = 'text-sm font-medium text-gray-300';
+    }
+
+    // Trigger the slot preallocation using HTMX
+    const slotPreallocation = document.getElementById('slotPreallocation');
+
+    if (slotPreallocation && typeof htmx !== 'undefined') {
+        // Use htmx.ajax to send the request with current components data
+        htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
+            target: '#slotPreallocationResult',
+            swap: 'innerHTML',
+            values: {
+                components: JSON.stringify(components),
+                log_text: ''
+            },
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+            }
+        });
+    } else {
+        console.error('[Pipeline Warming] Cannot trigger pipeline warming - slotPreallocation element or htmx library not found');
+    }
+}
+
 // Function to update the floating Simulate Subset button
 function updateSimulateSubsetButton() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
     const container = document.getElementById('simulateSubsetContainer');
     const countBadge = document.getElementById('selectedCount');
-    
+
     if (!container || !countBadge) return;
-    
+
     const count = selectedElements.length;
-    
+
     if (count > 0) {
         container.classList.remove('hidden');
         countBadge.textContent = count;
@@ -29,14 +92,14 @@ function updateSimulateSubsetButton() {
 // Function to clear all selections
 window.clearAllSelections = function() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
-    
+
     selectedElements.forEach(element => {
         const componentId = element.getAttribute('data-id');
         if (!componentId) return;
-        
+
         // Find the component to determine if it's a conditional block
         const component = findComponentById(componentId);
-        
+
         if (component && component.plugin === 'if') {
             // It's a conditional block
             deselectConditionalBlock(componentId);
@@ -45,7 +108,7 @@ window.clearAllSelections = function() {
             deselectPlugin(componentId);
         }
     });
-    
+
     // Update the button visibility
     updateSimulateSubsetButton();
 };
@@ -58,14 +121,14 @@ let selectedComponentIds = [];
 function getSelectedComponentIds() {
     const selectedElements = document.querySelectorAll('.simulation-selected');
     const ids = [];
-    
+
     selectedElements.forEach(element => {
         const id = element.getAttribute('data-id');
         if (id) {
             ids.push(id);
         }
     });
-    
+
     return ids;
 }
 
@@ -74,33 +137,33 @@ function getSubsetComponents() {
     if (!isSubsetSimulation || selectedComponentIds.length === 0) {
         return components;
     }
-    
+
     // Create a deep copy of components
     const subsetComponents = {
         input: [],
         filter: [],
         output: []
     };
-    
+
     // Helper function to check if a component or any of its children are selected
     function isComponentSelected(component) {
         return selectedComponentIds.includes(component.id);
     }
-    
+
     // Helper function to recursively filter conditional blocks
     function filterConditionalBlock(component) {
         if (!isComponentSelected(component)) {
             return null;
         }
-        
+
         // Clone the component
         const filtered = JSON.parse(JSON.stringify(component));
-        
+
         // If it's a conditional block, we include all its nested plugins
         // (they were already selected when the parent was selected)
         return filtered;
     }
-    
+
     // Filter each section
     ['input', 'filter', 'output'].forEach(type => {
         if (components[type]) {
@@ -116,7 +179,7 @@ function getSubsetComponents() {
             });
         }
     });
-    
+
     return subsetComponents;
 }
 
@@ -125,7 +188,13 @@ window.openSimulateSubsetModal = function() {
     // Set subset mode and collect selected IDs
     isSubsetSimulation = true;
     selectedComponentIds = getSelectedComponentIds();
-    
+
+    // Check for memory-intensive filter plugins
+    checkMemoryIntensivePlugins();
+
+    // Check for plugins requiring file paths
+    checkFilePathRequiredPlugins();
+
     // Open the same simulation modal
     const modal = document.getElementById('simulationModal');
     if (modal) {
@@ -137,10 +206,10 @@ window.openSimulateSubsetModal = function() {
 function selectPlugin(componentId) {
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Add green border
     componentElement.classList.add('simulation-selected');
-    
+
     // Replace play button with checkmark
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -153,7 +222,7 @@ function selectPlugin(componentId) {
         playBtn.classList.add('simulation-selected-checkbox');
         playBtn.title = 'Deselect from simulation';
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -162,10 +231,10 @@ function selectPlugin(componentId) {
 function deselectPlugin(componentId) {
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Remove green border
     componentElement.classList.remove('simulation-selected');
-    
+
     // Restore play button
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -179,7 +248,7 @@ function deselectPlugin(componentId) {
         playBtn.classList.remove('simulation-selected-checkbox');
         playBtn.title = 'Select for simulation';
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -188,13 +257,13 @@ function deselectPlugin(componentId) {
 function selectConditionalBlock(componentId) {
     const component = findComponentById(componentId);
     if (!component || component.plugin !== 'if') return;
-    
+
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Add green border to the main conditional block
     componentElement.classList.add('simulation-selected');
-    
+
     // Replace play button with checkmark
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -207,13 +276,13 @@ function selectConditionalBlock(componentId) {
         playBtn.classList.add('simulation-selected-checkbox');
         playBtn.title = 'Deselect from simulation';
     }
-    
+
     // Helper to select a plugin and convert its play button
     const selectNestedPlugin = (plugin) => {
         const pluginElement = document.querySelector(`[data-id="${plugin.id}"]`);
         if (pluginElement) {
             pluginElement.classList.add('simulation-selected');
-            
+
             // Convert play button to checkmark
             const nestedPlayBtn = pluginElement.querySelector('.play-btn');
             if (nestedPlayBtn) {
@@ -228,12 +297,12 @@ function selectConditionalBlock(componentId) {
             }
         }
     };
-    
+
     // Select all plugins in the if block
     if (component.config.plugins) {
         component.config.plugins.forEach(selectNestedPlugin);
     }
-    
+
     // Select all plugins in else-if blocks
     if (component.config.else_ifs) {
         component.config.else_ifs.forEach(elseIf => {
@@ -242,12 +311,12 @@ function selectConditionalBlock(componentId) {
             }
         });
     }
-    
+
     // Select all plugins in else block
     if (component.config.else && component.config.else.plugins) {
         component.config.else.plugins.forEach(selectNestedPlugin);
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -256,13 +325,13 @@ function selectConditionalBlock(componentId) {
 function deselectConditionalBlock(componentId) {
     const component = findComponentById(componentId);
     if (!component || component.plugin !== 'if') return;
-    
+
     const componentElement = document.querySelector(`[data-id="${componentId}"]`);
     if (!componentElement) return;
-    
+
     // Remove green border from the main conditional block
     componentElement.classList.remove('simulation-selected');
-    
+
     // Restore play button
     const playBtn = componentElement.querySelector('.play-btn');
     if (playBtn) {
@@ -276,13 +345,13 @@ function deselectConditionalBlock(componentId) {
         playBtn.classList.remove('simulation-selected-checkbox');
         playBtn.title = 'Select entire condition for simulation';
     }
-    
+
     // Helper to deselect a plugin and restore its play button
     const deselectNestedPlugin = (plugin) => {
         const pluginElement = document.querySelector(`[data-id="${plugin.id}"]`);
         if (pluginElement) {
             pluginElement.classList.remove('simulation-selected');
-            
+
             // Restore play button
             const nestedPlayBtn = pluginElement.querySelector('.play-btn');
             if (nestedPlayBtn) {
@@ -298,12 +367,12 @@ function deselectConditionalBlock(componentId) {
             }
         }
     };
-    
+
     // Deselect all plugins in the if block
     if (component.config.plugins) {
         component.config.plugins.forEach(deselectNestedPlugin);
     }
-    
+
     // Deselect all plugins in else-if blocks
     if (component.config.else_ifs) {
         component.config.else_ifs.forEach(elseIf => {
@@ -312,12 +381,12 @@ function deselectConditionalBlock(componentId) {
             }
         });
     }
-    
+
     // Deselect all plugins in else block
     if (component.config.else && component.config.else.plugins) {
         component.config.else.plugins.forEach(deselectNestedPlugin);
     }
-    
+
     // Update floating button
     updateSimulateSubsetButton();
 }
@@ -465,13 +534,103 @@ function setupInsertionPointsForConditional(container, type, conditionalId, bloc
     }
 }
 
+/**
+ * Update the blocking problems indicator based on current validation state
+ */
+function updateBlockingProblemsIndicator() {
+    const indicator = document.getElementById('blockingProblemsIndicator');
+    const content = document.getElementById('blockingProblemsContent');
+    
+    if (!indicator || !content) return;
+    
+    const problems = [];
+    
+    // Check for empty conditionals
+    const emptyConditionals = [];
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(component => {
+                if (component.plugin === 'if') {
+                    const emptyBlocks = getEmptyBlocksList(component);
+                    if (emptyBlocks.length > 0) {
+                        emptyConditionals.push({
+                            type: type,
+                            blocks: emptyBlocks
+                        });
+                    }
+                }
+            });
+        }
+    });
+    
+    // Check for missing required fields
+    const missingFields = [];
+    function checkComponentFields(component) {
+        if (component.plugin === 'comment' || component.plugin === 'if') {
+            if (component.plugin === 'if') {
+                // Check nested plugins in conditionals
+                if (component.config.plugins) {
+                    component.config.plugins.forEach(checkComponentFields);
+                }
+                if (component.config.else_ifs) {
+                    component.config.else_ifs.forEach(elseIf => {
+                        if (elseIf.plugins) elseIf.plugins.forEach(checkComponentFields);
+                    });
+                }
+                if (component.config.else && component.config.else.plugins) {
+                    component.config.else.plugins.forEach(checkComponentFields);
+                }
+            }
+            return;
+        }
+        
+        const validation = validateRequiredFields(component);
+        if (!validation.isValid) {
+            missingFields.push({
+                plugin: component.plugin,
+                fields: validation.missingFields
+            });
+        }
+    }
+    
+    ['input', 'filter', 'output'].forEach(type => {
+        if (components[type] && Array.isArray(components[type])) {
+            components[type].forEach(checkComponentFields);
+        }
+    });
+    
+    // Build problems list
+    if (emptyConditionals.length > 0) {
+        problems.push('<div class="font-medium text-red-400">Empty Conditional Blocks:</div>');
+        emptyConditionals.forEach(item => {
+            problems.push(`<div class="ml-2">• ${item.type}: ${item.blocks.join(', ')}</div>`);
+        });
+    }
+    
+    if (missingFields.length > 0) {
+        if (problems.length > 0) problems.push('<div class="mt-2"></div>');
+        problems.push('<div class="font-medium text-red-400">Missing Required Fields:</div>');
+        missingFields.forEach(item => {
+            problems.push(`<div class="ml-2">• ${item.plugin}: ${item.fields.join(', ')}</div>`);
+        });
+    }
+    
+    // Update indicator visibility and content
+    if (problems.length > 0) {
+        content.innerHTML = problems.join('');
+        indicator.classList.remove('hidden');
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
 function loadExistingComponents() {
     // Check if we're in simulation mode before clearing
     const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
     const simulationNodes = wasInSimulationMode && window.simulationData ? window.simulationData.nodes : null;
-    const originalEventData = wasInSimulationMode && window.simulationResultsCache ? 
+    const originalEventData = wasInSimulationMode && window.simulationResultsCache ?
         Object.values(window.simulationResultsCache)[0]?.originalEvent : null;
-    
+
     // Clears all existing components first
     const componentTypes = ['input', 'filter', 'output'];
 
@@ -526,6 +685,9 @@ function loadExistingComponents() {
         newlyAddedPluginId = pendingAnimationPluginId;
     }
     
+    // Update blocking problems indicator
+    updateBlockingProblemsIndicator();
+
     // Restore simulation data if we were in simulation mode
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
         markExecutedPlugins(simulationNodes, originalEventData);
@@ -544,11 +706,157 @@ window.triggerPendingAnimation = function () {
 // Helper function to check if a field is sensitive (password/api_key)
 function isSensitiveField(fieldName) {
     const lowerFieldName = fieldName.toLowerCase();
-    return lowerFieldName.includes('password') || 
-           lowerFieldName.includes('api_key') || 
+    return lowerFieldName.includes('password') ||
+           lowerFieldName.includes('api_key') ||
            lowerFieldName.includes('apikey') ||
            lowerFieldName === 'token' ||
            lowerFieldName.includes('secret');
+}
+
+/**
+ * Check if a conditional component has any empty blocks (if/else-if/else)
+ * @param {Object} component - The conditional component to check
+ * @returns {boolean} - True if any block is empty or only contains comments
+ */
+function checkConditionalForEmptyBlocks(component) {
+    if (component.plugin !== 'if') {
+        return false;
+    }
+
+    // Check if main if block is empty or only has comments
+    if (isPluginsArrayEmpty(component.config.plugins)) {
+        return true;
+    }
+
+    // Check else-if blocks
+    if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+        for (const elseIf of component.config.else_ifs) {
+            if (isPluginsArrayEmpty(elseIf.plugins)) {
+                return true;
+            }
+        }
+    }
+
+    // Check else block
+    if (component.config.else) {
+        if (isPluginsArrayEmpty(component.config.else.plugins)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Helper to check if a plugins array is effectively empty (no plugins or only comments)
+ * @param {Array} plugins - Array of plugins to check
+ * @returns {boolean} - True if empty or only contains comments
+ */
+function isPluginsArrayEmpty(plugins) {
+    if (!plugins || plugins.length === 0) {
+        return true;
+    }
+    // Check if all plugins are comments
+    return plugins.every(plugin => plugin.plugin === 'comment');
+}
+
+/**
+ * Get list of empty blocks in a conditional component
+ * @param {Object} component - The conditional component to check
+ * @returns {Array<string>} - List of empty block names
+ */
+function getEmptyBlocksList(component) {
+    const emptyBlocks = [];
+    
+    if (component.plugin !== 'if') {
+        return emptyBlocks;
+    }
+
+    // Check if main if block is empty or only has comments
+    if (isPluginsArrayEmpty(component.config.plugins)) {
+        emptyBlocks.push('if');
+    }
+
+    // Check else-if blocks
+    if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+        component.config.else_ifs.forEach((elseIf, index) => {
+            if (isPluginsArrayEmpty(elseIf.plugins)) {
+                emptyBlocks.push(`else-if #${index + 1}`);
+            }
+        });
+    }
+
+    // Check else block
+    if (component.config.else) {
+        if (isPluginsArrayEmpty(component.config.else.plugins)) {
+            emptyBlocks.push('else');
+        }
+    }
+
+    return emptyBlocks;
+}
+
+/**
+ * Validate that all required fields for a plugin are filled in.
+ * @param {Object} component - The component to validate
+ * @returns {Object} - { isValid: boolean, missingFields: Array<string> }
+ */
+function validateRequiredFields(component) {
+    const result = {
+        isValid: true,
+        missingFields: []
+    };
+
+    // Skip validation for comment plugins and conditionals
+    if (component.plugin === 'comment' || component.plugin === 'if') {
+        return result;
+    }
+
+    // Get plugin definition from pluginData (check both global scope and window)
+    const pluginDataSource = typeof pluginData !== 'undefined' ? pluginData : window.pluginData;
+    const pluginDef = pluginDataSource?.[component.type]?.[component.plugin];
+
+    if (!pluginDataSource) {
+        console.error('[Validation] pluginData not available yet');
+        return result;
+    }
+
+    if (!pluginDef) {
+        console.error(`[Validation] No plugin definition for ${component.plugin}`);
+        return result;
+    }
+
+    // The field definitions are in 'options', not 'fields'
+    if (!pluginDef.options) {
+        console.error(`[Validation] No options property for ${component.plugin}`);
+        return result;
+    }
+
+    // Check each field in the plugin definition
+    for (const [fieldName, fieldDef] of Object.entries(pluginDef.options)) {
+        // Check if field is required
+        if (fieldDef.required === 'Yes') {
+            const fieldValue = component.config[fieldName];
+
+            // Check if field is missing or empty
+            if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+                result.isValid = false;
+                result.missingFields.push(fieldName);
+            }
+            // Check for empty arrays
+            else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+                result.isValid = false;
+                result.missingFields.push(fieldName);
+            }
+            // Check for empty objects
+            else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue) && Object.keys(fieldValue).length === 0) {
+                result.isValid = false;
+                result.missingFields.push(fieldName);
+            }
+        }
+    }
+
+    return result;
 }
 
 // Helper function to format config values for display
@@ -595,14 +903,14 @@ function formatConfigValue(value, key) {
         if (value.length === 0) {
             return '[]';
         }
-        
+
         // Check if this is an array of objects (array_of_hashes)
         const firstItem = value[0];
         if (typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem)) {
             // This is an array of hashes - show count instead of content
             return `[${value.length} ${value.length === 1 ? 'entry' : 'entries'}]`;
         }
-        
+
         // Format as: "item1", "item2", "item3"
         const formattedItems = value.map(item => {
             return `"${cleanString(item)}"`;
@@ -651,10 +959,14 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         return createConditionalBlockElement(component, depth);
     }
 
+// Check if this is a comment plugin - apply special styling
+    const isComment = component.plugin === 'comment';
+
 // Alternate background colors based on depth
-    const bgColor = depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600';
+    const bgColor = isComment ? 'bg-gray-800' : (depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600');
     const el = document.createElement('div');
-    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item`;
+    const commentClass = isComment ? 'comment-plugin' : '';
+    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item ${commentClass}`;
     el.dataset.id = component.id;
 
 // Get plugin info for description and type
@@ -667,8 +979,15 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         const configItems = [];
         for (const [key, value] of Object.entries(component.config)) {
             if (value !== undefined && value !== null && value !== '' && key !== 'plugins' && key !== 'else_ifs' && key !== 'else' && key !== 'condition') {
+                // Special handling for comment plugin - show full text with newlines (no field name prefix)
+                if (isComment && (key === 'string' || key === 'message' || key === 'text')) {
+                    const fullText = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    configItems.push(`<div class="text-sm text-gray-300 whitespace-pre-wrap font-mono mt-2">${fullText}</div>`);
+                    continue;
+                }
+
                 let displayValue = formatConfigValue(value, key);
-                
+
                 // Add eye icon for sensitive fields
                 if (isSensitiveField(key)) {
                     const actualValue = String(value).length > 30 ? String(value).substring(0, 30) + '...' : String(value);
@@ -676,7 +995,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
                     configItems.push(`
                         <span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded inline-flex items-center gap-1">
                             ${key}: <span class="sensitive-value" data-actual="${escapedActualValue}">${displayValue}</span>
-                            <button type="button" 
+                            <button type="button"
                                     class="text-gray-400 hover:text-gray-200 inline-flex items-center"
                                     onclick="toggleSensitiveValue(this, event)"
                                     title="Show/Hide">
@@ -698,12 +1017,15 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     }
 
     // Only show image for input and output plugins
-    const imageHtml = (component.type === 'input' || component.type === 'output') 
-        ? `<img src="/static/images/${component.plugin}.png" 
-                alt="${component.plugin} icon" 
+    const imageHtml = (component.type === 'input' || component.type === 'output')
+        ? `<img src="/static/images/${component.plugin}.png"
+                alt="${component.plugin} icon"
                 class="w-5 h-5 mr-2 object-contain flex-shrink-0"
                 onerror="this.style.display='none';">`
         : '';
+
+    // Validate required fields
+    const validation = validateRequiredFields(component);
 
     el.innerHTML = `
 <button class="move-handle" data-component-id="${component.id}" title="Click to move this component">
@@ -713,7 +1035,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
 </button>
 <div class="flex justify-between items-start">
   <div class="flex-1">
-    <div class="flex items-center">
+    <div class="flex items-center ${isComment ? 'flex-wrap' : ''}">
       ${imageHtml}
       <span class="font-medium text-white">${component.plugin}</span>
       <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
@@ -721,13 +1043,15 @@ function createComponentElement(component, depth = 0, isConditional = false, par
       </span>
       ${pluginInfo.deprecated ?
         '<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-600/50 text-red-100">Deprecated</span>' : ''}
+      ${isComment && pluginInfo.description ?
+        `<span class="ml-2 text-xs text-gray-400 italic">${pluginInfo.description}</span>` : ''}
     </div>
-    ${pluginInfo.description ?
+    ${!isComment && pluginInfo.description ?
         `<p class="text-xs text-gray-400 mt-1 line-clamp-2">${pluginInfo.description}</p>` : ''}
     ${configSummary}
   </div>
   <div class="flex space-x-1 ml-2">
-    ${component.type === 'filter' ? `
+    ${component.type === 'filter' && !isComment ? `
     <!-- Play button / Checkbox (toggles based on selection state) -->
     <button class="play-btn text-gray-400 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
             data-component-id="${component.id}"
@@ -738,7 +1062,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
       </svg>
     </button>
     ` : ''}
-    
+
     <button class="config-btn text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
             data-component-id="${component.id}"
             title="Configure">
@@ -757,6 +1081,45 @@ function createComponentElement(component, depth = 0, isConditional = false, par
   </div>
 </div>
 `;
+
+    // Add warning badge and text if required fields are missing
+    if (!validation.isValid) {
+        const badge = document.createElement('div');
+        badge.className = 'required-fields-badge';
+        badge.innerHTML = '!';
+        badge.title = `MISSING REQUIRED FIELDS\n${validation.missingFields.join(', ')}`;
+        badge.style.cssText = `
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            background: #dc2626;
+            color: white;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            animation: badgePop 0.3s ease-out;
+        `;
+        el.appendChild(badge);
+
+        // Add text indicator below the plugin
+        const warningText = document.createElement('div');
+        warningText.className = 'required-fields-warning';
+        warningText.innerHTML = `
+            <div style="margin-top: 8px; padding: 6px 8px; background: rgba(220, 38, 38, 0.1); border-left: 3px solid #dc2626; border-radius: 4px;">
+                <div style="font-size: 11px; font-weight: 600; color: #fca5a5; margin-bottom: 2px;">Missing Required Fields</div>
+                <div style="font-size: 10px; color: #fecaca;">${validation.missingFields.join(', ')}</div>
+            </div>
+        `;
+        el.appendChild(warningText);
+    }
 
     return el;
 }
@@ -825,7 +1188,7 @@ function createConditionalBlockElement(component, depth = 0) {
   <span class="font-medium text-yellow-300">if</span>
   <div class="flex items-center ml-2 group/condition">
     <span class="text-xs text-gray-400 condition-text">${component.config.condition || ''}</span>
-    <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-condition" 
+    <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-condition"
             data-component-id="${component.id}">
       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -906,6 +1269,8 @@ function createConditionalBlockElement(component, depth = 0) {
     ifPluginsContainer.dataset.conditionalId = component.id;
     ifPluginsContainer.dataset.blockType = 'if';
 
+    const isIfBlockEmpty = !component.config.plugins || component.config.plugins.length === 0;
+    
     if (component.config.plugins && component.config.plugins.length > 0) {
         component.config.plugins.forEach(plugin => {
             const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
@@ -938,8 +1303,8 @@ function createConditionalBlockElement(component, depth = 0) {
       <span class="font-medium text-yellow-300">else if</span>
       <div class="flex items-center ml-2">
         <span id="${conditionId}" class="text-xs text-gray-400 condition-text">${elseIf.condition || ''}</span>
-        <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition" 
-                data-component-id="${component.id}" 
+        <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition"
+                data-component-id="${component.id}"
                 data-elseif-index="${elseIfIndex}"
                 data-condition-id="${conditionId}">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -948,8 +1313,8 @@ function createConditionalBlockElement(component, depth = 0) {
         </button>
       </div>
     </div>
-    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-elseif-btn" 
-            data-component-id="${component.id}" 
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-elseif-btn"
+            data-component-id="${component.id}"
             data-elseif-index="${elseIfIndex}"
             title="Remove else-if block">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -965,6 +1330,8 @@ function createConditionalBlockElement(component, depth = 0) {
             elseIfPluginsContainer.dataset.blockType = 'else_if';
             elseIfPluginsContainer.dataset.elseIfIndex = elseIfIndex;
 
+            const isElseIfBlockEmpty = !elseIf.plugins || elseIf.plugins.length === 0;
+            
             if (elseIf.plugins && elseIf.plugins.length > 0) {
                 elseIf.plugins.forEach(plugin => {
                     const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
@@ -994,7 +1361,7 @@ function createConditionalBlockElement(component, depth = 0) {
         elseHeader.className = 'flex items-center justify-between group';
         elseHeader.innerHTML = `
     <span class="font-medium text-yellow-300">else</span>
-    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-else-btn" 
+    <button class="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity delete-else-btn"
             data-component-id="${component.id}"
             title="Remove else block">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1009,6 +1376,8 @@ function createConditionalBlockElement(component, depth = 0) {
         elsePluginsContainer.dataset.conditionalId = component.id;
         elsePluginsContainer.dataset.blockType = 'else';
 
+        const isElseBlockEmpty = !component.config.else.plugins || component.config.else.plugins.length === 0;
+        
         if (component.config.else.plugins && component.config.else.plugins.length > 0) {
             component.config.else.plugins.forEach(plugin => {
                 const pluginEl = createComponentElement(plugin, depth + 1, true, component.id);
@@ -1030,6 +1399,47 @@ function createConditionalBlockElement(component, depth = 0) {
 
     container.appendChild(collapsibleContent);
     el.appendChild(container);
+    
+    // Add warning badge and text if any block in this conditional is empty
+    const emptyBlocksList = getEmptyBlocksList(component);
+    if (emptyBlocksList.length > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'empty-conditional-badge';
+        badge.innerHTML = '!';
+        badge.title = `EMPTY CONDITIONAL BLOCKS\n${emptyBlocksList.join(', ')}`;
+        badge.style.cssText = `
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            background: #dc2626;
+            color: white;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            animation: badgePop 0.3s ease-out;
+        `;
+        el.appendChild(badge);
+
+        // Add text indicator below the conditional
+        const warningText = document.createElement('div');
+        warningText.className = 'empty-conditional-warning';
+        warningText.innerHTML = `
+            <div style="margin-top: 8px; padding: 6px 8px; background: rgba(220, 38, 38, 0.1); border-left: 3px solid #dc2626; border-radius: 4px;">
+                <div style="font-size: 11px; font-weight: 600; color: #fca5a5; margin-bottom: 2px;">Empty Conditional Blocks</div>
+                <div style="font-size: 10px; color: #fecaca;">${emptyBlocksList.join(', ')}</div>
+            </div>
+        `;
+        el.appendChild(warningText);
+    }
+    
     return el;
 }
 
@@ -1226,7 +1636,7 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
         type: type,
         plugin: 'if',
         config: {
-            condition: 'true',
+            condition: '[message]',
             plugins: []
         }
     };
@@ -1298,7 +1708,7 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
         type: type,
         plugin: 'if',
         config: {
-            condition: 'true',
+            condition: '[message]',
             plugins: []
         }
     };
@@ -1443,23 +1853,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
         });
-        
+
         // Add click handler for play buttons
         document.addEventListener('click', function (event) {
             const playBtn = event.target.closest('.play-btn');
             if (playBtn) {
                 event.preventDefault();
                 event.stopPropagation();
-                
+
                 const componentId = playBtn.getAttribute('data-component-id');
                 const isConditional = playBtn.getAttribute('data-is-conditional') === 'true';
                 const componentElement = document.querySelector(`[data-id="${componentId}"]`);
-                
+
                 if (!componentElement) return;
-                
+
                 // Check if already selected
                 const isSelected = componentElement.classList.contains('simulation-selected');
-                
+
                 if (isSelected) {
                     // Deselect
                     if (isConditional) {
@@ -1505,10 +1915,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (deleteBtn) {
             event.stopPropagation();
             event.preventDefault();
-            
+
             const componentId = deleteBtn.getAttribute('data-component-id');
             const elseIfIndex = parseInt(deleteBtn.getAttribute('data-elseif-index'), 10);
-            
+
             if (componentId && !isNaN(elseIfIndex)) {
                 deleteElseIfBlock(componentId, elseIfIndex);
             }
@@ -1521,9 +1931,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (deleteBtn) {
             event.stopPropagation();
             event.preventDefault();
-            
+
             const componentId = deleteBtn.getAttribute('data-component-id');
-            
+
             if (componentId) {
                 deleteElseBlock(componentId);
             }
@@ -1676,6 +2086,10 @@ function removeComponent(componentId) {
     // Refresh the entire UI to reflect the changes
     if (removed) {
         loadExistingComponents();
+        // Trigger pipeline warming and checking after removal
+        triggerPipelineWarmingAndChecking();
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentDeleted'));
     }
 }
 
@@ -1688,7 +2102,7 @@ function addElseIfToConditional(componentId) {
     }
 
 // Prompt for condition
-    const condition = prompt('Enter the else-if condition:', '[field] == "value"');
+    const condition = prompt('Enter the else-if condition:', '[message]');
     if (!condition) {
         return;
     }
@@ -1698,82 +2112,26 @@ function addElseIfToConditional(componentId) {
         component.config.else_ifs = [];
     }
 
-// Add new else-if block
+// Add new else-if block with empty plugins array
     const elseIfBlock = {
         condition: condition,
         plugins: []
     };
 
-    const elseIfIndex = component.config.else_ifs.push(elseIfBlock) - 1;
+    component.config.else_ifs.push(elseIfBlock);
 
-// Store the context in the modal's dataset
-    const modal = document.getElementById('pluginModal');
-    modal.dataset.context = JSON.stringify({
-        componentId,
-        blockType: 'else_if',
-        elseIfIndex
-    });
+// Refresh the UI to show the new empty else-if block
+    loadExistingComponents();
 
-// Show the plugin modal for the appropriate plugin type
-    PluginModal.show(component.type || 'output');
+// Dispatch event to mark UI as changed
+    document.body.dispatchEvent(new CustomEvent('componentAdded'));
 
-// Add a one-time event listener for plugin selection
-    const handlePluginSelect = function (event) {
-        const {pluginName, pluginType} = event.detail;
-        const context = JSON.parse(modal.dataset.context);
-
-        // Find the component again to ensure we have the latest state
-        const component = findComponentById(context.componentId);
-        if (!component) return;
-
-        // Ensure the else_ifs array and the specific else-if block exist
-        if (!component.config.else_ifs || !component.config.else_ifs[context.elseIfIndex]) {
-            console.error('Invalid else-if index or else_ifs not found');
-            return;
-        }
-
-        if (!component.config.else_ifs[context.elseIfIndex].plugins) {
-            component.config.else_ifs[context.elseIfIndex].plugins = [];
-        }
-
-        // Create the new plugin with default config
-        const newPlugin = {
-            id: `${pluginType}_${pluginName}_${Date.now()}`,
-            type: pluginType,
-            plugin: pluginName,
-            config: {}
-        };
-
-        // Track the newly added plugin for animation
-        newlyAddedPluginId = newPlugin.id;
-
-        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
-        pendingAnimationPluginId = newlyAddedPluginId;
-
-        // Add the plugin to the else-if block
-        component.config.else_ifs[context.elseIfIndex].plugins.push(newPlugin);
-
-        // Refresh the UI
-        loadExistingComponents();
-
-        // Show the config modal for the new plugin
-        if (typeof window.PluginConfigModal !== 'undefined') {
-            // Use a small timeout to ensure the UI is updated first
-            setTimeout(() => {
-                window.PluginConfigModal.show(newPlugin);
-            }, 50);
-        }
-
-        // Remove the event listener after handling the selection
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-    };
-
-// Listen for the plugin selection event
-    document.addEventListener('pluginSelected', handlePluginSelect);
+// Trigger pipeline warming and checking
+    triggerPipelineWarmingAndChecking();
 }
 
 function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
-    console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}`);
+    // console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}`);
 
 // Find the conditional component
     const component = findComponentById(componentId);
@@ -1801,7 +2159,6 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 // Add a one-time event listener for plugin selection
     const handlePluginSelect = function (event) {
         const {pluginName, pluginType} = event.detail;
-        console.log(`Plugin selected: ${pluginType}.${pluginName} for block type: ${blockType}`);
 
 // Make sure we have a valid context
         if (!modal.dataset.context) {
@@ -1880,6 +2237,9 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
                 window.PluginConfigModal.show(newPlugin);
             }, 50);
         }
+
+        // Dispatch event to mark UI as changed
+        document.body.dispatchEvent(new CustomEvent('componentAdded'));
     };
 
 // Listen for the plugin selection event
@@ -1904,122 +2264,32 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
 }
 
 function addElseToConditional(componentId) {
-    console.log('addElseToConditional called with:', componentId);
 
 // Find the conditional component
     const component = findComponentById(componentId);
-    console.log('Found component:', component);
 
     if (!component || component.plugin !== 'if') {
         console.error('Component not found or not a conditional:', componentId);
         return;
     }
 
-// Initialize the else block if it doesn't exist
-    if (!component.config.else) {
-        component.config.else = {plugins: []};
-    } else if (!component.config.else.plugins) {
-        component.config.else.plugins = [];
+// Check if else block already exists
+    if (component.config.else && component.config.else.plugins) {
+        alert('An else block already exists for this conditional.');
+        return;
     }
 
-// Store the context in the modal's dataset
-    const modal = document.getElementById('pluginModal');
+// Initialize the else block with empty plugins array
+    component.config.else = {plugins: []};
 
-// Clean up any existing context first
-    if (modal.dataset.context) {
-        delete modal.dataset.context;
-    }
+// Refresh the UI to show the new empty else block
+    loadExistingComponents();
 
-    const context = {
-        componentId,
-        blockType: 'else',
-        isNewElseBlock: true
-    };
+// Dispatch event to mark UI as changed
+    document.body.dispatchEvent(new CustomEvent('componentAdded'));
 
-    modal.dataset.context = JSON.stringify(context);
-
-// Show the plugin modal for the appropriate plugin type
-    PluginModal.show(component.type || 'output');
-
-// Add a one-time event listener for plugin selection
-    const handlePluginSelect = function (event) {
-        const {pluginName, pluginType} = event.detail;
-
-// Make sure we have a valid context
-        if (!modal.dataset.context) {
-            console.error('No context found for plugin selection');
-            return;
-        }
-
-        const context = JSON.parse(modal.dataset.context);
-
-// Find the component again to ensure we have the latest state
-        const component = findComponentById(context.componentId);
-        if (!component) return;
-
-// Ensure the else block exists
-        if (!component.config.else) {
-            component.config.else = {plugins: []};
-        } else if (!component.config.else.plugins) {
-            component.config.else.plugins = [];
-        }
-
-// Create the new plugin with default config
-        const newPlugin = {
-            id: `${pluginType}_${pluginName}_${Date.now()}`,
-            type: pluginType,
-            plugin: pluginName,
-            config: {}
-        };
-
-        // Track the newly added plugin for animation
-        newlyAddedPluginId = newPlugin.id;
-
-        // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
-        pendingAnimationPluginId = newlyAddedPluginId;
-
-// Add the plugin to the else block
-        component.config.else.plugins.push(newPlugin);
-
-// Clean up the context
-        if (modal.dataset.context) {
-            delete modal.dataset.context;
-        }
-
-// Remove the event listener after handling the selection
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-
-// Refresh the UI
-        loadExistingComponents();
-
-// Show the config modal for the new plugin
-        if (typeof window.PluginConfigModal !== 'undefined') {
-            // Use a small timeout to ensure the UI is updated first
-            setTimeout(() => {
-                window.PluginConfigModal.show(newPlugin);
-            }, 50);
-        }
-    };
-
-// Listen for the plugin selection event
-    document.addEventListener('pluginSelected', handlePluginSelect);
-
-// Set a timeout to clean up the listener if the modal is closed without selecting a plugin
-    const cleanupTimer = setTimeout(() => {
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-        if (modal.dataset.context) {
-            delete modal.dataset.context;
-        }
-    }, 60000); // 60 second timeout
-
-// Clean up the timer when the modal is closed
-    const originalHide = PluginModal.hide;
-    PluginModal.hide = function () {
-        clearTimeout(cleanupTimer);
-        document.removeEventListener('pluginSelected', handlePluginSelect);
-        originalHide.call(PluginModal);
-        PluginModal.hide = originalHide; // Restore original hide function
-    };
+// Trigger pipeline warming and checking
+    triggerPipelineWarmingAndChecking();
 }
 
 
@@ -2045,6 +2315,9 @@ function deleteElseIfBlock(componentId, elseIfIndex) {
 
     // Refresh the UI
     loadExistingComponents();
+
+    // Trigger pipeline warming and checking after removal
+    triggerPipelineWarmingAndChecking();
 }
 
 // Function to delete an else block
@@ -2069,6 +2342,9 @@ function deleteElseBlock(componentId) {
 
     // Refresh the UI
     loadExistingComponents();
+
+    // Trigger pipeline warming and checking after removal
+    triggerPipelineWarmingAndChecking();
 }
 
 // Function to toggle collapse/expand of conditional blocks
@@ -2079,10 +2355,10 @@ document.addEventListener('click', function(e) {
         const componentId = collapseToggle.dataset.componentId;
         const content = document.querySelector(`.conditional-content[data-component-id="${componentId}"]`);
         const svg = collapseToggle.querySelector('svg');
-        
+
         if (content && svg) {
             const isCollapsed = content.classList.contains('collapsed');
-            
+
             if (isCollapsed) {
                 // Expand
                 content.classList.remove('collapsed');
@@ -2099,13 +2375,13 @@ document.addEventListener('click', function(e) {
 // Function to toggle sensitive value visibility in component row preview
 window.toggleSensitiveValue = function(button, event) {
     event.stopPropagation();
-    
+
     const valueSpan = button.previousElementSibling;
     if (!valueSpan || !valueSpan.classList.contains('sensitive-value')) return;
-    
+
     const actualValue = valueSpan.dataset.actual;
     const currentText = valueSpan.textContent;
-    
+
     if (currentText === '••••••••') {
         // Show actual value
         valueSpan.textContent = actualValue;
@@ -2133,9 +2409,309 @@ window.openSimulateModal = function() {
     // Reset subset mode when opening regular simulation
     isSubsetSimulation = false;
     selectedComponentIds = [];
-    
+
+    // Check for memory-intensive filter plugins
+    checkMemoryIntensivePlugins();
+
+    // Check for plugins requiring file paths
+    checkFilePathRequiredPlugins();
+
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
     }
+};
+
+// Function to check for memory-intensive filter plugins and display warning
+function checkMemoryIntensivePlugins() {
+    const warningDiv = document.getElementById('memoryIntensiveWarning');
+    const pluginListDiv = document.getElementById('memoryIntensivePluginList');
+
+    if (!warningDiv || !pluginListDiv) return;
+
+    // Get components to check (either subset or all)
+    const componentsToCheck = isSubsetSimulation ? getSubsetComponents() : components;
+
+    // Find all memory-intensive filter plugins
+    const memoryIntensivePlugins = [];
+
+    if (componentsToCheck.filter && Array.isArray(componentsToCheck.filter)) {
+        componentsToCheck.filter.forEach(component => {
+            // Check if this is a regular plugin (not a conditional block)
+            if (component.plugin && component.plugin !== 'if') {
+                const pluginInfo = pluginData?.filter?.[component.plugin];
+                if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                    memoryIntensivePlugins.push(component.plugin);
+                }
+            }
+
+            // Check plugins inside conditional blocks
+            if (component.plugin === 'if') {
+                // Check plugins in the if block
+                if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                    component.config.plugins.forEach(plugin => {
+                        const pluginInfo = pluginData?.filter?.[plugin.plugin];
+                        if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                            memoryIntensivePlugins.push(plugin.plugin);
+                        }
+                    });
+                }
+
+                // Check plugins in else-if blocks
+                if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                    component.config.else_ifs.forEach(elseIf => {
+                        if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                            elseIf.plugins.forEach(plugin => {
+                                const pluginInfo = pluginData?.filter?.[plugin.plugin];
+                                if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                                    memoryIntensivePlugins.push(plugin.plugin);
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // Check plugins in else block
+                if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                    component.config.else.plugins.forEach(plugin => {
+                        const pluginInfo = pluginData?.filter?.[plugin.plugin];
+                        if (pluginInfo && pluginInfo.memory_intensive === 'Yes') {
+                            memoryIntensivePlugins.push(plugin.plugin);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    // Remove duplicates
+    const uniquePlugins = [...new Set(memoryIntensivePlugins)];
+
+    // Display warning if any memory-intensive plugins found
+    if (uniquePlugins.length > 0) {
+        let message = "Looks like you're using ";
+        if (uniquePlugins.length === 1) {
+            message += `<strong>${uniquePlugins[0]}</strong>. This plugin can use a lot of memory. You may have to bump up your JVM heap if it fails.`;
+        } else {
+            const pluginNames = uniquePlugins.map(p => `<strong>${p}</strong>`).join(', ');
+            message += `${pluginNames}. These plugins can use a lot of memory. You may have to bump up your JVM heap if it fails.`;
+        }
+
+        pluginListDiv.innerHTML = message;
+        warningDiv.classList.remove('hidden');
+    } else {
+        warningDiv.classList.add('hidden');
+    }
+}
+
+// Function to check for plugins requiring file paths and display warning
+function checkFilePathRequiredPlugins() {
+    const warningDiv = document.getElementById('filePathRequiredWarning');
+    const pluginListDiv = document.getElementById('filePathPluginList');
+
+    if (!warningDiv || !pluginListDiv) return;
+
+    // Get components to check (either subset or all)
+    const componentsToCheck = isSubsetSimulation ? getSubsetComponents() : components;
+
+    // Find all plugins with fs_path options
+    const pluginsWithFilePaths = [];
+
+    // Helper function to check a component for fs_path options (recursive for nested conditionals)
+    function checkComponentForFilePaths(component, type) {
+        if (!component.plugin) return;
+
+        // If this is a conditional, recursively check its nested plugins
+        if (component.plugin === 'if') {
+            // Check plugins in the if block
+            if (component.config.plugins && Array.isArray(component.config.plugins)) {
+                component.config.plugins.forEach(plugin => {
+                    checkComponentForFilePaths(plugin, type);
+                });
+            }
+
+            // Check plugins in else-if blocks
+            if (component.config.else_ifs && Array.isArray(component.config.else_ifs)) {
+                component.config.else_ifs.forEach(elseIf => {
+                    if (elseIf.plugins && Array.isArray(elseIf.plugins)) {
+                        elseIf.plugins.forEach(plugin => {
+                            checkComponentForFilePaths(plugin, type);
+                        });
+                    }
+                });
+            }
+
+            // Check plugins in else block
+            if (component.config.else && component.config.else.plugins && Array.isArray(component.config.else.plugins)) {
+                component.config.else.plugins.forEach(plugin => {
+                    checkComponentForFilePaths(plugin, type);
+                });
+            }
+            return; // Don't check the conditional itself for fs_path options
+        }
+
+        // For non-conditional plugins, check for fs_path options
+        const pluginInfo = pluginData?.[type]?.[component.plugin];
+        if (!pluginInfo || !pluginInfo.options) return;
+
+        // Check if any option has input_type: "fs_path" AND has a value configured
+        const fsPathOptionsWithValues = [];
+        Object.entries(pluginInfo.options).forEach(([optionName, optionInfo]) => {
+            if (optionInfo.input_type && optionInfo.input_type.toLowerCase() === 'fs_path') {
+                // Only include if the component has a value for this option
+                const configValue = component.config?.[optionName];
+                if (configValue !== undefined && configValue !== null && configValue !== '') {
+                    fsPathOptionsWithValues.push(optionName);
+                }
+            }
+        });
+
+        if (fsPathOptionsWithValues.length > 0) {
+            pluginsWithFilePaths.push({
+                name: component.plugin,
+                type: type,
+                options: fsPathOptionsWithValues,
+                componentId: component.id
+            });
+        }
+    }
+
+    // Check all plugin types
+    ['input', 'filter', 'output'].forEach(type => {
+        if (componentsToCheck[type] && Array.isArray(componentsToCheck[type])) {
+            componentsToCheck[type].forEach(component => {
+                checkComponentForFilePaths(component, type);
+            });
+        }
+    });
+
+    // Display warning if any plugins with file paths found
+    if (pluginsWithFilePaths.length > 0) {
+        let html = '';
+
+        pluginsWithFilePaths.forEach((plugin, index) => {
+            const pluginId = `file-path-plugin-${index}`;
+
+            html += `
+                <div class="bg-gray-800/50 rounded p-3 border border-gray-600">
+                    ${plugin.options.map((optionName, optIndex) => {
+                        const inputId = `${pluginId}-${optIndex}`;
+                        const checkboxId = `${pluginId}-ignore-${optIndex}`;
+                        return `
+                            <div class="mb-3">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="font-medium text-blue-200">${plugin.name}</span>
+                                    <span class="text-gray-400">(${plugin.type})</span>
+                                    <span class="text-gray-400">${optionName}</span>
+                                    <label class="flex items-center gap-1 cursor-pointer ml-auto">
+                                        <input type="checkbox" id="${checkboxId}" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500" onchange="toggleFilePathInput('${inputId}', this.checked)">
+                                        <span class="text-xs text-gray-300">Ignore</span>
+                                    </label>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="text" id="${inputId}"
+                                           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                           placeholder="Enter file path or click Browse..."
+                                           data-plugin-name="${plugin.name}"
+                                           data-plugin-type="${plugin.type}"
+                                           data-option-name="${optionName}"
+                                           data-component-id="${plugin.componentId}">
+                                    <button type="button" class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 text-sm whitespace-nowrap" onclick="browseFilePathForSimulation('${inputId}')" title="Browse for file">
+                                        <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        Browse...
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        });
+
+        pluginListDiv.innerHTML = html;
+        warningDiv.classList.remove('hidden');
+    } else {
+        warningDiv.classList.add('hidden');
+    }
+}
+
+// Toggle file path input enabled/disabled based on ignore checkbox
+window.toggleFilePathInput = function(inputId, isIgnored) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.disabled = isIgnored;
+        if (isIgnored) {
+            input.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            input.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+};
+
+// Browse file path for simulation and upload the file
+window.browseFilePathForSimulation = function(inputId) {
+    // Create a hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.style.display = 'none';
+
+    fileInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const textInput = document.getElementById(inputId);
+            if (!textInput) return;
+
+            // Get metadata from data attributes
+            const componentId = textInput.dataset.componentId;
+            const optionName = textInput.dataset.optionName;
+
+            // Get file extension
+            const originalExtension = file.name.split('.').pop();
+
+            // Generate filename for backend: {component_id}_{option_name}.{extension}
+            const generatedFilename = `${componentId}_${optionName}.${originalExtension}`;
+
+            // Show the original filename to the user
+            textInput.value = file.name;
+
+            // Store the generated filename in a data attribute for later use
+            textInput.dataset.generatedFilename = generatedFilename;
+
+            // Upload the file to the API with the generated filename
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('filename', generatedFilename);
+
+                const response = await fetch('/ConnectionManager/UploadFile/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                });
+
+                if (response.ok) {
+                    // Show success toast
+                    showToast('Upload successful', 'success');
+                } else {
+                    const errorData = await response.json();
+                    console.error('File upload failed:', errorData);
+                    showToast('Upload failed: ' + (errorData.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                showToast('Upload failed: ' + error.message, 'error');
+            }
+        }
+
+        // Clean up
+        document.body.removeChild(fileInput);
+    });
+
+    // Trigger the file picker
+    document.body.appendChild(fileInput);
+    fileInput.click();
 };

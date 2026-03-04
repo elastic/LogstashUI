@@ -1,0 +1,86 @@
+{
+    "input": [
+        {
+            "id": "input_tcp_0",
+            "type": "input",
+            "plugin": "tcp",
+            "config": {
+                "port": "5000",
+                "type": "syslog"
+            }
+        },
+        {
+            "id": "input_udp_1",
+            "type": "input",
+            "plugin": "udp",
+            "config": {
+                "port": "5000",
+                "type": "syslog"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_2",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[type] == \"syslog\"",
+                "plugins": [
+                    {
+                        "id": "filter_grok_3",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "message": "%{SYSLOGTIMESTAMP:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\\[%{POSINT:syslog_pid}\\])?: %{GREEDYDATA:syslog_message}"
+                            },
+                            "add_field": [
+                                "received_at",
+                                "%{@timestamp}",
+                                "received_from",
+                                "%{host}"
+                            ]
+                        }
+                    },
+                    {
+                        "id": "filter_date_4",
+                        "type": "filter",
+                        "plugin": "date",
+                        "config": {
+                            "match": [
+                                "syslog_timestamp",
+                                "MMM  d HH:mm:ss",
+                                "MMM dd HH:mm:ss"
+                            ]
+                        }
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_5",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        },
+        {
+            "id": "output_stdout_6",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            }
+        }
+    ]
+}

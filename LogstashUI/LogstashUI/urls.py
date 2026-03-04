@@ -1,4 +1,10 @@
 """
+Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+or more contributor license agreements. Licensed under the Elastic License;
+you may not use this file except in compliance with the Elastic License.
+"""
+
+"""
 URL configuration for LogstashUI project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
@@ -21,19 +27,24 @@ from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 
 # Custom error handlers
-handler400 = 'Core.error_handlers.handler400'
-handler403 = 'Core.error_handlers.handler403'
-handler404 = 'Core.error_handlers.handler404'
-handler500 = 'Core.error_handlers.handler500'
+handler400 = 'Common.error_handlers.handler400'
+handler403 = 'Common.error_handlers.handler403'
+handler404 = 'Common.error_handlers.handler404'
+handler500 = 'Common.error_handlers.handler500'
+
+def crash(request):
+    raise Exception("Test Exception")
 
 urlpatterns = [
-
-    path('', include('Core.urls')),
     path('ConnectionManager/', include('PipelineManager.urls')),
-    path('API/', include('API.urls')),
     path('Management/', include('Management.urls')),
     path('Utilities/', include('Utilities.urls')),
+    path('SNMP/', include('SNMP.urls')),
+    path('Monitoring/', include('Monitoring.urls')),
+    path('', include('Site.urls')),
+    #path('Crash', crash)
 ]
+
 
 
 

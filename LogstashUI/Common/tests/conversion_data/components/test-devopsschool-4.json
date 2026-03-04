@@ -1,0 +1,57 @@
+{
+    "input": [
+        {
+            "id": "input_file_0",
+            "type": "input",
+            "plugin": "file",
+            "config": {
+                "path": "/var/log/apache2/access.log",
+                "start_position": "beginning",
+                "sincedb_path": "/dev/null"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_grok_1",
+            "type": "filter",
+            "plugin": "grok",
+            "config": {
+                "match": {
+                    "message": "%{COMBINEDAPACHELOG}"
+                }
+            }
+        },
+        {
+            "id": "filter_date_2",
+            "type": "filter",
+            "plugin": "date",
+            "config": {
+                "match": [
+                    "timestamp",
+                    "dd/MMM/yyyy:HH:mm:ss Z"
+                ]
+            }
+        },
+        {
+            "id": "filter_geoip_3",
+            "type": "filter",
+            "plugin": "geoip",
+            "config": {
+                "source": "clientip"
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_elasticsearch_4",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ]
+            }
+        }
+    ]
+}
