@@ -276,7 +276,7 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
         # If pipeline exists and content is identical, skip the update
         if pipeline_exists:
             content_match = existing_pipeline_content == pipeline_content
-            logger.info(
+            logger.debug(
                 f"Pipeline {pipeline_name} comparison: existing_len={len(existing_pipeline_content)}, new_len={len(pipeline_content)}, match={content_match}")
 
             if content_match:
