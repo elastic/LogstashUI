@@ -21,9 +21,9 @@ chmod 755 /var/log/logstash
 
 # Verify log4j2.properties exists
 if [ -f /etc/logstash/log4j2.properties ]; then
-    echo "✓ log4j2.properties found at /etc/logstash/log4j2.properties"
+    echo "+ log4j2.properties found at /etc/logstash/log4j2.properties"
 else
-    echo "⚠ WARNING: log4j2.properties not found!"
+    echo "- WARNING: log4j2.properties not found!"
 fi
 
 # Start Logstash in the background with explicit log4j2 config

@@ -486,7 +486,7 @@ async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_wa
                     # All pipelines found and loaded (either idle or running) - SUCCESS IMMEDIATELY
                     if len(loaded_pipelines) == expected_count:
                         logger.info(
-                            f"✓ All {expected_count} pipelines for slot {slot_id} are loaded (took {elapsed:.2f}s, {attempt} checks)")
+                            f"+ All {expected_count} pipelines for slot {slot_id} are loaded (took {elapsed:.2f}s, {attempt} checks)")
                         return True
 
                     # Check if we've exceeded max wait time
@@ -541,7 +541,7 @@ async def _verify_slot_pipelines_loaded_fallback(slot_id: int, expected_count: i
             missing_pipelines = [p for p in slot_pipelines if p not in running_pipelines]
 
             if not missing_pipelines:
-                logger.info(f"✓ All {expected_count} pipelines for slot {slot_id} are running (fallback)")
+                logger.info(f"+ All {expected_count} pipelines for slot {slot_id} are running (fallback)")
                 return True
 
             logger.warning(f"Attempt {attempt + 1}/{max_retries}: Waiting for pipelines: {missing_pipelines}")
