@@ -1,3 +1,9 @@
+"""
+Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+or more contributor license agreements. Licensed under the Elastic License;
+you may not use this file except in compliance with the Elastic License.
+"""
+
 from Common.test_resources import authenticated_client, test_connection, test_user
 from PipelineManager.models import Connection
 
