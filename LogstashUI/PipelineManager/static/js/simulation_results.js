@@ -1195,14 +1195,17 @@ function createForceDirectedGraph(graphData) {
                 .style("cursor", "pointer")
                 .style("filter", hasFailure ? "drop-shadow(0 0 8px rgba(220, 38, 38, 0.8))" : "none")
                 .on("mouseover", function(event, d) {
+                    const isSlowest = d.isSlowest;
                     d3.select(this)
                         .attr("stroke-width", hasFailure ? 4 : 3)
+                        .attr("stroke", isSlowest ? "#60a5fa" : (hasFailure ? strokeColor : strokeColor))
                         .attr("r", 22);
                     showNodeTooltip(event, d);
                 })
                 .on("mouseout", function(event, d) {
                     d3.select(this)
                         .attr("stroke-width", hasFailure ? 3 : 2)
+                        .attr("stroke", strokeColor)
                         .attr("r", 18);
                     hideNodeTooltip();
                 });
@@ -1218,6 +1221,38 @@ function createForceDirectedGraph(graphData) {
         .attr("font-size", "10px")
         .attr("font-weight", "bold")
         .style("pointer-events", "none");
+
+    // Find the slowest plugin (highest execution time)
+    let slowestNode = null;
+    let maxExecutionTime = 0;
+    graphData.nodes.forEach(n => {
+        if (n.executionTimeMs && parseFloat(n.executionTimeMs) > maxExecutionTime) {
+            maxExecutionTime = parseFloat(n.executionTimeMs);
+            slowestNode = n;
+        }
+    });
+
+    // Mark slowest node for later reference
+    if (slowestNode) {
+        slowestNode.isSlowest = true;
+    }
+
+    // Add execution time text below nodes (if available)
+    node.each(function(d) {
+        if (d.executionTimeMs) {
+            const isSlowest = d.isSlowest;
+            const nodeGroup = d3.select(this);
+            
+            nodeGroup.append("text")
+                .text(`${d.executionTimeMs}ms`)
+                .attr("text-anchor", "middle")
+                .attr("dy", "3.2em")
+                .attr("fill", isSlowest ? "#60a5fa" : "#fbbf24")
+                .attr("font-size", "9px")
+                .attr("font-weight", "600")
+                .style("pointer-events", "none");
+        }
+    });
 
     // Manually position all elements since we have no simulation
     link
@@ -1425,6 +1460,7 @@ function createForceDirectedGraph(graphData) {
             // Regular plugin node - show changes and failure status
             let titleColor = d.hasFailure ? '#ef4444' : '#9ca3af';
             let failureWarning = '';
+            let slowestWarning = '';
 
             if (d.hasFailure) {
                 failureWarning = `<div style="background: rgba(220, 38, 38, 0.2); border: 2px solid #dc2626; border-radius: 6px; padding: 8px; margin-bottom: 0.5rem;">
@@ -1434,8 +1470,16 @@ function createForceDirectedGraph(graphData) {
                 </div>`;
             }
 
+            if (d.isSlowest) {
+                slowestWarning = `<div style="background: rgba(96, 165, 250, 0.15); border: 2px solid #60a5fa; border-radius: 6px; padding: 8px; margin-bottom: 0.5rem;">
+                    <div style="font-weight: 700; color: #60a5fa; margin-bottom: 0.25rem; font-size: 12px;">🐌 Slowest Plugin</div>
+                    <div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem; font-size: 10px;">Execution time:</div>
+                    <div style="color: #60a5fa; font-weight: 600; font-size: 11px;">${d.executionTimeMs}ms</div>
+                </div>`;
+            }
+
             title = `<div style="font-weight: 600; color: ${titleColor}; margin-bottom: 0.5rem;">Step ${d.step}: ${d.label}<br/><span style="font-weight: 400; font-size: 10px;">${d.id}</span></div>`;
-            content = failureWarning + (d.hasChanges
+            content = slowestWarning + failureWarning + (d.hasChanges
                 ? `<div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem;">Changes:</div><pre style="color: #86efac; white-space: pre-wrap; margin: 0;">${d.changesText}</pre>`
                 : `<div style="color: #6b7280; font-style: italic;">No changes</div>`);
         }

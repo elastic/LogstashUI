@@ -26,6 +26,45 @@ LOGSTASH_API_HOST = "localhost"
 LOGSTASH_API_PORT = 9600
 LOGSTASH_API_BASE_URL = f"http://{LOGSTASH_API_HOST}:{LOGSTASH_API_PORT}"
 
+# Shared HTTP client for connection pooling
+# This prevents creating/destroying clients on every API call, which causes connection accumulation
+_shared_client: Optional[httpx.Client] = None
+_shared_client_lock = None  # Will be initialized when needed
+
+
+def _get_shared_client(timeout: float = 5.0) -> httpx.Client:
+    """
+    Get or create the shared HTTP client for connection pooling.
+    
+    This prevents OOM issues caused by creating/destroying httpx.Client instances
+    on every API call. The shared client maintains a connection pool that's reused.
+    
+    Args:
+        timeout: Request timeout in seconds
+    
+    Returns:
+        Shared httpx.Client instance
+    """
+    global _shared_client, _shared_client_lock
+    
+    # Lazy import to avoid circular dependency
+    if _shared_client_lock is None:
+        from threading import Lock
+        _shared_client_lock = Lock()
+    
+    with _shared_client_lock:
+        if _shared_client is None:
+            # Create shared client with connection limits to prevent pool growth
+            _shared_client = httpx.Client(
+                timeout=timeout,
+                limits=httpx.Limits(
+                    max_connections=10,      # Total connection pool size
+                    max_keepalive_connections=5  # Connections to keep alive
+                )
+            )
+            logger.info("Created shared LogstashAPI client with connection pooling")
+        return _shared_client
+
 
 class LogstashAPIError(Exception):
     """Base exception for Logstash API errors"""
@@ -43,29 +82,44 @@ class LogstashAPI:
     
     This provides methods to query pipeline statistics, detect pipeline state,
     and monitor pipeline health without relying on log parsing.
+    
+    By default, uses a shared HTTP client for connection pooling to prevent OOM.
     """
     
-    def __init__(self, base_url: str = LOGSTASH_API_BASE_URL, timeout: float = 5.0):
+    def __init__(self, base_url: str = LOGSTASH_API_BASE_URL, timeout: float = 5.0, use_shared_client: bool = True):
         """
         Initialize the Logstash API client.
         
         Args:
             base_url: Base URL for the Logstash API (default: http://localhost:9600)
             timeout: Request timeout in seconds (default: 5.0)
+            use_shared_client: Use shared connection pool (default: True, recommended for production)
         """
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
-        self.client = httpx.Client(timeout=timeout)
+        self.use_shared_client = use_shared_client
+        
+        if use_shared_client:
+            # Use shared client for connection pooling (prevents OOM)
+            self.client = _get_shared_client(timeout)
+            self._owns_client = False
+        else:
+            # Create dedicated client (only for testing or special cases)
+            self.client = httpx.Client(timeout=timeout)
+            self._owns_client = True
     
     def __enter__(self):
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.client.close()
+        # Only close if we own the client (not using shared pool)
+        if self._owns_client:
+            self.client.close()
     
     def close(self):
-        """Close the HTTP client"""
-        self.client.close()
+        """Close the HTTP client (only if not using shared pool)"""
+        if self._owns_client:
+            self.client.close()
     
     def get_node_info(self) -> Dict[str, Any]:
         """

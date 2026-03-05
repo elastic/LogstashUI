@@ -59,18 +59,18 @@ def _compute_pipeline_hash(pipelines: List[Dict[str, Any]]) -> str:
     computed_hash = hashlib.sha256(pipeline_str.encode()).hexdigest()
 
     # Debug: Write full filter_config to temp file for comparison
-    if normalized_pipelines:
-        import tempfile
-        filter_config = normalized_pipelines[0]['filter_config']
-        debug_file = os.path.join(tempfile.gettempdir(), f"filter_config_{computed_hash[:8]}.txt")
-        try:
-            with open(debug_file, 'w', encoding='utf-8') as f:
-                f.write(filter_config)
-            logger.info(f"Hash {computed_hash[:8]}: Wrote filter_config to {debug_file} ({len(filter_config)} bytes)")
-        except Exception as e:
-            logger.error(f"Failed to write debug file: {e}")
-
-    return computed_hash
+    # if normalized_pipelines:
+    #     import tempfile
+    #     filter_config = normalized_pipelines[0]['filter_config']
+    #     debug_file = os.path.join(tempfile.gettempdir(), f"filter_config_{computed_hash[:8]}.txt")
+    #     try:
+    #         with open(debug_file, 'w', encoding='utf-8') as f:
+    #             f.write(filter_config)
+    #         logger.info(f"Hash {computed_hash[:8]}: Wrote filter_config to {debug_file} ({len(filter_config)} bytes)")
+    #     except Exception as e:
+    #         logger.error(f"Failed to write debug file: {e}")
+    #
+    # return computed_hash
 
 
 def get_slot_state() -> Dict[int, Dict[str, Any]]:
