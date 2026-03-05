@@ -399,7 +399,7 @@ class LogstashAPI:
             events_out = events.get('out', 0)
             
             # Log the actual values we're seeing
-            logger.info(f"Pipeline '{pipeline_name}' - events(in={events_in}, filtered={events_filtered}, out={events_out}), reloads(successes={reload_successes}, failures={reload_failures})")
+            logger.debug(f"Pipeline '{pipeline_name}' - events(in={events_in}, filtered={events_filtered}, out={events_out}), reloads(successes={reload_successes}, failures={reload_failures})")
             
             # If events structure has the required fields (even if all are 0), pipeline is loaded
             # The presence of these fields means Logstash has initialized the pipeline

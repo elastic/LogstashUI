@@ -334,6 +334,12 @@ function filterMetadata(obj) {
  * Mark executed plugins in the editor with visual indicators
  */
 function markExecutedPlugins(nodes, originalEvent) {
+    // Hide any visible tooltips BEFORE removing DOM elements to prevent stuck tooltips
+    const tooltip = document.getElementById('data-flow-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+    
     // Clear any existing simulation badges and data indicators
     document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
@@ -484,8 +490,12 @@ function markExecutedPlugins(nodes, originalEvent) {
                 componentElement.appendChild(badge);
             }
 
-            // Add execution time badge if available
-            if (node.executionTimeMs && !componentElement.querySelector('.simulation-timing-badge')) {
+            // Add execution time badge if available (skip for drop plugins)
+            // Find the component to check if it's a drop plugin
+            const component = findComponentById(componentId);
+            const isDropPlugin = component && component.plugin === 'drop';
+            
+            if (node.executionTimeMs && !componentElement.querySelector('.simulation-timing-badge') && !isDropPlugin) {
                 const timingBadge = document.createElement('div');
                 timingBadge.className = 'simulation-timing-badge';
                 timingBadge.innerHTML = `⏱ ${node.executionTimeMs}ms`;
@@ -1237,20 +1247,27 @@ function createForceDirectedGraph(graphData) {
         slowestNode.isSlowest = true;
     }
 
-    // Add execution time text below nodes (if available)
+    // Add execution time text below nodes (if available, skip for drop plugins)
     node.each(function(d) {
         if (d.executionTimeMs) {
-            const isSlowest = d.isSlowest;
-            const nodeGroup = d3.select(this);
+            // Check if this is a drop plugin
+            const component = findComponentById(d.id);
+            const isDropPlugin = component && component.plugin === 'drop';
             
-            nodeGroup.append("text")
-                .text(`${d.executionTimeMs}ms`)
-                .attr("text-anchor", "middle")
-                .attr("dy", "3.2em")
-                .attr("fill", isSlowest ? "#60a5fa" : "#fbbf24")
-                .attr("font-size", "9px")
-                .attr("font-weight", "600")
-                .style("pointer-events", "none");
+            // Skip timing display for drop plugins
+            if (!isDropPlugin) {
+                const isSlowest = d.isSlowest;
+                const nodeGroup = d3.select(this);
+                
+                nodeGroup.append("text")
+                    .text(`${d.executionTimeMs}ms`)
+                    .attr("text-anchor", "middle")
+                    .attr("dy", "3.2em")
+                    .attr("fill", isSlowest ? "#60a5fa" : "#fbbf24")
+                    .attr("font-size", "9px")
+                    .attr("font-weight", "600")
+                    .style("pointer-events", "none");
+            }
         }
     });
 
@@ -1848,6 +1865,9 @@ function initSimulationResults(runId) {
         return;
     }
     window.activePollers.add(runId);
+    
+    // Add loading overlay to block interaction with the overlay bar
+    showOverlayLoadingBlock();
 
     let pollCount = 0;
     const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
@@ -1899,8 +1919,8 @@ function initSimulationResults(runId) {
                         if (event.simulation.id === 'original') {
                             originalEvent = event;
                         }
-                        // Check if this is the final event
-                        else if (event.simulation.id === 'final') {
+                        // Check if this is the final event (either id='final' or final='true' for drop plugins)
+                        else if (event.simulation.id === 'final' || event.simulation.final === 'true') {
                                 receivedFinal = true;
 
                                 // Check if no plugins were executed (empty or missing snapshots)
@@ -1912,6 +1932,11 @@ function initSimulationResults(runId) {
                                     const loadingIndicator = document.getElementById('simulation-loading-indicator');
                                     if (loadingIndicator) {
                                         loadingIndicator.style.display = 'none';
+                                    }
+                                    
+                                    // Remove loading block only if no more active pollers
+                                    if (!window.activePollers || window.activePollers.size === 0) {
+                                        hideOverlayLoadingBlock();
                                     }
 
                                     // Show message that no plugins were executed
@@ -2227,6 +2252,11 @@ function initSimulationResults(runId) {
                                         if (window.activePollers) {
                                             window.activePollers.delete(runId);
                                         }
+                                        
+                                        // Remove loading block only if no more active pollers
+                                        if (!window.activePollers || window.activePollers.size === 0) {
+                                            hideOverlayLoadingBlock();
+                                        }
                                     }
                                 } else {
                                     console.error('Components variable not accessible or snapshots missing');
@@ -2353,6 +2383,47 @@ window.viewSimulationLogs = function() {
             logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
         });
 };
+
+/**
+ * Show a loading block overlay over the simulation overlay bar to prevent interaction
+ * during multi-simulation updates
+ */
+function showOverlayLoadingBlock() {
+    // Remove any existing block first
+    hideOverlayLoadingBlock();
+    
+    const overlay = document.getElementById('simulation-overlay');
+    if (!overlay) {
+        return;
+    }
+    
+    // Create a blocking overlay that covers only the simulation overlay bar
+    const block = document.createElement('div');
+    block.id = 'overlay-loading-block';
+    block.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(17, 24, 39, 0.5);
+        z-index: 50;
+        pointer-events: auto;
+        cursor: wait;
+    `;
+    
+    overlay.appendChild(block);
+}
+
+/**
+ * Hide the overlay loading block
+ */
+function hideOverlayLoadingBlock() {
+    const block = document.getElementById('overlay-loading-block');
+    if (block) {
+        block.remove();
+    }
+}
 
 // Global cleanup for tooltips - hide any open tooltips when clicking outside
 document.addEventListener('click', function(e) {

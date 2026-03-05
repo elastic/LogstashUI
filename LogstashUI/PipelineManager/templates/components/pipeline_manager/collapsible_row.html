@@ -134,7 +134,7 @@
             <div id="createPipelineError" class="mb-4"></div>
             
             <form hx-post="/ConnectionManager/CreatePipeline/"
-                  hx-target="#pipelineList" 
+                  hx-target="#pipelineList-{{ es_id }}" 
                   hx-swap="innerHTML"
                   hx-on::before-request="document.getElementById('createPipelineError').innerHTML = ''"
                   hx-on::after-request="
@@ -196,7 +196,7 @@
             <div id="clonePipelineError" class="mb-4"></div>
             
             <form hx-post="/ConnectionManager/ClonePipeline/"
-                  hx-target="#pipelineList" 
+                  hx-target="#pipelineList-{{ es_id }}" 
                   hx-swap="innerHTML"
                   hx-on::before-request="document.getElementById('clonePipelineError').innerHTML = ''"
                   hx-on::after-request="

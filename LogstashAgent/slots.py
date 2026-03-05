@@ -69,8 +69,8 @@ def _compute_pipeline_hash(pipelines: List[Dict[str, Any]]) -> str:
     #         logger.info(f"Hash {computed_hash[:8]}: Wrote filter_config to {debug_file} ({len(filter_config)} bytes)")
     #     except Exception as e:
     #         logger.error(f"Failed to write debug file: {e}")
-    #
-    # return computed_hash
+    
+    return computed_hash
 
 
 def get_slot_state() -> Dict[int, Dict[str, Any]]:
@@ -373,7 +373,7 @@ def _evict_failed_slots_fallback() -> List[int]:
 
 
 async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_wait_seconds: float = 20.0,
-                                       poll_interval: float = 0.2) -> bool:
+                                       poll_interval: float = 1.0) -> bool:
     """
     Verify that all pipelines for a slot have been successfully loaded by Logstash.
 
@@ -601,7 +601,7 @@ def _background_cleanup_worker():
     """
     while True:
         try:
-            time.sleep(15)  # Check every 15 seconds (reduced from 60 to prevent OOM)
+            time.sleep(60)
 
             # Evict slots that have exceeded TTL
             expired_slots = evict_expired_slots()
