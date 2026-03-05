@@ -43,6 +43,9 @@ urlpatterns = [
     path("GetElasticsearchConnections/", views.GetElasticsearchConnections, name="GetElasticsearchConnections"),
     path("GetElasticsearchIndices/", views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
     path("GetElasticsearchFields/", views.GetElasticsearchFields, name="GetElasticsearchFields"),
-    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments")
+    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
+    
+    # Plugin documentation endpoint
+    path("GetPluginDocumentation/", views.GetPluginDocumentation, name="GetPluginDocumentation")
 
 ]

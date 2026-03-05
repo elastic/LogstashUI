@@ -847,3 +847,60 @@ def QueryElasticsearchDocuments(request):
     except Exception as e:
         logger.error(f"Error querying Elasticsearch documents: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+def GetPluginDocumentation(request):
+    """
+    Securely proxy plugin documentation URLs with allowlist validation.
+    Only allows documentation from trusted Elastic/Logstash domains.
+    """
+    plugin_type = request.GET.get("type")
+    plugin_name = request.GET.get("name")
+    
+    if not plugin_type or not plugin_name:
+        return JsonResponse({"error": "type and name are required"}, status=400)
+    
+    try:
+        # Load plugin data to get the documentation URL
+        plugin_data = _load_plugin_data()
+        
+        if plugin_type not in plugin_data:
+            return JsonResponse({"error": f"Invalid plugin type: {plugin_type}"}, status=400)
+        
+        if plugin_name not in plugin_data[plugin_type]:
+            return JsonResponse({"error": f"Plugin not found: {plugin_name}"}, status=404)
+        
+        plugin = plugin_data[plugin_type][plugin_name]
+        doc_url = plugin.get("link")
+        
+        if not doc_url:
+            return JsonResponse({"error": "No documentation URL available for this plugin"}, status=404)
+        
+        # Allowlist of trusted documentation domains
+        ALLOWED_DOC_DOMAINS = [
+            "www.elastic.co",
+            "elastic.co",
+            "github.com",
+            "rubydoc.info"
+        ]
+        
+        # Parse and validate the URL
+        from urllib.parse import urlparse
+        parsed_url = urlparse(doc_url)
+        
+        # Check if domain is in allowlist
+        if not any(parsed_url.netloc.endswith(domain) or parsed_url.netloc == domain 
+                   for domain in ALLOWED_DOC_DOMAINS):
+            logger.warning(f"Blocked documentation URL from untrusted domain: {doc_url}")
+            return JsonResponse({"error": "Documentation URL is not from a trusted domain"}, status=403)
+        
+        # Return the validated URL (frontend will use it in iframe)
+        return JsonResponse({
+            "url": doc_url,
+            "plugin_name": plugin_name,
+            "plugin_type": plugin_type
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching plugin documentation: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
