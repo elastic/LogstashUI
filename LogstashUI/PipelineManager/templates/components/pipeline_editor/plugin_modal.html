@@ -50,6 +50,49 @@ const PluginModal = (function() {
   let currentPluginType = '';
   let pluginData = {};
 
+  // LocalStorage helper functions for user favorites
+  const UserFavorites = {
+    STORAGE_KEY: 'logstash_user_favorites',
+    
+    // Get all user favorites from localStorage
+    getAll: function() {
+      try {
+        const stored = localStorage.getItem(this.STORAGE_KEY);
+        return stored ? JSON.parse(stored) : {};
+      } catch (e) {
+        console.error('Error reading user favorites:', e);
+        return {};
+      }
+    },
+    
+    // Check if a plugin is favorited by the user
+    isFavorited: function(pluginName, pluginType) {
+      const favorites = this.getAll();
+      const key = `${pluginType}:${pluginName}`;
+      return favorites[key] === true;
+    },
+    
+    // Toggle favorite status for a plugin
+    toggle: function(pluginName, pluginType) {
+      const favorites = this.getAll();
+      const key = `${pluginType}:${pluginName}`;
+      
+      if (favorites[key]) {
+        delete favorites[key];
+      } else {
+        favorites[key] = true;
+      }
+      
+      try {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(favorites));
+        return !favorites[key]; // Return new state (true if now favorited)
+      } catch (e) {
+        console.error('Error saving user favorites:', e);
+        return false;
+      }
+    }
+  };
+
   // Initialize the modal with plugin data
   function init(data) {
     pluginData = data;
@@ -80,24 +123,28 @@ const PluginModal = (function() {
     const plugins = pluginData[type] || {};
     grid.innerHTML = '';
 
-    // Sort plugins: important first (in order), then alphabetically
+    // Sort plugins: user favorites first, then important, then alphabetically
     const pluginEntries = Object.entries(plugins);
+    const favoritedPlugins = [];
     const importantPlugins = [];
     const regularPlugins = [];
     
     pluginEntries.forEach(([name, plugin]) => {
-      if (plugin.important === 'Yes') {
+      if (UserFavorites.isFavorited(name, type)) {
+        favoritedPlugins.push([name, plugin]);
+      } else if (plugin.important === 'Yes') {
         importantPlugins.push([name, plugin]);
       } else {
         regularPlugins.push([name, plugin]);
       }
     });
     
-    // Sort regular plugins alphabetically by name
+    // Sort each group alphabetically by name
+    favoritedPlugins.sort((a, b) => a[0].localeCompare(b[0]));
     regularPlugins.sort((a, b) => a[0].localeCompare(b[0]));
     
-    // Combine: important plugins first (in their original order), then regular plugins
-    const sortedPlugins = [...importantPlugins, ...regularPlugins];
+    // Combine: user favorites first, then important plugins, then regular plugins
+    const sortedPlugins = [...favoritedPlugins, ...importantPlugins, ...regularPlugins];
     
     sortedPlugins.forEach(([name, plugin]) => {
       const card = createPluginCard(name, plugin, type);
@@ -144,8 +191,7 @@ const PluginModal = (function() {
             <div class="flex space-x-2">
               ${type === 'filter' && plugin.memory_intensive === 'Yes' ? 
                 '<span class="text-gray-400 hover:text-white" title="This filter has the potential to use a lot of memory."><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg></span>' : ''}
-              ${plugin.important === 'Yes' ? 
-                '<span class="text-gray-400 hover:text-white" title="Popular plugin"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg></span>' : ''}
+              ${createFavoriteIcon(name, type, plugin.important === 'Yes')}
               ${plugin.link ? createIconLink(plugin.link, 'Documentation', 'info') : ''}
               ${plugin.repo_link ? createIconLink(plugin.repo_link, 'Source Code', 'code') : ''}
             </div>
@@ -166,6 +212,43 @@ const PluginModal = (function() {
     }
 
     return card;
+  }
+
+  // Create a favorite star icon (clickable)
+  function createFavoriteIcon(pluginName, pluginType, isSystemImportant) {
+    const isUserFavorited = UserFavorites.isFavorited(pluginName, pluginType);
+    
+    // Determine star appearance:
+    // - Gold filled: User favorited
+    // - Gray filled: System important (not user favorited)
+    // - Outline: Neither
+    let starColor, starFill, starTitle;
+    
+    if (isUserFavorited) {
+      starColor = 'text-yellow-400';
+      starFill = 'currentColor';
+      starTitle = 'Favorited (click to unfavorite)';
+    } else if (isSystemImportant) {
+      starColor = 'text-gray-400';
+      starFill = 'currentColor';
+      starTitle = 'Popular plugin (click to favorite)';
+    } else {
+      starColor = 'text-gray-400';
+      starFill = 'none';
+      starTitle = 'Click to favorite';
+    }
+    
+    return `
+      <button class="favorite-star-btn ${starColor} hover:text-yellow-400 transition-colors cursor-pointer"
+              data-plugin="${pluginName}"
+              data-type="${pluginType}"
+              title="${starTitle}"
+              onclick="event.stopPropagation(); PluginModal.toggleFavorite('${pluginName}', '${pluginType}');">
+        <svg class="w-5 h-5" fill="${starFill}" stroke="currentColor" stroke-width="${starFill === 'none' ? '2' : '0'}" viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+        </svg>
+      </button>
+    `;
   }
 
   // Create an icon link
@@ -423,11 +506,19 @@ const PluginModal = (function() {
     });
   }
 
+  // Toggle favorite status for a plugin
+  function toggleFavorite(pluginName, pluginType) {
+    UserFavorites.toggle(pluginName, pluginType);
+    // Re-render to update star appearance and sort order
+    renderPlugins(currentPluginType);
+  }
+
   // Public API
   return {
     init,
     show,
-    hide
+    hide,
+    toggleFavorite
   };
 })();
 

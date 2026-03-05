@@ -1016,13 +1016,11 @@ function createComponentElement(component, depth = 0, isConditional = false, par
         }
     }
 
-    // Only show image for input and output plugins
-    const imageHtml = (component.type === 'input' || component.type === 'output')
-        ? `<img src="/static/images/${component.plugin}.png"
+    // Show image for input, filter, and output plugins
+    const imageHtml = `<img src="/static/images/${component.plugin}.png"
                 alt="${component.plugin} icon"
                 class="w-5 h-5 mr-2 object-contain flex-shrink-0"
-                onerror="this.style.display='none';">`
-        : '';
+                onerror="this.style.display='none';">`;
 
     // Validate required fields
     const validation = validateRequiredFields(component);
