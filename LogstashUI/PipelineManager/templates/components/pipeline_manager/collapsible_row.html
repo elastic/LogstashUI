@@ -7,15 +7,33 @@
 
 
 <td colspan=6>
-    <div class="mb-2">
+    <!-- Header with Create Pipeline and Search -->
+    <div class="mb-4 flex gap-4 items-center">
         <button onclick="document.getElementById('createPipelineModal').showModal()" class="btn btn-primary btn-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
             </svg>
             Create Pipeline
         </button>
+        
+        <!-- Search Bar -->
+        <div style="max-width: 500px; flex: 1;">
+            <input type="text" id="pipelineSearchInput-{{ es_id }}" placeholder="Search by pipeline name or description..." class="input input-bordered w-full">
+        </div>
     </div>
-    <div id="pipelineList">
+
+    <!-- No Results State -->
+    <div id="pipelineNoResults-{{ es_id }}" class="hidden p-8 text-center bg-gray-900 rounded-lg mb-4">
+        <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-600/20 rounded-full mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-1">No results found</h3>
+        <p class="text-gray-400 text-sm">Try adjusting your search terms</p>
+    </div>
+
+    <div id="pipelineList-{{ es_id }}">
         <table class="w-full">
             <thead>
                 <th class="text-left">Pipeline Name</th>
@@ -23,7 +41,7 @@
                 <th class="text-left">Last Updated</th>
                 <th class="text-right">Actions</th>
             </thead>
-            <tbody>
+            <tbody id="pipelineTableBody-{{ es_id }}">
                 {% for pipeline in pipelines %}
                 <tr>
                     <td class="px-4 py-2">
@@ -85,6 +103,25 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div id="pipelinePagination-{{ es_id }}" class="mt-4 flex justify-between items-center">
+        <div class="flex gap-3 items-center">
+            <div class="text-sm text-gray-400 whitespace-nowrap">
+                Showing <span id="pipelineShowingStart-{{ es_id }}">0</span> to <span id="pipelineShowingEnd-{{ es_id }}">0</span> of <span id="pipelineTotalCount-{{ es_id }}">0</span> pipelines
+            </div>
+            <select id="pipelinePageSize-{{ es_id }}" class="select select-bordered select-sm" style="width: 70px;">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+            </select>
+        </div>
+        <div class="flex gap-2">
+            <button id="pipelinePrevBtn-{{ es_id }}" class="btn btn-sm btn-secondary" onclick="previousPipelinePage('{{ es_id }}')">Previous</button>
+            <span id="pipelinePageInfo-{{ es_id }}" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
+            <button id="pipelineNextBtn-{{ es_id }}" class="btn btn-sm btn-secondary" onclick="nextPipelinePage('{{ es_id }}')">Next</button>
+        </div>
     </div>
 
     <!-- Create Pipeline Modal -->
@@ -208,6 +245,24 @@
     document.body.addEventListener('htmx:configRequest', function(event) {
         event.detail.headers['X-CSRFToken'] = document.querySelector('[name=csrfmiddlewaretoken]').value;
     });
+
+    // Initialize pipeline list with pagination
+    (function() {
+        const pipelines = {{ pipelines|safe }};
+        const esId = '{{ es_id }}';
+        
+        // Wait for DOM to be ready
+        if (typeof initPipelineList === 'function') {
+            initPipelineList(esId, pipelines);
+        } else {
+            // If script not loaded yet, wait for it
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof initPipelineList === 'function') {
+                    initPipelineList(esId, pipelines);
+                }
+            });
+        }
+    })();
 
     // Handle action menu (3-dot icon) functionality
     document.addEventListener('click', function(e) {

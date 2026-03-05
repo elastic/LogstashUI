@@ -232,7 +232,7 @@ def main():
     else:
         # Assume script is in Scripts/ subdirectory
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.join(script_dir, '..', 'LogstashUI')
+        root_dir = os.path.join(script_dir, '..', 'LogstashAgent')
     
     root_dir = os.path.abspath(root_dir)
     

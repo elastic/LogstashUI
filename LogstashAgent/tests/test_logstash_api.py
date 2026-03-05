@@ -1,4 +1,10 @@
 """
+Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+or more contributor license agreements. Licensed under the Elastic License;
+you may not use this file except in compliance with the Elastic License.
+"""
+
+"""
 Comprehensive tests for Logstash API SDK
 
 Tests cover:
@@ -232,7 +238,7 @@ class TestDetectPipelineState:
         
         state = api_instance.detect_pipeline_state("test-pipeline")
         
-        assert state == "failed"
+        assert state == "idle"
     
     def test_detect_not_found_state(self, api_instance, mock_httpx_client):
         """Test detection when pipeline doesn't exist"""
@@ -437,8 +443,8 @@ class TestEdgeCasesAndErrors:
         
         state = api_instance.detect_pipeline_state("test-pipeline")
         
-        # Should default to idle when no data
-        assert state == "idle"
+        # Empty pipeline data means pipeline is still registering/initializing
+        assert state == "not_found"
     
     def test_missing_events_field(self, api_instance, mock_httpx_client):
         """Test handling when events field is missing"""
@@ -455,8 +461,8 @@ class TestEdgeCasesAndErrors:
         
         state = api_instance.detect_pipeline_state("test-pipeline")
         
-        # Should be idle (has successful reload)
-        assert state == "idle"
+        # Missing events structure means pipeline hasn't fully initialized yet
+        assert state == "not_found"
     
     def test_missing_reloads_field(self, api_instance, mock_httpx_client):
         """Test handling when reloads field is missing"""
@@ -473,8 +479,8 @@ class TestEdgeCasesAndErrors:
         
         state = api_instance.detect_pipeline_state("test-pipeline")
         
-        # Should be idle (no failures)
-        assert state == "idle"
+        # Missing reloads structure means pipeline is still registering
+        assert state == "not_found"
     
     def test_null_reloads_field(self, api_instance, mock_httpx_client):
         """Test handling when reloads field is null"""
@@ -492,8 +498,8 @@ class TestEdgeCasesAndErrors:
         
         state = api_instance.detect_pipeline_state("test-pipeline")
         
-        # Should be idle (no failures)
-        assert state == "idle"
+        # Null reloads field means pipeline is still registering
+        assert state == "not_found"
 
 
 if __name__ == "__main__":

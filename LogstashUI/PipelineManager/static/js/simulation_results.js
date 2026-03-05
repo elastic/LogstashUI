@@ -2010,72 +2010,75 @@ function initSimulationResults(runId) {
                                                 }
                                             } else {
                                                 // Regular plugin
-                                                const pluginId = filterPlugin.id;
-                                                const snapshot = event.snapshots[pluginId];
+                                                // Skip comment plugins - they don't execute in Logstash
+                                                if (filterPlugin.plugin !== 'comment') {
+                                                    const pluginId = filterPlugin.id;
+                                                    const snapshot = event.snapshots[pluginId];
 
-                                                if (snapshot) {
-                                                    stepNumber++;
+                                                    if (snapshot) {
+                                                        stepNumber++;
 
-                                                    // Filter metadata from both snapshots before comparing
-                                                    const filteredPrevious = filterMetadata(previousSnapshot);
-                                                    const filteredCurrent = filterMetadata(snapshot);
+                                                        // Filter metadata from both snapshots before comparing
+                                                        const filteredPrevious = filterMetadata(previousSnapshot);
+                                                        const filteredCurrent = filterMetadata(snapshot);
 
-                                                    // Compare with previous snapshot (or original) and show only changes
-                                                    const changes = diffObjects(filteredPrevious, filteredCurrent);
+                                                        // Compare with previous snapshot (or original) and show only changes
+                                                        const changes = diffObjects(filteredPrevious, filteredCurrent);
 
-                                                    // Check if there are any changes
-                                                    const hasChanges = Object.keys(changes.added).length > 0 ||
-                                                                     Object.keys(changes.modified).length > 0 ||
-                                                                     Object.keys(changes.deleted).length > 0;
+                                                        // Check if there are any changes
+                                                        const hasChanges = Object.keys(changes.added).length > 0 ||
+                                                                         Object.keys(changes.modified).length > 0 ||
+                                                                         Object.keys(changes.deleted).length > 0;
 
-                                                    // Format changes for tooltip
-                                                    let changesText = 'No changes';
-                                                    if (hasChanges) {
-                                                        const changesObj = {};
-                                                        if (Object.keys(changes.added).length > 0) changesObj.added = changes.added;
-                                                        if (Object.keys(changes.modified).length > 0) changesObj.modified = changes.modified;
-                                                        if (Object.keys(changes.deleted).length > 0) changesObj.deleted = changes.deleted;
-                                                        changesText = JSON.stringify(changesObj, null, 2);
+                                                        // Format changes for tooltip
+                                                        let changesText = 'No changes';
+                                                        if (hasChanges) {
+                                                            const changesObj = {};
+                                                            if (Object.keys(changes.added).length > 0) changesObj.added = changes.added;
+                                                            if (Object.keys(changes.modified).length > 0) changesObj.modified = changes.modified;
+                                                            if (Object.keys(changes.deleted).length > 0) changesObj.deleted = changes.deleted;
+                                                            changesText = JSON.stringify(changesObj, null, 2);
+                                                        }
+
+                                                        // Filter snapshot before storing
+                                                        const filteredSnap = filterMetadata(snapshot);
+
+                                                        // Extract timing data if available
+                                                        let executionTimeMs = null;
+                                                        if (snapshot.simulation && snapshot.simulation.timing && snapshot.simulation.timing.execution_ns) {
+                                                            // Convert nanoseconds to milliseconds, rounded to 3 decimal places
+                                                            executionTimeMs = (snapshot.simulation.timing.execution_ns / 1000000).toFixed(3);
+                                                        }
+
+                                                        // Add node with changes for context-aware highlighting
+                                                        nodes.push({
+                                                            id: pluginId,
+                                                            label: filterPlugin.plugin,
+                                                            step: stepNumber,
+                                                            hasChanges: hasChanges,
+                                                            changesText: changesText,
+                                                            eventJson: JSON.stringify(filteredSnap, null, 2),
+                                                            changes: changes, // Store changes for highlighting
+                                                            isConditional: false,
+                                                            executionTimeMs: executionTimeMs // Store execution time in milliseconds
+                                                        });
+
+                                                        // Add link from the last actual node that was added
+                                                        // Include the snapshot (event state) for this link
+                                                        links.push({
+                                                            source: currentNodeId,
+                                                            target: pluginId,
+                                                            eventJson: JSON.stringify(filteredSnap, null, 2),
+                                                            changes: changes, // Store changes for highlighting in tooltips
+                                                            isConditional: false
+                                                        });
+
+                                                        // Update current node ID for next iteration
+                                                        currentNodeId = pluginId;
+
+                                                        // Update previous snapshot for next iteration
+                                                        previousSnapshot = snapshot;
                                                     }
-
-                                                    // Filter snapshot before storing
-                                                    const filteredSnap = filterMetadata(snapshot);
-
-                                                    // Extract timing data if available
-                                                    let executionTimeMs = null;
-                                                    if (snapshot.simulation && snapshot.simulation.timing && snapshot.simulation.timing.execution_ns) {
-                                                        // Convert nanoseconds to milliseconds, rounded to 3 decimal places
-                                                        executionTimeMs = (snapshot.simulation.timing.execution_ns / 1000000).toFixed(3);
-                                                    }
-
-                                                    // Add node with changes for context-aware highlighting
-                                                    nodes.push({
-                                                        id: pluginId,
-                                                        label: filterPlugin.plugin,
-                                                        step: stepNumber,
-                                                        hasChanges: hasChanges,
-                                                        changesText: changesText,
-                                                        eventJson: JSON.stringify(filteredSnap, null, 2),
-                                                        changes: changes, // Store changes for highlighting
-                                                        isConditional: false,
-                                                        executionTimeMs: executionTimeMs // Store execution time in milliseconds
-                                                    });
-
-                                                    // Add link from the last actual node that was added
-                                                    // Include the snapshot (event state) for this link
-                                                    links.push({
-                                                        source: currentNodeId,
-                                                        target: pluginId,
-                                                        eventJson: JSON.stringify(filteredSnap, null, 2),
-                                                        changes: changes, // Store changes for highlighting in tooltips
-                                                        isConditional: false
-                                                    });
-
-                                                    // Update current node ID for next iteration
-                                                    currentNodeId = pluginId;
-
-                                                    // Update previous snapshot for next iteration
-                                                    previousSnapshot = snapshot;
                                                 }
                                             }
                                         });

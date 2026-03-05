@@ -1,3 +1,9 @@
+"""
+Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+or more contributor license agreements. Licensed under the Elastic License;
+you may not use this file except in compliance with the Elastic License.
+"""
+
 from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
