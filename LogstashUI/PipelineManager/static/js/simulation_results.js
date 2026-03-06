@@ -334,6 +334,12 @@ function filterMetadata(obj) {
  * Mark executed plugins in the editor with visual indicators
  */
 function markExecutedPlugins(nodes, originalEvent) {
+    // Hide any visible tooltips BEFORE removing DOM elements to prevent stuck tooltips
+    const tooltip = document.getElementById('data-flow-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+    
     // Clear any existing simulation badges and data indicators
     document.querySelectorAll('.simulation-executed-badge').forEach(badge => badge.remove());
     document.querySelectorAll('.simulation-data-indicator').forEach(indicator => indicator.remove());
@@ -484,8 +490,12 @@ function markExecutedPlugins(nodes, originalEvent) {
                 componentElement.appendChild(badge);
             }
 
-            // Add execution time badge if available
-            if (node.executionTimeMs && !componentElement.querySelector('.simulation-timing-badge')) {
+            // Add execution time badge if available (skip for drop plugins)
+            // Find the component to check if it's a drop plugin
+            const component = findComponentById(componentId);
+            const isDropPlugin = component && component.plugin === 'drop';
+            
+            if (node.executionTimeMs && !componentElement.querySelector('.simulation-timing-badge') && !isDropPlugin) {
                 const timingBadge = document.createElement('div');
                 timingBadge.className = 'simulation-timing-badge';
                 timingBadge.innerHTML = `⏱ ${node.executionTimeMs}ms`;
@@ -995,6 +1005,13 @@ function hideDataFlowTooltip() {
 function createForceDirectedGraph(graphData) {
     const svg = d3.select("#pipeline-graph");
     const containerElement = document.getElementById("results-container");
+    
+    // Check if container exists - if not, the overlay hasn't been created yet
+    if (!containerElement) {
+        console.error('results-container not found - overlay may not be created yet');
+        return;
+    }
+    
     const height = containerElement.clientHeight || 100;
 
     // Calculate proper spacing and total width needed
@@ -1195,14 +1212,17 @@ function createForceDirectedGraph(graphData) {
                 .style("cursor", "pointer")
                 .style("filter", hasFailure ? "drop-shadow(0 0 8px rgba(220, 38, 38, 0.8))" : "none")
                 .on("mouseover", function(event, d) {
+                    const isSlowest = d.isSlowest;
                     d3.select(this)
                         .attr("stroke-width", hasFailure ? 4 : 3)
+                        .attr("stroke", isSlowest ? "#60a5fa" : (hasFailure ? strokeColor : strokeColor))
                         .attr("r", 22);
                     showNodeTooltip(event, d);
                 })
                 .on("mouseout", function(event, d) {
                     d3.select(this)
                         .attr("stroke-width", hasFailure ? 3 : 2)
+                        .attr("stroke", strokeColor)
                         .attr("r", 18);
                     hideNodeTooltip();
                 });
@@ -1218,6 +1238,45 @@ function createForceDirectedGraph(graphData) {
         .attr("font-size", "10px")
         .attr("font-weight", "bold")
         .style("pointer-events", "none");
+
+    // Find the slowest plugin (highest execution time)
+    let slowestNode = null;
+    let maxExecutionTime = 0;
+    graphData.nodes.forEach(n => {
+        if (n.executionTimeMs && parseFloat(n.executionTimeMs) > maxExecutionTime) {
+            maxExecutionTime = parseFloat(n.executionTimeMs);
+            slowestNode = n;
+        }
+    });
+
+    // Mark slowest node for later reference
+    if (slowestNode) {
+        slowestNode.isSlowest = true;
+    }
+
+    // Add execution time text below nodes (if available, skip for drop plugins)
+    node.each(function(d) {
+        if (d.executionTimeMs) {
+            // Check if this is a drop plugin
+            const component = findComponentById(d.id);
+            const isDropPlugin = component && component.plugin === 'drop';
+            
+            // Skip timing display for drop plugins
+            if (!isDropPlugin) {
+                const isSlowest = d.isSlowest;
+                const nodeGroup = d3.select(this);
+                
+                nodeGroup.append("text")
+                    .text(`${d.executionTimeMs}ms`)
+                    .attr("text-anchor", "middle")
+                    .attr("dy", "3.2em")
+                    .attr("fill", isSlowest ? "#60a5fa" : "#fbbf24")
+                    .attr("font-size", "9px")
+                    .attr("font-weight", "600")
+                    .style("pointer-events", "none");
+            }
+        }
+    });
 
     // Manually position all elements since we have no simulation
     link
@@ -1425,6 +1484,7 @@ function createForceDirectedGraph(graphData) {
             // Regular plugin node - show changes and failure status
             let titleColor = d.hasFailure ? '#ef4444' : '#9ca3af';
             let failureWarning = '';
+            let slowestWarning = '';
 
             if (d.hasFailure) {
                 failureWarning = `<div style="background: rgba(220, 38, 38, 0.2); border: 2px solid #dc2626; border-radius: 6px; padding: 8px; margin-bottom: 0.5rem;">
@@ -1434,8 +1494,16 @@ function createForceDirectedGraph(graphData) {
                 </div>`;
             }
 
+            if (d.isSlowest) {
+                slowestWarning = `<div style="background: rgba(96, 165, 250, 0.15); border: 2px solid #60a5fa; border-radius: 6px; padding: 8px; margin-bottom: 0.5rem;">
+                    <div style="font-weight: 700; color: #60a5fa; margin-bottom: 0.25rem; font-size: 12px;">🐌 Slowest Plugin</div>
+                    <div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem; font-size: 10px;">Execution time:</div>
+                    <div style="color: #60a5fa; font-weight: 600; font-size: 11px;">${d.executionTimeMs}ms</div>
+                </div>`;
+            }
+
             title = `<div style="font-weight: 600; color: ${titleColor}; margin-bottom: 0.5rem;">Step ${d.step}: ${d.label}<br/><span style="font-weight: 400; font-size: 10px;">${d.id}</span></div>`;
-            content = failureWarning + (d.hasChanges
+            content = slowestWarning + failureWarning + (d.hasChanges
                 ? `<div style="font-weight: 600; color: #9ca3af; margin-bottom: 0.25rem;">Changes:</div><pre style="color: #86efac; white-space: pre-wrap; margin: 0;">${d.changesText}</pre>`
                 : `<div style="color: #6b7280; font-style: italic;">No changes</div>`);
         }
@@ -1804,6 +1872,9 @@ function initSimulationResults(runId) {
         return;
     }
     window.activePollers.add(runId);
+    
+    // Add loading overlay to block interaction with the overlay bar
+    showOverlayLoadingBlock();
 
     let pollCount = 0;
     const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
@@ -1855,8 +1926,8 @@ function initSimulationResults(runId) {
                         if (event.simulation.id === 'original') {
                             originalEvent = event;
                         }
-                        // Check if this is the final event
-                        else if (event.simulation.id === 'final') {
+                        // Check if this is the final event (either id='final' or final='true' for drop plugins)
+                        else if (event.simulation.id === 'final' || event.simulation.final === 'true') {
                                 receivedFinal = true;
 
                                 // Check if no plugins were executed (empty or missing snapshots)
@@ -1868,6 +1939,11 @@ function initSimulationResults(runId) {
                                     const loadingIndicator = document.getElementById('simulation-loading-indicator');
                                     if (loadingIndicator) {
                                         loadingIndicator.style.display = 'none';
+                                    }
+                                    
+                                    // Remove loading block only if no more active pollers
+                                    if (!window.activePollers || window.activePollers.size === 0) {
+                                        hideOverlayLoadingBlock();
                                     }
 
                                     // Show message that no plugins were executed
@@ -2010,72 +2086,75 @@ function initSimulationResults(runId) {
                                                 }
                                             } else {
                                                 // Regular plugin
-                                                const pluginId = filterPlugin.id;
-                                                const snapshot = event.snapshots[pluginId];
+                                                // Skip comment plugins - they don't execute in Logstash
+                                                if (filterPlugin.plugin !== 'comment') {
+                                                    const pluginId = filterPlugin.id;
+                                                    const snapshot = event.snapshots[pluginId];
 
-                                                if (snapshot) {
-                                                    stepNumber++;
+                                                    if (snapshot) {
+                                                        stepNumber++;
 
-                                                    // Filter metadata from both snapshots before comparing
-                                                    const filteredPrevious = filterMetadata(previousSnapshot);
-                                                    const filteredCurrent = filterMetadata(snapshot);
+                                                        // Filter metadata from both snapshots before comparing
+                                                        const filteredPrevious = filterMetadata(previousSnapshot);
+                                                        const filteredCurrent = filterMetadata(snapshot);
 
-                                                    // Compare with previous snapshot (or original) and show only changes
-                                                    const changes = diffObjects(filteredPrevious, filteredCurrent);
+                                                        // Compare with previous snapshot (or original) and show only changes
+                                                        const changes = diffObjects(filteredPrevious, filteredCurrent);
 
-                                                    // Check if there are any changes
-                                                    const hasChanges = Object.keys(changes.added).length > 0 ||
-                                                                     Object.keys(changes.modified).length > 0 ||
-                                                                     Object.keys(changes.deleted).length > 0;
+                                                        // Check if there are any changes
+                                                        const hasChanges = Object.keys(changes.added).length > 0 ||
+                                                                         Object.keys(changes.modified).length > 0 ||
+                                                                         Object.keys(changes.deleted).length > 0;
 
-                                                    // Format changes for tooltip
-                                                    let changesText = 'No changes';
-                                                    if (hasChanges) {
-                                                        const changesObj = {};
-                                                        if (Object.keys(changes.added).length > 0) changesObj.added = changes.added;
-                                                        if (Object.keys(changes.modified).length > 0) changesObj.modified = changes.modified;
-                                                        if (Object.keys(changes.deleted).length > 0) changesObj.deleted = changes.deleted;
-                                                        changesText = JSON.stringify(changesObj, null, 2);
+                                                        // Format changes for tooltip
+                                                        let changesText = 'No changes';
+                                                        if (hasChanges) {
+                                                            const changesObj = {};
+                                                            if (Object.keys(changes.added).length > 0) changesObj.added = changes.added;
+                                                            if (Object.keys(changes.modified).length > 0) changesObj.modified = changes.modified;
+                                                            if (Object.keys(changes.deleted).length > 0) changesObj.deleted = changes.deleted;
+                                                            changesText = JSON.stringify(changesObj, null, 2);
+                                                        }
+
+                                                        // Filter snapshot before storing
+                                                        const filteredSnap = filterMetadata(snapshot);
+
+                                                        // Extract timing data if available
+                                                        let executionTimeMs = null;
+                                                        if (snapshot.simulation && snapshot.simulation.timing && snapshot.simulation.timing.execution_ns) {
+                                                            // Convert nanoseconds to milliseconds, rounded to 3 decimal places
+                                                            executionTimeMs = (snapshot.simulation.timing.execution_ns / 1000000).toFixed(3);
+                                                        }
+
+                                                        // Add node with changes for context-aware highlighting
+                                                        nodes.push({
+                                                            id: pluginId,
+                                                            label: filterPlugin.plugin,
+                                                            step: stepNumber,
+                                                            hasChanges: hasChanges,
+                                                            changesText: changesText,
+                                                            eventJson: JSON.stringify(filteredSnap, null, 2),
+                                                            changes: changes, // Store changes for highlighting
+                                                            isConditional: false,
+                                                            executionTimeMs: executionTimeMs // Store execution time in milliseconds
+                                                        });
+
+                                                        // Add link from the last actual node that was added
+                                                        // Include the snapshot (event state) for this link
+                                                        links.push({
+                                                            source: currentNodeId,
+                                                            target: pluginId,
+                                                            eventJson: JSON.stringify(filteredSnap, null, 2),
+                                                            changes: changes, // Store changes for highlighting in tooltips
+                                                            isConditional: false
+                                                        });
+
+                                                        // Update current node ID for next iteration
+                                                        currentNodeId = pluginId;
+
+                                                        // Update previous snapshot for next iteration
+                                                        previousSnapshot = snapshot;
                                                     }
-
-                                                    // Filter snapshot before storing
-                                                    const filteredSnap = filterMetadata(snapshot);
-
-                                                    // Extract timing data if available
-                                                    let executionTimeMs = null;
-                                                    if (snapshot.simulation && snapshot.simulation.timing && snapshot.simulation.timing.execution_ns) {
-                                                        // Convert nanoseconds to milliseconds, rounded to 3 decimal places
-                                                        executionTimeMs = (snapshot.simulation.timing.execution_ns / 1000000).toFixed(3);
-                                                    }
-
-                                                    // Add node with changes for context-aware highlighting
-                                                    nodes.push({
-                                                        id: pluginId,
-                                                        label: filterPlugin.plugin,
-                                                        step: stepNumber,
-                                                        hasChanges: hasChanges,
-                                                        changesText: changesText,
-                                                        eventJson: JSON.stringify(filteredSnap, null, 2),
-                                                        changes: changes, // Store changes for highlighting
-                                                        isConditional: false,
-                                                        executionTimeMs: executionTimeMs // Store execution time in milliseconds
-                                                    });
-
-                                                    // Add link from the last actual node that was added
-                                                    // Include the snapshot (event state) for this link
-                                                    links.push({
-                                                        source: currentNodeId,
-                                                        target: pluginId,
-                                                        eventJson: JSON.stringify(filteredSnap, null, 2),
-                                                        changes: changes, // Store changes for highlighting in tooltips
-                                                        isConditional: false
-                                                    });
-
-                                                    // Update current node ID for next iteration
-                                                    currentNodeId = pluginId;
-
-                                                    // Update previous snapshot for next iteration
-                                                    previousSnapshot = snapshot;
                                                 }
                                             }
                                         });
@@ -2139,7 +2218,11 @@ function initSimulationResults(runId) {
                                     } else {
                                         // Overlay Mode: Mark plugins and create graph
                                         markExecutedPlugins(nodes, originalEvent);
-                                        createForceDirectedGraph({ nodes, links });
+                                        
+                                        // Use requestAnimationFrame to ensure DOM is fully rendered before creating graph
+                                        requestAnimationFrame(() => {
+                                            createForceDirectedGraph({ nodes, links });
+                                        });
 
                                         // Display total execution time
                                         const totalTimeElement = document.getElementById('totalExecutionTime');
@@ -2179,6 +2262,11 @@ function initSimulationResults(runId) {
                                         // Remove from active pollers
                                         if (window.activePollers) {
                                             window.activePollers.delete(runId);
+                                        }
+                                        
+                                        // Remove loading block only if no more active pollers
+                                        if (!window.activePollers || window.activePollers.size === 0) {
+                                            hideOverlayLoadingBlock();
                                         }
                                     }
                                 } else {
@@ -2306,6 +2394,47 @@ window.viewSimulationLogs = function() {
             logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
         });
 };
+
+/**
+ * Show a loading block overlay over the simulation overlay bar to prevent interaction
+ * during multi-simulation updates
+ */
+function showOverlayLoadingBlock() {
+    // Remove any existing block first
+    hideOverlayLoadingBlock();
+    
+    const overlay = document.getElementById('simulation-overlay');
+    if (!overlay) {
+        return;
+    }
+    
+    // Create a blocking overlay that covers only the simulation overlay bar
+    const block = document.createElement('div');
+    block.id = 'overlay-loading-block';
+    block.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(17, 24, 39, 0.5);
+        z-index: 50;
+        pointer-events: auto;
+        cursor: wait;
+    `;
+    
+    overlay.appendChild(block);
+}
+
+/**
+ * Hide the overlay loading block
+ */
+function hideOverlayLoadingBlock() {
+    const block = document.getElementById('overlay-loading-block');
+    if (block) {
+        block.remove();
+    }
+}
 
 // Global cleanup for tooltips - hide any open tooltips when clicking outside
 document.addEventListener('click', function(e) {

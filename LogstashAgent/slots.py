@@ -1,3 +1,9 @@
+"""
+Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+or more contributor license agreements. Licensed under the Elastic License;
+you may not use this file except in compliance with the Elastic License.
+"""
+
 import hashlib
 import json
 from datetime import datetime, timezone, timedelta
@@ -53,17 +59,17 @@ def _compute_pipeline_hash(pipelines: List[Dict[str, Any]]) -> str:
     computed_hash = hashlib.sha256(pipeline_str.encode()).hexdigest()
 
     # Debug: Write full filter_config to temp file for comparison
-    if normalized_pipelines:
-        import tempfile
-        filter_config = normalized_pipelines[0]['filter_config']
-        debug_file = os.path.join(tempfile.gettempdir(), f"filter_config_{computed_hash[:8]}.txt")
-        try:
-            with open(debug_file, 'w', encoding='utf-8') as f:
-                f.write(filter_config)
-            logger.info(f"Hash {computed_hash[:8]}: Wrote filter_config to {debug_file} ({len(filter_config)} bytes)")
-        except Exception as e:
-            logger.error(f"Failed to write debug file: {e}")
-
+    # if normalized_pipelines:
+    #     import tempfile
+    #     filter_config = normalized_pipelines[0]['filter_config']
+    #     debug_file = os.path.join(tempfile.gettempdir(), f"filter_config_{computed_hash[:8]}.txt")
+    #     try:
+    #         with open(debug_file, 'w', encoding='utf-8') as f:
+    #             f.write(filter_config)
+    #         logger.info(f"Hash {computed_hash[:8]}: Wrote filter_config to {debug_file} ({len(filter_config)} bytes)")
+    #     except Exception as e:
+    #         logger.error(f"Failed to write debug file: {e}")
+    
     return computed_hash
 
 
@@ -367,7 +373,7 @@ def _evict_failed_slots_fallback() -> List[int]:
 
 
 async def verify_slot_pipelines_loaded(slot_id: int, expected_count: int, max_wait_seconds: float = 20.0,
-                                       poll_interval: float = 0.2) -> bool:
+                                       poll_interval: float = 1.0) -> bool:
     """
     Verify that all pipelines for a slot have been successfully loaded by Logstash.
 
@@ -595,7 +601,7 @@ def _background_cleanup_worker():
     """
     while True:
         try:
-            time.sleep(15)  # Check every 15 seconds (reduced from 60 to prevent OOM)
+            time.sleep(60)
 
             # Evict slots that have exceeded TTL
             expired_slots = evict_expired_slots()

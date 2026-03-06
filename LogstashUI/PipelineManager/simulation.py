@@ -107,19 +107,18 @@ def SimulatePipeline(request):
 
                     # Instrument plugins in the main 'if' block
                     if 'plugins' in conditional_plugin['config']:
-                        # Add branch tracking at the start of the if block
+                        # Add branch tracking at the start of the if block using mutate filter
+                        # This avoids injecting unique values into Ruby code, allowing JRuby code reuse
                         if_condition = conditional_plugin['config'].get('condition', '')
-                        # Escape only double quotes for embedding in Ruby string (not backslashes - that causes double-escaping)
-                        escaped_condition = if_condition.replace('"', '\\"')
                         branch_tracker = {
                             "id": f"{conditional_id}_if_tracker",
                             "type": "filter",
-                            "plugin": "ruby",
+                            "plugin": "mutate",
                             "config": {
-                                "code": (
-                                    f"event.set(\"[simulation][conditional_branches][{conditional_id}]\", \"if\")\n"
-                                    f"event.set(\"[simulation][conditional_conditions][{conditional_id}]\", \"{escaped_condition}\")"
-                                )
+                                "replace": {
+                                    f"[simulation][conditional_branches][{conditional_id}]": "if",
+                                    f"[simulation][conditional_conditions][{conditional_id}]": if_condition
+                                }
                             }
                         }
                         conditional_plugin['config']['plugins'] = [branch_tracker] + instrument_plugins(
@@ -132,19 +131,18 @@ def SimulatePipeline(request):
                         for else_if_idx, else_if in enumerate(conditional_plugin['config']['else_ifs']):
                             else_if_copy = else_if.copy()
                             if 'plugins' in else_if_copy:
-                                # Add branch tracking at the start of the else_if block
+                                # Add branch tracking at the start of the else_if block using mutate filter
+                                # This avoids injecting unique values into Ruby code, allowing JRuby code reuse
                                 else_if_condition = else_if.get('condition', '')
-                                # Escape only double quotes for embedding in Ruby string (not backslashes - that causes double-escaping)
-                                escaped_else_if_condition = else_if_condition.replace('"', '\\"')
                                 branch_tracker = {
                                     "id": f"{conditional_id}_elseif{else_if_idx}_tracker",
                                     "type": "filter",
-                                    "plugin": "ruby",
+                                    "plugin": "mutate",
                                     "config": {
-                                        "code": (
-                                            f"event.set(\"[simulation][conditional_branches][{conditional_id}]\", \"else_if_{else_if_idx}\")\n"
-                                            f"event.set(\"[simulation][conditional_conditions][{conditional_id}]\", \"{escaped_else_if_condition}\")"
-                                        )
+                                        "replace": {
+                                            f"[simulation][conditional_branches][{conditional_id}]": f"else_if_{else_if_idx}",
+                                            f"[simulation][conditional_conditions][{conditional_id}]": else_if_condition
+                                        }
                                     }
                                 }
                                 else_if_copy['plugins'] = [branch_tracker] + instrument_plugins(else_if_copy['plugins'])
@@ -155,13 +153,16 @@ def SimulatePipeline(request):
                     if 'else' in conditional_plugin['config'] and conditional_plugin['config']['else']:
                         else_block = conditional_plugin['config']['else'].copy()
                         if 'plugins' in else_block:
-                            # Add branch tracking at the start of the else block
+                            # Add branch tracking at the start of the else block using mutate filter
+                            # This avoids injecting unique values into Ruby code, allowing JRuby code reuse
                             branch_tracker = {
                                 "id": f"{conditional_id}_else_tracker",
                                 "type": "filter",
-                                "plugin": "ruby",
+                                "plugin": "mutate",
                                 "config": {
-                                    "code": f"event.set(\"[simulation][conditional_branches][{conditional_id}]\", \"else\")"
+                                    "replace": {
+                                        f"[simulation][conditional_branches][{conditional_id}]": "else"
+                                    }
                                 }
                             }
                             else_block['plugins'] = [branch_tracker] + instrument_plugins(else_block['plugins'])
@@ -180,15 +181,27 @@ def SimulatePipeline(request):
                         # Drop plugins are special - they need to send the event to the API before dropping
                         # We don't use the normal timing instrumentation for drop plugins
                         # Instead, we create a snapshot and send it directly via HTTP POST
-                        drop_plugin_id = plugin['id']
+                        
+                        # Add mutate filter to set step and id metadata
+                        # Use replace instead of add_field to avoid array accumulation
+                        drop_metadata_plugin = {
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "replace": {
+                                    "[simulation][step]": str(current_step),
+                                    "[simulation][id]": plugin['id'],
+                                    "[simulation][final]": "true"
+                                }
+                            }
+                        }
+                        instrumented.append(drop_metadata_plugin)
+                        
+                        # This code is now IDENTICAL for all drop plugins, allowing JRuby to compile once and reuse
                         pre_drop_code = f"""
 require "net/http"
 require "uri"
 require "json"
-
-# Create a snapshot for the drop plugin
-event.set("[simulation][step]", {current_step})
-event.set("[simulation][id]", "{drop_plugin_id}")
 
 # Create snapshot of current event state for the drop plugin
 snapshot = {{}}
@@ -197,13 +210,20 @@ event.to_hash.each do |key, value|
   next if key.start_with?("@metadata") || key == "snapshots"
   snapshot[key] = value
 end
-event.set("[snapshots][{drop_plugin_id}]", snapshot)
+
+# Get plugin ID from event field
+plugin_id = event.get("[simulation][id]")
+event.set("[snapshots][#{{plugin_id}}]", snapshot)
 
 # Note: run_id is added to the event at runtime via the simulate endpoint
 # Do NOT hardcode it here as it would change the pipeline hash for each simulation
 
 # Convert event to hash and send to API
 event_hash = event.to_hash
+
+# Debug: Log run_id to verify it exists
+run_id_value = event.get("run_id")
+puts "Drop plugin: run_id = #{{run_id_value.inspect}}"
 
 # Send HTTP POST to StreamSimulate endpoint
 uri = URI.parse("{logstash_ui_url}/ConnectionManager/StreamSimulate/")
@@ -216,13 +236,16 @@ request.body = event_hash.to_json
 
 begin
   response = http.request(request)
+  # Log response for debugging
+  puts "Drop plugin HTTP response: #{{response.code}} #{{response.message}}"
 rescue => e
-  # Log error but don't fail the pipeline
+  # Log error for debugging
+  puts "Drop plugin HTTP error: #{{e.class}} - #{{e.message}}"
+  puts e.backtrace.join("\\n")
 end
 """.strip()
 
                         pre_drop_plugin = {
-                            "id": f"pre_drop_api_call_{plugin['id']}",
                             "type": "filter",
                             "plugin": "ruby",
                             "config": {
@@ -239,13 +262,13 @@ end
                     else:
                         # Regular plugin - add normal timing instrumentation
                         # Add pre-plugin timing instrumentation
+                        # This code is IDENTICAL for all plugins, allowing JRuby to compile once and reuse
                         pre_instrumentation_code = (
-                            f"# Capture start time in nanoseconds before plugin execution\n"
-                            f"event.set(\"[simulation][timing][start_ns]\", (Time.now.to_f * 1_000_000_000).to_i)"
+                            "# Capture start time in nanoseconds before plugin execution\n"
+                            "event.set(\"[simulation][timing][start_ns]\", (Time.now.to_f * 1_000_000_000).to_i)"
                         )
 
                         pre_instrumentation_plugin = {
-                            "id": f"pre_instrumentation_{current_step}",
                             "type": "filter",
                             "plugin": "ruby",
                             "config": {
@@ -258,30 +281,43 @@ end
                         # Add the actual plugin
                         instrumented.append(plugin)
 
+                        # Add mutate filter to set step and id metadata
+                        # This avoids embedding unique values in Ruby code, allowing code reuse
+                        # Use replace instead of add_field to avoid array accumulation
+                        metadata_plugin = {
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "replace": {
+                                    "[simulation][step]": str(current_step),
+                                    "[simulation][id]": plugin['id']
+                                }
+                            }
+                        }
+                        instrumented.append(metadata_plugin)
+
                         # Add Ruby instrumentation after this plugin
+                        # This code is now IDENTICAL for all plugins, allowing JRuby to compile once and reuse
                         instrumentation_code = (
-                            f"event.set(\"[simulation][step]\", {current_step})\n"
-                            f"event.set(\"[simulation][id]\", \"{plugin['id']}\")\n"
-                            f"end_ns = (Time.now.to_f * 1_000_000_000).to_i\n"
-                            f"start_ns = event.get(\"[simulation][timing][start_ns]\")\n"
-                            f"if start_ns\n"
-                            f"  execution_ns = end_ns - start_ns\n"
-                            f"  event.set(\"[simulation][timing][execution_ns]\", execution_ns)\n"
-                            f"  event.set(\"[simulation][timing][end_ns]\", end_ns)\n"
-                            f"end\n"
-                            f"\n"
-                            f"snapshot = {{}}\n"
-                            f"event.to_hash.each do |key, value|\n"
-                            f"  next if key.start_with?(\"@metadata\") || key == \"snapshots\"\n"
-                            f"  snapshot[key] = value\n"
-                            f"end\n"
-                            f"\n"
-                            f"# Store snapshot under the plugin ID\n"
-                            f"event.set(\"[snapshots][{plugin['id']}]\", snapshot)"
+                            "end_ns = (Time.now.to_f * 1_000_000_000).to_i\n"
+                            "start_ns = event.get(\"[simulation][timing][start_ns]\")\n"
+                            "if start_ns\n"
+                            "  execution_ns = end_ns - start_ns\n"
+                            "  event.set(\"[simulation][timing][execution_ns]\", execution_ns)\n"
+                            "  event.set(\"[simulation][timing][end_ns]\", end_ns)\n"
+                            "end\n"
+                            "\n"
+                            "snapshot = {}\n"
+                            "event.to_hash.each do |key, value|\n"
+                            "  next if key.start_with?(\"@metadata\") || key == \"snapshots\"\n"
+                            "  snapshot[key] = value\n"
+                            "end\n"
+                            "\n"
+                            "plugin_id = event.get(\"[simulation][id]\")\n"
+                            "event.set(\"[snapshots][#{plugin_id}]\", snapshot)"
                         )
 
                         instrumentation_plugin = {
-                            "id": f"instrumentation_{current_step}",
                             "type": "filter",
                             "plugin": "ruby",
                             "config": {
@@ -518,8 +554,12 @@ def StreamSimulate(request):
             simulation_results.append(event_data)
             queue_size = len(simulation_results)
 
-        logger.info(f"StreamSimulate: Received event, queue size now: {queue_size}")
+        # Log detailed information about the received event
+        event_run_id = event_data.get('run_id', 'MISSING')
+        logger.info(f"StreamSimulate: Received event with run_id={event_run_id}, queue size now: {queue_size}")
         logger.debug(f"StreamSimulate: Event data keys: {list(event_data.keys())}")
+        if event_run_id == 'MISSING':
+            logger.error(f"StreamSimulate: Event is missing run_id field! Event keys: {list(event_data.keys())}")
 
         return JsonResponse({"status": "ok"}, status=200)
 
@@ -548,12 +588,20 @@ def GetSimulationResults(request):
         with simulation_lock:
             matching_results = []
             remaining_results = deque(maxlen=1000)
+            
+            # Debug: Log all run_ids in the queue
+            queue_run_ids = [r.get('run_id', 'MISSING') for r in simulation_results]
+            logger.debug(f"GetSimulationResults: Queue has {len(simulation_results)} events with run_ids: {queue_run_ids}")
+            logger.debug(f"GetSimulationResults: Looking for run_id: {run_id}")
 
             for result in simulation_results:
-                if result.get('run_id') == run_id:
+                result_run_id = result.get('run_id')
+                if result_run_id == run_id:
                     matching_results.append(result)
+                    logger.debug(f"GetSimulationResults: MATCH found for run_id {run_id}")
                 else:
                     remaining_results.append(result)
+                    logger.debug(f"GetSimulationResults: No match - result has run_id={result_run_id}, looking for {run_id}")
 
             # Replace the queue with non-matching results
             simulation_results.clear()

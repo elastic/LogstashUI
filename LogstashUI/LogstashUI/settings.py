@@ -76,6 +76,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
     'login_required.middleware.LoginRequiredMiddleware',
+    'Common.middleware.SecurityHeadersMiddleware',
 
 ]
 

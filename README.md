@@ -100,7 +100,7 @@ input {
 - Git backups for configuration
 - Loggy AI Assistant for pipeline failure analysis
 - Management of Logstash Nodes via external agent
-- JKS Keystore management
+- Logstash Keystore management
 - Expression editor for conditions
 
 ## Reporting Issues
