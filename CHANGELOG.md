@@ -1,11 +1,28 @@
-## [0.2.1] - TBD
+## [0.2.1] - 03/05/2026
 
 ### Added
+- Documentation links inside the plugin configuration modal
+- Initial implementation of a visual expression editor (foundation for future condition builder)
+- Ability to load Logstash plugin documentation directly within LogstashUI
+- Label showing the slowest plugin during pipeline simulation
+- Icons for filter plugins in the pipeline editor
+- Search bar and pagination for Connection Manager
+- `pipeline_list.js` for improved pipeline UI behavior
 
 ### Changed
+- Tuned Logstash performance and stability
+- Reduced the number of generated Ruby scripts created during pipeline editing
+- Updated Logstash API polling behavior to be less aggressive
+- Updated eviction algorithm to reduce unnecessary cache churn
+- Simulation overlay now dims the interface while results are loading to prevent interaction
 
 ### Fixed
-- 
+- Eliminated or significantly mitigated a Logstash memory leak caused by cached Ruby plugins
+- Added a shared connection pool to prevent opening a new Logstash API connection for every request
+- Removed temporary pipeline file writes during simulation
+- Fixed missing return statement that caused unexpected behavior
+- Simulation timeline now ignores comments
+- Updated tests to reflect LogstashAgent pipeline status behavior changes
 
 ## [0.2.0] - 03/02/2026
 
