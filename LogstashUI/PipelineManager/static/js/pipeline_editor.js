@@ -1186,6 +1186,15 @@ function createConditionalBlockElement(component, depth = 0) {
   <span class="font-medium text-yellow-300">if</span>
   <div class="flex items-center ml-2 group/condition">
     <span class="text-xs text-gray-400 condition-text">${component.config.condition || ''}</span>
+    <!-- Expression Editor Button - Temporarily Commented Out
+    <button class="ml-1 text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity expression-editor-btn"
+            data-component-id="${component.id}"
+            title="Expression Editor">
+      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    </button>
+    -->
     <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-condition"
             data-component-id="${component.id}">
       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1301,6 +1310,16 @@ function createConditionalBlockElement(component, depth = 0) {
       <span class="font-medium text-yellow-300">else if</span>
       <div class="flex items-center ml-2">
         <span id="${conditionId}" class="text-xs text-gray-400 condition-text">${elseIf.condition || ''}</span>
+        <!-- Expression Editor Button - Temporarily Commented Out
+        <button class="ml-1 text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity expression-editor-btn"
+                data-component-id="${component.id}"
+                data-elseif-index="${elseIfIndex}"
+                title="Expression Editor">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </button>
+        -->
         <button class="ml-1 text-gray-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity edit-elseif-condition"
                 data-component-id="${component.id}"
                 data-elseif-index="${elseIfIndex}"

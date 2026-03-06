@@ -19,6 +19,7 @@
 <script src="{% static 'js/move_mode.js' %}"></script>
 <script src="{% static 'js/simulation_results.js' %}"></script>
 <script src="{% static 'js/pipeline_text_editor.js' %}"></script>
+<script src="{% static 'js/expression_editor.js' %}"></script>
 
 <link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
 <link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
@@ -998,6 +999,9 @@
 
 <!-- Add Plugin Config Modal -->
 {% include 'components/pipeline_editor/plugin_config_modal.html' %}
+
+<!-- Expression Editor Modal -->
+{% include 'components/pipeline_editor/expression_editor.html' %}
 
 <!--- Diff modal -->
 {% include 'components/pipeline_editor/diff_modal.html' %}

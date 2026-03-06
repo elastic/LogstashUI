@@ -1005,6 +1005,13 @@ function hideDataFlowTooltip() {
 function createForceDirectedGraph(graphData) {
     const svg = d3.select("#pipeline-graph");
     const containerElement = document.getElementById("results-container");
+    
+    // Check if container exists - if not, the overlay hasn't been created yet
+    if (!containerElement) {
+        console.error('results-container not found - overlay may not be created yet');
+        return;
+    }
+    
     const height = containerElement.clientHeight || 100;
 
     // Calculate proper spacing and total width needed
@@ -2211,7 +2218,11 @@ function initSimulationResults(runId) {
                                     } else {
                                         // Overlay Mode: Mark plugins and create graph
                                         markExecutedPlugins(nodes, originalEvent);
-                                        createForceDirectedGraph({ nodes, links });
+                                        
+                                        // Use requestAnimationFrame to ensure DOM is fully rendered before creating graph
+                                        requestAnimationFrame(() => {
+                                            createForceDirectedGraph({ nodes, links });
+                                        });
 
                                         // Display total execution time
                                         const totalTimeElement = document.getElementById('totalExecutionTime');

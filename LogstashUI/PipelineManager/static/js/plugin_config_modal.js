@@ -427,13 +427,22 @@ window.PluginConfigModal = (function () {
               </span>
             </label>
             ${pluginInfo.link && option.setting_link ? `
-              <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
-                 class="text-gray-400 hover:text-blue-400 ml-2"
-                 title="Documentation for ${key}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </a>
+              <div class="flex items-center gap-1 ml-2">
+                <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
+                   class="text-gray-400 hover:text-white transition-colors"
+                   title="Documentation for ${key}">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </a>
+                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); DocsIframeModal.show('${component.plugin}', '${component.type}')"
+                        class="text-gray-400 hover:text-blue-400 transition-colors"
+                        title="View documentation in window">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </button>
+              </div>
             ` : ''}
           </div>
           ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
@@ -808,13 +817,22 @@ window.PluginConfigModal = (function () {
               </span>
             </label>
             ${pluginInfo.link && option.setting_link ? `
-              <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
-                 class="text-gray-400 hover:text-blue-400 ml-2"
-                 title="Documentation for ${key}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </a>
+              <div class="flex items-center gap-1 ml-2">
+                <a href="${pluginInfo.link}${option.setting_link}" target="_blank"
+                   class="text-gray-400 hover:text-white transition-colors"
+                   title="Documentation for ${key}">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </a>
+                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); DocsIframeModal.show('${component.plugin}', '${component.type}')"
+                        class="text-gray-400 hover:text-blue-400 transition-colors"
+                        title="View documentation in window">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </button>
+              </div>
             ` : ''}
           </div>
           ${option.description ? `<p class="text-xs text-gray-400 mb-1">${option.description}</p>` : ''}
