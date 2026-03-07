@@ -8,10 +8,10 @@
 window.simulationData = null;
 
 // Line numbers functionality
-const logInput = document.getElementById('logInput');
-const logInputLineNumbers = document.getElementById('logInputLineNumbers');
-const multilineCheckbox = document.getElementById('multilineCheckbox');
-const multilineInputBanner = document.getElementById('multilineInputBanner');
+let logInput;
+let logInputLineNumbers;
+let multilineCheckbox;
+let multilineInputBanner;
 
 function updateLineNumbers(textarea, lineNumbersContainer) {
 const lines = textarea.value.split('\n');
@@ -66,19 +66,6 @@ lineNumbersContainer.innerHTML = lineNumbersHTML;
 lineNumbersContainer.scrollTop = textarea.scrollTop;
 }
 
-if (logInput && logInputLineNumbers) {
-logInput.addEventListener('input', () => {
-  updateLineNumbers(logInput, logInputLineNumbers);
-  updateMultilineBanner();
-});
-
-logInput.addEventListener('scroll', () => {
-  logInputLineNumbers.scrollTop = logInput.scrollTop;
-});
-
-updateLineNumbers(logInput, logInputLineNumbers);
-}
-
 function updateMultilineBanner() {
 const lines = logInput.value.split('\n').filter(line => line.trim() !== '');
 if (lines.length > 1 && !multilineCheckbox.checked) {
@@ -88,9 +75,30 @@ if (lines.length > 1 && !multilineCheckbox.checked) {
 }
 }
 
-if (multilineCheckbox) {
-multilineCheckbox.addEventListener('change', updateMultilineBanner);
-}
+// Initialize line numbers and multiline banner when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  logInput = document.getElementById('logInput');
+  logInputLineNumbers = document.getElementById('logInputLineNumbers');
+  multilineCheckbox = document.getElementById('multilineCheckbox');
+  multilineInputBanner = document.getElementById('multilineInputBanner');
+
+  if (logInput && logInputLineNumbers) {
+    logInput.addEventListener('input', () => {
+      updateLineNumbers(logInput, logInputLineNumbers);
+      updateMultilineBanner();
+    });
+
+    logInput.addEventListener('scroll', () => {
+      logInputLineNumbers.scrollTop = logInput.scrollTop;
+    });
+
+    updateLineNumbers(logInput, logInputLineNumbers);
+  }
+
+  if (multilineCheckbox) {
+    multilineCheckbox.addEventListener('change', updateMultilineBanner);
+  }
+});
 
 // Input source switching
 function switchInputSource(source) {

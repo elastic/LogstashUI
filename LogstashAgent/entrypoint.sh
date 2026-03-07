@@ -6,7 +6,7 @@ echo "  Starting LogstashAgent"
 echo "=========================================="
 
 # Set default LOGSTASH_URL if not provided (for standalone docker run)
-export LOGSTASH_URL="${LOGSTASH_URL:-http://host.docker.internal:8080}"
+export LOGSTASH_URL="${LOGSTASH_URL:-https://nginx}"
 echo "Using LOGSTASH_URL: $LOGSTASH_URL"
 
 # Update simulate_end.conf with the correct URL
