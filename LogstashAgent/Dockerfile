@@ -49,6 +49,12 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && \
     chown logstash:logstash /entrypoint.sh
 
+# Set default LOGSTASH_URL for local development
+# Uses host.docker.internal which works cross-platform with extra_hosts in docker-compose
+# Can be overridden at build time or runtime
+ARG LOGSTASH_URL=http://host.docker.internal:8080
+ENV LOGSTASH_URL=${LOGSTASH_URL}
+
 # Switch back to logstash user
 USER logstash
 

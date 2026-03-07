@@ -36,8 +36,14 @@ services:
     expose:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
     environment:
-      - LOGSTASH_URL=https://nginx  # HTTPS via nginx (no port needed - uses 443)
+      # Override default LOGSTASH_URL (default: http://host.docker.internal:8080 for local dev)
+      # In docker-compose, use nginx for HTTPS routing
+      - LOGSTASH_URL=https://nginx
       - SIMULATION_MODE=true  # Enable file upload for simulation
+    # Enable host.docker.internal on Linux (automatic on Docker Desktop)
+    # Allows container to reach host machine when running Django locally
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - logstashui_network

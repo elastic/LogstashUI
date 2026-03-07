@@ -1,0 +1,98 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- Graph Editor Container -->
+<div id="graphEditorContainer" class="h-full flex flex-col">
+    <!-- Layout Controls -->
+    <div class="flex items-center justify-between px-6 py-3 bg-gray-700 border-b border-gray-600">
+        <div class="flex items-center gap-4">
+            <span class="text-sm font-medium text-gray-300">Layout:</span>
+            <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="graphLayout" value="branch" checked onchange="switchGraphLayout('branch')" class="w-4 h-4 text-green-600 bg-gray-600 border-gray-500 focus:ring-green-500">
+                    <span class="text-sm text-gray-300">Branch</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="graphLayout" value="flow" onchange="switchGraphLayout('flow')" class="w-4 h-4 text-green-600 bg-gray-600 border-gray-500 focus:ring-green-500">
+                    <span class="text-sm text-gray-300">Flow</span>
+                </label>
+            </div>
+        </div>
+        <button id="graphFullscreenBtn" onclick="toggleGraphFullscreen()" class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-600 transition-colors" title="Toggle fullscreen">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Graph Canvas Area -->
+    <div id="graphCanvas" class="flex-1 overflow-auto graph-canvas-container">
+        <svg id="graphSvg" width="100%" height="100%" class="min-h-full">
+            <!-- Graph will be rendered here -->
+        </svg>
+    </div>
+</div>
+
+<style>
+    .graph-canvas-container {
+        background-color: #1a1d23;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    #graphSvg {
+        min-height: 800px;
+        cursor: grab;
+    }
+    
+    /* Blue glow animation for newly added nodes */
+    @keyframes graphGlowPulse {
+        0% {
+            filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0.7)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));
+        }
+        50% {
+            filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.5)) drop-shadow(0 0 12px rgba(59, 130, 246, 0.3));
+        }
+        100% {
+            filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0));
+        }
+    }
+    
+    .graph-node-glow {
+        animation: graphGlowPulse 2s ease-out;
+    }
+    
+    #graphSvg:active {
+        cursor: grabbing;
+    }
+    
+    .graph-add-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 24px;
+        background: rgba(75, 85, 99, 0.3);
+        border: 2px dashed rgba(156, 163, 175, 0.5);
+        border-radius: 6px;
+        color: #9ca3af;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .graph-add-button:hover {
+        background: rgba(75, 85, 99, 0.5);
+        border-color: rgba(156, 163, 175, 0.8);
+        color: #d1d5db;
+    }
+    
+    .graph-add-button svg {
+        width: 20px;
+        height: 20px;
+    }
+</style>

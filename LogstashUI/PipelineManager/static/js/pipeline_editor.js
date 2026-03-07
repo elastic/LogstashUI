@@ -36,17 +36,17 @@ function triggerPipelineWarmingAndChecking() {
     const statusMessage = document.getElementById('pipelineStatusMessage');
 
     if (statusBanner && statusIcon && statusMessage) {
-        statusBanner.style.display = 'flex';
-        statusBanner.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
+        statusBanner.style.display = 'inline-flex';
+        statusBanner.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
 
         // Set loading spinner - statusIcon is already an SVG element
         statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
-        statusIcon.setAttribute('class', 'w-5 h-5 animate-spin text-gray-300');
+        statusIcon.setAttribute('class', 'w-4 h-4 animate-spin text-gray-300');
         statusIcon.setAttribute('fill', 'currentColor');
         statusIcon.setAttribute('viewBox', '0 0 24 24');
 
         statusMessage.textContent = 'Allocating pipeline slot...';
-        statusMessage.className = 'text-sm font-medium text-gray-300';
+        statusMessage.className = 'text-xs font-medium text-gray-300';
     }
 
     // Trigger the slot preallocation using HTMX
@@ -691,6 +691,15 @@ function loadExistingComponents() {
     // Restore simulation data if we were in simulation mode
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
         markExecutedPlugins(simulationNodes, originalEventData);
+    }
+    
+    // If in graph mode, re-render the graph
+    if (window.currentEditorMode === 'graph' && typeof renderGraphEditor === 'function') {
+        // Capture newly added plugin ID for animation
+        if (newlyAddedPluginId && typeof window.newlyAddedComponentId !== 'undefined') {
+            window.newlyAddedComponentId = newlyAddedPluginId;
+        }
+        renderGraphEditor();
     }
 }
 
@@ -1679,6 +1688,9 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
         components[type].splice(index, 0, newCondition);
     }
 
+    // Dispatch event to mark UI as changed (before loadExistingComponents clears the ID)
+    document.body.dispatchEvent(new CustomEvent('componentAdded'));
+    
     // Refresh the UI
     loadExistingComponents();
 }
@@ -2653,6 +2665,113 @@ function checkFilePathRequiredPlugins() {
         warningDiv.classList.add('hidden');
     }
 }
+
+/**
+ * Check if the pipeline successfully loaded in Logstash
+ * Called after slot preallocation completes
+ */
+async function checkPipelineLoadStatus() {
+        const statusContainer = document.getElementById('pipelineLoadStatus');
+        const statusIcon = document.getElementById('pipelineStatusIcon');
+        const statusMessage = document.getElementById('pipelineStatusMessage');
+
+        if (!statusContainer || !statusIcon || !statusMessage) {
+            console.error('Pipeline status elements not found');
+            return;
+        }
+
+        // Get slot_id from preallocation result
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+
+        const slotElement = preallocationResult?.querySelector('[data-slot-id]');
+
+        const slotId = slotElement?.getAttribute('data-slot-id');
+        const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
+
+        // Store slot_id globally for logs viewer (even if pipeline failed)
+        if (slotId) {
+            currentSlotId = slotId;
+        }
+
+        // If pipeline already failed during allocation, show failure immediately
+        if (pipelineFailed) {
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+            statusIcon.className = 'w-4 h-4 text-yellow-400';
+            statusMessage.textContent = '⚠ Simulation Error';
+            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            return;
+        }
+
+        if (!slotId) {
+            // No slot_id means the pipeline failed to allocate a slot entirely
+            console.error('Slot ID not found in preallocation result - pipeline failed to allocate');
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+            statusIcon.className = 'w-4 h-4 text-yellow-400';
+            statusMessage.textContent = '⚠ Simulation Failed';
+            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            return;
+        }
+
+        // The actual pipeline name in Logstash is slot{id}-filter1
+        const slotPipelineName = `slot${slotId}-filter1`;
+
+        // Show loading state
+        statusContainer.classList.remove('hidden');
+        statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
+        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
+        statusIcon.classList.add('animate-spin', 'w-5', 'h-5', 'text-gray-300');
+        statusMessage.textContent = 'Running simulation...';
+        statusMessage.className = 'text-xs font-medium text-gray-300';
+
+        try {
+            // Backend already verifies pipelines are running before returning slot allocation
+            // No need to wait - check status immediately
+
+            // Check pipeline status using the slot pipeline name
+            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch pipeline status');
+            }
+
+            const data = await response.json();
+            const isRunning = data.is_running;
+
+            statusIcon.classList.remove('animate-spin');
+
+            if (isRunning) {
+                // Success - Pipeline is running
+                statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
+                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                statusIcon.className = 'w-4 h-4 text-green-400';
+                statusMessage.textContent = '● Simulation OK';
+                statusMessage.className = 'text-xs font-medium text-green-400';
+            } else {
+                // Failure - Pipeline not running
+                statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
+                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                statusIcon.className = 'w-4 h-4 text-yellow-400';
+                statusMessage.textContent = '⚠ Simulation Error';
+                statusMessage.className = 'text-xs font-medium text-yellow-400';
+            }
+
+        } catch (error) {
+            console.error('Error checking pipeline status:', error);
+
+            // Unknown - Error occurred
+            statusIcon.classList.remove('animate-spin');
+            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600 bg-yellow-900/30';
+            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+            statusIcon.className = 'w-4 h-4 text-yellow-400';
+            statusMessage.textContent = '⚠ Unable to verify status';
+            statusMessage.className = 'text-xs font-medium text-yellow-400';
+        }
+    }
+
 
 // Toggle file path input enabled/disabled based on ignore checkbox
 window.toggleFilePathInput = function(inputId, isIgnored) {

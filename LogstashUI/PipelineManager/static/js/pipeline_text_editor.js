@@ -151,6 +151,7 @@ function switchToUIMode() {
  */
 function performUISwitch() {
     currentEditorMode = 'ui';
+    window.currentEditorMode = currentEditorMode;
     
     // Reset text change tracking
     textHasChanges = false;
@@ -159,22 +160,27 @@ function performUISwitch() {
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
     const textBtn = document.getElementById('textModeBtn');
+    const graphBtn = document.getElementById('graphModeBtn');
     
     if (uiBtn && textBtn) {
-        uiBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors bg-green-600 text-white relative z-10';
-        textBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors text-gray-300 hover:bg-gray-600 relative z-10';
-        
-        // Add flash animation
-        addFlashAnimation(uiBtn);
+        uiBtn.className = 'w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active';
+        textBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        if (graphBtn) {
+            graphBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        }
     }
     
-    // Show UI container, hide text container
+    // Show UI container, hide text and graph containers
     const uiContainer = document.getElementById('uiModeContainer');
     const textContainer = document.getElementById('textModeContainer');
+    const graphContainer = document.getElementById('graphModeContainer');
     
     if (uiContainer && textContainer) {
         uiContainer.classList.remove('hidden');
         textContainer.classList.add('hidden');
+    }
+    if (graphContainer) {
+        graphContainer.classList.add('hidden');
     }
     
     // Enable View Code and Simulate Pipeline buttons
@@ -186,26 +192,32 @@ function performUISwitch() {
  */
 function switchToTextMode() {
     currentEditorMode = 'text';
+    window.currentEditorMode = currentEditorMode;
     
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
     const textBtn = document.getElementById('textModeBtn');
+    const graphBtn = document.getElementById('graphModeBtn');
     
     if (uiBtn && textBtn) {
-        uiBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors text-gray-300 hover:bg-gray-600 relative z-10';
-        textBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors bg-green-600 text-white relative z-10';
-        
-        // Add flash animation
-        addFlashAnimation(textBtn);
+        uiBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        textBtn.className = 'w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active';
+        if (graphBtn) {
+            graphBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        }
     }
     
-    // Hide UI container, show text container
+    // Hide UI and graph containers, show text container
     const uiContainer = document.getElementById('uiModeContainer');
     const textContainer = document.getElementById('textModeContainer');
+    const graphContainer = document.getElementById('graphModeContainer');
     
     if (uiContainer && textContainer) {
         uiContainer.classList.add('hidden');
         textContainer.classList.remove('hidden');
+    }
+    if (graphContainer) {
+        graphContainer.classList.add('hidden');
     }
     
     // Disable View Code and Simulate Pipeline buttons
@@ -1638,6 +1650,46 @@ function enableEditorButtons() {
         simulateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         simulateBtn.classList.add('hover:bg-purple-700');
     }
+}
+
+/**
+ * Switch to Graph mode
+ */
+function switchToGraphMode() {
+    currentEditorMode = 'graph';
+    
+    // Update button styles
+    const uiBtn = document.getElementById('uiModeBtn');
+    const textBtn = document.getElementById('textModeBtn');
+    const graphBtn = document.getElementById('graphModeBtn');
+    
+    if (uiBtn && textBtn && graphBtn) {
+        uiBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        textBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        graphBtn.className = 'w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active';
+    }
+    
+    // Hide UI and Text containers, show Graph container
+    const uiContainer = document.getElementById('uiModeContainer');
+    const textContainer = document.getElementById('textModeContainer');
+    const graphContainer = document.getElementById('graphModeContainer');
+    
+    if (uiContainer && textContainer && graphContainer) {
+        uiContainer.classList.add('hidden');
+        textContainer.classList.add('hidden');
+        graphContainer.classList.remove('hidden');
+    }
+    
+    // Render the graph with current components
+    if (typeof renderGraphEditor === 'function') {
+        renderGraphEditor();
+    }
+    
+    // Make currentEditorMode globally accessible for graph editor
+    window.currentEditorMode = currentEditorMode;
+    
+    // Enable View Code and Simulate Pipeline buttons
+    enableEditorButtons();
 }
 
 // Initialize when DOM is ready

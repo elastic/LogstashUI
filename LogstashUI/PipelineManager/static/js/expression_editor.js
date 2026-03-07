@@ -240,14 +240,6 @@ function applyExpression() {
     console.log('Expression applied:', currentExpression);
 }
 
-/**
- * Helper function to escape HTML
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 // Event listener setup when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
