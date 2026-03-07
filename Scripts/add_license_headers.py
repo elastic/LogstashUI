@@ -1,8 +1,6 @@
-"""
-Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
-or more contributor license agreements. Licensed under the Elastic License;
-you may not use this file except in compliance with the Elastic License.
-"""
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
 
 import os
 import sys
@@ -13,7 +11,7 @@ ELASTIC_LICENSE_TEXT = """Copyright Elasticsearch B.V. and/or licensed to Elasti
 or more contributor license agreements. Licensed under the Elastic License;
 you may not use this file except in compliance with the Elastic License."""
 
-PYTHON_HEADER = f'"""\n{ELASTIC_LICENSE_TEXT}\n"""\n\n'
+PYTHON_HEADER = '#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n#or more contributor license agreements. Licensed under the Elastic License;\n#you may not use this file except in compliance with the Elastic License.\n\n'
 
 JS_HEADER = f"""/*
  * {ELASTIC_LICENSE_TEXT.replace(chr(10), chr(10) + ' * ')}
