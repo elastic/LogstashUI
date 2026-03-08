@@ -4,10 +4,19 @@
  * you may not use this file except in compliance with the Elastic License.
 -->
 
-<div class="flex flex-col" style="height: calc(100vh - 280px);">
+<!-- Text Editor Container -->
+<div id="textEditorContainer" class="h-full flex flex-col">
+    <!-- Top Controls Bar -->
+    <div class="flex items-center justify-end px-6 py-3 bg-gray-700 border-b border-gray-600">
+        <button id="textFullscreenBtn" onclick="toggleTextFullscreen()" class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-600 transition-colors" title="Toggle fullscreen">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>
+        </button>
+    </div>
 
-    <!-- CodeMirror Editor Container -->
-    <div class="flex-1 bg-gray-900 rounded-lg border border-gray-700 overflow-hidden" style="min-height: 500px;">
+    <!-- CodeMirror Editor Area -->
+    <div class="flex-1 overflow-auto text-editor-canvas">
         <textarea 
             id="pipelineTextEditor" 
             placeholder="Enter your Logstash pipeline configuration here...
@@ -34,17 +43,22 @@ output {
             spellcheck="false"
         ></textarea>
     </div>
-    
-    <div class="mt-4 flex justify-between items-center">
-        <div class="text-sm text-gray-400">
-            <span id="lineCount">Lines: 0</span>
-            <span class="mx-2">|</span>
-            <span id="charCount">Characters: 0</span>
-        </div>
-    </div>
 </div>
 
 <style>
+    /* Text editor container - rounded corners like graph editor */
+    #textEditorContainer {
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }
+    
+    /* Text editor canvas styling */
+    .text-editor-canvas {
+        background-color: #1a1d23;
+        position: relative;
+        overflow: hidden;
+    }
+    
     /* CodeMirror container styling */
     .CodeMirror {
         height: 100%;
@@ -52,6 +66,7 @@ output {
         font-size: 14px;
         background: #1f2937;
         color: #e5e7eb;
+        border: none !important;
     }
     
     .CodeMirror-gutters {
@@ -140,7 +155,7 @@ output {
     /* Autocomplete hint styles */
     .CodeMirror-hints {
         position: absolute;
-        z-index: 10;
+        z-index: 10000;
         overflow-x: hidden;
         overflow-y: auto;
         list-style: none;

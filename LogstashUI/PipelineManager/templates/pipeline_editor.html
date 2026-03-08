@@ -21,6 +21,7 @@
 <script src="{% static 'js/pipeline_text_editor.js' %}"></script>
 <script src="{% static 'js/pipeline_graph_editor.js' %}"></script>
 <script src="{% static 'js/expression_editor.js' %}"></script>
+<script src="{% static 'js/stats_strip.js' %}"></script>
 
 <link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
 <link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
@@ -514,7 +515,7 @@
     </div>
     {% endif %}
     
-    <div class="mb-6 pt-5 pb-4">
+    <div class="mb-6 pt-5 pb-0">
         <!-- Row 1: Pipeline Name -->
         <div class="flex items-center mb-4">
             <h1 class="text-3xl font-semibold text-white">{{ pipeline_name }}</h1>
@@ -558,20 +559,6 @@
                 <form onsubmit="return false;" class="flex items-center gap-4">
                     {% csrf_token %}
                     
-                    <!-- Blocking Problems Indicator -->
-                    <div id="blockingProblemsIndicator" class="hidden relative group">
-                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                        </svg>
-                        <div id="blockingProblemsTooltip" class="hidden group-hover:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 bg-gray-800 text-white text-xs rounded-lg shadow-lg p-3 z-50 border border-red-500">
-                            <div class="font-semibold text-red-400 mb-2">Blocking Problems Detected</div>
-                            <div id="blockingProblemsContent" class="text-gray-300 space-y-1"></div>
-                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
-                                <div class="w-2 h-2 bg-gray-800 border-l border-t border-red-500 transform rotate-45"></div>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <!-- Utility Button: View Code -->
                     <button type="button"
                             id="viewCode"
@@ -607,7 +594,12 @@
         </div>
         
         <!-- Subtle Divider -->
-        <div class="mt-4 mb-6 border-b border-gray-700/50"></div>
+        <div class="mt-4 border-b border-gray-700/50"></div>
+    </div>
+
+    <!-- Stats Strip -->
+    <div class="py-3">
+        {% include 'components/pipeline_editor/stats_strip.html' %}
     </div>
 
     <!-- Pipeline Settings Collapsible Section -->
@@ -888,7 +880,7 @@
             </div>
             
             <!-- Text Mode Container (hidden by default) -->
-            <div id="textModeContainer" class="hidden flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+            <div id="textModeContainer" class="hidden flex-1 bg-gray-800 rounded-lg overflow-hidden">
                 {% include 'pipeline_text_editor.html' %}
             </div>
             

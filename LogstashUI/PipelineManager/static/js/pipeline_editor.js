@@ -615,13 +615,66 @@ function updateBlockingProblemsIndicator() {
         });
     }
     
-    // Update indicator visibility and content
-    if (problems.length > 0) {
-        content.innerHTML = problems.join('');
-        indicator.classList.remove('hidden');
-    } else {
-        indicator.classList.add('hidden');
+    // Count total problem items
+    const totalProblems = emptyConditionals.length + missingFields.length;
+    
+    // Update the count display
+    const countElement = document.getElementById('blockingProblemsCount');
+    if (countElement) {
+        countElement.textContent = totalProblems;
     }
+    
+    // Update capsule styling based on problem count
+    const capsule = document.getElementById('blockingProblemsCapsule');
+    const iconContainer = document.getElementById('blockingProblemsIconContainer');
+    
+    if (totalProblems > 0) {
+        // Red styling when there are problems
+        if (capsule) {
+            capsule.className = 'flex items-center gap-3 px-4 py-2 bg-red-900/30 rounded-lg border border-red-600/50 hover:bg-red-900/40 transition-colors';
+        }
+        if (iconContainer) {
+            iconContainer.className = 'flex items-center justify-center w-8 h-8 bg-red-600/20 rounded-lg';
+            const svg = iconContainer.querySelector('svg');
+            if (svg) svg.className = 'w-5 h-5 text-red-400';
+        }
+        // Update text colors
+        const labelElements = capsule?.querySelectorAll('.text-gray-400');
+        labelElements?.forEach(el => {
+            el.classList.remove('text-gray-400');
+            el.classList.add('text-red-300');
+        });
+        const countEl = document.getElementById('blockingProblemsCount');
+        if (countEl) {
+            countEl.classList.remove('text-white');
+            countEl.classList.add('text-red-400');
+        }
+    } else {
+        // Normal gray styling when no problems
+        if (capsule) {
+            capsule.className = 'flex items-center gap-3 px-4 py-2 bg-gray-700/50 rounded-lg border border-gray-600/50 hover:bg-gray-700 transition-colors';
+        }
+        if (iconContainer) {
+            iconContainer.className = 'flex items-center justify-center w-8 h-8 bg-gray-600/20 rounded-lg';
+            const svg = iconContainer.querySelector('svg');
+            if (svg) svg.className = 'w-5 h-5 text-gray-400';
+        }
+        // Update text colors back to gray
+        const labelElements = capsule?.querySelectorAll('.text-red-300');
+        labelElements?.forEach(el => {
+            el.classList.remove('text-red-300');
+            el.classList.add('text-gray-400');
+        });
+        const countEl = document.getElementById('blockingProblemsCount');
+        if (countEl) {
+            countEl.classList.remove('text-red-400');
+            countEl.classList.add('text-white');
+        }
+    }
+    
+    // Update indicator visibility and content
+    content.innerHTML = problems.join('');
+    indicator.classList.remove('hidden');
 }
 
 function loadExistingComponents() {
@@ -700,6 +753,11 @@ function loadExistingComponents() {
             window.newlyAddedComponentId = newlyAddedPluginId;
         }
         renderGraphEditor();
+    }
+    
+    // Update stats strip with current plugin counts
+    if (typeof updateStatsStrip === 'function') {
+        updateStatsStrip();
     }
 }
 
@@ -1738,7 +1796,9 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
         plugin: 'if',
         config: {
             condition: '[message]',
-            plugins: []
+            plugins: [],
+            else_ifs: [],
+            else: null
         }
     };
 
@@ -2148,6 +2208,10 @@ function addElseIfToConditional(componentId) {
     };
 
     component.config.else_ifs.push(elseIfBlock);
+    
+    // Set the newly added else_if as the component to highlight in graph mode
+    const newElseIfIndex = component.config.else_ifs.length - 1;
+    window.newlyAddedComponentId = component.id + '_elseif_' + newElseIfIndex;
 
 // Refresh the UI to show the new empty else-if block
     loadExistingComponents();
@@ -2310,6 +2374,9 @@ function addElseToConditional(componentId) {
 
 // Initialize the else block with empty plugins array
     component.config.else = {plugins: []};
+    
+    // Set the newly added else as the component to highlight in graph mode
+    window.newlyAddedComponentId = component.id + '_else';
 
 // Refresh the UI to show the new empty else block
     loadExistingComponents();

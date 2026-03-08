@@ -322,7 +322,6 @@ end
                                 "code": instrumentation_code
                             }
                         }
-
                         instrumented.append(instrumentation_plugin)
 
             return instrumented

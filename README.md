@@ -25,8 +25,8 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ### System Requirements
 **Minimum:**
-- 4 GB RAM
-- 2 CPU Cores
+- 8 GB RAM
+- 4 CPU Cores
 
 ### For Local Development
 - [Python 3.10+](https://www.python.org/downloads/)
