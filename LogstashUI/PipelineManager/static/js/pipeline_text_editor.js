@@ -25,17 +25,22 @@ let textModeInitialContent = '';
 /**
  * Switch to UI mode
  */
-function switchToUIMode() {
+async function switchToUIMode() {
     // Check if text has been modified
     if (textHasChanges) {
-        // Show warning dialog
-        const confirmed = confirm(
-            'Switching to UI mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?'
-        );
-        
-        if (!confirmed) {
-            // User cancelled, don't switch modes
-            return;
+        // Check if user has disabled conversion warnings
+        if (!shouldSkipConversionWarning()) {
+            // Show warning dialog
+            const confirmed = await ConfirmationModal.show(
+                'Switching to UI mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?',
+                'Switch to UI Mode',
+                'Continue'
+            );
+            
+            if (!confirmed) {
+                // User cancelled, don't switch modes
+                return;
+            }
         }
     }
     
@@ -138,7 +143,13 @@ function switchToUIMode() {
         })
         .catch(error => {
             console.error('Error converting config to components:', error);
-            alert('Failed to convert pipeline configuration: ' + error.message);
+            ConfirmationModal.show(
+                'Failed to convert pipeline configuration:',
+                'Configuration Error',
+                'OK',
+                error.message,
+                true
+            );
         });
     } else {
         // No text changes, just switch modes
@@ -152,6 +163,9 @@ function switchToUIMode() {
 function performUISwitch() {
     currentEditorMode = 'ui';
     window.currentEditorMode = currentEditorMode;
+    
+    // Save mode preference to localStorage
+    localStorage.setItem('lastEditorMode', 'ui');
     
     // Clear any open autocomplete hints
     clearAutocompleteHints();
@@ -196,6 +210,9 @@ function performUISwitch() {
 function switchToTextMode() {
     currentEditorMode = 'text';
     window.currentEditorMode = currentEditorMode;
+    
+    // Save mode preference to localStorage
+    localStorage.setItem('lastEditorMode', 'text');
     
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
@@ -1770,11 +1787,154 @@ function enableEditorButtons() {
 /**
  * Switch to Graph mode
  */
-function switchToGraphMode() {
+async function switchToGraphMode() {
+    // Check if text has been modified
+    if (textHasChanges) {
+        // Check if user has disabled conversion warnings
+        if (!shouldSkipConversionWarning()) {
+            // Show warning dialog
+            const confirmed = await ConfirmationModal.show(
+                'Switching to Graph mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?',
+                'Switch to Graph Mode',
+                'Continue'
+            );
+            
+            if (!confirmed) {
+                // User cancelled, don't switch modes
+                return;
+            }
+        }
+    }
+    
+    // If text has changes, convert it to components
+    if (textHasChanges && codeMirrorEditor) {
+        const configText = codeMirrorEditor.getValue();
+        
+        if (!configText) {
+            console.error('No config text to convert');
+            alert('No pipeline configuration to convert');
+            return;
+        }
+        
+        // Convert config text to components via API
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        const formData = new FormData();
+        formData.append('config_text', configText);
+        
+        fetch('/ConnectionManager/ConfigToComponents/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to convert config to components');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            
+            // If data is a string, parse it
+            let parsedData = data;
+            if (typeof data === 'string') {
+                parsedData = JSON.parse(data);
+            }
+            
+            // The API returns the components structure directly
+            // If it's an array, it needs to be converted to the expected object format
+            let convertedComponents;
+            if (Array.isArray(parsedData)) {
+                // Data is an array [input, filter, output] - convert to object
+                convertedComponents = {
+                    input: parsedData[0] || [],
+                    filter: parsedData[1] || [],
+                    output: parsedData[2] || []
+                };
+            } else {
+                // Data is already an object
+                convertedComponents = parsedData;
+            }
+
+            // Update the global components variable
+            if (typeof components !== 'undefined') {
+
+                
+                // Clear existing arrays and push new items (preserves Proxy/reactive behavior)
+                components.input.length = 0;
+                components.filter.length = 0;
+                components.output.length = 0;
+
+                // Use Array.isArray and check length
+                if (Array.isArray(convertedComponents.input) && convertedComponents.input.length > 0) {
+                    components.input.push(...convertedComponents.input);
+                }
+                if (Array.isArray(convertedComponents.filter) && convertedComponents.filter.length > 0) {
+                    components.filter.push(...convertedComponents.filter);
+                }
+                if (Array.isArray(convertedComponents.output) && convertedComponents.output.length > 0) {
+                    const pushResult = components.output.push(...convertedComponents.output);
+                } else {
+                    console.error('Output check failed - isArray:', Array.isArray(convertedComponents.output), 'length:', convertedComponents.output?.length);
+                }
+
+            } else {
+                console.error('Global components variable is undefined!');
+            }
+            
+            // Switch to Graph mode first
+            performGraphSwitch();
+            
+            // Use setTimeout to ensure Graph container is visible before rendering
+            setTimeout(() => {
+                
+                // Render the graph with the new components
+                if (typeof renderGraphEditor === 'function') {
+                    renderGraphEditor();
+                } else {
+                    console.error('renderGraphEditor function not found!');
+                }
+                
+                // Mark UI as changed since we just loaded from text
+                // This ensures switching back to Text mode will convert components to config
+                uiHasChanges = true;
+            }, 100);
+        })
+        .catch(error => {
+            console.error('Error converting config to components:', error);
+            ConfirmationModal.show(
+                'Failed to convert pipeline configuration:',
+                'Configuration Error',
+                'OK',
+                error.message,
+                true
+            );
+        });
+    } else {
+        // No text changes, just switch modes
+        performGraphSwitch();
+    }
+}
+
+/**
+ * Perform the actual Graph mode switch (internal helper)
+ */
+function performGraphSwitch() {
     currentEditorMode = 'graph';
+    window.currentEditorMode = currentEditorMode;
+    
+    // Save mode preference to localStorage
+    localStorage.setItem('lastEditorMode', 'graph');
     
     // Clear any open autocomplete hints
     clearAutocompleteHints();
+    
+    // Reset text change tracking
+    textHasChanges = false;
+    textModeInitialContent = '';
     
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
@@ -1802,9 +1962,6 @@ function switchToGraphMode() {
     if (typeof renderGraphEditor === 'function') {
         renderGraphEditor();
     }
-    
-    // Make currentEditorMode globally accessible for graph editor
-    window.currentEditorMode = currentEditorMode;
     
     // Enable View Code button but disable Simulate button in Graph mode
     const viewCodeBtn = document.getElementById('viewCode');
@@ -1881,8 +2038,51 @@ function toggleTextFullscreen() {
 // Make function globally available
 window.toggleTextFullscreen = toggleTextFullscreen;
 
+/**
+ * Initialize conversion warning checkbox from localStorage
+ */
+function initializeConversionWarningCheckbox() {
+    const checkbox = document.getElementById('disableConversionWarning');
+    if (!checkbox) return;
+    
+    // Load saved preference from localStorage
+    const savedPreference = localStorage.getItem('disableConversionWarning');
+    if (savedPreference === 'true') {
+        checkbox.checked = true;
+    }
+    
+    // Save preference when checkbox changes
+    checkbox.addEventListener('change', function() {
+        localStorage.setItem('disableConversionWarning', this.checked);
+    });
+}
+
+/**
+ * Check if conversion warnings are disabled
+ */
+function shouldSkipConversionWarning() {
+    return localStorage.getItem('disableConversionWarning') === 'true';
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    // Set initial mode to UI
-    switchToUIMode();
+    // Initialize conversion warning checkbox
+    initializeConversionWarningCheckbox();
+    
+    // Load last editor mode from localStorage, default to UI if not set
+    const lastMode = localStorage.getItem('lastEditorMode') || 'ui';
+    
+    // Switch to the saved mode
+    switch(lastMode) {
+        case 'text':
+            switchToTextMode();
+            break;
+        case 'graph':
+            switchToGraphMode();
+            break;
+        case 'ui':
+        default:
+            switchToUIMode();
+            break;
+    }
 });

@@ -1124,6 +1124,9 @@
 <!--- Diff modal -->
 {% include 'components/pipeline_editor/diff_modal.html' %}
 
+<!-- Confirmation Modal -->
+{% include 'popup.html' %}
+
 <!-- Slot preallocation - warm up a slot when page loads so simulations are fast -->
 <!-- Empty log_text means only allocate slot, don't run simulation -->
 <!-- Also triggers on pipelineChanged event when plugins are added/removed/changed -->

@@ -6,21 +6,8 @@
 
 <!-- Graph Editor Container -->
 <div id="graphEditorContainer" class="h-full flex flex-col">
-    <!-- Layout Controls -->
-    <div class="flex items-center justify-between px-6 py-3 bg-gray-700 border-b border-gray-600">
-        <div class="flex items-center gap-4">
-            <span class="text-sm font-medium text-gray-300">Layout:</span>
-            <div class="flex items-center gap-3">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="graphLayout" value="branch" checked onchange="switchGraphLayout('branch')" class="w-4 h-4 text-green-600 bg-gray-600 border-gray-500 focus:ring-green-500">
-                    <span class="text-sm text-gray-300">Branch</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="graphLayout" value="flow" onchange="switchGraphLayout('flow')" class="w-4 h-4 text-green-600 bg-gray-600 border-gray-500 focus:ring-green-500">
-                    <span class="text-sm text-gray-300">Flow</span>
-                </label>
-            </div>
-        </div>
+    <!-- Toolbar -->
+    <div class="flex items-center justify-end px-6 py-3 bg-gray-700 border-b border-gray-600">
         <button id="graphFullscreenBtn" onclick="toggleGraphFullscreen()" class="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-600 transition-colors" title="Toggle fullscreen">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>

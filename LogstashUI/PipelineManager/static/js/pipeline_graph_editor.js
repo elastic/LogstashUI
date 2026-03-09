@@ -4,9 +4,6 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-// Track current graph layout mode
-let currentGraphLayout = 'branch'; // 'branch' or 'flow'
-
 // Track fullscreen state
 let isGraphFullscreen = false;
 
@@ -25,14 +22,6 @@ let isInitialRender = true;
 let nodeRenderIndex = 0;
 let currentTransform = null; // Store current transform to preserve position
 let animationDelayPerNode = 100; // Dynamic delay per node (ms), calculated based on total nodes
-
-/**
- * Switch graph layout mode
- */
-function switchGraphLayout(layout) {
-    currentGraphLayout = layout;
-    renderGraphEditor();
-}
 
 /**
  * Toggle fullscreen mode for graph editor
@@ -272,7 +261,7 @@ function renderGraphEditor() {
         return;
     }
 
-    // Render using branch layout (Flow will be implemented later for conditions)
+    // Render using branch layout
     renderBranchLayout(svg, allComponents);
     
     // Initialize zoom and pan behavior
@@ -455,6 +444,34 @@ function extractBranches(conditional) {
 }
 
 /**
+ * Helper function to recursively calculate the width needed for a branch with nested conditionals
+ */
+function calculateBranchWidth(branch, nodeWidth, branchHorizontalSpacing) {
+    if (!branch.plugins || branch.plugins.length === 0) {
+        return nodeWidth;
+    }
+    
+    let maxNestedWidth = nodeWidth;
+    
+    branch.plugins.forEach(plugin => {
+        if (plugin.isBranchPoint && plugin.branches) {
+            // Recursively calculate width for each nested branch
+            const nestedBranchWidths = plugin.branches.map(nestedBranch => 
+                calculateBranchWidth(nestedBranch, nodeWidth, branchHorizontalSpacing)
+            );
+            
+            const nestedTotalWidth = nestedBranchWidths.reduce((sum, w) => sum + w, 0) + 
+                                    ((plugin.branches.length - 1) * branchHorizontalSpacing);
+            
+            // Parent needs to be at least as wide as its nested content plus padding
+            maxNestedWidth = Math.max(maxNestedWidth, nestedTotalWidth + 24);
+        }
+    });
+    
+    return maxNestedWidth;
+}
+
+/**
  * Recursively render a nested conditional as a full branch layout
  * This handles conditionals at any depth of nesting
  */
@@ -464,14 +481,10 @@ function renderNestedConditional(g, nestedConditional, parentX, startY, parentWi
     
     let currentY = startY;
     
-    // Calculate dynamic widths for nested branches
-    const branchWidths = nestedBranches.map(branch => {
-        let hasNestedConditional = false;
-        if (branch.plugins && branch.plugins.length > 0) {
-            hasNestedConditional = branch.plugins.some(plugin => plugin.isBranchPoint);
-        }
-        return hasNestedConditional ? nodeWidth + 40 : nodeWidth;
-    });
+    // Calculate dynamic widths for nested branches using recursive calculation
+    const branchWidths = nestedBranches.map(branch => 
+        calculateBranchWidth(branch, nodeWidth, branchHorizontalSpacing)
+    );
     
     const totalBranchWidth = branchWidths.reduce((sum, w) => sum + w, 0) + 
                             ((branchCount - 1) * branchHorizontalSpacing);
@@ -713,26 +726,40 @@ function renderNestedConditional(g, nestedConditional, parentX, startY, parentWi
         
         // Add branch container background
         const branchHeight = branchY - branchStartY;
+        // Don't add extra height - branchY already includes button positioning
+        const containerHeight = branchHeight - verticalSpacing + 56;
         const branchContainer = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         branchContainer.setAttribute('x', branchX - 12);
         branchContainer.setAttribute('y', branchStartY - 8);
         branchContainer.setAttribute('width', branchWidth + 24);
-        branchContainer.setAttribute('height', branchHeight - verticalSpacing + 56);
+        branchContainer.setAttribute('height', containerHeight);
         branchContainer.setAttribute('rx', 8);
         branchContainer.setAttribute('fill', 'rgba(0, 0, 0, 0.2)');
         branchContainer.setAttribute('stroke', 'rgba(255, 255, 255, 0.08)');
         branchContainer.setAttribute('stroke-width', 1);
-        g.insertBefore(branchContainer, g.firstChild);
+        branchContainer.setAttribute('data-branch-container', 'true');
+        branchContainer.setAttribute('data-branch-level', 'nested');
+        // Insert AFTER any existing parent containers to maintain proper z-order
+        const existingContainers = g.querySelectorAll('[data-branch-container="true"]');
+        if (existingContainers.length > 0) {
+            // Insert after the last container so nested appears on top of parent
+            const lastContainer = existingContainers[existingContainers.length - 1];
+            g.insertBefore(branchContainer, lastContainer.nextSibling);
+        } else {
+            g.insertBefore(branchContainer, g.firstChild);
+        }
         
-        // Add yellow border
+        // Add yellow border - insert after the container it belongs to
         const yellowBorder = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         yellowBorder.setAttribute('x', branchX - 12);
         yellowBorder.setAttribute('y', branchStartY - 8);
         yellowBorder.setAttribute('width', 4);
-        yellowBorder.setAttribute('height', branchHeight - verticalSpacing + 56);
+        yellowBorder.setAttribute('height', containerHeight);
         yellowBorder.setAttribute('rx', 2);
         yellowBorder.setAttribute('fill', '#eab308');
-        g.insertBefore(yellowBorder, g.firstChild);
+        yellowBorder.setAttribute('data-branch-border', 'true');
+        // Insert after the container to maintain z-order
+        g.insertBefore(yellowBorder, branchContainer.nextSibling);
         
         branchEndPositions[branchIndex] = branchY - verticalSpacing;
         maxBranchEndY = Math.max(maxBranchEndY, branchY);
@@ -745,9 +772,10 @@ function renderNestedConditional(g, nestedConditional, parentX, startY, parentWi
     });
     
     return {
-        endY: maxBranchEndY,
+        endY: maxBranchEndY + 48, // Add button area height to endY so parent knows total height
         branchEndPositions,
-        totalWidth: totalBranchWidth
+        totalWidth: totalBranchWidth,
+        actualBranchWidths: branchWidths // Return actual widths used for each branch
     };
 }
 
@@ -939,15 +967,10 @@ function renderBranchLayout(svg, allComponents) {
                 const conditionalSpacing = isMultiBranch ? verticalSpacing : 0;
                 currentY += conditionalSpacing;
                 
-                // Calculate dynamic widths for each branch based on nested content
-                const branchWidths = branches.map(branch => {
-                    let hasNestedConditional = false;
-                    if (branch.plugins && branch.plugins.length > 0) {
-                        hasNestedConditional = branch.plugins.some(plugin => plugin.isBranchPoint);
-                    }
-                    // If branch has nested conditional, make it slightly wider
-                    return hasNestedConditional ? nodeWidth + 40 : nodeWidth;
-                });
+                // Calculate dynamic widths for each branch using recursive calculation
+                const branchWidths = branches.map(branch => 
+                    calculateBranchWidth(branch, nodeWidth, branchHorizontalSpacing)
+                );
                 
                 // Recalculate total width and starting positions based on dynamic widths
                 const totalBranchWidth = branchWidths.reduce((sum, w) => sum + w, 0) + 
@@ -1083,12 +1106,18 @@ function renderBranchLayout(svg, allComponents) {
                         // Draw line from condition node to first plugin, or from previous plugin to next
                         if (pluginIndex === 0) {
                             // Line from condition node to first plugin
+                            const blockType = branch.type === 'else_if' ? 'else_if' : (branch.type === 'else' ? 'else' : 'if');
+                            const elseIfIndex = branch.type === 'else_if' ? branchIndex - 1 : null;
                             const line = createConnectionLine(
                                 branchX + branchWidth / 2, branchY - verticalSpacing,
                                 branchX + branchWidth / 2, branchY,
                                 false,
                                 'filter',
-                                index
+                                pluginIndex, // Use pluginIndex for insertion at this position
+                                true, // Show buttons on connection lines within branches
+                                component.id, // Pass component ID for data-component-id
+                                blockType,
+                                elseIfIndex
                             );
                             g.appendChild(line);
                         }
@@ -1106,12 +1135,18 @@ function renderBranchLayout(svg, allComponents) {
                             // Draw connection line to next plugin if there is one
                             if (pluginIndex < branch.plugins.length - 1) {
                                 const nextY = branchY;
+                                const blockType = branch.type === 'else_if' ? 'else_if' : (branch.type === 'else' ? 'else' : 'if');
+                                const elseIfIndex = branch.type === 'else_if' ? branchIndex - 1 : null;
                                 const line = createConnectionLine(
                                     branchX + branchWidth / 2, nestedResult.endY - verticalSpacing,
                                     branchX + branchWidth / 2, nextY,
                                     false,
                                     'filter',
-                                    index
+                                    pluginIndex + 1, // Insert after the nested conditional
+                                    true, // Show buttons on connection lines within branches
+                                    component.id,
+                                    blockType,
+                                    elseIfIndex
                                 );
                                 g.appendChild(line);
                             }
@@ -1123,12 +1158,18 @@ function renderBranchLayout(svg, allComponents) {
                             // Draw line to next plugin in branch
                             if (pluginIndex < branch.plugins.length - 1) {
                                 const nextY = branchY + nodeHeight + verticalSpacing;
+                                const blockType = branch.type === 'else_if' ? 'else_if' : (branch.type === 'else' ? 'else' : 'if');
+                                const elseIfIndex = branch.type === 'else_if' ? branchIndex - 1 : null;
                                 const line = createConnectionLine(
                                     branchX + branchWidth / 2, branchY + nodeHeight,
                                     branchX + branchWidth / 2, nextY,
                                     false,
                                     'filter',
-                                    index
+                                    pluginIndex + 1, // Insert after this plugin
+                                    true, // Show buttons on connection lines within branches
+                                    component.id,
+                                    blockType,
+                                    elseIfIndex
                                 );
                                 g.appendChild(line);
                             }
@@ -1143,10 +1184,6 @@ function renderBranchLayout(svg, allComponents) {
                     maxBranchEndY = Math.max(maxBranchEndY, branchY);
                     branchEndPositions[branchIndex] = branchY - verticalSpacing; // Store actual end position (last element's bottom)
                     
-                    // Check if this branch has nested conditionals to add extra height for their buttons
-                    const hasNestedConditionals = branch.plugins && branch.plugins.some(p => p.isBranchPoint);
-                    const extraHeightForNested = hasNestedConditionals ? 40 : 0; // Extra space for nested conditional buttons
-                    
                     // Add subtle background container for this branch (use dynamic width)
                     // Use branchY to include nested conditionals in the height calculation
                     const branchHeight = branchY - branchStartY;
@@ -1154,11 +1191,13 @@ function renderBranchLayout(svg, allComponents) {
                     branchContainer.setAttribute('x', branchX - 12);
                     branchContainer.setAttribute('y', branchStartY - 8);
                     branchContainer.setAttribute('width', branchWidth + 24);
-                    branchContainer.setAttribute('height', branchHeight - verticalSpacing + 56 + extraHeightForNested);
+                    branchContainer.setAttribute('height', branchHeight - verticalSpacing + 56);
                     branchContainer.setAttribute('rx', 8);
                     branchContainer.setAttribute('fill', 'rgba(0, 0, 0, 0.15)');
                     branchContainer.setAttribute('stroke', 'rgba(255, 255, 255, 0.05)');
                     branchContainer.setAttribute('stroke-width', 1);
+                    branchContainer.setAttribute('data-branch-container', 'true');
+                    branchContainer.setAttribute('data-branch-level', 'parent');
                     // Insert at beginning of group so it's behind everything
                     g.insertBefore(branchContainer, g.firstChild);
                     
@@ -1167,14 +1206,15 @@ function renderBranchLayout(svg, allComponents) {
                     yellowBorder.setAttribute('x', branchX - 12);
                     yellowBorder.setAttribute('y', branchStartY - 8);
                     yellowBorder.setAttribute('width', 4);
-                    yellowBorder.setAttribute('height', branchHeight - verticalSpacing + 56 + extraHeightForNested);
+                    yellowBorder.setAttribute('height', branchHeight - verticalSpacing + 56);
                     yellowBorder.setAttribute('rx', 2);
                     yellowBorder.setAttribute('fill', '#eab308'); // Yellow-500
-                    g.insertBefore(yellowBorder, g.firstChild);
+                    yellowBorder.setAttribute('data-branch-border', 'true');
+                    // Insert after the container to maintain z-order
+                    g.insertBefore(yellowBorder, branchContainer.nextSibling);
                     
                     // Add buttons at bottom of branch (always visible, inside shaded container)
-                    // Position buttons after nested conditionals, accounting for their button areas
-                    const branchEndY = branchY - verticalSpacing + extraHeightForNested;
+                    const branchEndY = branchY - verticalSpacing;
                     
                     // Determine the elseIfIndex based on branch type and index
                     let elseIfIndex = null;
@@ -1729,7 +1769,7 @@ function formatConfigValueForGraph(value, key) {
 /**
  * Create a connection line between nodes with orthogonal (right-angle) routing
  */
-function createConnectionLine(x1, y1, x2, y2, isAnimated = false, type = 'filter', index = 0, showButtons = true) {
+function createConnectionLine(x1, y1, x2, y2, isAnimated = false, type = 'filter', index = 0, showButtons = true, componentId = null, blockType = null, elseIfIndex = null) {
     // Create a group to hold the line and interactive elements
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     group.setAttribute('class', 'connection-line-group');
@@ -1806,26 +1846,54 @@ function createConnectionLine(x1, y1, x2, y2, isAnimated = false, type = 'filter
     const buttonDiv = document.createElement('div');
     buttonDiv.className = 'flex gap-1 justify-center';
     buttonDiv.style.cssText = 'gap: 4px;';
-    buttonDiv.innerHTML = `
-        <button class="graph-add-plugin-btn insertion-button add-plugin" 
-                data-type="${type}" data-index="${index}"
-                style="pointer-events: auto; padding: 2px 6px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; display: flex; align-items: center; white-space: nowrap; height: 20px; background-color: #3b82f6; color: white;">
-            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 12px; height: 12px; margin-right: 4px;">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            <span>Add Plugin</span>
-        </button>
-        ${type === 'filter' || type === 'output' ? `
-        <button class="graph-add-condition-btn insertion-button add-condition"
-                data-type="${type}" data-index="${index}"
-                style="pointer-events: auto; padding: 2px 6px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; display: flex; align-items: center; white-space: nowrap; height: 20px; background-color: #f59e0b; color: white;">
-            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 12px; height: 12px; margin-right: 4px;">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-            <span>Add Condition</span>
-        </button>
-        ` : ''}
-    `;
+    // If componentId is provided, create buttons for conditional branches with data-component-id
+    // Otherwise, create buttons for top-level components with data-type/data-index
+    if (componentId) {
+        buttonDiv.innerHTML = `
+            <button class="graph-add-plugin-to-branch-btn" 
+                    data-component-id="${componentId}"
+                    data-block-type="${blockType}"
+                    data-elseif-index="${elseIfIndex}"
+                    data-index="${index}"
+                    style="pointer-events: auto; padding: 2px 6px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; display: flex; align-items: center; white-space: nowrap; height: 20px; background-color: #3b82f6; color: white;">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 12px; height: 12px; margin-right: 4px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Add Plugin</span>
+            </button>
+            <button class="graph-add-condition-to-branch-btn"
+                    data-component-id="${componentId}"
+                    data-block-type="${blockType}"
+                    data-elseif-index="${elseIfIndex}"
+                    style="pointer-events: auto; padding: 2px 6px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; display: flex; align-items: center; white-space: nowrap; height: 20px; background-color: #f59e0b; color: white;">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 12px; height: 12px; margin-right: 4px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+                <span>Add Condition</span>
+            </button>
+        `;
+    } else {
+        buttonDiv.innerHTML = `
+            <button class="graph-add-plugin-btn insertion-button add-plugin" 
+                    data-type="${type}" data-index="${index}"
+                    style="pointer-events: auto; padding: 2px 6px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; display: flex; align-items: center; white-space: nowrap; height: 20px; background-color: #3b82f6; color: white;">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 12px; height: 12px; margin-right: 4px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Add Plugin</span>
+            </button>
+            ${type === 'filter' || type === 'output' ? `
+            <button class="graph-add-condition-btn insertion-button add-condition"
+                    data-type="${type}" data-index="${index}"
+                    style="pointer-events: auto; padding: 2px 6px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; display: flex; align-items: center; white-space: nowrap; height: 20px; background-color: #f59e0b; color: white;">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 12px; height: 12px; margin-right: 4px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+                <span>Add Condition</span>
+            </button>
+            ` : ''}
+        `;
+    }
     buttonFO.appendChild(buttonDiv);
     
     // Show/hide buttons on hover
@@ -2051,6 +2119,5 @@ if (typeof MutationObserver !== 'undefined') {
 }
 
 // Make functions globally available
-window.switchGraphLayout = switchGraphLayout;
 window.renderGraphEditor = renderGraphEditor;
 window.toggleGraphFullscreen = toggleGraphFullscreen;
