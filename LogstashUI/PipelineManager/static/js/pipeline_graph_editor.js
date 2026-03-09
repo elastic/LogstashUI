@@ -455,6 +455,303 @@ function extractBranches(conditional) {
 }
 
 /**
+ * Recursively render a nested conditional as a full branch layout
+ * This handles conditionals at any depth of nesting
+ */
+function renderNestedConditional(g, nestedConditional, parentX, startY, parentWidth, nodeWidth, nodeHeight, verticalSpacing, branchHorizontalSpacing, filterIndex, parentComponentId) {
+    const nestedBranches = nestedConditional.branches;
+    const branchCount = nestedBranches.length;
+    
+    let currentY = startY;
+    
+    // Calculate dynamic widths for nested branches
+    const branchWidths = nestedBranches.map(branch => {
+        let hasNestedConditional = false;
+        if (branch.plugins && branch.plugins.length > 0) {
+            hasNestedConditional = branch.plugins.some(plugin => plugin.isBranchPoint);
+        }
+        return hasNestedConditional ? nodeWidth + 40 : nodeWidth;
+    });
+    
+    const totalBranchWidth = branchWidths.reduce((sum, w) => sum + w, 0) + 
+                            ((branchCount - 1) * branchHorizontalSpacing);
+    const branchStartX = parentX + (parentWidth / 2) - (totalBranchWidth / 2);
+    
+    let maxBranchEndY = currentY;
+    const branchEndPositions = [];
+    const buttonElements = [];
+    
+    // Render each nested branch
+    let cumulativeX = branchStartX;
+    nestedBranches.forEach((branch, branchIndex) => {
+        const branchWidth = branchWidths[branchIndex];
+        const branchX = cumulativeX;
+        let branchY = currentY;
+        const branchStartY = branchY;
+        
+        // Create condition node
+        const conditionNode = {
+            id: branch.id,
+            type: 'filter',
+            plugin: branch.type,
+            isConditional: true,
+            conditionText: branch.condition,
+            config: {}
+        };
+        const conditionGroup = createNodeElement(conditionNode, branchX, branchY, branchWidth, nodeHeight, 'filter');
+        g.appendChild(conditionGroup);
+        
+        branchY += nodeHeight + verticalSpacing;
+        
+        // Render plugins in this nested branch
+        if (branch.plugins && branch.plugins.length > 0) {
+            branch.plugins.forEach((plugin, pluginIndex) => {
+                // Add hover area between plugins
+                if (pluginIndex > 0) {
+                    const betweenY = branchY - verticalSpacing;
+                    const betweenHeight = verticalSpacing;
+                    
+                    const betweenHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    betweenHoverArea.setAttribute('x', branchX - 12);
+                    betweenHoverArea.setAttribute('y', betweenY);
+                    betweenHoverArea.setAttribute('width', branchWidth + 24);
+                    betweenHoverArea.setAttribute('height', betweenHeight);
+                    betweenHoverArea.setAttribute('fill', 'transparent');
+                    betweenHoverArea.style.cursor = 'pointer';
+                    g.appendChild(betweenHoverArea);
+                    
+                    const betweenButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                    betweenButtonFO.setAttribute('x', branchX + (branchWidth / 2) - 95);
+                    betweenButtonFO.setAttribute('y', betweenY + (betweenHeight / 2) - 15);
+                    betweenButtonFO.setAttribute('width', '190');
+                    betweenButtonFO.setAttribute('height', '30');
+                    betweenButtonFO.setAttribute('overflow', 'visible');
+                    betweenButtonFO.style.opacity = '0';
+                    betweenButtonFO.style.pointerEvents = 'none';
+                    betweenButtonFO.style.transition = 'opacity 0.15s ease';
+                    
+                    const betweenButtonDiv = document.createElement('div');
+                    betweenButtonDiv.style.display = 'flex';
+                    betweenButtonDiv.style.gap = '6px';
+                    betweenButtonDiv.style.justifyContent = 'center';
+                    betweenButtonDiv.style.alignItems = 'center';
+                    
+                    const blockType = branch.type === 'else_if' ? 'else_if' : (branch.type === 'else' ? 'else' : 'if');
+                    const elseIfIndex = branch.type === 'else_if' ? branchIndex - 1 : null;
+                    
+                    betweenButtonDiv.innerHTML = `
+                        <button class="graph-add-plugin-to-branch-btn" 
+                                data-component-id="${nestedConditional.id}"
+                                data-block-type="${blockType}"
+                                data-elseif-index="${elseIfIndex}"
+                                data-index="${pluginIndex}"
+                                style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #3b82f6; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            <span>Add Plugin</span>
+                        </button>
+                        <button class="graph-add-condition-to-branch-btn"
+                                data-component-id="${nestedConditional.id}"
+                                data-block-type="${blockType}"
+                                data-elseif-index="${elseIfIndex}"
+                                style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #d97706; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            <span>Add Condition</span>
+                        </button>
+                    `;
+                    betweenButtonFO.appendChild(betweenButtonDiv);
+                    
+                    betweenHoverArea.addEventListener('mouseenter', () => {
+                        betweenButtonFO.style.opacity = '1';
+                        betweenButtonFO.style.pointerEvents = 'auto';
+                    });
+                    betweenHoverArea.addEventListener('mouseleave', () => {
+                        betweenButtonFO.style.opacity = '0';
+                        betweenButtonFO.style.pointerEvents = 'none';
+                    });
+                    betweenButtonFO.addEventListener('mouseenter', () => {
+                        betweenButtonFO.style.opacity = '1';
+                        betweenButtonFO.style.pointerEvents = 'auto';
+                    });
+                    betweenButtonFO.addEventListener('mouseleave', () => {
+                        betweenButtonFO.style.opacity = '0';
+                        betweenButtonFO.style.pointerEvents = 'none';
+                    });
+                    
+                    g.appendChild(betweenButtonFO);
+                }
+                
+                // Draw connection line
+                if (pluginIndex === 0) {
+                    const line = createConnectionLine(
+                        branchX + branchWidth / 2, branchY - verticalSpacing,
+                        branchX + branchWidth / 2, branchY,
+                        false,
+                        'filter',
+                        filterIndex
+                    );
+                    g.appendChild(line);
+                }
+                
+                // Check if this plugin is itself a nested conditional (recursive case)
+                if (plugin.isBranchPoint) {
+                    const deeperNestedResult = renderNestedConditional(
+                        g, plugin, branchX, branchY, branchWidth,
+                        nodeWidth, nodeHeight, verticalSpacing, branchHorizontalSpacing,
+                        filterIndex, nestedConditional.id
+                    );
+                    branchY = deeperNestedResult.endY;
+                    
+                    if (pluginIndex < branch.plugins.length - 1) {
+                        const line = createConnectionLine(
+                            branchX + branchWidth / 2, deeperNestedResult.endY - verticalSpacing,
+                            branchX + branchWidth / 2, branchY,
+                            false,
+                            'filter',
+                            filterIndex
+                        );
+                        g.appendChild(line);
+                    }
+                } else {
+                    // Regular plugin
+                    const pluginGroup = createNodeElement(plugin, branchX, branchY, branchWidth, nodeHeight, 'filter');
+                    g.appendChild(pluginGroup);
+                    
+                    if (pluginIndex < branch.plugins.length - 1) {
+                        const nextY = branchY + nodeHeight + verticalSpacing;
+                        const line = createConnectionLine(
+                            branchX + branchWidth / 2, branchY + nodeHeight,
+                            branchX + branchWidth / 2, nextY,
+                            false,
+                            'filter',
+                            filterIndex
+                        );
+                        g.appendChild(line);
+                    }
+                    
+                    branchY += nodeHeight + verticalSpacing;
+                }
+            });
+        }
+        
+        // Add hover area and buttons at bottom of branch
+        const branchEndY = branchY - verticalSpacing;
+        const blockType = branch.type === 'else_if' ? 'else_if' : (branch.type === 'else' ? 'else' : 'if');
+        const elseIfIndex = branch.type === 'else_if' ? branchIndex - 1 : null;
+        const pluginInsertIndex = branch.plugins ? branch.plugins.length : 0;
+        
+        const branchButtonHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        branchButtonHoverArea.setAttribute('x', branchX - 12);
+        branchButtonHoverArea.setAttribute('y', branchEndY);
+        branchButtonHoverArea.setAttribute('width', branchWidth + 24);
+        branchButtonHoverArea.setAttribute('height', 48);
+        branchButtonHoverArea.setAttribute('fill', 'transparent');
+        branchButtonHoverArea.style.cursor = 'pointer';
+        g.appendChild(branchButtonHoverArea);
+        
+        const branchButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+        branchButtonFO.setAttribute('x', branchX + (branchWidth / 2) - 95);
+        branchButtonFO.setAttribute('y', branchEndY + 10);
+        branchButtonFO.setAttribute('width', '190');
+        branchButtonFO.setAttribute('height', '30');
+        branchButtonFO.setAttribute('overflow', 'visible');
+        branchButtonFO.style.opacity = '0';
+        branchButtonFO.style.pointerEvents = 'none';
+        branchButtonFO.style.transition = 'opacity 0.15s ease';
+        
+        const branchButtonDiv = document.createElement('div');
+        branchButtonDiv.style.display = 'flex';
+        branchButtonDiv.style.gap = '6px';
+        branchButtonDiv.style.justifyContent = 'center';
+        branchButtonDiv.style.alignItems = 'center';
+        branchButtonDiv.innerHTML = `
+            <button class="graph-add-plugin-to-branch-btn" 
+                    data-component-id="${nestedConditional.id}"
+                    data-block-type="${blockType}"
+                    data-elseif-index="${elseIfIndex}"
+                    data-index="${pluginInsertIndex}"
+                    style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #2563eb; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Add Plugin</span>
+            </button>
+            <button class="graph-add-condition-to-branch-btn"
+                    data-component-id="${nestedConditional.id}"
+                    data-block-type="${blockType}"
+                    data-elseif-index="${elseIfIndex}"
+                    style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #d97706; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Add Condition</span>
+            </button>
+        `;
+        branchButtonFO.appendChild(branchButtonDiv);
+        
+        branchButtonHoverArea.addEventListener('mouseenter', () => {
+            branchButtonFO.style.opacity = '1';
+            branchButtonFO.style.pointerEvents = 'auto';
+        });
+        branchButtonHoverArea.addEventListener('mouseleave', () => {
+            branchButtonFO.style.opacity = '0';
+            branchButtonFO.style.pointerEvents = 'none';
+        });
+        branchButtonFO.addEventListener('mouseenter', () => {
+            branchButtonFO.style.opacity = '1';
+            branchButtonFO.style.pointerEvents = 'auto';
+        });
+        branchButtonFO.addEventListener('mouseleave', () => {
+            branchButtonFO.style.opacity = '0';
+            branchButtonFO.style.pointerEvents = 'none';
+        });
+        
+        buttonElements.push(branchButtonFO);
+        
+        // Add branch container background
+        const branchHeight = branchY - branchStartY;
+        const branchContainer = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        branchContainer.setAttribute('x', branchX - 12);
+        branchContainer.setAttribute('y', branchStartY - 8);
+        branchContainer.setAttribute('width', branchWidth + 24);
+        branchContainer.setAttribute('height', branchHeight - verticalSpacing + 56);
+        branchContainer.setAttribute('rx', 8);
+        branchContainer.setAttribute('fill', 'rgba(0, 0, 0, 0.2)');
+        branchContainer.setAttribute('stroke', 'rgba(255, 255, 255, 0.08)');
+        branchContainer.setAttribute('stroke-width', 1);
+        g.insertBefore(branchContainer, g.firstChild);
+        
+        // Add yellow border
+        const yellowBorder = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        yellowBorder.setAttribute('x', branchX - 12);
+        yellowBorder.setAttribute('y', branchStartY - 8);
+        yellowBorder.setAttribute('width', 4);
+        yellowBorder.setAttribute('height', branchHeight - verticalSpacing + 56);
+        yellowBorder.setAttribute('rx', 2);
+        yellowBorder.setAttribute('fill', '#eab308');
+        g.insertBefore(yellowBorder, g.firstChild);
+        
+        branchEndPositions[branchIndex] = branchY - verticalSpacing;
+        maxBranchEndY = Math.max(maxBranchEndY, branchY);
+        cumulativeX += branchWidth + branchHorizontalSpacing;
+    });
+    
+    // Append button elements
+    buttonElements.forEach(buttonElement => {
+        g.appendChild(buttonElement);
+    });
+    
+    return {
+        endY: maxBranchEndY,
+        branchEndPositions,
+        totalWidth: totalBranchWidth
+    };
+}
+
+/**
  * Render nodes in branch layout (tree-like structure)
  */
 function renderBranchLayout(svg, allComponents) {
@@ -554,14 +851,82 @@ function renderBranchLayout(svg, allComponents) {
         g.appendChild(label);
         
         processedComponents.filter.forEach((component, index) => {
+            // Add hover area between this component and the previous one (if not first)
+            if (index > 0) {
+                const betweenY = currentY - verticalSpacing;
+                const betweenHeight = verticalSpacing;
+                
+                const betweenHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                betweenHoverArea.setAttribute('x', filterStartX - 20);
+                betweenHoverArea.setAttribute('y', betweenY);
+                betweenHoverArea.setAttribute('width', nodeWidth + 40);
+                betweenHoverArea.setAttribute('height', betweenHeight);
+                betweenHoverArea.setAttribute('fill', 'transparent');
+                betweenHoverArea.style.cursor = 'pointer';
+                g.appendChild(betweenHoverArea);
+                
+                const betweenButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                betweenButtonFO.setAttribute('x', filterStartX + (nodeWidth / 2) - 95);
+                betweenButtonFO.setAttribute('y', betweenY + (betweenHeight / 2) - 15);
+                betweenButtonFO.setAttribute('width', '190');
+                betweenButtonFO.setAttribute('height', '30');
+                betweenButtonFO.setAttribute('overflow', 'visible');
+                betweenButtonFO.style.opacity = '0';
+                betweenButtonFO.style.pointerEvents = 'none';
+                betweenButtonFO.style.transition = 'opacity 0.15s ease';
+                
+                const betweenButtonDiv = document.createElement('div');
+                betweenButtonDiv.style.display = 'flex';
+                betweenButtonDiv.style.gap = '6px';
+                betweenButtonDiv.style.justifyContent = 'center';
+                betweenButtonDiv.style.alignItems = 'center';
+                betweenButtonDiv.innerHTML = `
+                    <button class="graph-add-plugin-between-btn" 
+                            data-index="${index}"
+                            style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #3b82f6; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                        <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add Plugin</span>
+                    </button>
+                    <button class="graph-add-condition-between-btn" 
+                            data-index="${index}"
+                            style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #d97706; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                        <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add Condition</span>
+                    </button>
+                `;
+                betweenButtonFO.appendChild(betweenButtonDiv);
+                
+                betweenHoverArea.addEventListener('mouseenter', () => {
+                    betweenButtonFO.style.opacity = '1';
+                    betweenButtonFO.style.pointerEvents = 'auto';
+                });
+                
+                betweenHoverArea.addEventListener('mouseleave', () => {
+                    betweenButtonFO.style.opacity = '0';
+                    betweenButtonFO.style.pointerEvents = 'none';
+                });
+                
+                betweenButtonFO.addEventListener('mouseenter', () => {
+                    betweenButtonFO.style.opacity = '1';
+                    betweenButtonFO.style.pointerEvents = 'auto';
+                });
+                
+                betweenButtonFO.addEventListener('mouseleave', () => {
+                    betweenButtonFO.style.opacity = '0';
+                    betweenButtonFO.style.pointerEvents = 'none';
+                });
+                
+                g.appendChild(betweenButtonFO);
+            }
+            
             if (component.isBranchPoint) {
                 // This is a conditional - render as branches
                 const branches = component.branches;
                 const branchCount = branches.length;
-                
-                // Calculate total width needed for all branches
-                const totalBranchWidth = (branchCount * nodeWidth) + ((branchCount - 1) * branchHorizontalSpacing);
-                const branchStartX = filterStartX + (nodeWidth / 2) - (totalBranchWidth / 2);
                 
                 // Store Y position before branches for connection lines
                 const beforeBranchY = currentY;
@@ -574,14 +939,31 @@ function renderBranchLayout(svg, allComponents) {
                 const conditionalSpacing = isMultiBranch ? verticalSpacing : 0;
                 currentY += conditionalSpacing;
                 
+                // Calculate dynamic widths for each branch based on nested content
+                const branchWidths = branches.map(branch => {
+                    let hasNestedConditional = false;
+                    if (branch.plugins && branch.plugins.length > 0) {
+                        hasNestedConditional = branch.plugins.some(plugin => plugin.isBranchPoint);
+                    }
+                    // If branch has nested conditional, make it slightly wider
+                    return hasNestedConditional ? nodeWidth + 40 : nodeWidth;
+                });
+                
+                // Recalculate total width and starting positions based on dynamic widths
+                const totalBranchWidth = branchWidths.reduce((sum, w) => sum + w, 0) + 
+                                        ((branchCount - 1) * branchHorizontalSpacing);
+                const dynamicBranchStartX = filterStartX + (nodeWidth / 2) - (totalBranchWidth / 2);
+                
                 // Track the maximum Y position across all branches
                 let maxBranchEndY = currentY;
                 const branchEndPositions = []; // Track end Y position of each branch
                 const buttonElements = []; // Store button elements to append after lines
                 
                 // Render each branch
+                let cumulativeX = dynamicBranchStartX;
                 branches.forEach((branch, branchIndex) => {
-                    const branchX = branchStartX + (branchIndex * (nodeWidth + branchHorizontalSpacing));
+                    const branchWidth = branchWidths[branchIndex];
+                    const branchX = cumulativeX;
                     let branchY = currentY; // Start at currentY (with conditional spacing applied)
                     const branchStartY = branchY; // Store start for background container
                     
@@ -589,7 +971,7 @@ function renderBranchLayout(svg, allComponents) {
                     if (index > 0 || processedComponents.input.length > 0) {
                         const line = createConnectionLine(
                             filterStartX + nodeWidth / 2, beforeBranchY,
-                            branchX + nodeWidth / 2, branchY,
+                            branchX + branchWidth / 2, branchY,
                             false,
                             'filter',
                             index,
@@ -598,7 +980,7 @@ function renderBranchLayout(svg, allComponents) {
                         g.appendChild(line);
                     }
                     
-                    // Create condition node
+                    // Create condition node (use dynamic branch width)
                     const conditionNode = {
                         id: branch.id,
                         type: 'filter',
@@ -607,7 +989,7 @@ function renderBranchLayout(svg, allComponents) {
                         conditionText: branch.condition,
                         config: {}
                     };
-                    const conditionGroup = createNodeElement(conditionNode, branchX, branchY, nodeWidth, nodeHeight, 'filter');
+                    const conditionGroup = createNodeElement(conditionNode, branchX, branchY, branchWidth, nodeHeight, 'filter');
                     g.appendChild(conditionGroup);
                     
                     branchY += nodeHeight + verticalSpacing;
@@ -617,12 +999,93 @@ function renderBranchLayout(svg, allComponents) {
                     
                     // Render plugins in this branch vertically
                     branch.plugins.forEach((plugin, pluginIndex) => {
+                        // Add hover area between plugins (not before first plugin)
+                        if (pluginIndex > 0) {
+                            const betweenY = branchY - verticalSpacing;
+                            const betweenHeight = verticalSpacing;
+                            
+                            const betweenHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                            betweenHoverArea.setAttribute('x', branchX - 12);
+                            betweenHoverArea.setAttribute('y', betweenY);
+                            betweenHoverArea.setAttribute('width', branchWidth + 24);
+                            betweenHoverArea.setAttribute('height', betweenHeight);
+                            betweenHoverArea.setAttribute('fill', 'transparent');
+                            betweenHoverArea.style.cursor = 'pointer';
+                            g.appendChild(betweenHoverArea);
+                            
+                            const betweenButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                            betweenButtonFO.setAttribute('x', branchX + (branchWidth / 2) - 95);
+                            betweenButtonFO.setAttribute('y', betweenY + (betweenHeight / 2) - 15);
+                            betweenButtonFO.setAttribute('width', '190');
+                            betweenButtonFO.setAttribute('height', '30');
+                            betweenButtonFO.setAttribute('overflow', 'visible');
+                            betweenButtonFO.style.opacity = '0';
+                            betweenButtonFO.style.pointerEvents = 'none';
+                            betweenButtonFO.style.transition = 'opacity 0.15s ease';
+                            
+                            const betweenButtonDiv = document.createElement('div');
+                            betweenButtonDiv.style.display = 'flex';
+                            betweenButtonDiv.style.gap = '6px';
+                            betweenButtonDiv.style.justifyContent = 'center';
+                            betweenButtonDiv.style.alignItems = 'center';
+                            
+                            const blockType = branch.type === 'else_if' ? 'else_if' : (branch.type === 'else' ? 'else' : 'if');
+                            const elseIfIndex = branch.type === 'else_if' ? branchIndex - 1 : null;
+                            
+                            betweenButtonDiv.innerHTML = `
+                                <button class="graph-add-plugin-to-branch-btn" 
+                                        data-component-id="${component.id}"
+                                        data-block-type="${blockType}"
+                                        data-elseif-index="${elseIfIndex}"
+                                        data-index="${pluginIndex}"
+                                        style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #3b82f6; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                    <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    <span>Add Plugin</span>
+                                </button>
+                                <button class="graph-add-condition-to-branch-btn"
+                                        data-component-id="${component.id}"
+                                        data-block-type="${blockType}"
+                                        data-elseif-index="${elseIfIndex}"
+                                        style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #d97706; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                                    <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    <span>Add Condition</span>
+                                </button>
+                            `;
+                            betweenButtonFO.appendChild(betweenButtonDiv);
+                            
+                            betweenHoverArea.addEventListener('mouseenter', () => {
+                                betweenButtonFO.style.opacity = '1';
+                                betweenButtonFO.style.pointerEvents = 'auto';
+                            });
+                            
+                            betweenHoverArea.addEventListener('mouseleave', () => {
+                                betweenButtonFO.style.opacity = '0';
+                                betweenButtonFO.style.pointerEvents = 'none';
+                            });
+                            
+                            betweenButtonFO.addEventListener('mouseenter', () => {
+                                betweenButtonFO.style.opacity = '1';
+                                betweenButtonFO.style.pointerEvents = 'auto';
+                            });
+                            
+                            betweenButtonFO.addEventListener('mouseleave', () => {
+                                betweenButtonFO.style.opacity = '0';
+                                betweenButtonFO.style.pointerEvents = 'none';
+                            });
+                            
+                            g.appendChild(betweenButtonFO);
+                        }
+                        
                         // Draw line from condition node to first plugin, or from previous plugin to next
                         if (pluginIndex === 0) {
                             // Line from condition node to first plugin
                             const line = createConnectionLine(
-                                branchX + nodeWidth / 2, branchY - verticalSpacing,
-                                branchX + nodeWidth / 2, branchY,
+                                branchX + branchWidth / 2, branchY - verticalSpacing,
+                                branchX + branchWidth / 2, branchY,
                                 false,
                                 'filter',
                                 index
@@ -632,31 +1095,37 @@ function renderBranchLayout(svg, allComponents) {
                         
                         // Check if this plugin is itself a branch point (nested conditional)
                         if (plugin.isBranchPoint) {
-                            // Render nested conditional as a single collapsed node inside parent's shaded area
-                            // This prevents it from expanding into a full branch structure at the same level
-                            const nestedConditionNode = {
-                                id: plugin.id,
-                                type: 'filter',
-                                plugin: 'if',
-                                isConditional: true,
-                                conditionText: plugin.config.condition,
-                                config: plugin.config
-                            };
-                            const nestedPluginGroup = createNodeElement(nestedConditionNode, branchX, branchY, nodeWidth, nodeHeight, 'filter');
-                            g.appendChild(nestedPluginGroup);
+                            // Recursively render nested conditional as full branch layout
+                            const nestedResult = renderNestedConditional(
+                                g, plugin, branchX, branchY, branchWidth,
+                                nodeWidth, nodeHeight, verticalSpacing, branchHorizontalSpacing,
+                                index, component.id
+                            );
+                            branchY = nestedResult.endY;
                             
-                            branchY += nodeHeight + verticalSpacing;
+                            // Draw connection line to next plugin if there is one
+                            if (pluginIndex < branch.plugins.length - 1) {
+                                const nextY = branchY;
+                                const line = createConnectionLine(
+                                    branchX + branchWidth / 2, nestedResult.endY - verticalSpacing,
+                                    branchX + branchWidth / 2, nextY,
+                                    false,
+                                    'filter',
+                                    index
+                                );
+                                g.appendChild(line);
+                            }
                         } else {
-                            // Regular plugin
-                            const pluginGroup = createNodeElement(plugin, branchX, branchY, nodeWidth, nodeHeight, 'filter');
+                            // Regular plugin (use branch width)
+                            const pluginGroup = createNodeElement(plugin, branchX, branchY, branchWidth, nodeHeight, 'filter');
                             g.appendChild(pluginGroup);
                             
                             // Draw line to next plugin in branch
                             if (pluginIndex < branch.plugins.length - 1) {
                                 const nextY = branchY + nodeHeight + verticalSpacing;
                                 const line = createConnectionLine(
-                                    branchX + nodeWidth / 2, branchY + nodeHeight,
-                                    branchX + nodeWidth / 2, nextY,
+                                    branchX + branchWidth / 2, branchY + nodeHeight,
+                                    branchX + branchWidth / 2, nextY,
                                     false,
                                     'filter',
                                     index
@@ -674,14 +1143,18 @@ function renderBranchLayout(svg, allComponents) {
                     maxBranchEndY = Math.max(maxBranchEndY, branchY);
                     branchEndPositions[branchIndex] = branchY - verticalSpacing; // Store actual end position (last element's bottom)
                     
-                    // Add subtle background container for this branch
-                    // Extend to include button area at bottom
-                    const branchHeight = branchYBeforeNested - branchStartY;
+                    // Check if this branch has nested conditionals to add extra height for their buttons
+                    const hasNestedConditionals = branch.plugins && branch.plugins.some(p => p.isBranchPoint);
+                    const extraHeightForNested = hasNestedConditionals ? 40 : 0; // Extra space for nested conditional buttons
+                    
+                    // Add subtle background container for this branch (use dynamic width)
+                    // Use branchY to include nested conditionals in the height calculation
+                    const branchHeight = branchY - branchStartY;
                     const branchContainer = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     branchContainer.setAttribute('x', branchX - 12);
                     branchContainer.setAttribute('y', branchStartY - 8);
-                    branchContainer.setAttribute('width', nodeWidth + 24);
-                    branchContainer.setAttribute('height', branchHeight - verticalSpacing + 56);
+                    branchContainer.setAttribute('width', branchWidth + 24);
+                    branchContainer.setAttribute('height', branchHeight - verticalSpacing + 56 + extraHeightForNested);
                     branchContainer.setAttribute('rx', 8);
                     branchContainer.setAttribute('fill', 'rgba(0, 0, 0, 0.15)');
                     branchContainer.setAttribute('stroke', 'rgba(255, 255, 255, 0.05)');
@@ -689,18 +1162,19 @@ function renderBranchLayout(svg, allComponents) {
                     // Insert at beginning of group so it's behind everything
                     g.insertBefore(branchContainer, g.firstChild);
                     
-                    // Add yellow left border accent line
+                    // Add yellow left border accent line (extends full height including nested conditionals)
                     const yellowBorder = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     yellowBorder.setAttribute('x', branchX - 12);
                     yellowBorder.setAttribute('y', branchStartY - 8);
                     yellowBorder.setAttribute('width', 4);
-                    yellowBorder.setAttribute('height', branchHeight - verticalSpacing + 56);
+                    yellowBorder.setAttribute('height', branchHeight - verticalSpacing + 56 + extraHeightForNested);
                     yellowBorder.setAttribute('rx', 2);
                     yellowBorder.setAttribute('fill', '#eab308'); // Yellow-500
                     g.insertBefore(yellowBorder, g.firstChild);
                     
                     // Add buttons at bottom of branch (always visible, inside shaded container)
-                    const branchEndY = branchYBeforeNested - verticalSpacing;
+                    // Position buttons after nested conditionals, accounting for their button areas
+                    const branchEndY = branchY - verticalSpacing + extraHeightForNested;
                     
                     // Determine the elseIfIndex based on branch type and index
                     let elseIfIndex = null;
@@ -713,15 +1187,29 @@ function renderBranchLayout(svg, allComponents) {
                         blockType = 'else';
                     }
                     
-                    // Create buttons in foreignObject (always visible)
+                    // Calculate the index where new plugins should be added (at the end of this branch's plugins)
+                    const pluginInsertIndex = branch.plugins ? branch.plugins.length : 0;
+                    
+                    // Add hover area for buttons at bottom of branch
+                    const branchButtonHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    branchButtonHoverArea.setAttribute('x', branchX - 12);
+                    branchButtonHoverArea.setAttribute('y', branchEndY);
+                    branchButtonHoverArea.setAttribute('width', branchWidth + 24);
+                    branchButtonHoverArea.setAttribute('height', 48);
+                    branchButtonHoverArea.setAttribute('fill', 'transparent');
+                    branchButtonHoverArea.style.cursor = 'pointer';
+                    g.appendChild(branchButtonHoverArea);
+                    
+                    // Create buttons in foreignObject (hover-based, centered in branch width)
                     const branchButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-                    branchButtonFO.setAttribute('x', branchX + (nodeWidth / 2) - 95);
+                    branchButtonFO.setAttribute('x', branchX + (branchWidth / 2) - 95);
                     branchButtonFO.setAttribute('y', branchEndY + 10);
                     branchButtonFO.setAttribute('width', '190');
                     branchButtonFO.setAttribute('height', '30');
                     branchButtonFO.setAttribute('overflow', 'visible');
-                    branchButtonFO.style.opacity = '1';
-                    branchButtonFO.style.pointerEvents = 'auto';
+                    branchButtonFO.style.opacity = '0';
+                    branchButtonFO.style.pointerEvents = 'none';
+                    branchButtonFO.style.transition = 'opacity 0.15s ease';
                     
                     const branchButtonDiv = document.createElement('div');
                     branchButtonDiv.style.display = 'flex';
@@ -733,6 +1221,7 @@ function renderBranchLayout(svg, allComponents) {
                                 data-component-id="${component.id}"
                                 data-block-type="${blockType}"
                                 data-elseif-index="${elseIfIndex}"
+                                data-index="${pluginInsertIndex}"
                                 style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #2563eb; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
                             <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -751,163 +1240,54 @@ function renderBranchLayout(svg, allComponents) {
                         </button>
                     `;
                     branchButtonFO.appendChild(branchButtonDiv);
+                    
+                    // Show/hide buttons on hover
+                    branchButtonHoverArea.addEventListener('mouseenter', () => {
+                        branchButtonFO.style.opacity = '1';
+                        branchButtonFO.style.pointerEvents = 'auto';
+                    });
+                    
+                    branchButtonHoverArea.addEventListener('mouseleave', () => {
+                        branchButtonFO.style.opacity = '0';
+                        branchButtonFO.style.pointerEvents = 'none';
+                    });
+                    
+                    branchButtonFO.addEventListener('mouseenter', () => {
+                        branchButtonFO.style.opacity = '1';
+                        branchButtonFO.style.pointerEvents = 'auto';
+                    });
+                    
+                    branchButtonFO.addEventListener('mouseleave', () => {
+                        branchButtonFO.style.opacity = '0';
+                        branchButtonFO.style.pointerEvents = 'none';
+                    });
+                    
+                    // Store button element to append later (after lines are drawn)
                     buttonElements.push(branchButtonFO);
                     
-                    // Add hover area BELOW the shaded container for adding plugin after conditional
-                    const afterConditionalY = branchYBeforeNested + 8; // Just below the shaded container
-                    const afterConditionalHoverHeight = 40;
-                    
-                    // Create hover area below shaded container
-                    const afterConditionalHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    afterConditionalHoverArea.setAttribute('x', branchX - 12);
-                    afterConditionalHoverArea.setAttribute('y', afterConditionalY);
-                    afterConditionalHoverArea.setAttribute('width', nodeWidth + 24);
-                    afterConditionalHoverArea.setAttribute('height', afterConditionalHoverHeight);
-                    afterConditionalHoverArea.setAttribute('fill', 'transparent');
-                    afterConditionalHoverArea.style.cursor = 'pointer';
-                    g.appendChild(afterConditionalHoverArea);
-                    
-                    // Create buttons for adding plugin/condition after conditional (hover-only)
-                    const afterConditionalButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-                    afterConditionalButtonFO.setAttribute('x', branchX + (nodeWidth / 2) - 95);
-                    afterConditionalButtonFO.setAttribute('y', afterConditionalY + 5);
-                    afterConditionalButtonFO.setAttribute('width', '190');
-                    afterConditionalButtonFO.setAttribute('height', '30');
-                    afterConditionalButtonFO.setAttribute('overflow', 'visible');
-                    afterConditionalButtonFO.style.opacity = '0';
-                    afterConditionalButtonFO.style.pointerEvents = 'none';
-                    afterConditionalButtonFO.style.transition = 'opacity 0.15s ease';
-                    
-                    const afterConditionalButtonDiv = document.createElement('div');
-                    afterConditionalButtonDiv.style.display = 'flex';
-                    afterConditionalButtonDiv.style.gap = '6px';
-                    afterConditionalButtonDiv.style.justifyContent = 'center';
-                    afterConditionalButtonDiv.style.alignItems = 'center';
-                    afterConditionalButtonDiv.innerHTML = `
-                        <button class="graph-add-plugin-after-conditional-btn" 
-                                data-component-id="${component.id}"
-                                style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #3b82f6; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
-                            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <span>Add Plugin</span>
-                        </button>
-                        <button class="graph-add-condition-after-conditional-btn" 
-                                data-component-id="${component.id}"
-                                style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #d97706; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
-                            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <span>Add Condition</span>
-                        </button>
-                    `;
-                    afterConditionalButtonFO.appendChild(afterConditionalButtonDiv);
-                    
-                    // Show/hide button on hover
-                    afterConditionalHoverArea.addEventListener('mouseenter', () => {
-                        afterConditionalButtonFO.style.opacity = '1';
-                        afterConditionalButtonFO.style.pointerEvents = 'auto';
-                    });
-                    
-                    afterConditionalHoverArea.addEventListener('mouseleave', () => {
-                        afterConditionalButtonFO.style.opacity = '0';
-                        afterConditionalButtonFO.style.pointerEvents = 'none';
-                    });
-                    
-                    afterConditionalButtonFO.addEventListener('mouseenter', () => {
-                        afterConditionalButtonFO.style.opacity = '1';
-                        afterConditionalButtonFO.style.pointerEvents = 'auto';
-                    });
-                    
-                    afterConditionalButtonFO.addEventListener('mouseleave', () => {
-                        afterConditionalButtonFO.style.opacity = '0';
-                        afterConditionalButtonFO.style.pointerEvents = 'none';
-                    });
-                    
-                    buttonElements.push(afterConditionalButtonFO);
-                    
-                    // Add hover area between this branch and the next for + else if / + else buttons
-                    if (branchIndex < branches.length - 1) {
-                        const nextBranchX = branchStartX + ((branchIndex + 1) * (nodeWidth + branchHorizontalSpacing));
-                        const gapCenterX = branchX + nodeWidth + (branchHorizontalSpacing / 2);
-                        const gapCenterY = branchStartY + (branchHeight / 2);
-                        
-                        // Create invisible hover area between branches
-                        const hoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                        hoverArea.setAttribute('x', branchX + nodeWidth);
-                        hoverArea.setAttribute('y', branchStartY - 8);
-                        hoverArea.setAttribute('width', branchHorizontalSpacing);
-                        hoverArea.setAttribute('height', branchHeight - verticalSpacing + 16);
-                        hoverArea.setAttribute('fill', 'transparent');
-                        hoverArea.style.cursor = 'pointer';
-                        g.appendChild(hoverArea);
-                        
-                        // Create buttons in foreignObject
-                        const buttonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-                        buttonFO.setAttribute('x', gapCenterX - 40);
-                        buttonFO.setAttribute('y', gapCenterY - 25);
-                        buttonFO.setAttribute('width', '80');
-                        buttonFO.setAttribute('height', '50');
-                        buttonFO.style.opacity = '0';
-                        buttonFO.style.pointerEvents = 'none';
-                        buttonFO.style.transition = 'opacity 0.15s ease';
-                        
-                        const hasElse = component.config && component.config.else && component.config.else.plugins;
-                        const buttonDiv = document.createElement('div');
-                        buttonDiv.className = 'flex flex-col gap-1 items-center';
-                        buttonDiv.innerHTML = `
-                            <button class="graph-add-elseif-btn" 
-                                    data-component-id="${component.id}"
-                                    style="pointer-events: auto; padding: 2px 8px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap; height: 20px; background-color: #d97706; color: white;">
-                                <span>+ else if</span>
-                            </button>
-                            ${!hasElse ? `
-                            <button class="graph-add-else-btn"
-                                    data-component-id="${component.id}"
-                                    style="pointer-events: auto; padding: 2px 8px; border: none; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap; height: 20px; background-color: #d97706; color: white;">
-                                <span>+ else</span>
-                            </button>
-                            ` : ''}
-                        `;
-                        buttonFO.appendChild(buttonDiv);
-                        
-                        // Show/hide buttons on hover
-                        hoverArea.addEventListener('mouseenter', () => {
-                            buttonFO.style.opacity = '1';
-                            buttonFO.style.pointerEvents = 'auto';
-                        });
-                        
-                        hoverArea.addEventListener('mouseleave', () => {
-                            buttonFO.style.opacity = '0';
-                            buttonFO.style.pointerEvents = 'none';
-                        });
-                        
-                        buttonFO.addEventListener('mouseenter', () => {
-                            buttonFO.style.opacity = '1';
-                            buttonFO.style.pointerEvents = 'auto';
-                        });
-                        
-                        buttonFO.addEventListener('mouseleave', () => {
-                            buttonFO.style.opacity = '0';
-                            buttonFO.style.pointerEvents = 'none';
-                        });
-                        
-                        g.appendChild(buttonFO);
-                    }
+                    // Advance cumulativeX for next branch
+                    cumulativeX += branchWidth + branchHorizontalSpacing;
                 });
                 
                 // Move currentY to after all branches
                 currentY = maxBranchEndY;
                 
+                // Add extra spacing after conditionals for better visual separation
+                const conditionalExtraSpacing = 20;
+                
                 // If there's a next component, draw convergence lines from each branch to it
                 if (index < processedComponents.filter.length - 1) {
-                    const nextY = currentY + verticalSpacing;
+                    const nextY = currentY + verticalSpacing + conditionalExtraSpacing;
+                    
+                    // Recalculate branch positions for convergence lines
+                    let convergenceCumulativeX = dynamicBranchStartX;
                     branches.forEach((branch, branchIndex) => {
-                        const branchX = branchStartX + (branchIndex * (nodeWidth + branchHorizontalSpacing));
+                        const branchWidth = branchWidths[branchIndex];
+                        const branchX = convergenceCumulativeX;
                         const branchEndY = branchEndPositions[branchIndex]; // Use stored end position
                         
                         const line = createConnectionLine(
-                            branchX + nodeWidth / 2, branchEndY,
+                            branchX + branchWidth / 2, branchEndY,
                             filterStartX + nodeWidth / 2, nextY,
                             false,
                             'filter',
@@ -915,6 +1295,8 @@ function renderBranchLayout(svg, allComponents) {
                             false
                         );
                         g.appendChild(line);
+                        
+                        convergenceCumulativeX += branchWidth + branchHorizontalSpacing;
                     });
                     currentY = nextY;
                 }
@@ -923,6 +1305,77 @@ function renderBranchLayout(svg, allComponents) {
                 buttonElements.forEach(buttonElement => {
                     g.appendChild(buttonElement);
                 });
+                
+                // Add hover area and buttons after the entire conditional for adding plugin/condition after it
+                const afterConditionalY = currentY;
+                const afterConditionalHoverHeight = 40;
+                
+                const afterConditionalHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                afterConditionalHoverArea.setAttribute('x', filterStartX - 20);
+                afterConditionalHoverArea.setAttribute('y', afterConditionalY);
+                afterConditionalHoverArea.setAttribute('width', nodeWidth + 40);
+                afterConditionalHoverArea.setAttribute('height', afterConditionalHoverHeight);
+                afterConditionalHoverArea.setAttribute('fill', 'transparent');
+                afterConditionalHoverArea.style.cursor = 'pointer';
+                g.appendChild(afterConditionalHoverArea);
+                
+                const afterConditionalButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                afterConditionalButtonFO.setAttribute('x', filterStartX + (nodeWidth / 2) - 95);
+                afterConditionalButtonFO.setAttribute('y', afterConditionalY + 5);
+                afterConditionalButtonFO.setAttribute('width', '190');
+                afterConditionalButtonFO.setAttribute('height', '30');
+                afterConditionalButtonFO.setAttribute('overflow', 'visible');
+                afterConditionalButtonFO.style.opacity = '0';
+                afterConditionalButtonFO.style.pointerEvents = 'none';
+                afterConditionalButtonFO.style.transition = 'opacity 0.15s ease';
+                
+                const afterConditionalButtonDiv = document.createElement('div');
+                afterConditionalButtonDiv.style.display = 'flex';
+                afterConditionalButtonDiv.style.gap = '6px';
+                afterConditionalButtonDiv.style.justifyContent = 'center';
+                afterConditionalButtonDiv.style.alignItems = 'center';
+                afterConditionalButtonDiv.innerHTML = `
+                    <button class="graph-add-plugin-after-conditional-btn" 
+                            data-component-id="${component.id}"
+                            style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #3b82f6; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                        <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add Plugin</span>
+                    </button>
+                    <button class="graph-add-condition-after-conditional-btn" 
+                            data-component-id="${component.id}"
+                            style="pointer-events: auto; padding: 4px 8px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap; background-color: #d97706; color: white; display: flex; align-items: center; gap: 4px; font-weight: 500;">
+                        <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add Condition</span>
+                    </button>
+                `;
+                afterConditionalButtonFO.appendChild(afterConditionalButtonDiv);
+                
+                // Show/hide buttons on hover
+                afterConditionalHoverArea.addEventListener('mouseenter', () => {
+                    afterConditionalButtonFO.style.opacity = '1';
+                    afterConditionalButtonFO.style.pointerEvents = 'auto';
+                });
+                
+                afterConditionalHoverArea.addEventListener('mouseleave', () => {
+                    afterConditionalButtonFO.style.opacity = '0';
+                    afterConditionalButtonFO.style.pointerEvents = 'none';
+                });
+                
+                afterConditionalButtonFO.addEventListener('mouseenter', () => {
+                    afterConditionalButtonFO.style.opacity = '1';
+                    afterConditionalButtonFO.style.pointerEvents = 'auto';
+                });
+                
+                afterConditionalButtonFO.addEventListener('mouseleave', () => {
+                    afterConditionalButtonFO.style.opacity = '0';
+                    afterConditionalButtonFO.style.pointerEvents = 'none';
+                });
+                
+                g.appendChild(afterConditionalButtonFO);
                 
             } else {
                 // Regular plugin - render normally
@@ -1428,6 +1881,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add event listeners for graph connection line buttons
     document.body.addEventListener('click', function(e) {
+        // Handle Add Plugin button between components
+        if (e.target.closest('.graph-add-plugin-between-btn')) {
+            const btn = e.target.closest('.graph-add-plugin-between-btn');
+            const index = parseInt(btn.dataset.index);
+            
+            if (typeof showPluginModal === 'function') {
+                showPluginModal('filter', index);
+            }
+        }
+        
+        // Handle Add Condition button between components
+        if (e.target.closest('.graph-add-condition-between-btn')) {
+            const btn = e.target.closest('.graph-add-condition-between-btn');
+            const index = parseInt(btn.dataset.index);
+            
+            if (typeof addConditionAtPosition === 'function') {
+                addConditionAtPosition('filter', index);
+            }
+        }
+        
         // Handle Add Plugin button on connection lines
         if (e.target.closest('.graph-add-plugin-btn')) {
             const btn = e.target.closest('.graph-add-plugin-btn');
@@ -1482,9 +1955,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const componentId = btn.dataset.componentId;
             const blockType = btn.dataset.blockType;
             const elseIfIndex = btn.dataset.elseifIndex !== 'null' ? parseInt(btn.dataset.elseifIndex) : null;
+            const index = parseInt(btn.dataset.index);
             
             if (typeof addPluginToConditional === 'function') {
-                addPluginToConditional(componentId, blockType, elseIfIndex);
+                addPluginToConditional(componentId, blockType, elseIfIndex, index);
             }
         }
         

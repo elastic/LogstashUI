@@ -860,3 +860,125 @@ def UploadFile(request):
         logger.error(f"Error in UploadFile: {e}")
         logger.error(traceback.format_exc())
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def GetSimulationNodeStatus(request):
+    """
+    Check the health status of the LogstashAgent.
+    
+    Returns:
+        JSON response with:
+        - status: "running" if agent is healthy, "not_responding" otherwise
+        - message: Human-readable status message
+        - agent_info: Additional info from agent (if available)
+    """
+    try:
+        logstash_agent_url = settings.LOGSTASH_AGENT_URL
+        
+        try:
+            response = requests.get(logstash_agent_url, timeout=3, verify=False)
+            response.raise_for_status()
+            
+            agent_data = response.json()
+            
+            return JsonResponse({
+                "status": "running",
+                "message": "Agent Running",
+                "agent_info": agent_data
+            }, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"LogstashAgent not responding: {e}")
+            return JsonResponse({
+                "status": "not_responding",
+                "message": "Agent Not Responding",
+                "error": str(e)
+            }, status=200)
+    
+    except Exception as e:
+        logger.error(f"Error in GetSimulationNodeStatus: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "status": "error",
+            "message": "Agent Not Responding",
+            "error": str(e)
+        }, status=200)
+
+
+@require_admin_role
+def ValidateLogstashConfig(request):
+    """
+    Validate a Logstash pipeline configuration by sending it to LogstashAgent
+    for validation using logstash --config.test_and_exit.
+    
+    Expected POST parameters:
+        - components: JSON string of pipeline components
+        - pipeline_name: Name of the pipeline (used for temp file naming)
+    
+    Returns:
+        JSON response with:
+        - status: "OK" or "ERROR"
+        - notifications: List of warning/deprecation messages
+        - error: Error message if validation failed
+    """
+    if request.method != 'POST':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        components_json = request.POST.get('components')
+        pipeline_name = request.POST.get('pipeline_name', 'pipeline')
+        
+        if not components_json:
+            return JsonResponse({
+                "status": "ERROR",
+                "error": "No pipeline components provided"
+            }, status=400)
+        
+        try:
+            components = json.loads(components_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse components JSON: {e}")
+            return JsonResponse({
+                "status": "ERROR",
+                "error": "Invalid components data"
+            }, status=400)
+        
+        # Convert components to Logstash config
+        converter = logstash_config_parse.ComponentToPipeline(components, test=False)
+        logstash_config = converter.components_to_logstash_config()
+        
+        # Send to LogstashAgent for validation
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/validate"
+        
+        try:
+            response = requests.post(
+                logstash_agent_url,
+                json={
+                    "pipeline_name": pipeline_name,
+                    "config": logstash_config
+                },
+                verify=False,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            validation_result = response.json()
+            logger.info(f"Validation result for pipeline '{pipeline_name}': {validation_result.get('status')}")
+            
+            return JsonResponse(validation_result, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to validate config via LogstashAgent: {e}")
+            return JsonResponse({
+                "status": "ERROR",
+                "error": f"Failed to connect to LogstashAgent: {str(e)}"
+            }, status=500)
+    
+    except Exception as e:
+        logger.error(f"Error in ValidateLogstashConfig: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "status": "ERROR",
+            "error": str(e)
+        }, status=500)

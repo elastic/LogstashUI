@@ -18,6 +18,9 @@ from logstash_api import LogstashAPI, PipelineNotFoundError
 import requests
 import time
 import base64
+import asyncio
+import atexit
+import logstash_supervisor
 
 # Configure logging
 logging.basicConfig(
@@ -31,6 +34,24 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
+
+@app.on_event("startup")
+async def startup_event():
+    """Start Logstash under supervision when FastAPI starts"""
+    logger.info("FastAPI startup - initializing Logstash supervisor")
+    logstash_supervisor.start_supervised_logstash()
+    # Wait for Logstash to initialize
+    await asyncio.sleep(5)
+    logger.info("Logstash supervision started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown Logstash supervisor when FastAPI stops"""
+    logger.info("FastAPI shutdown - stopping Logstash supervisor")
+    logstash_supervisor.shutdown_supervisor()
+
+# Also register atexit handler for clean shutdown
+atexit.register(logstash_supervisor.shutdown_supervisor)
 
 # Configuration paths
 PIPELINES_YML_PATH = "/etc/logstash/pipelines.yml"
@@ -94,12 +115,34 @@ def _load_pipelines_yml() -> list:
 
 
 def _save_pipelines_yml(pipelines: list):
-    """Save the pipelines.yml file atomically"""
+    """Save the pipelines.yml file atomically, ensuring static pipelines are preserved"""
+    # Define static pipelines that must always be present
+    static_pipelines = [
+        {
+            'pipeline.id': 'simulate-start',
+            'pipeline.workers': 1,
+            'path.config': '/etc/logstash/config/simulate_start.conf'
+        },
+        {
+            'pipeline.id': 'simulate-end',
+            'pipeline.workers': 1,
+            'path.config': '/etc/logstash/config/simulate_end.conf'
+        }
+    ]
+    
+    # Remove any existing static pipeline entries from the input list
+    static_ids = {'simulate-start', 'simulate-end'}
+    dynamic_pipelines = [p for p in pipelines if p.get('pipeline.id') not in static_ids]
+    
+    # Combine static pipelines (first) with dynamic pipelines
+    final_pipelines = static_pipelines + dynamic_pipelines
+    
     temp_path = f"{PIPELINES_YML_PATH}.tmp"
     try:
         with open(temp_path, 'w') as f:
-            yaml.dump(pipelines, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(final_pipelines, f, default_flow_style=False, sort_keys=False)
         os.replace(temp_path, PIPELINES_YML_PATH)
+        logger.debug(f"Saved pipelines.yml with {len(static_pipelines)} static + {len(dynamic_pipelines)} dynamic pipelines")
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -892,4 +935,151 @@ async def write_file(request: Request):
         raise HTTPException(
             status_code=500,
             detail=f"Error writing file: {str(e)}"
+        )
+
+
+@app.post("/_logstash/validate")
+async def validate_logstash_config(request: Request):
+    """
+    Validate a Logstash pipeline configuration using logstash --config.test_and_exit.
+    
+    Request body:
+        - pipeline_name: Name of the pipeline (used for temp file naming)
+        - config: The Logstash configuration to validate
+    
+    Returns:
+        - status: "OK" or "ERROR"
+        - notifications: List of warning/deprecation messages
+        - error: Error message if validation failed
+    """
+    import subprocess
+    import tempfile
+    
+    try:
+        body = await request.json()
+        pipeline_name = body.get("pipeline_name", "pipeline")
+        config = body.get("config")
+        
+        if not config:
+            raise HTTPException(
+                status_code=400,
+                detail="No configuration provided"
+            )
+        
+        # Create temporary config file
+        temp_file_path = f"/tmp/{pipeline_name}.conf"
+        
+        try:
+            # Replace keystore variables without defaults to avoid validation failures
+            # Pattern: ${variable_name} -> ${variable_name:test}
+            # Don't replace if already has a default: ${variable_name:existing_default}
+            import re
+            config_with_defaults = re.sub(
+                r'\$\{([^}:]+)\}',  # Match ${variable_name} without colon
+                r'${\1:test}',       # Replace with ${variable_name:test}
+                config
+            )
+            
+            # Write config to temp file
+            with open(temp_file_path, 'w') as f:
+                f.write(config_with_defaults)
+            
+            logger.info(f"Validating config for pipeline '{pipeline_name}' at {temp_file_path}")
+            
+            # Run logstash validation
+            result = subprocess.run(
+                ["logstash", "--config.test_and_exit", "-f", temp_file_path, "--log.format", "json"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Parse output to extract notifications by log level
+            notifications_by_level = {}
+            output_lines = result.stdout.strip().split('\n')
+            
+            for line in output_lines:
+                try:
+                    log_entry = json.loads(line)
+                    # Extract log entries with logEvent
+                    if "logEvent" in log_entry:
+                        message = log_entry["logEvent"].get("message", "")
+                        logger_name = log_entry.get("loggerName", "")
+                        level = log_entry.get("level", "INFO")
+                        
+                        # Filter out noise
+                        if "Reflections took" in message or "pipelines.yml" in message:
+                            continue
+                        
+                        # Only include relevant log levels
+                        if level in ["FATAL", "ERROR", "WARN", "INFO"]:
+                            # Skip generic INFO messages unless they're important
+                            if level == "INFO":
+                                # Filter out logstash.runner INFO logs - not useful to users
+                                if logger_name == "logstash.runner":
+                                    continue
+                                # Only include specific INFO messages
+                                if not any(keyword in message.lower() for keyword in ["deprecated", "warning", "error"]):
+                                    continue
+                            
+                            # Initialize level list if not exists
+                            if level not in notifications_by_level:
+                                notifications_by_level[level] = []
+                            
+                            # Remove discussion forum text if present
+                            cleaned_message = message.replace(
+                                "If you have any questions about this, please ask it on the https://discuss.elastic.co/c/logstash discussion forum",
+                                ""
+                            ).strip()
+                            
+                            # Add entry with plugin and message
+                            notifications_by_level[level].append({
+                                "plugin": logger_name,
+                                "message": cleaned_message
+                            })
+                except json.JSONDecodeError:
+                    # Skip non-JSON lines (like "Configuration OK")
+                    if "Configuration OK" in line:
+                        logger.info("Configuration validation passed")
+                    continue
+            
+            # Determine overall status based on log levels present
+            if "FATAL" in notifications_by_level or "ERROR" in notifications_by_level:
+                status = "ERROR"
+            elif "WARN" in notifications_by_level:
+                status = "WARN"
+            elif result.returncode == 0:
+                status = "OK"
+            else:
+                status = "ERROR"
+            
+            logger.info(f"Validation result for pipeline '{pipeline_name}': {status}, levels: {list(notifications_by_level.keys())}")
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": status,
+                    "notifications": notifications_by_level
+                }
+            )
+        
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                logger.debug(f"Removed temp file: {temp_file_path}")
+    
+    except subprocess.TimeoutExpired:
+        logger.error(f"Validation timeout for pipeline '{pipeline_name}'")
+        raise HTTPException(
+            status_code=500,
+            detail="Validation timeout - configuration took too long to validate"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error validating configuration: {str(e)}"
         )

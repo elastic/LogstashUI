@@ -51,6 +51,35 @@
         </div>
     </div>
     
+    <!-- Validate Config Button -->
+    <div class="relative group">
+        <button id="validateConfigBtn" onclick="validatePipelineConfig()" class="flex items-center gap-3 px-4 py-2 bg-gray-700/50 rounded-lg border border-gray-600/50 hover:bg-gray-700 transition-colors cursor-pointer">
+            <div class="flex items-center justify-center w-8 h-8 bg-purple-600/20 rounded-lg">
+                <svg id="validateIcon" class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 font-medium">Validate</div>
+                <div id="validateStatus" class="text-xl font-bold text-white">Check config</div>
+            </div>
+        </button>
+        <div id="validationTooltip" class="hidden group-hover:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-96 bg-gray-800 text-white text-xs rounded-lg shadow-lg p-3 z-50 border border-purple-500" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-start mb-2">
+                <div class="font-semibold text-purple-400">Validation Results</div>
+                <button onclick="document.getElementById('validationTooltip').classList.add('hidden')" class="text-gray-400 hover:text-white ml-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="validationContent" class="text-gray-300 space-y-1">Click to validate your pipeline configuration</div>
+            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
+                <div class="w-2 h-2 bg-gray-800 border-l border-t border-purple-500 transform rotate-45"></div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Placeholder for future metrics -->
     <!-- Add more metric capsules here as needed -->
 </div>

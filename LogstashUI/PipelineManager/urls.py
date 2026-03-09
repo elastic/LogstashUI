@@ -17,6 +17,8 @@ urlpatterns = [
     path("CheckIfPipelineLoaded/", simulation.CheckIfPipelineLoaded, name="CheckIfPipelineLoaded"),
     path("GetRelatedLogs/", simulation.GetRelatedLogs, name="GetRelatedLogs"),
     path("UploadFile/", simulation.UploadFile, name="UploadFile"),
+    path("GetSimulationNodeStatus/", simulation.GetSimulationNodeStatus, name="GetSimulationNodeStatus"),
+    path("ValidateLogstashConfig/", simulation.ValidateLogstashConfig, name="ValidateLogstashConfig"),
 
     path('TestConnectivity', views.TestConnectivity, name='TestConnectivity'),
 

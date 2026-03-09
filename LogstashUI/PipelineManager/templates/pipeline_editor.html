@@ -129,6 +129,189 @@
         }
     }
     
+    /**
+     * Check LogstashAgent health status
+     */
+    async function checkAgentStatus() {
+        try {
+            const response = await fetch('/ConnectionManager/GetSimulationNodeStatus/');
+            const data = await response.json();
+            
+            const agentStatusDiv = document.getElementById('agentStatus');
+            const agentStatusIcon = document.getElementById('agentStatusIcon');
+            const agentStatusMessage = document.getElementById('agentStatusMessage');
+            
+            if (data.status === 'running') {
+                // Agent is running - show green checkmark
+                agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
+                agentStatusIcon.outerHTML = `
+                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                agentStatusMessage.className = 'text-xs font-medium text-green-300';
+                agentStatusMessage.textContent = data.message;
+            } else {
+                // Agent not responding - show red X
+                agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
+                agentStatusIcon.outerHTML = `
+                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                `;
+                agentStatusMessage.className = 'text-xs font-medium text-red-300';
+                agentStatusMessage.textContent = data.message;
+            }
+        } catch (error) {
+            console.error('Error checking agent status:', error);
+            const agentStatusDiv = document.getElementById('agentStatus');
+            const agentStatusIcon = document.getElementById('agentStatusIcon');
+            const agentStatusMessage = document.getElementById('agentStatusMessage');
+            
+            // Show error state
+            agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
+            agentStatusIcon.outerHTML = `
+                <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            `;
+            agentStatusMessage.className = 'text-xs font-medium text-red-300';
+            agentStatusMessage.textContent = 'Agent Not Responding';
+        }
+    }
+    
+    /**
+     * Validate pipeline configuration
+     */
+    async function validatePipelineConfig() {
+        const validateBtn = document.getElementById('validateConfigBtn');
+        const validateIcon = document.getElementById('validateIcon');
+        const validateStatus = document.getElementById('validateStatus');
+        const validationContent = document.getElementById('validationContent');
+        const validationTooltip = document.getElementById('validationTooltip');
+        
+        // Show loading state
+        validateIcon.outerHTML = `
+            <svg id="validateIcon" class="w-5 h-5 text-purple-400 animate-spin" fill="currentColor" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        `;
+        validateStatus.textContent = 'Validating...';
+        validationContent.innerHTML = 'Validating your pipeline configuration...';
+        
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pipelineName = urlParams.get('pipeline') || 'pipeline';
+            
+            const formData = new FormData();
+            formData.append('components', JSON.stringify(components));
+            formData.append('pipeline_name', pipelineName);
+            
+            const response = await fetch('/ConnectionManager/ValidateLogstashConfig/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            });
+            
+            const data = await response.json();
+            const notifications = data.notifications || {};
+            
+            // Determine severity based on log levels present
+            const hasFatal = 'FATAL' in notifications;
+            const hasError = 'ERROR' in notifications;
+            const hasWarn = 'WARN' in notifications;
+            const hasInfo = 'INFO' in notifications;
+            
+            let borderColor = 'border-purple-500';
+            let statusIcon = '';
+            let statusText = '';
+            let statusClass = '';
+            let contentHtml = '';
+            
+            if (hasFatal || hasError || data.status === 'ERROR') {
+                // FATAL or ERROR - show red X with "Invalid"
+                borderColor = 'border-red-500';
+                statusIcon = `
+                    <svg id="validateIcon" class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                `;
+                statusText = 'Invalid';
+                statusClass = 'text-xl font-bold text-red-400';
+                contentHtml = '<div class="text-red-400 font-semibold mb-2">✗ Configuration has errors</div>';
+            } else if (hasWarn) {
+                // WARN - show yellow caution symbol
+                borderColor = 'border-yellow-500';
+                statusIcon = `
+                    <svg id="validateIcon" class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                `;
+                statusText = 'Valid';
+                statusClass = 'text-xl font-bold text-yellow-400';
+                contentHtml = '<div class="text-yellow-400 font-semibold mb-2">⚠ Configuration is valid with warnings</div>';
+            } else {
+                // INFO only or no issues - show green checkmark with "Valid"
+                borderColor = 'border-green-500';
+                statusIcon = `
+                    <svg id="validateIcon" class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                `;
+                statusText = 'Valid';
+                statusClass = 'text-xl font-bold text-green-400';
+                contentHtml = '<div class="text-green-400 font-semibold mb-2">✓ Configuration is valid with no warnings</div>';
+            }
+            
+            // Build notification details by log level
+            const logLevelOrder = ['FATAL', 'ERROR', 'WARN', 'INFO'];
+            for (const level of logLevelOrder) {
+                if (level in notifications && notifications[level].length > 0) {
+                    const levelColor = {
+                        'FATAL': 'text-red-400',
+                        'ERROR': 'text-red-400',
+                        'WARN': 'text-yellow-400',
+                        'INFO': 'text-blue-400'
+                    }[level];
+                    
+                    contentHtml += `<div class="${levelColor} font-semibold mt-2 mb-1">${level} (${notifications[level].length}):</div>`;
+                    notifications[level].forEach(entry => {
+                        contentHtml += `<div class="text-gray-300 text-xs mb-1">
+                            <span class="text-gray-400">[${entry.plugin}]</span> ${entry.message}
+                        </div>`;
+                    });
+                }
+            }
+            
+            // Update UI
+            document.getElementById('validateIcon').outerHTML = statusIcon;
+            validateStatus.textContent = statusText;
+            validateStatus.className = statusClass;
+            validationContent.innerHTML = contentHtml;
+            
+            // Update tooltip border color
+            validationTooltip.className = validationTooltip.className.replace(/border-\w+-500/, borderColor);
+            
+            // Show tooltip - user can close it manually or by hovering away
+            validationTooltip.classList.remove('hidden');
+            
+        } catch (error) {
+            console.error('Error validating config:', error);
+            document.getElementById('validateIcon').outerHTML = `
+                <svg id="validateIcon" class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            `;
+            validateStatus.textContent = 'Error';
+            validateStatus.className = 'text-xl font-bold text-red-400';
+            validationContent.innerHTML = `<div class="text-red-400">Error: ${error.message}</div>`;
+            validationTooltip.className = validationTooltip.className.replace('border-purple-500', 'border-red-500');
+        }
+    }
+    
     // Register htmx:afterSwap listener EARLY to catch the initial page load preallocation
     // This must be done before the slotPreallocation element is parsed
     document.addEventListener('DOMContentLoaded', function() {
@@ -139,6 +322,9 @@
                 setTimeout(checkPipelineLoadStatus, 100);
             });
         }
+        
+        // Check agent status once on page load
+        checkAgentStatus();
     });
 </script>
 <style>
@@ -525,6 +711,15 @@
         <div class="flex justify-between items-center relative">
             <!-- Left: Status Chip + Logs -->
             <div class="flex items-center gap-4">
+                <!-- LogstashAgent Status Chip -->
+                <div id="agentStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
+                    <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="agentStatusMessage" class="text-xs font-medium text-gray-300">Checking agent...</span>
+                </div>
+                
                 <!-- Pipeline Status Chip -->
                 <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
                     <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">

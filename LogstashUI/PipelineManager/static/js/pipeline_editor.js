@@ -2223,8 +2223,8 @@ function addElseIfToConditional(componentId) {
     triggerPipelineWarmingAndChecking();
 }
 
-function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
-    // console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}`);
+function addPluginToConditional(componentId, blockType, elseIfIndex = null, index = null) {
+    // console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}, index: ${index}`);
 
 // Find the conditional component
     const component = findComponentById(componentId);
@@ -2234,7 +2234,7 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
     }
 
 // Store the context for the plugin selection callback
-    const context = {componentId, blockType, elseIfIndex};
+    const context = {componentId, blockType, elseIfIndex, index};
 
 // Store the context in the modal's dataset for later use
     const modal = document.getElementById('pluginModal');
@@ -2309,8 +2309,12 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
         // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
         pendingAnimationPluginId = newlyAddedPluginId;
 
-// Add the plugin to the appropriate block
-        targetPlugins.push(newPlugin);
+// Add the plugin to the appropriate block at the specified index
+        if (context.index !== null && context.index !== undefined) {
+            targetPlugins.splice(context.index, 0, newPlugin);
+        } else {
+            targetPlugins.push(newPlugin);
+        }
 
 // Clean up the context
         if (modal.dataset.context) {
@@ -2813,10 +2817,13 @@ async function checkPipelineLoadStatus() {
             if (isRunning) {
                 // Success - Pipeline is running
                 statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
-                statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
-                statusIcon.className = 'w-4 h-4 text-green-400';
-                statusMessage.textContent = '● Simulation OK';
-                statusMessage.className = 'text-xs font-medium text-green-400';
+                statusIcon.outerHTML = `
+                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                statusMessage.textContent = 'Simulation OK';
+                statusMessage.className = 'text-xs font-medium text-green-300';
             } else {
                 // Failure - Pipeline not running
                 statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
