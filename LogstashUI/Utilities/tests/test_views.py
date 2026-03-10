@@ -13,6 +13,41 @@ from Utilities.views import (
 )
 import json
 import os
+from django.conf import settings
+from Common.test_resources import request_factory, authenticated_client, test_user, client
+
+
+@pytest.fixture
+def sample_log_data():
+    """Sample log data for testing grok patterns"""
+    return {
+        'simple': '192.168.1.1 - - [01/Jan/2024:12:00:00 +0000] "GET /index.html HTTP/1.1" 200 1234',
+        'multiline': 'Line 1\nLine 2\nLine 3',
+        'special_chars': '<script>alert("xss")</script>',
+        'unicode': 'User José logged in from München'
+    }
+
+
+@pytest.fixture
+def custom_patterns():
+    """Custom grok pattern definitions for testing"""
+    return r"""CUSTOM_EMAIL [A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}
+CUSTOM_DATE \d{4}-\d{2}-\d{2}"""
+
+
+@pytest.fixture
+def grok_patterns_file_path():
+    """Path to the grok patterns file"""
+    utilities_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    patterns_file = os.path.join(utilities_dir, 'data', 'grok-patterns.txt')
+    
+    if not os.path.exists(patterns_file):
+        patterns_file = os.path.join(utilities_dir, 'grok-patterns')
+    
+    if not os.path.exists(patterns_file):
+        patterns_file = os.path.join(utilities_dir, 'static', 'grok-patterns')
+    
+    return patterns_file
 
 
 @pytest.mark.django_db

@@ -21,6 +21,7 @@
         <!-- Modal Body -->
         <div class="p-6">
             <p id="confirmationModalMessage" class="text-gray-300 whitespace-pre-line"></p>
+            <input type="text" id="confirmationModalInput" class="hidden mt-4 w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="">
             <pre id="confirmationModalCode" class="hidden mt-4 p-4 bg-gray-900 rounded-lg text-xs font-mono text-red-400 whitespace-pre-wrap overflow-x-auto border border-gray-700"></pre>
         </div>
 
@@ -63,6 +64,7 @@ window.ConfirmationModal = {
             const modal = document.getElementById('confirmationModal');
             const titleEl = document.getElementById('confirmationModalTitle');
             const messageEl = document.getElementById('confirmationModalMessage');
+            const inputEl = document.getElementById('confirmationModalInput');
             const codeEl = document.getElementById('confirmationModalCode');
             const okBtn = document.getElementById('confirmationModalOkBtn');
             const cancelBtn = modal.querySelector('button[onclick="ConfirmationModal.cancel()"]');
@@ -71,6 +73,9 @@ window.ConfirmationModal = {
             titleEl.textContent = title;
             messageEl.textContent = message;
             okBtn.textContent = okText;
+            
+            // Hide input field for regular confirmations
+            inputEl.classList.add('hidden');
             
             // Handle code message
             if (codeMessage) {
@@ -103,6 +108,63 @@ window.ConfirmationModal = {
             
             // Focus OK button
             setTimeout(() => okBtn.focus(), 100);
+        });
+    },
+    
+    /**
+     * Show a prompt modal for text input
+     * @param {string} message - The message to display
+     * @param {string} defaultValue - Default value for the input field
+     * @param {string} title - Optional title (defaults to "Input Required")
+     * @param {string} placeholder - Optional placeholder text for input
+     * @returns {Promise} - Resolves with the input value if confirmed, null if cancelled
+     */
+    prompt: function(message, defaultValue = '', title = 'Input Required', placeholder = '') {
+        return new Promise((resolve, reject) => {
+            const modal = document.getElementById('confirmationModal');
+            const titleEl = document.getElementById('confirmationModalTitle');
+            const messageEl = document.getElementById('confirmationModalMessage');
+            const inputEl = document.getElementById('confirmationModalInput');
+            const codeEl = document.getElementById('confirmationModalCode');
+            const okBtn = document.getElementById('confirmationModalOkBtn');
+            const cancelBtn = modal.querySelector('button[onclick="ConfirmationModal.cancel()"]');
+            
+            // Set content
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            okBtn.textContent = 'OK';
+            
+            // Show and configure input field
+            inputEl.classList.remove('hidden');
+            inputEl.value = defaultValue;
+            inputEl.placeholder = placeholder;
+            
+            // Hide code block
+            codeEl.classList.add('hidden');
+            
+            // Show Cancel button
+            cancelBtn.classList.remove('hidden');
+            
+            // Set callbacks
+            this.onConfirm = () => {
+                const value = inputEl.value.trim();
+                this.hide();
+                resolve(value || null);
+            };
+            
+            this.onCancel = () => {
+                this.hide();
+                resolve(null);
+            };
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            
+            // Focus input field and select default value
+            setTimeout(() => {
+                inputEl.focus();
+                inputEl.select();
+            }, 100);
         });
     },
     

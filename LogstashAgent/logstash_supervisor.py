@@ -41,15 +41,18 @@ class LogstashSupervisor:
         self.threshold_duration_seconds = 30.0
         
         # RSS thresholds will be calculated dynamically based on JVM heap size
-        # Target: RSS should be ~1.4x to ~1.75x of JVM heap max
+        # Watch threshold: RSS > 1.2x heap (wait 30s before restart)
+        # Critical threshold: RSS > 1.75x heap (immediate restart)
         # (JVM overhead + off-heap memory + OS buffers)
-        self.rss_min_multiplier = 1.4
-        self.rss_max_multiplier = 1.75
+        self.rss_watch_multiplier = 1.2
+        self.rss_critical_multiplier = 1.75
         self.heap_max_gb: Optional[float] = None  # Will be fetched from Logstash API
         
         # Tracking
         self.high_memory_start_time: Optional[float] = None
         self.restart_count = 0
+        self.api_unresponsive_count = 0
+        self.api_unresponsive_threshold = 3  # Restart after 3 consecutive API failures
         
         logger.info(f"LogstashSupervisor initialized (simulation_mode={self.simulation_mode})")
     
@@ -169,7 +172,8 @@ class LogstashSupervisor:
                 if heap_max > 0 and self.heap_max_gb is None:
                     self.heap_max_gb = heap_max / (1024 ** 3)
                     logger.info(f"JVM heap max detected: {self.heap_max_gb:.2f}GB")
-                    logger.info(f"RSS thresholds: {self.heap_max_gb * self.rss_min_multiplier:.2f}GB - {self.heap_max_gb * self.rss_max_multiplier:.2f}GB")
+                    logger.info(f"RSS watch threshold: {self.heap_max_gb * self.rss_watch_multiplier:.2f}GB (30s wait)")
+                    logger.info(f"RSS critical threshold: {self.heap_max_gb * self.rss_critical_multiplier:.2f}GB (immediate restart)")
                 
                 if heap_max > 0:
                     return (heap_used / heap_max) * 100.0
@@ -202,28 +206,54 @@ class LogstashSupervisor:
     def _check_memory_thresholds(self) -> Optional[str]:
         """
         Check if memory thresholds are exceeded.
-        Returns restart reason if threshold exceeded for 30+ seconds, None otherwise.
+        Returns restart reason immediately if critical threshold exceeded,
+        or after 30s if watch threshold exceeded.
         """
         heap_percent = self._get_jvm_heap_usage()
         rss_gb = self._get_rss_memory_gb()
         
+        # Check if API is unresponsive
+        if heap_percent is None and rss_gb is None:
+            self.api_unresponsive_count += 1
+            logger.warning(f"Logstash API unresponsive ({self.api_unresponsive_count}/{self.api_unresponsive_threshold})")
+            if self.api_unresponsive_count >= self.api_unresponsive_threshold:
+                return f"Logstash API unresponsive for {self.api_unresponsive_count * 5}s"
+            return None
+        else:
+            # Reset unresponsive counter if we get data
+            self.api_unresponsive_count = 0
+        
         # Determine if we're in high memory state
         high_memory = False
+        immediate_restart = False
         reason = None
         
+        # Check JVM heap
         if heap_percent and heap_percent > self.heap_threshold_percent:
             high_memory = True
             reason = f"JVM heap at {heap_percent:.1f}% (threshold: {self.heap_threshold_percent}%)"
-        elif rss_gb and self.heap_max_gb:
-            # Calculate dynamic RSS thresholds based on heap size
-            rss_min_gb = self.heap_max_gb * self.rss_min_multiplier
-            rss_max_gb = self.heap_max_gb * self.rss_max_multiplier
-            
-            if rss_min_gb <= rss_gb <= rss_max_gb:
-                high_memory = True
-                reason = f"RSS memory at {rss_gb:.2f}GB (threshold: {rss_min_gb:.2f}-{rss_max_gb:.2f}GB)"
         
-        # Track high memory duration
+        # Check RSS memory
+        if rss_gb and self.heap_max_gb:
+            rss_watch_gb = self.heap_max_gb * self.rss_watch_multiplier
+            rss_critical_gb = self.heap_max_gb * self.rss_critical_multiplier
+            
+            if rss_gb > rss_critical_gb:
+                # Critical threshold - immediate restart
+                immediate_restart = True
+                reason = f"RSS memory at {rss_gb:.2f}GB > critical threshold {rss_critical_gb:.2f}GB"
+            elif rss_gb > rss_watch_gb:
+                # Watch threshold - wait 30s before restart
+                high_memory = True
+                reason = f"RSS memory at {rss_gb:.2f}GB > watch threshold {rss_watch_gb:.2f}GB"
+        
+        # Immediate restart for critical threshold
+        if immediate_restart:
+            logger.warning(f"Critical memory threshold exceeded: {reason}")
+            self.high_memory_start_time = None  # Reset tracking
+            return reason
+        
+        # Track high memory duration for watch threshold
         if high_memory:
             if self.high_memory_start_time is None:
                 self.high_memory_start_time = time.time()

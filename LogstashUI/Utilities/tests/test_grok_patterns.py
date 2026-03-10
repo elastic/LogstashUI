@@ -6,9 +6,26 @@ import pytest
 import os
 import re
 import logging
+from django.conf import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture
+def grok_patterns_file_path():
+    """Path to the grok patterns file"""
+    utilities_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    patterns_file = os.path.join(utilities_dir, 'data', 'grok-patterns.txt')
+    
+    if not os.path.exists(patterns_file):
+        patterns_file = os.path.join(utilities_dir, 'grok-patterns')
+    
+    if not os.path.exists(patterns_file):
+        patterns_file = os.path.join(utilities_dir, 'static', 'grok-patterns')
+    
+    return patterns_file
+
 
 @pytest.mark.django_db
 class TestGrokPatternsFile:

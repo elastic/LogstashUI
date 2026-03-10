@@ -2182,7 +2182,7 @@ function removeComponent(componentId) {
     }
 }
 
-function addElseIfToConditional(componentId) {
+async function addElseIfToConditional(componentId) {
 // Find the conditional component
     const component = findComponentById(componentId);
     if (!component || component.plugin !== 'if') {
@@ -2190,8 +2190,13 @@ function addElseIfToConditional(componentId) {
         return;
     }
 
-// Prompt for condition
-    const condition = prompt('Enter the else-if condition:', '[message]');
+// Prompt for condition using custom modal
+    const condition = await ConfirmationModal.prompt(
+        'Enter the else-if condition:',
+        '[message]',
+        'Add Else-If Condition',
+        'e.g., [message] == "error"'
+    );
     if (!condition) {
         return;
     }
