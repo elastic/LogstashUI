@@ -245,7 +245,7 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
                     meta_agg_stats['nodes'].append(node['key'])
                     try:
                         last_hit_doc = node['last_hit']['hits']['hits'][0]['_source']['logstash']
-                    except KeyError as e:
+                    except (KeyError, IndexError) as e:
                         logger.error(f"Unable to fetch last_hit for {node['key']}")
                         continue
 
@@ -394,7 +394,7 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
 
                         try:
                             last_hit_doc = pipeline_bucket['last_hit']['hits']['hits'][0]['_source']['logstash']
-                        except KeyError as e:
+                        except (KeyError, IndexError) as e:
                             logger.warning(f"Unable to fetch last_hit for {pipeline_bucket['key']}")
                             continue
 

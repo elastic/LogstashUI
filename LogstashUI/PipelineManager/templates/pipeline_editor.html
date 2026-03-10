@@ -707,10 +707,10 @@
             <h1 class="text-3xl font-semibold text-white">{{ pipeline_name }}</h1>
         </div>
         
-        <!-- Row 2: Status + Centered Toggle + Actions -->
-        <div class="flex justify-between items-center relative">
+        <!-- Row 2: Status + Centered Toggle + Actions (Responsive Layout) -->
+        <div class="flex flex-col 2xl:flex-row 2xl:justify-between 2xl:items-center gap-4 relative">
             <!-- Left: Status Chip + Logs -->
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 flex-wrap">
                 <!-- LogstashAgent Status Chip -->
                 <div id="agentStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
                     <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
@@ -737,7 +737,7 @@
             </div>
             
             <!-- Center: Presentation Mode Toggle -->
-            <div class="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 bg-gray-700 rounded-lg p-1">
+            <div class="2xl:absolute 2xl:left-1/2 2xl:transform 2xl:-translate-x-1/2 flex items-center gap-2 bg-gray-700 rounded-lg p-1 w-fit">
                 <button id="uiModeBtn" class="w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
                     UI
                 </button>
@@ -750,7 +750,7 @@
             </div>
             
             <!-- Right: Action Buttons -->
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 flex-wrap">
                 <form onsubmit="return false;" class="flex items-center gap-4">
                     {% csrf_token %}
                     

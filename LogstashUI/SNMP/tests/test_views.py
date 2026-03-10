@@ -357,3 +357,90 @@ class TestViewsEdgeCases:
             except Exception:
                 # If exception is raised, that's also acceptable for this test
                 pass
+
+
+# ============================================================================
+# Additional context / content verification tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestViewContextContent:
+    """Additional tests verifying the data passed to each template context"""
+
+    def test_networks_context_contains_network_instance(self, authenticated_client, test_network):
+        """Networks context 'networks' queryset contains our test network"""
+        response = authenticated_client.get('/SNMP/Networks/')
+        assert response.status_code == 200
+        network_names = [n.name for n in response.context['networks']]
+        assert 'Test Network' in network_names
+
+    def test_devices_context_has_devices_key(self, authenticated_client, test_device):
+        """Devices view passes 'devices' queryset to template"""
+        response = authenticated_client.get('/SNMP/Devices/')
+        assert response.status_code == 200
+        assert 'devices' in response.context
+        device_names = [d.name for d in response.context['devices']]
+        assert 'Test Device' in device_names
+
+    def test_credentials_context_has_credentials_key(self, authenticated_client, test_credential):
+        """Credentials view passes 'credentials' queryset to template"""
+        response = authenticated_client.get('/SNMP/Credentials/')
+        assert response.status_code == 200
+        assert 'credentials' in response.context
+        cred_names = [c.name for c in response.context['credentials']]
+        assert 'Test Credential' in cred_names
+
+    def test_profiles_view_user_profile_fields(self, authenticated_client, test_profile):
+        """User profile dicts always have pinned=False"""
+        response = authenticated_client.get('/SNMP/Profiles/')
+        assert response.status_code == 200
+        user_profiles = [p for p in response.context['profiles'] if not p['is_official']]
+        for p in user_profiles:
+            assert p['pinned'] is False
+
+    def test_profiles_view_official_profile_fields(self, authenticated_client):
+        """Official profiles parsed from JSON always have is_official=True"""
+        response = authenticated_client.get('/SNMP/Profiles/')
+        assert response.status_code == 200
+        official_profiles = [p for p in response.context['profiles'] if p['is_official']]
+        for p in official_profiles:
+            assert p['is_official'] is True
+            # Must have all required keys
+            for key in ('name', 'display_name', 'description', 'type', 'vendor', 'pinned'):
+                assert key in p
+
+    def test_profiles_view_invalid_json_handled_gracefully(self, authenticated_client, settings, tmp_path):
+        """Profiles view gracefully ignores JSON files that cannot be parsed"""
+        official_dir = tmp_path / 'official_profiles'
+        official_dir.mkdir()
+        (official_dir / 'broken.json').write_text('{ not valid json }')
+
+        with patch('SNMP.views.os.path.exists', return_value=True), \
+             patch('SNMP.views.os.listdir', return_value=['broken.json']):
+            response = authenticated_client.get('/SNMP/Profiles/')
+        assert response.status_code == 200
+        # Broken file's profile should still appear (with empty fields) thanks to the except: pass
+        profiles = response.context['profiles']
+        official_names = [p['name'] for p in profiles if p['is_official']]
+        # 'broken' should appear because the entry is always appended before reading JSON
+        assert 'broken' in official_names
+        broken = next(p for p in profiles if p['name'] == 'broken')
+        assert broken['description'] == ''
+
+    def test_networks_view_form_is_connection_form(self, authenticated_client):
+        """Networks context form is a ConnectionForm instance"""
+        from PipelineManager.forms import ConnectionForm
+        response = authenticated_client.get('/SNMP/Networks/')
+        assert isinstance(response.context['form'], ConnectionForm)
+
+    def test_profiles_alphabetical_sort_among_unpinned(self, authenticated_client):
+        """Unpinned profiles are sorted alphabetically by display_name"""
+        Profile.objects.all().delete()  # start clean for this test
+        Profile.objects.create(name='zebra_profile', description='', profile_data={'get': {}})
+        Profile.objects.create(name='alpha_profile', description='', profile_data={'get': {}})
+
+        response = authenticated_client.get('/SNMP/Profiles/')
+        assert response.status_code == 200
+        user_profiles = [p for p in response.context['profiles'] if not p['is_official']]
+        display_names = [p['display_name'] for p in user_profiles]
+        assert display_names == sorted(display_names)

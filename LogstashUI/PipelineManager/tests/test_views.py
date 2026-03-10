@@ -675,3 +675,799 @@ class TestIntegration:
         delete_conn_response = authenticated_client.post(f'/ConnectionManager/DeleteConnection/{connection.id}/')
         assert delete_conn_response.status_code == 200
         assert not Connection.objects.filter(id=connection.id).exists()
+
+
+# ============================================================================
+# test_connectivity() pure function
+# ============================================================================
+
+class TestConnectivityHelper:
+    """Unit tests for the test_connectivity() pure helper function"""
+
+    def test_no_connection_id_returns_false(self):
+        """Empty connection_id immediately returns (False, message)"""
+        from PipelineManager.views import test_connectivity
+        success, msg = test_connectivity("")
+        assert success is False
+        assert "No connection ID" in msg
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    @patch('PipelineManager.views.test_elastic_connectivity')
+    def test_success_returns_true_and_result(self, mock_test_elastic, mock_get_es):
+        from PipelineManager.views import test_connectivity
+        mock_get_es.return_value = MagicMock()
+        mock_test_elastic.return_value = "Connected!"
+        success, msg = test_connectivity("42")
+        assert success is True
+        assert msg == "Connected!"
+
+    @patch('PipelineManager.views.get_elastic_connection', side_effect=Exception("timeout"))
+    def test_exception_returns_false(self, mock_get_es):
+        from PipelineManager.views import test_connectivity
+        success, msg = test_connectivity("42")
+        assert success is False
+        assert "timeout" in msg
+
+
+# ============================================================================
+# TestConnectivity VIEW — additional paths
+# ============================================================================
+
+@pytest.mark.django_db
+class TestTestConnectivityView:
+    """Tests for the TestConnectivity view"""
+
+    def test_no_test_id_returns_400(self, authenticated_client):
+        """GET without `test` param returns 400"""
+        response = authenticated_client.get('/ConnectionManager/TestConnectivity')
+        assert response.status_code == 400
+        assert b'No connection ID' in response.content
+
+    @patch('PipelineManager.views.test_connectivity', return_value=(True, "All good!"))
+    def test_success_renders_green_div(self, mock_tc, authenticated_client, test_connection):
+        """Successful connection renders a green-coloured div"""
+        response = authenticated_client.get(
+            f'/ConnectionManager/TestConnectivity?test={test_connection.id}'
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert 'green' in content
+        assert 'All good!' in content
+
+
+# ============================================================================
+# GetConnections VIEW
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetConnections:
+    """Tests for the GetConnections view"""
+
+    def test_returns_json_list(self, authenticated_client, test_connection):
+        """Returns a JSON list of connection dicts"""
+        response = authenticated_client.get('/ConnectionManager/GetConnections/')
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        # At least our test_connection
+        ids = [c['id'] for c in data]
+        assert test_connection.id in ids
+
+    def test_returns_expected_fields(self, authenticated_client, test_connection):
+        """Each connection dict has id, name, connection_type"""
+        response = authenticated_client.get('/ConnectionManager/GetConnections/')
+        item = response.json()[0]
+        assert 'id' in item
+        assert 'name' in item
+        assert 'connection_type' in item
+
+
+# ============================================================================
+# AddConnection / DeleteConnection method guards
+# ============================================================================
+
+@pytest.mark.django_db
+class TestConnectionMethodGuards:
+    """Test HTTP method enforcement on connection endpoints"""
+
+    def test_add_connection_get_returns_405(self, authenticated_client):
+        """AddConnection only accepts POST — GET returns 405"""
+        response = authenticated_client.get('/ConnectionManager/AddConnection')
+        assert response.status_code == 405
+
+    def test_delete_connection_get_returns_405(self, authenticated_client, test_connection):
+        """DeleteConnection only accepts POST — GET returns 405"""
+        response = authenticated_client.get(
+            f'/ConnectionManager/DeleteConnection/{test_connection.id}/'
+        )
+        assert response.status_code == 405
+
+
+# ============================================================================
+# PipelineManager & PipelineEditor pages
+# ============================================================================
+
+@pytest.mark.django_db
+class TestPipelineManagerPage:
+    """Tests for the PipelineManager view"""
+
+    def test_page_loads(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/')
+        assert response.status_code == 200
+
+    def test_context_has_connections(self, authenticated_client, test_connection):
+        response = authenticated_client.get('/ConnectionManager/')
+        assert response.status_code == 200
+        assert 'connections' in response.context
+        assert 'has_connections' in response.context
+        assert response.context['has_connections'] is True
+
+
+@pytest.mark.django_db
+class TestPipelineEditorPage:
+    """Tests for the PipelineEditor GET view"""
+
+    def test_missing_params_returns_400(self, authenticated_client):
+        """GET without es_id or pipeline returns 400"""
+        response = authenticated_client.get('/ConnectionManager/Pipelines/Editor/')
+        assert response.status_code == 400
+
+    def test_missing_pipeline_param_returns_400(self, authenticated_client, test_connection):
+        response = authenticated_client.get(
+            f'/ConnectionManager/Pipelines/Editor/?es_id={test_connection.id}'
+        )
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.get_logstash_pipeline', return_value=None)
+    def test_pipeline_not_found_returns_400(self, mock_glp, authenticated_client, test_connection):
+        """When pipeline fetch returns None, view returns 400"""
+        response = authenticated_client.get(
+            f'/ConnectionManager/Pipelines/Editor/?es_id={test_connection.id}&pipeline=nope'
+        )
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_successful_load_200(self, mock_glp, authenticated_client, test_connection):
+        mock_glp.return_value = {
+            'pipeline': 'input {} filter {} output {}',
+            'pipeline_settings': {},
+            'description': 'test',
+            'pipeline_metadata': {'version': 1, 'type': 'logstash_pipeline'},
+        }
+        response = authenticated_client.get(
+            f'/ConnectionManager/Pipelines/Editor/?es_id={test_connection.id}&pipeline=mypipe'
+        )
+        assert response.status_code == 200
+
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_parse_error_captured_in_context(self, mock_glp, authenticated_client, test_connection):
+        """If config parsing fails, parsing_error is set in context (no 500)"""
+        mock_glp.return_value = {
+            'pipeline': '<<< INVALID >>>',
+            'pipeline_settings': {},
+            'description': '',
+            'pipeline_metadata': {'version': 1, 'type': 'logstash_pipeline'},
+        }
+        response = authenticated_client.get(
+            f'/ConnectionManager/Pipelines/Editor/?es_id={test_connection.id}&pipeline=bad'
+        )
+        assert response.status_code == 200
+        assert response.context.get('parsing_error') is not None
+
+
+# ============================================================================
+# GetPipeline endpoint
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetPipelineEndpoint:
+    """Tests for the GetPipeline JSON view"""
+
+    def test_missing_params_returns_400(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetPipeline/')
+        assert response.status_code == 400
+        assert 'error' in response.json()
+
+    def test_missing_pipeline_returns_400(self, authenticated_client, test_connection):
+        response = authenticated_client.get(
+            f'/ConnectionManager/GetPipeline/?es_id={test_connection.id}'
+        )
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.get_logstash_pipeline', return_value=None)
+    def test_pipeline_not_found_returns_400(self, mock_glp, authenticated_client, test_connection):
+        response = authenticated_client.get(
+            f'/ConnectionManager/GetPipeline/?es_id={test_connection.id}&pipeline=missing'
+        )
+        assert response.status_code == 400
+        assert 'error' in response.json()
+
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_success_returns_code(self, mock_glp, authenticated_client, test_connection):
+        mock_glp.return_value = {'pipeline': 'input {} filter {} output {}'}
+        response = authenticated_client.get(
+            f'/ConnectionManager/GetPipeline/?es_id={test_connection.id}&pipeline=mypipe'
+        )
+        assert response.status_code == 200
+        assert response.json()['code'] == 'input {} filter {} output {}'
+
+
+# ============================================================================
+# GetCurrentPipelineCode endpoint
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetCurrentPipelineCode:
+    """Tests for the GetCurrentPipelineCode view"""
+
+    def test_returns_html_pre_block(self, authenticated_client):
+        components = {"input": [], "filter": [], "output": []}
+        response = authenticated_client.post(
+            '/ConnectionManager/GetCurrentPipelineCode/',
+            {'components': json.dumps(components)}
+        )
+        assert response.status_code == 200
+        assert b'<pre' in response.content
+        assert b'<code' in response.content
+
+
+# ============================================================================
+# SavePipeline edge cases
+# ============================================================================
+
+@pytest.mark.django_db
+class TestSavePipelineEdgeCases:
+    """Tests for SavePipeline edge cases not covered by existing tests"""
+
+    def test_no_save_pipeline_key_returns_400(self, authenticated_client):
+        """POST without save_pipeline key returns 400"""
+        response = authenticated_client.post('/ConnectionManager/SavePipeline/', {
+            'es_id': '1',
+            'pipeline': 'mypipe',
+        })
+        assert response.status_code == 400
+
+    def test_invalid_pipeline_name_returns_400(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/SavePipeline/', {
+            'save_pipeline': 'true',
+            'pipeline': '123invalid',
+            'es_id': '1',
+        })
+        assert response.status_code == 400
+
+    def test_missing_components_and_pipeline_config_returns_400(self, authenticated_client):
+        """No pipeline_config and no components → 400"""
+        response = authenticated_client.post('/ConnectionManager/SavePipeline/', {
+            'save_pipeline': 'true',
+            'pipeline': 'valid_pipe',
+            'es_id': '1',
+            # neither pipeline_config nor components
+        })
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    def test_raw_text_mode_saves_directly(self, mock_get_es, authenticated_client, test_connection):
+        """When pipeline_config is provided (raw text mode), it is saved as-is"""
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.return_value = {
+            'my_pipe': {
+                'pipeline': 'input {} filter {} output {}',
+                'pipeline_metadata': {'version': 1, 'type': 'logstash_pipeline'},
+                'pipeline_settings': {},
+                'description': ''
+            }
+        }
+        mock_es.logstash.put_pipeline.return_value = {'acknowledged': True}
+        mock_get_es.return_value = mock_es
+
+        response = authenticated_client.post('/ConnectionManager/SavePipeline/', {
+            'save_pipeline': 'true',
+            'pipeline': 'my_pipe',
+            'es_id': str(test_connection.id),
+            'pipeline_config': 'input {} filter {} output {}',
+        })
+        assert response.status_code == 200
+        assert b'saved successfully' in response.content
+
+
+# ============================================================================
+# ClonePipeline error paths
+# ============================================================================
+
+@pytest.mark.django_db
+class TestClonePipelineEdgeCases:
+    """Tests for ClonePipeline error paths"""
+
+    def test_invalid_source_name_returns_400(self, authenticated_client, test_connection):
+        response = authenticated_client.post('/ConnectionManager/ClonePipeline/', {
+            'es_id': test_connection.id,
+            'source_pipeline': '123bad',
+            'new_pipeline': 'newpipe',
+        })
+        assert response.status_code == 400
+
+    def test_invalid_new_name_returns_400(self, authenticated_client, test_connection):
+        response = authenticated_client.post('/ConnectionManager/ClonePipeline/', {
+            'es_id': test_connection.id,
+            'source_pipeline': 'valid_source',
+            'new_pipeline': '123bad',
+        })
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    def test_source_pipeline_not_found_returns_404(self, mock_get_es, authenticated_client, test_connection):
+        mock_es = MagicMock()
+        # get_pipeline returns dict that does NOT contain source_pipeline key
+        mock_es.logstash.get_pipeline.return_value = {}
+        mock_get_es.return_value = mock_es
+        response = authenticated_client.post('/ConnectionManager/ClonePipeline/', {
+            'es_id': test_connection.id,
+            'source_pipeline': 'missing_pipe',
+            'new_pipeline': 'new_pipe',
+        })
+        assert response.status_code == 404
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    def test_new_pipeline_name_already_exists_returns_400(self, mock_get_es, authenticated_client, test_connection):
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.side_effect = [
+            # First call: get source pipeline
+            {'source_pipe': {'pipeline': 'input {} filter {} output {}',
+                             'pipeline_settings': {}, 'description': ''}},
+            # Second call: get all pipelines — new_pipe already in there
+            {'source_pipe': {}, 'new_pipe': {}},
+        ]
+        mock_get_es.return_value = mock_es
+        response = authenticated_client.post('/ConnectionManager/ClonePipeline/', {
+            'es_id': test_connection.id,
+            'source_pipeline': 'source_pipe',
+            'new_pipeline': 'new_pipe',
+        })
+        assert response.status_code == 400
+        assert b'already exists' in response.content
+
+    @patch('PipelineManager.views.get_elastic_connection', side_effect=Exception("ES down"))
+    def test_clone_exception_returns_500(self, mock_get_es, authenticated_client, test_connection):
+        response = authenticated_client.post('/ConnectionManager/ClonePipeline/', {
+            'es_id': test_connection.id,
+            'source_pipeline': 'source_pipe',
+            'new_pipeline': 'new_pipe',
+        })
+        assert response.status_code == 500
+
+
+# ============================================================================
+# DeletePipeline — additional paths
+# ============================================================================
+
+@pytest.mark.django_db
+class TestDeletePipelineEdgeCases:
+    """Extra DeletePipeline tests"""
+
+    def test_invalid_pipeline_name_returns_400(self, authenticated_client, test_connection):
+        response = authenticated_client.post('/ConnectionManager/DeletePipeline/', {
+            'es_id': test_connection.id,
+            'pipeline': '123invalid',
+        })
+        assert response.status_code == 400
+
+
+# ============================================================================
+# ComponentsToConfig / ConfigToComponents / GetDiff
+# ============================================================================
+
+@pytest.mark.django_db
+class TestConversionEndpoints:
+    """Tests for ComponentsToConfig, ConfigToComponents, GetDiff"""
+
+    # --- ComponentsToConfig ---
+
+    def test_components_to_config_success(self, authenticated_client):
+        components = {"input": [], "filter": [], "output": []}
+        response = authenticated_client.post('/ConnectionManager/ComponentsToConfig/', {
+            'components': json.dumps(components)
+        })
+        assert response.status_code == 200
+        assert response['Content-Type'] == 'text/plain'
+
+    def test_components_to_config_no_components_returns_400(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/ComponentsToConfig/', {})
+        assert response.status_code == 400
+
+    def test_components_to_config_get_returns_405(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/ComponentsToConfig/')
+        assert response.status_code == 405
+
+    # --- ConfigToComponents ---
+
+    def test_config_to_components_success(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/ConfigToComponents/', {
+            'config_text': 'input {} filter {} output {}'
+        })
+        assert response.status_code == 200
+        # Response is JSON (string or parsed)
+        data = response.json()
+        assert data is not None
+
+    def test_config_to_components_no_config_returns_400(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/ConfigToComponents/', {})
+        assert response.status_code == 400
+        assert 'error' in response.json()
+
+    def test_config_to_components_get_returns_405(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/ConfigToComponents/')
+        assert response.status_code == 405
+
+    # --- GetDiff ---
+
+    def test_get_diff_missing_params_returns_400(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/GetDiff/', {})
+        assert response.status_code == 400
+        assert 'error' in response.json()
+
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_get_diff_text_mode(self, mock_glp, authenticated_client, test_connection):
+        """GetDiff with raw pipeline_text uses text mode"""
+        mock_glp.return_value = {'pipeline': 'input {} filter {} output {}'}
+        response = authenticated_client.post('/ConnectionManager/GetDiff/', {
+            'es_id': test_connection.id,
+            'pipeline': 'mypipe',
+            'pipeline_text': 'input {} filter {} output { stdout {} }',
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert 'diff' in data
+        assert 'stats' in data
+        assert 'current' in data
+        assert 'new' in data
+
+    @patch('PipelineManager.views.get_logstash_pipeline')
+    def test_get_diff_components_mode(self, mock_glp, authenticated_client, test_connection):
+        """GetDiff with components JSON uses components mode"""
+        mock_glp.return_value = {'pipeline': 'input {} filter {} output {}'}
+        components = {"input": [], "filter": [], "output": []}
+        response = authenticated_client.post('/ConnectionManager/GetDiff/', {
+            'es_id': test_connection.id,
+            'pipeline': 'mypipe',
+            'components': json.dumps(components),
+        })
+        assert response.status_code == 200
+        assert 'diff' in response.json()
+
+    @patch('PipelineManager.views.get_logstash_pipeline', side_effect=Exception("ES error"))
+    def test_get_diff_exception_returns_500(self, mock_glp, authenticated_client, test_connection):
+        response = authenticated_client.post('/ConnectionManager/GetDiff/', {
+            'es_id': test_connection.id,
+            'pipeline': 'mypipe',
+            'pipeline_text': 'input {}',
+        })
+        assert response.status_code == 500
+
+    def test_get_diff_get_returns_405(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetDiff/')
+        assert response.status_code == 405
+
+
+# ============================================================================
+# Elasticsearch data endpoints
+# ============================================================================
+
+@pytest.mark.django_db
+class TestElasticsearchDataEndpoints:
+    """Tests for GetElasticsearchConnections, GetElasticsearchIndices, GetElasticsearchFields"""
+
+    # --- GetElasticsearchConnections ---
+
+    @patch('PipelineManager.views.get_elastic_connections_from_list', return_value=[])
+    def test_get_es_connections_success(self, mock_list, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetElasticsearchConnections/')
+        assert response.status_code == 200
+        assert 'connections' in response.json()
+
+    @patch('PipelineManager.views.get_elastic_connections_from_list',
+           side_effect=Exception("ES down"))
+    def test_get_es_connections_exception_returns_500(self, mock_list, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetElasticsearchConnections/')
+        assert response.status_code == 500
+        assert 'error' in response.json()
+
+    @patch('PipelineManager.views.get_elastic_connections_from_list')
+    def test_get_es_connections_formats_correctly(self, mock_list, authenticated_client):
+        mock_list.return_value = [
+            {'id': 1, 'name': 'My ES', 'connection_type': 'CENTRALIZED', 'es': MagicMock()}
+        ]
+        response = authenticated_client.get('/ConnectionManager/GetElasticsearchConnections/')
+        conns = response.json()['connections']
+        assert len(conns) == 1
+        assert conns[0] == {'id': 1, 'name': 'My ES'}
+
+    # --- GetElasticsearchIndices ---
+
+    def test_get_es_indices_missing_connection_id_returns_400(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetElasticsearchIndices/')
+        assert response.status_code == 400
+        assert 'error' in response.json()
+
+    @patch('PipelineManager.views.get_elasticsearch_indices', return_value=['index-1', 'index-2'])
+    def test_get_es_indices_success(self, mock_indices, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetElasticsearchIndices/?connection_id=1&pattern=index-*'
+        )
+        assert response.status_code == 200
+        assert response.json()['indices'] == ['index-1', 'index-2']
+
+    @patch('PipelineManager.views.get_elasticsearch_indices', side_effect=Exception("timeout"))
+    def test_get_es_indices_exception_returns_500(self, mock_indices, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetElasticsearchIndices/?connection_id=1'
+        )
+        assert response.status_code == 500
+
+    # --- GetElasticsearchFields ---
+
+    def test_get_es_fields_missing_params_returns_400(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetElasticsearchFields/')
+        assert response.status_code == 400
+
+    def test_get_es_fields_missing_index_returns_400(self, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetElasticsearchFields/?connection_id=1'
+        )
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.get_elasticsearch_field_mappings',
+           return_value=['@timestamp', 'host.name'])
+    def test_get_es_fields_success(self, mock_fields, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetElasticsearchFields/?connection_id=1&index=my-index'
+        )
+        assert response.status_code == 200
+        assert response.json()['fields'] == ['@timestamp', 'host.name']
+
+    @patch('PipelineManager.views.get_elasticsearch_field_mappings',
+           side_effect=Exception("ES error"))
+    def test_get_es_fields_exception_returns_500(self, mock_fields, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetElasticsearchFields/?connection_id=1&index=my-index'
+        )
+        assert response.status_code == 500
+
+
+# ============================================================================
+# QueryElasticsearchDocuments
+# ============================================================================
+
+@pytest.mark.django_db
+class TestQueryElasticsearchDocuments:
+    """Tests for the QueryElasticsearchDocuments view"""
+
+    def test_missing_connection_id_returns_400(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'index': 'my-index'
+        })
+        assert response.status_code == 400
+
+    def test_missing_index_returns_400(self, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'connection_id': '1'
+        })
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.query_elasticsearch_documents', return_value=[{'doc': 1}])
+    def test_docid_mode(self, mock_query, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'connection_id': '1',
+            'index': 'my-index',
+            'query_method': 'docid',
+            'doc_ids': 'id1\nid2',
+        })
+        assert response.status_code == 200
+        assert response.json()['documents'] == [{'doc': 1}]
+
+    @patch('PipelineManager.views.query_elasticsearch_documents', return_value=[])
+    def test_entire_mode(self, mock_query, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'connection_id': '1',
+            'index': 'my-index',
+            'query_method': 'entire',
+            'size': '5',
+        })
+        assert response.status_code == 200
+
+    def test_field_mode_missing_field_returns_400(self, authenticated_client):
+        """field query_method without field returns 400"""
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'connection_id': '1',
+            'index': 'my-index',
+            'query_method': 'field',
+            # no 'field' param
+        })
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views.query_elasticsearch_documents', return_value=[])
+    def test_field_mode_with_field(self, mock_query, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'connection_id': '1',
+            'index': 'my-index',
+            'query_method': 'field',
+            'field': 'host.name',
+            'size': '10',
+        })
+        assert response.status_code == 200
+
+    @patch('PipelineManager.views.query_elasticsearch_documents',
+           side_effect=Exception("ES error"))
+    def test_exception_returns_500(self, mock_query, authenticated_client):
+        response = authenticated_client.post('/ConnectionManager/QueryElasticsearchDocuments/', {
+            'connection_id': '1',
+            'index': 'my-index',
+            'query_method': 'entire',
+        })
+        assert response.status_code == 500
+
+
+# ============================================================================
+# GetPluginDocumentation (security allowlist)
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetPluginDocumentation:
+    """Tests for the GetPluginDocumentation security proxy view"""
+
+    def test_missing_type_and_name_returns_400(self, authenticated_client):
+        response = authenticated_client.get('/ConnectionManager/GetPluginDocumentation/')
+        assert response.status_code == 400
+
+    def test_missing_name_returns_400(self, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=input'
+        )
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views._load_plugin_data')
+    def test_invalid_plugin_type_returns_400(self, mock_load, authenticated_client):
+        mock_load.return_value = {'input': {}, 'filter': {}, 'output': {}}
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=INVALID&name=stdin'
+        )
+        assert response.status_code == 400
+
+    @patch('PipelineManager.views._load_plugin_data')
+    def test_plugin_not_found_returns_404(self, mock_load, authenticated_client):
+        mock_load.return_value = {'input': {}}
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=input&name=nonexistent'
+        )
+        assert response.status_code == 404
+
+    @patch('PipelineManager.views._load_plugin_data')
+    def test_plugin_with_no_link_returns_404(self, mock_load, authenticated_client):
+        mock_load.return_value = {'input': {'stdin': {}}}   # no 'link' key
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=input&name=stdin'
+        )
+        assert response.status_code == 404
+
+    @patch('PipelineManager.views._load_plugin_data')
+    def test_untrusted_domain_returns_403(self, mock_load, authenticated_client):
+        """A doc URL on an untrusted domain is blocked"""
+        mock_load.return_value = {
+            'input': {'stdin': {'link': 'https://evil.com/docs'}}
+        }
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=input&name=stdin'
+        )
+        assert response.status_code == 403
+
+    @patch('PipelineManager.views._load_plugin_data')
+    def test_trusted_elastic_domain_returns_url(self, mock_load, authenticated_client):
+        """A doc URL on www.elastic.co is allowed"""
+        mock_load.return_value = {
+            'input': {
+                'stdin': {'link': 'https://www.elastic.co/guide/en/logstash/current/plugins-inputs-stdin.html'}
+            }
+        }
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=input&name=stdin'
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert 'url' in data
+        assert 'elastic.co' in data['url']
+
+    @patch('PipelineManager.views._load_plugin_data')
+    def test_trusted_github_domain_returns_url(self, mock_load, authenticated_client):
+        """A doc URL on github.com is also allowed"""
+        mock_load.return_value = {
+            'filter': {'mutate': {'link': 'https://github.com/elastic/logstash'}}
+        }
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=filter&name=mutate'
+        )
+        assert response.status_code == 200
+
+    @patch('PipelineManager.views._load_plugin_data', side_effect=Exception("file missing"))
+    def test_exception_returns_500(self, mock_load, authenticated_client):
+        response = authenticated_client.get(
+            '/ConnectionManager/GetPluginDocumentation/?type=input&name=stdin'
+        )
+        assert response.status_code == 500
+
+
+# ============================================================================
+# CreatePipeline — simulate path and default config
+# ============================================================================
+
+@pytest.mark.django_db
+class TestCreatePipelineAdditional:
+    """Additional CreatePipeline tests"""
+
+    @patch('PipelineManager.views.get_elastic_connection')
+    def test_creates_default_empty_config_when_no_pipeline_config(
+            self, mock_get_es, authenticated_client, test_connection):
+        """When no pipeline_config is given, the default 'input {} filter {} output {}' is used"""
+        mock_es = MagicMock()
+        mock_es.logstash.put_pipeline.return_value = {'acknowledged': True}
+        mock_get_es.return_value = mock_es
+
+        response = authenticated_client.post('/ConnectionManager/CreatePipeline/', {
+            'es_id': test_connection.id,
+            'pipeline': 'default_pipe',
+            # no pipeline_config
+        })
+        assert response.status_code == 200
+        call_body = mock_es.logstash.put_pipeline.call_args[1]['body']
+        assert 'input {}' in call_body['pipeline']
+
+    @patch('PipelineManager.views.requests.put')
+    def test_simulate_mode_success(self, mock_put, authenticated_client, settings):
+        """CreatePipeline in simulate=True mode sends a PUT to LogstashAgent"""
+        settings.LOGSTASH_AGENT_URL = 'http://localhost:8080'
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_put.return_value = mock_response
+
+        from PipelineManager.views import CreatePipeline
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+
+        rf = RequestFactory()
+        user = User.objects.get(username='testuser')
+        request = rf.get('/')
+        request.user = user
+
+        response = CreatePipeline(
+            request,
+            simulate=True,
+            pipeline_name='sim_pipe',
+            pipeline_config='input {} filter {} output {}'
+        )
+        assert response.status_code == 200
+        assert b'Simulation pipeline created successfully' in response.content
+
+    @patch('PipelineManager.views.requests.put',
+           side_effect=__import__('requests').exceptions.ConnectionError("agent down"))
+    def test_simulate_mode_failure_returns_500(self, mock_put, authenticated_client, settings):
+        """CreatePipeline simulate=True with agent failure returns 500.
+
+        The view only catches requests.exceptions.RequestException — a generic
+        Exception would propagate uncaught, so we use a concrete subclass here.
+        """
+        settings.LOGSTASH_AGENT_URL = 'http://localhost:8080'
+
+        from PipelineManager.views import CreatePipeline
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+
+        rf = RequestFactory()
+        user = User.objects.get(username='testuser')
+        request = rf.get('/')
+        request.user = user
+
+        response = CreatePipeline(
+            request,
+            simulate=True,
+            pipeline_name='sim_pipe',
+            pipeline_config='input {} filter {} output {}'
+        )
+        assert response.status_code == 500

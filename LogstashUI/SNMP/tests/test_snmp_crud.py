@@ -941,3 +941,425 @@ class TestEdgeCasesAndErrors:
         response = authenticated_client.post('/SNMP/CommitConfiguration/')
         # Should return error but not crash
         assert response.status_code in [400, 500]
+
+
+# ============================================================================
+# Pure-function unit tests for snmp_crud.py helpers
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetPipelineName:
+    """Tests for _get_pipeline_name() helper"""
+
+    def test_basic_name_generation(self, test_network):
+        from SNMP.snmp_crud import _get_pipeline_name
+        name = _get_pipeline_name(test_network)
+        assert name.startswith('snmp-')
+        # logstash_name is 'test-logstash' — hyphens preserved by sanitizer
+        assert 'test-logstash' in name
+        # network name is 'Test Network' — spaces become underscores via sanitizer
+        assert 'test_network' in name
+
+    def test_special_chars_sanitized(self, test_connection, test_credential_v2c):
+        """Special chars in network/logstash names are sanitized"""
+        from SNMP.snmp_crud import _get_pipeline_name
+        network = Network.objects.create(
+            name='My Network (prod)!',
+            network_range='10.0.0.0/24',
+            logstash_name='my logstash/cluster',
+            connection=test_connection,
+        )
+        name = _get_pipeline_name(network)
+        # Pipeline names must not contain special chars
+        import re
+        assert re.match(r'^[a-z0-9_\-]+$', name), f"Bad pipeline name: {name}"
+
+
+@pytest.mark.django_db
+class TestCreateOrUpdatePipeline:
+    """Tests for _create_or_update_pipeline() helper"""
+
+    def test_creates_new_pipeline(self):
+        from SNMP.snmp_crud import _create_or_update_pipeline
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.side_effect = Exception("not found")
+        mock_es.logstash.put_pipeline.return_value = {}
+
+        success, is_new, error, was_updated = _create_or_update_pipeline(
+            mock_es, 'test-pipe', 'input {} filter {} output {}'
+        )
+        assert success is True
+        assert is_new is True
+        assert error is None
+        assert was_updated is True
+        mock_es.logstash.put_pipeline.assert_called_once()
+
+    def test_updates_existing_pipeline_when_content_changed(self):
+        from SNMP.snmp_crud import _create_or_update_pipeline
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.return_value = {
+            'test-pipe': {
+                'pipeline': 'input {} filter {} output { old_output }',
+                'pipeline_settings': {'queue.type': 'memory'},
+                'pipeline_metadata': {'version': 2, 'type': 'logstash_pipeline'},
+            }
+        }
+        mock_es.logstash.put_pipeline.return_value = {}
+
+        success, is_new, error, was_updated = _create_or_update_pipeline(
+            mock_es, 'test-pipe', 'input {} filter {} output { new_output }'
+        )
+        assert success is True
+        assert is_new is False
+        assert was_updated is True
+        mock_es.logstash.put_pipeline.assert_called_once()
+
+    def test_skips_update_when_content_identical(self):
+        from SNMP.snmp_crud import _create_or_update_pipeline
+        content = 'input {} filter {} output {}'
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.return_value = {
+            'test-pipe': {
+                'pipeline': content,
+                'pipeline_settings': {},
+                'pipeline_metadata': {},
+            }
+        }
+
+        success, is_new, error, was_updated = _create_or_update_pipeline(
+            mock_es, 'test-pipe', content
+        )
+        assert success is True
+        assert is_new is False
+        assert was_updated is False
+        mock_es.logstash.put_pipeline.assert_not_called()
+
+    def test_returns_false_on_put_exception(self):
+        from SNMP.snmp_crud import _create_or_update_pipeline
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.side_effect = Exception("not found")
+        mock_es.logstash.put_pipeline.side_effect = Exception("ES write error")
+
+        success, is_new, error, was_updated = _create_or_update_pipeline(
+            mock_es, 'test-pipe', 'input {} filter {} output {}'
+        )
+        assert success is False
+        assert error is not None
+        assert 'ES write error' in error
+
+    def test_new_pipeline_uses_default_settings(self):
+        from SNMP.snmp_crud import _create_or_update_pipeline
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.side_effect = Exception("not found")
+        mock_es.logstash.put_pipeline.return_value = {}
+
+        _create_or_update_pipeline(mock_es, 'new-pipe', 'input {}')
+        call_body = mock_es.logstash.put_pipeline.call_args[1]['body']
+        assert 'pipeline_settings' in call_body
+        assert call_body['pipeline_settings']['queue.type'] == 'memory'
+
+    def test_existing_pipeline_preserves_settings(self):
+        from SNMP.snmp_crud import _create_or_update_pipeline
+        custom_settings = {'queue.type': 'persisted', 'pipeline.workers': 4}
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.return_value = {
+            'test-pipe': {
+                'pipeline': 'old content',
+                'pipeline_settings': custom_settings,
+                'pipeline_metadata': {'version': 5},
+            }
+        }
+        mock_es.logstash.put_pipeline.return_value = {}
+
+        _create_or_update_pipeline(mock_es, 'test-pipe', 'new content')
+        call_body = mock_es.logstash.put_pipeline.call_args[1]['body']
+        assert call_body['pipeline_settings'] == custom_settings
+
+
+@pytest.mark.django_db
+class TestGetDeviceProfiles:
+    """Tests for _get_device_profiles() helper"""
+
+    def test_no_profiles_returns_empty(self, test_network, test_credential_v2c):
+        from SNMP.snmp_crud import _get_device_profiles
+        device = Device.objects.create(
+            name='No Profiles Device', ip_address='10.0.0.1',
+            credential=test_credential_v2c, network=test_network
+        )
+        profile_ids, merged = _get_device_profiles(device, {})
+        assert profile_ids == tuple()
+        assert merged == {'get': {}, 'walk': {}, 'table': {}}
+
+    def test_custom_profile_oids_merged(self, test_network, test_credential_v2c):
+        from SNMP.snmp_crud import _get_device_profiles
+        profile = Profile.objects.create(
+            name='custom_test',
+            profile_data={
+                'get': {'system.name': '1.3.6.1.2.1.1.5.0'},
+                'walk': {},
+                'table': {}
+            }
+        )
+        device = Device.objects.create(
+            name='Profile Device', ip_address='10.0.0.2',
+            credential=test_credential_v2c, network=test_network
+        )
+        device.profiles.add(profile)
+
+        profile_ids, merged = _get_device_profiles(device, {})
+        assert len(profile_ids) == 1
+        assert '1.3.6.1.2.1.1.5.0' in merged['get'].values()
+
+    def test_official_placeholder_loaded_from_file(self, test_network, test_credential_v2c, tmp_path):
+        from SNMP.snmp_crud import _get_device_profiles
+        # Create a placeholder profile
+        profile = Profile.objects.create(
+            name='test_official.json',
+            profile_data={'is_official_placeholder': True},
+        )
+        device = Device.objects.create(
+            name='Official Device', ip_address='10.0.0.3',
+            credential=test_credential_v2c, network=test_network
+        )
+        device.profiles.add(profile)
+
+        # mock out the file loading — file exists with real data
+        fake_data = {'get': {'system.desc': '1.3.6.1.2.1.1.1.0'}, 'walk': {}, 'table': {}}
+        with patch('SNMP.snmp_crud.os.path.exists', return_value=True), \
+             patch('builtins.open', create=True) as mock_open, \
+             patch('SNMP.snmp_crud.json.load', return_value=fake_data):
+            mock_open.return_value.__enter__ = lambda s: s
+            mock_open.return_value.__exit__ = MagicMock(return_value=False)
+            profile_ids, merged = _get_device_profiles(device, {})
+
+        assert '1.3.6.1.2.1.1.1.0' in merged['get'].values()
+
+    def test_official_placeholder_file_missing_skipped(self, test_network, test_credential_v2c):
+        from SNMP.snmp_crud import _get_device_profiles
+        profile = Profile.objects.create(
+            name='missing_official.json',
+            profile_data={'is_official_placeholder': True},
+        )
+        device = Device.objects.create(
+            name='Missing File Device', ip_address='10.0.0.4',
+            credential=test_credential_v2c, network=test_network
+        )
+        device.profiles.add(profile)
+
+        with patch('SNMP.snmp_crud.os.path.exists', return_value=False):
+            profile_ids, merged = _get_device_profiles(device, {})
+
+        # Nothing should be merged since file doesn't exist
+        assert merged == {'get': {}, 'walk': {}, 'table': {}}
+
+    def test_oid_conflict_gets_suffixed(self, test_network, test_credential_v2c):
+        """When two profiles define the same OID key with different values, suffix is added"""
+        from SNMP.snmp_crud import _get_device_profiles
+        profile_a = Profile.objects.create(
+            name='profile_a', profile_data={'get': {'metric': 'oid.1'}, 'walk': {}, 'table': {}}
+        )
+        profile_b = Profile.objects.create(
+            name='profile_b', profile_data={'get': {'metric': 'oid.2'}, 'walk': {}, 'table': {}}
+        )
+        device = Device.objects.create(
+            name='Conflict Device', ip_address='10.0.0.5',
+            credential=test_credential_v2c, network=test_network
+        )
+        device.profiles.add(profile_a, profile_b)
+
+        _, merged = _get_device_profiles(device, {})
+        # Both OIDs should be present under different keys
+        assert len(merged['get']) == 2
+
+
+@pytest.mark.django_db
+class TestFormatFieldName:
+    """Tests for _format_field_name() pure function"""
+
+    def test_already_bracket_notation_unchanged(self):
+        from SNMP.snmp_crud import _format_field_name
+        assert _format_field_name('[system][cpu]') == '[system][cpu]'
+
+    def test_dotted_name_converted(self):
+        from SNMP.snmp_crud import _format_field_name
+        assert _format_field_name('system.cpu.load') == '[system][cpu][load]'
+
+    def test_plain_name_unchanged(self):
+        from SNMP.snmp_crud import _format_field_name
+        assert _format_field_name('hostname') == 'hostname'
+
+    def test_single_dot(self):
+        from SNMP.snmp_crud import _format_field_name
+        assert _format_field_name('a.b') == '[a][b]'
+
+
+@pytest.mark.django_db
+class TestGetDiscoveryIpAddresses:
+    """Tests for _get_discovery_ip_addresses() helper"""
+
+    def test_returns_all_hosts_in_range(self, test_network):
+        from SNMP.snmp_crud import _get_discovery_ip_addresses
+        # /30 has 2 usable hosts
+        test_network.network_range = '192.168.100.0/30'
+        test_network.save()
+        ips = _get_discovery_ip_addresses(test_network)
+        assert '192.168.100.1' in ips
+        assert '192.168.100.2' in ips
+        assert '192.168.100.0' not in ips   # network address
+        assert '192.168.100.3' not in ips   # broadcast
+
+    def test_excludes_existing_device_ips(self, test_network, test_credential_v2c):
+        from SNMP.snmp_crud import _get_discovery_ip_addresses
+        test_network.network_range = '10.0.0.0/30'
+        test_network.save()
+        Device.objects.create(
+            name='Existing', ip_address='10.0.0.1',
+            credential=test_credential_v2c, network=test_network
+        )
+        ips = _get_discovery_ip_addresses(test_network)
+        assert '10.0.0.1' not in ips
+        assert '10.0.0.2' in ips
+
+    def test_device_with_hostname_not_excluded(self, test_network, test_credential_v2c):
+        """Devices with hostnames (not IPs) don't cause IP to be excluded"""
+        from SNMP.snmp_crud import _get_discovery_ip_addresses
+        test_network.network_range = '10.0.1.0/30'
+        test_network.save()
+        Device.objects.create(
+            name='Hostname Device', ip_address='router.example.com',
+            credential=test_credential_v2c, network=test_network
+        )
+        ips = _get_discovery_ip_addresses(test_network)
+        # All IPs in range should still be present
+        assert '10.0.1.1' in ips
+
+    def test_invalid_cidr_returns_empty(self):
+        """Invalid CIDR can't be saved to DB (model validates it), so use a Mock."""
+        from SNMP.snmp_crud import _get_discovery_ip_addresses
+        from unittest.mock import MagicMock
+        fake_network = MagicMock()
+        fake_network.network_range = 'not-a-cidr'
+        fake_network.name = 'Fake'
+        ips = _get_discovery_ip_addresses(fake_network)
+        assert ips == []
+
+
+@pytest.mark.django_db
+class TestGetCredentialEndpointV3:
+    """Additional GetCredential tests for v3 fields"""
+
+    def test_get_credential_v3_returns_security_fields(self, authenticated_client, test_credential_v3):
+        """v3 credential response includes security_name, security_level, auth_protocol"""
+        response = authenticated_client.get(f'/SNMP/GetCredential/{test_credential_v3.id}/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['version'] == '3'
+        assert data['security_name'] == 'snmpuser'
+        assert data['security_level'] == 'authPriv'
+        assert data['auth_protocol'] == 'sha'
+        # Passwords must be masked
+        assert data['auth_pass'] == '***'
+        assert data['priv_pass'] == '***'
+
+    def test_get_credential_v3_authnopriv_no_priv_fields(self, authenticated_client):
+        """authNoPriv credential has no priv fields in response"""
+        cred = Credential.objects.create(
+            name='v3_authNoPriv',
+            version='3',
+            security_name='user',
+            security_level='authNoPriv',
+            auth_protocol='sha',
+            auth_pass='authpass',
+        )
+        response = authenticated_client.get(f'/SNMP/GetCredential/{cred.id}/')
+        data = json.loads(response.content)
+        assert 'priv_pass' not in data
+        assert 'auth_protocol' in data
+
+
+@pytest.mark.django_db
+class TestGetNetworkEndpointEdgeCases:
+    """Tests for GetNetwork, UpdateNetwork, GetNetworkPipelineName error paths"""
+
+    def test_get_network_not_found(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/GetNetwork/99999/')
+        assert response.status_code == 404
+        assert 'error' in json.loads(response.content)
+
+    def test_update_network_not_found(self, authenticated_client):
+        response = authenticated_client.post('/SNMP/UpdateNetwork/99999/', {
+            'name': 'Ghost', 'network_range': '10.0.0.0/24', 'logstash_name': 'test'
+        })
+        assert response.status_code == 404
+
+    def test_get_network_pipeline_name_not_found(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/GetNetworkPipelineName/99999/')
+        assert response.status_code == 404
+        data = json.loads(response.content)
+        assert data['success'] is False
+
+    def test_update_network_clears_optional_fields_when_empty(self, authenticated_client, test_network):
+        """Passing empty connection/credential nullifies those FK fields"""
+        response = authenticated_client.post(f'/SNMP/UpdateNetwork/{test_network.id}/', {
+            'name': test_network.name,
+            'network_range': test_network.network_range,
+            'logstash_name': test_network.logstash_name,
+            'connection': '',
+            'discovery_credential': '',
+            'credential': '',
+        })
+        assert response.status_code == 200
+        test_network.refresh_from_db()
+        assert test_network.connection is None
+        assert test_network.discovery_credential is None
+        assert test_network.credential is None
+
+
+@pytest.mark.django_db
+class TestDeleteNetworkPipelinePaths:
+    """Tests for DeleteNetwork pipeline deletion branches"""
+
+    @patch('SNMP.snmp_crud.get_elastic_connection')
+    def test_delete_network_with_pipeline_deleted_reports_it(self, mock_get_es, authenticated_client, test_network):
+        """When both pipelines exist and are deleted, success message mentions them"""
+        mock_es = MagicMock()
+        # make get_pipeline return the pipeline as existing
+        def get_pipeline_side_effect(id):
+            return {id: {'pipeline': 'content'}}
+        mock_es.logstash.get_pipeline.side_effect = get_pipeline_side_effect
+        mock_es.logstash.delete_pipeline.return_value = {}
+        mock_get_es.return_value = mock_es
+
+        response = authenticated_client.post(f'/SNMP/DeleteNetwork/{test_network.id}/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert 'pipeline' in data['message'].lower()
+
+    @patch('SNMP.snmp_crud.get_elastic_connection')
+    def test_delete_network_connection_error_still_deletes_db_record(
+            self, mock_get_es, authenticated_client, test_network):
+        """Even if ES connection fails, the DB record is deleted and success=True returned"""
+        mock_get_es.side_effect = Exception("ES connection failed")
+        network_id = test_network.id
+
+        response = authenticated_client.post(f'/SNMP/DeleteNetwork/{network_id}/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        # DB record should be gone
+        assert not Network.objects.filter(id=network_id).exists()
+
+    def test_delete_network_without_connection_skips_es(self, authenticated_client, test_credential_v2c):
+        """Network with no connection skips ES interaction and deletes cleanly"""
+        network = Network.objects.create(
+            name='No Conn Network',
+            network_range='172.16.0.0/24',
+            logstash_name='no-conn',
+        )
+        network_id = network.id
+        response = authenticated_client.post(f'/SNMP/DeleteNetwork/{network_id}/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert not Network.objects.filter(id=network_id).exists()

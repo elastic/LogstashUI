@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 from elasticsearch import Elasticsearch
 
 from Common.elastic_utils import (
+    test_elastic_connectivity as es_test_connectivity,
     get_elastic_connections_from_list,
     get_elastic_connection,
     _get_creds,
@@ -518,3 +519,89 @@ class TestQueryElasticsearchDocuments:
         
         call_kwargs = mock_es.search.call_args[1]
         assert call_kwargs['source'] == ['field1']
+
+
+class TestTestElasticConnectivity:
+    """Tests for test_elastic_connectivity function"""
+
+    def test_returns_json_string(self):
+        """Test that test_elastic_connectivity returns a JSON-formatted string"""
+        import json
+
+        mock_connection = Mock()
+        mock_connection.info.return_value = {
+            'name': 'node-1',
+            'cluster_name': 'my-cluster',
+            'version': {'number': '8.0.0'}
+        }
+
+        result = es_test_connectivity(mock_connection)
+
+        assert isinstance(result, str)
+        # Should be valid JSON
+        parsed = json.loads(result)
+        assert parsed['name'] == 'node-1'
+        assert parsed['cluster_name'] == 'my-cluster'
+
+    def test_json_is_pretty_printed(self):
+        """Test that the JSON output is indented (pretty-printed)"""
+        mock_connection = Mock()
+        mock_connection.info.return_value = {'name': 'node-1'}
+
+        result = es_test_connectivity(mock_connection)
+
+        # Pretty-printed JSON contains newlines and spaces for indentation
+        assert '\n' in result
+        assert '    ' in result  # 4-space indent
+
+    def test_calls_info_on_connection(self):
+        """Test that .info() is called on the provided connection object"""
+        mock_connection = Mock()
+        mock_connection.info.return_value = {'name': 'node-1'}
+
+        es_test_connectivity(mock_connection)
+
+        mock_connection.info.assert_called_once()
+
+    def test_returns_all_cluster_info_fields(self):
+        """Test that all fields from cluster info are returned in JSON"""
+        import json
+
+        cluster_info = {
+            'name': 'node-1',
+            'cluster_name': 'test-cluster',
+            'cluster_uuid': 'abc-123',
+            'version': {
+                'number': '8.12.0',
+                'build_flavor': 'default'
+            },
+            'tagline': 'You Know, for Search'
+        }
+        mock_connection = Mock()
+        mock_connection.info.return_value = cluster_info
+
+        result = es_test_connectivity(mock_connection)
+        parsed = json.loads(result)
+
+        # All top-level keys should be present
+        for key in cluster_info:
+            assert key in parsed
+
+    def test_propagates_exception_from_info(self):
+        """Test that exceptions from .info() are propagated (not swallowed)"""
+        mock_connection = Mock()
+        mock_connection.info.side_effect = ConnectionError("Cannot reach Elasticsearch")
+
+        with pytest.raises(ConnectionError):
+            es_test_connectivity(mock_connection)
+
+    def test_empty_info_response(self):
+        """Test behavior when info() returns an empty dict"""
+        import json
+
+        mock_connection = Mock()
+        mock_connection.info.return_value = {}
+
+        result = es_test_connectivity(mock_connection)
+        parsed = json.loads(result)
+        assert parsed == {}

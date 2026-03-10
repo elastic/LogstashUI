@@ -6,7 +6,8 @@ import pytest
 from Common.formatters import (
     _safe_get_numeric,
     _safe_extract_value,
-    _format_uptime
+    _format_uptime,
+    _sanitize_pipeline_name_component
 )
 
 
@@ -304,3 +305,103 @@ class TestFormatUptime:
     def test_parametrized_uptime_formats(self, milliseconds, expected):
         """Test various uptime formats with parametrized inputs"""
         assert _format_uptime(milliseconds) == expected
+
+
+class TestSanitizePipelineNameComponent:
+    """Test _sanitize_pipeline_name_component function"""
+
+    def test_simple_valid_name(self):
+        """Test simple valid name is returned as-is (lowercased)"""
+        assert _sanitize_pipeline_name_component('myname') == 'myname'
+
+    def test_uppercase_is_lowercased(self):
+        """Test that uppercase letters are lowercased"""
+        assert _sanitize_pipeline_name_component('MyName') == 'myname'
+        assert _sanitize_pipeline_name_component('UPPERCASE') == 'uppercase'
+
+    def test_numbers_are_preserved(self):
+        """Test that numbers are kept"""
+        assert _sanitize_pipeline_name_component('name123') == 'name123'
+        assert _sanitize_pipeline_name_component('abc456def') == 'abc456def'
+
+    def test_underscores_are_preserved(self):
+        """Test that underscores are kept"""
+        assert _sanitize_pipeline_name_component('my_name') == 'my_name'
+        assert _sanitize_pipeline_name_component('a_b_c') == 'a_b_c'
+
+    def test_hyphens_are_preserved(self):
+        """Test that hyphens are kept"""
+        assert _sanitize_pipeline_name_component('my-name') == 'my-name'
+        assert _sanitize_pipeline_name_component('a-b-c') == 'a-b-c'
+
+    def test_spaces_replaced_with_underscore(self):
+        """Test that spaces are replaced with underscores"""
+        assert _sanitize_pipeline_name_component('my name') == 'my_name'
+        assert _sanitize_pipeline_name_component('hello world foo') == 'hello_world_foo'
+
+    def test_special_characters_replaced_with_underscore(self):
+        """Test that special characters are replaced with underscores"""
+        assert _sanitize_pipeline_name_component('name@host') == 'name_host'
+        assert _sanitize_pipeline_name_component('name.value') == 'name_value'
+        assert _sanitize_pipeline_name_component('name/path') == 'name_path'
+        assert _sanitize_pipeline_name_component('name:port') == 'name_port'
+
+    def test_consecutive_underscores_collapsed(self):
+        """Test that consecutive underscores are collapsed to a single one"""
+        assert _sanitize_pipeline_name_component('a__b') == 'a_b'
+        assert _sanitize_pipeline_name_component('a___b') == 'a_b'
+        # Multiple special chars in a row → multiple underscores → collapsed
+        assert _sanitize_pipeline_name_component('a@#b') == 'a_b'
+
+    def test_leading_underscores_stripped(self):
+        """Test that leading underscores are stripped"""
+        assert _sanitize_pipeline_name_component('_name') == 'name'
+        assert _sanitize_pipeline_name_component('__name') == 'name'
+
+    def test_trailing_underscores_stripped(self):
+        """Test that trailing underscores are stripped"""
+        assert _sanitize_pipeline_name_component('name_') == 'name'
+        assert _sanitize_pipeline_name_component('name__') == 'name'
+
+    def test_leading_special_chars_stripped(self):
+        """Test that leading special characters (→ underscores) are stripped"""
+        # '@name' → '_name' (special char → underscore) → 'name' (stripped leading)
+        assert _sanitize_pipeline_name_component('@name') == 'name'
+
+    def test_all_allowed_chars(self):
+        """Test a name using all allowed character types"""
+        result = _sanitize_pipeline_name_component('MyName-123_test')
+        assert result == 'myname-123_test'
+
+    def test_empty_string(self):
+        """Test that empty string returns empty string"""
+        assert _sanitize_pipeline_name_component('') == ''
+
+    def test_only_special_chars(self):
+        """Test that a string of only special chars results in empty string"""
+        result = _sanitize_pipeline_name_component('@@@@')
+        # All replaced with underscores, collapsed, then stripped → empty
+        assert result == ''
+
+    def test_unicode_replaced_with_underscore(self):
+        """Test that unicode/emoji chars are replaced with underscores"""
+        result = _sanitize_pipeline_name_component('name_中文')
+        # Non-ASCII chars each become '_', consecutive collapsed, trailing stripped
+        assert result == 'name'
+
+    def test_already_clean_name(self):
+        """Test that a clean name passes through unchanged (except lowercasing)"""
+        assert _sanitize_pipeline_name_component('good-name_123') == 'good-name_123'
+
+    @pytest.mark.parametrize('input_name,expected', [
+        ('Hello World', 'hello_world'),
+        ('My-Pipeline_Name', 'my-pipeline_name'),
+        ('  spaces  ', 'spaces'),
+        ('a.b.c', 'a_b_c'),
+        ('test!@#$%', 'test'),
+        ('UPPER_LOWER', 'upper_lower'),
+        ('123abc', '123abc'),
+    ])
+    def test_parametrized_sanitization(self, input_name, expected):
+        """Parametrized test for various sanitization scenarios"""
+        assert _sanitize_pipeline_name_component(input_name) == expected

@@ -439,3 +439,234 @@ class TestGrokDebuggerIntegration:
         })
         assert response.status_code == 200
         assert b'2024-01-15' in response.content
+
+
+# ============================================================================
+# Additional gap-filling tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetGrokPatternsErrors:
+    """Test error-handling branches in get_grok_patterns"""
+
+    def test_get_grok_patterns_file_missing_returns_500(self, request_factory):
+        """When the grok-patterns file does not exist, the view returns 500 with an error key"""
+        from unittest.mock import patch
+        request = request_factory.get('/Utilities/GrokDebugger/patterns/')
+
+        with patch('Utilities.views.open', side_effect=FileNotFoundError("no such file")):
+            response = get_grok_patterns(request)
+
+        assert response.status_code == 500
+        data = json.loads(response.content)
+        assert 'error' in data
+
+    def test_get_grok_patterns_skips_comment_and_blank_lines(self, request_factory):
+        """Lines starting with # or blank lines are not included as patterns"""
+        from unittest.mock import patch, mock_open
+        fake_content = "# This is a comment\n\nWORD \\b\\w+\\b\n"
+        request = request_factory.get('/Utilities/GrokDebugger/patterns/')
+
+        with patch('builtins.open', mock_open(read_data=fake_content)):
+            response = get_grok_patterns(request)
+
+        data = json.loads(response.content)
+        patterns = data['patterns']
+        # Only WORD should be loaded; the comment and blank line must be absent
+        assert 'WORD' in patterns
+        for key in patterns:
+            assert not key.startswith('#')
+
+    def test_get_grok_patterns_skips_lines_without_space(self, request_factory):
+        """Lines with no whitespace (can't be split into name + definition) are silently skipped"""
+        from unittest.mock import patch, mock_open
+        fake_content = "BADLINE\nGOOD pattern_def\n"
+        request = request_factory.get('/Utilities/GrokDebugger/patterns/')
+
+        with patch('builtins.open', mock_open(read_data=fake_content)):
+            response = get_grok_patterns(request)
+
+        data = json.loads(response.content)
+        patterns = data['patterns']
+        assert 'GOOD' in patterns
+        assert 'BADLINE' not in patterns
+
+
+@pytest.mark.django_db
+class TestSimulateGrokAdditional:
+    """Additional simulate_grok edge-case tests"""
+
+    def test_whitespace_only_lines_filtered_from_sample(self, request_factory):
+        """Whitespace-only sample lines are filtered out before matching"""
+        request = request_factory.post('/Utilities/GrokDebugger/simulate/', {
+            'sample_data': '   \n  \t  ',
+            'grok_pattern': '%{IP:ip}',
+            'custom_patterns': '',
+            'multiline_mode': 'false'
+        })
+        response = simulate_grok(request)
+        assert response.status_code == 200
+        # No sample lines to process → HTML has no match results
+        content = response.content.decode('utf-8')
+        assert 'Match Found' not in content
+        assert 'No Match' not in content
+
+    def test_whitespace_only_pattern_lines_filtered(self, request_factory):
+        """Whitespace-only pattern lines are filtered; result is empty HTML"""
+        request = request_factory.post('/Utilities/GrokDebugger/simulate/', {
+            'sample_data': '192.168.1.1',
+            'grok_pattern': '   \n\t',
+            'custom_patterns': '',
+            'multiline_mode': 'false'
+        })
+        response = simulate_grok(request)
+        assert response.status_code == 200
+        # No patterns → empty body (no Pattern N headings)
+        content = response.content.decode('utf-8')
+        assert 'Pattern 1' not in content
+
+    def test_custom_patterns_blank_and_comment_lines_ignored(self, request_factory):
+        """Blank lines and lines without a space in custom_patterns are silently skipped"""
+        custom = "# comment\n\nMY_IP (?:\\d{1,3}\\.){3}\\d{1,3}\n"
+        request = request_factory.post('/Utilities/GrokDebugger/simulate/', {
+            'sample_data': '10.0.0.1',
+            'grok_pattern': '%{MY_IP:ip}',
+            'custom_patterns': custom,
+            'multiline_mode': 'false'
+        })
+        response = simulate_grok(request)
+        assert response.status_code == 200
+        content = response.content.decode('utf-8')
+        # MY_IP should have been parsed; match should succeed
+        assert 'Match Found' in content
+
+    def test_multiline_mode_false_splits_on_newlines(self, request_factory):
+        """When multiline_mode is false, each non-blank line is treated independently"""
+        request = request_factory.post('/Utilities/GrokDebugger/simulate/', {
+            'sample_data': '192.168.1.1\n10.0.0.1',
+            'grok_pattern': '%{IP:ip}',
+            'custom_patterns': '',
+            'multiline_mode': 'false'
+        })
+        response = simulate_grok(request)
+        assert response.status_code == 200
+        content = response.content.decode('utf-8')
+        # Both IPs should appear in Line 1 and Line 2 results
+        assert 'Line 1' in content
+        assert 'Line 2' in content
+        assert '192.168.1.1' in content
+        assert '10.0.0.1' in content
+
+    def test_multiline_mode_true_no_split(self, request_factory):
+        """When multiline_mode is true, the two-line input is treated as a single chunk"""
+        request = request_factory.post('/Utilities/GrokDebugger/simulate/', {
+            'sample_data': '192.168.1.1\n10.0.0.1',
+            'grok_pattern': '%{GREEDYDATA:msg}',
+            'custom_patterns': '',
+            'multiline_mode': 'true'
+        })
+        response = simulate_grok(request)
+        assert response.status_code == 200
+        content = response.content.decode('utf-8')
+        # Only one entry (Line 1); Line 2 label must not appear
+        assert 'Line 2' not in content
+
+
+@pytest.mark.django_db
+class TestGenerateResultsHtmlAdditional:
+    """Additional generate_results_html tests"""
+
+    def test_empty_results_list_returns_empty_string(self):
+        """No results → empty string (no crash, no stray HTML)"""
+        output = generate_results_html([])
+        assert output == ''
+
+    def test_pattern_error_field_shown_in_html(self):
+        """When a result has pattern_error set, the error information is included"""
+        results = [{
+            'pattern': '%{BAD_PATTERN:x}',
+            'pattern_number': 1,
+            'pattern_error': 'Undefined pattern: BAD_PATTERN',
+            'matches': [{
+                'line_number': 1,
+                'sample': 'anything',
+                'success': False,
+                'error': 'Pattern compilation error: Undefined pattern: BAD_PATTERN',
+                'error_type': 'compilation'
+            }]
+        }]
+        output = generate_results_html(results)
+        # The pattern header and the failed match entry should both be present
+        assert 'Pattern 1' in output
+        assert 'No Match' in output
+        assert 'compilation' in output.lower() or 'Pattern compilation' in output
+
+    def test_zero_matched_badge_correct(self):
+        """Badge shows 0 matched when all lines fail"""
+        results = [{
+            'pattern': '%{IP:ip}',
+            'pattern_number': 1,
+            'matches': [
+                {'line_number': 1, 'sample': 'hello', 'success': False, 'error': 'no match'},
+                {'line_number': 2, 'sample': 'world', 'success': False, 'error': 'no match'},
+            ]
+        }]
+        output = generate_results_html(results)
+        assert '0 matched' in output
+        assert '2 failed' in output
+
+    def test_all_matched_badge_correct(self):
+        """Badge shows 0 failed when all lines succeed"""
+        results = [{
+            'pattern': '%{IP:ip}',
+            'pattern_number': 1,
+            'matches': [
+                {'line_number': 1, 'sample': '1.1.1.1', 'success': True, 'parsed_data': {'ip': '1.1.1.1'}},
+                {'line_number': 2, 'sample': '2.2.2.2', 'success': True, 'parsed_data': {'ip': '2.2.2.2'}},
+            ]
+        }]
+        output = generate_results_html(results)
+        assert '2 matched' in output
+        assert '0 failed' in output
+
+    def test_html_escape_in_error_message(self):
+        """Error messages containing HTML special chars are escaped"""
+        results = [{
+            'pattern': 'p',
+            'pattern_number': 1,
+            'matches': [{
+                'line_number': 1,
+                'sample': 'x',
+                'success': False,
+                'error': '<b>bad</b> & "error"'
+            }]
+        }]
+        output = generate_results_html(results)
+        assert '<b>' not in output          # raw tag must not appear
+        assert '&lt;b&gt;' in output        # escaped version must appear
+
+
+@pytest.mark.django_db
+class TestAuthenticationAndRouting:
+    """URL-level authentication and routing tests"""
+
+    def test_grok_debugger_requires_authentication(self, client):
+        """Unauthenticated request to GrokDebugger redirects to login"""
+        response = client.get('/Utilities/GrokDebugger/')
+        assert response.status_code == 302
+        assert '/Management/Login/' in response.url
+
+    def test_simulate_grok_requires_authentication(self, client):
+        """Unauthenticated POST to simulate endpoint redirects to login"""
+        response = client.post('/Utilities/GrokDebugger/simulate/', {
+            'sample_data': '192.168.1.1',
+            'grok_pattern': '%{IP:ip}',
+        })
+        assert response.status_code == 302
+        assert '/Management/Login/' in response.url
+
+    def test_get_grok_patterns_requires_authentication(self, client):
+        """Unauthenticated GET to patterns endpoint redirects to login"""
+        response = client.get('/Utilities/GrokDebugger/patterns/')
+        assert response.status_code == 302
+        assert '/Management/Login/' in response.url
