@@ -1908,7 +1908,7 @@ function initSimulationResults(runId) {
     showOverlayLoadingBlock();
 
     let pollCount = 0;
-    const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
+    const maxPolls = 240; // Poll for 240 * 250ms = 60 seconds max (handles Logstash restarts)
     const pollInterval = 250; // Poll every 250ms for faster updates
     let receivedFinal = false; // Track if we've received the final event
     let originalEvent = null; // Store the original event for baseline comparison

@@ -136,6 +136,64 @@ class LogstashAPI:
         except httpx.HTTPError as e:
             raise LogstashAPIError(f"Failed to get node info: {e}")
     
+    def get_health_report(self) -> Dict[str, Any]:
+        """
+        Get health report from Logstash.
+        
+        Returns:
+            Dict containing health report with pipeline indicators
+        
+        Raises:
+            LogstashAPIError: If the request fails
+        """
+        try:
+            response = self.client.get(f"{self.base_url}/_node/health_report")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise LogstashAPIError(f"Failed to get health report: {e}")
+    
+    def get_node_stats(self) -> Dict[str, Any]:
+        """
+        Get node statistics.
+        
+        Returns:
+            Dict containing node statistics
+        
+        Raises:
+            LogstashAPIError: If the request fails
+        """
+        try:
+            response = self.client.get(f"{self.base_url}/_node/stats")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise LogstashAPIError(f"Failed to get node stats: {e}")
+    
+    def get_running_pipelines_from_health(self) -> List[str]:
+        """
+        Get list of running pipeline names from health report.
+        Falls back to list_pipelines() if health_report endpoint is not available.
+        
+        Returns:
+            List of pipeline names that appear in the health report or stats
+        
+        Raises:
+            LogstashAPIError: If the request fails
+        """
+        try:
+            health = self.get_health_report()
+            indicators = health.get('indicators', {}).get('pipelines', {}).get('indicators', {})
+            return list(indicators.keys())
+        except LogstashAPIError as e:
+            # Health report endpoint not available (404) - fallback to list_pipelines
+            if '404' in str(e):
+                logger.debug("Health report endpoint not available, falling back to list_pipelines()")
+                return self.list_pipelines()
+            raise
+        except Exception as e:
+            raise LogstashAPIError(f"Failed to parse health report: {e}")
+    
     def get_all_pipeline_stats(self) -> Dict[str, Any]:
         """
         Get statistics for all pipelines.

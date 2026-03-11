@@ -21,6 +21,8 @@ import base64
 import asyncio
 import atexit
 import logstash_supervisor
+from collections import deque
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -35,18 +37,36 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
 
+# Request queue for simulation requests during Logstash restarts
+_simulation_queue: deque = deque(maxlen=100)  # Max 100 queued requests
+_queue_lock = threading.Lock()
+_queue_processor_task: Optional[asyncio.Task] = None
+
 @app.on_event("startup")
 async def startup_event():
     """Start Logstash under supervision when FastAPI starts"""
+    global _queue_processor_task
     logger.info("FastAPI startup - initializing Logstash supervisor")
     logstash_supervisor.start_supervised_logstash()
     # Wait for Logstash to initialize
     await asyncio.sleep(5)
     logger.info("Logstash supervision started")
+    
+    # Start queue processor
+    _queue_processor_task = asyncio.create_task(_process_simulation_queue())
+    logger.info("Simulation queue processor started")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown Logstash supervisor when FastAPI stops"""
+    global _queue_processor_task
+    logger.info("FastAPI shutdown - stopping queue processor")
+    if _queue_processor_task:
+        _queue_processor_task.cancel()
+        try:
+            await _queue_processor_task
+        except asyncio.CancelledError:
+            pass
     logger.info("FastAPI shutdown - stopping Logstash supervisor")
     logstash_supervisor.shutdown_supervisor()
 
@@ -322,34 +342,207 @@ async def root():
     }
 
 
+async def _process_simulation_queue():
+    """
+    Background task that processes queued simulation requests when Logstash becomes healthy.
+    """
+    logger.info("Queue processor started")
+    last_healthy_time = None
+    
+    while True:
+        try:
+            await asyncio.sleep(2)  # Check every 2 seconds
+            
+            supervisor = logstash_supervisor.get_supervisor()
+            if not supervisor or not supervisor.is_healthy:
+                last_healthy_time = None
+                continue
+            
+            # Track when Logstash became healthy
+            if last_healthy_time is None:
+                last_healthy_time = time.time()
+                logger.info("Logstash became healthy, waiting 10s for full initialization before processing queue")
+                continue
+            
+            # Wait at least 10 seconds after Logstash becomes healthy before processing
+            time_since_healthy = time.time() - last_healthy_time
+            if time_since_healthy < 10:
+                continue
+            
+            # Process all queued requests
+            while True:
+                queued_item = None
+                with _queue_lock:
+                    if _simulation_queue:
+                        queued_item = _simulation_queue.popleft()
+                    else:
+                        break
+                
+                if queued_item:
+                    log_data = queued_item['log_data']
+                    slot_config = queued_item.get('slot_config')
+                    
+                    logger.info(f"Processing queued simulation: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
+                    
+                    # Restore slot configuration if needed
+                    if slot_config:
+                        slot_id = slot_config['slot_id']
+                        pipeline_name = slot_config['pipeline_name']
+                        pipelines = slot_config['pipelines']
+                        
+                        # Re-allocate slot (will reuse if hash matches)
+                        try:
+                            # Check if slot already exists
+                            existing_slots = slots.get_slot_state()
+                            slot_exists = slot_id in existing_slots
+                            
+                            if not slot_exists:
+                                # Allocate slot and create pipelines
+                                slots.allocate_slot(pipeline_name, pipelines)
+                                await _create_slot_pipelines(slot_id, pipelines)
+                                logger.info(f"Restored slot {slot_id} configuration")
+                            else:
+                                logger.info(f"Slot {slot_id} already exists, skipping restoration")
+                        except Exception as e:
+                            logger.error(f"Failed to restore slot {slot_id}: {e}")
+                            continue
+                    
+                    # Forward the simulation request
+                    try:
+                        response = requests.post(
+                            "http://127.0.0.1:9449",
+                            json=log_data,
+                            timeout=20
+                        )
+                        response.raise_for_status()
+                        logger.info(f"Queued simulation processed successfully: slot={log_data.get('slot')}")
+                    except Exception as e:
+                        logger.error(f"Failed to process queued simulation: {e}")
+                        # Don't re-queue, just log the failure
+                        
+        except asyncio.CancelledError:
+            logger.info("Queue processor cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in queue processor: {e}", exc_info=True)
+            await asyncio.sleep(5)
+
+
+@app.get("/_logstash/health")
+async def logstash_health():
+    """
+    Check if Logstash is healthy and ready to accept simulation requests.
+    Returns health status from supervisor.
+    """
+    supervisor = logstash_supervisor.get_supervisor()
+    with _queue_lock:
+        queue_size = len(_simulation_queue)
+    
+    if supervisor:
+        return JSONResponse(
+            status_code=200 if supervisor.is_healthy else 503,
+            content={
+                "healthy": supervisor.is_healthy,
+                "restarting": supervisor.is_restarting,
+                "restart_count": supervisor.restart_count,
+                "queued_requests": queue_size
+            }
+        )
+    return JSONResponse(
+        status_code=503,
+        content={"healthy": False, "restarting": False, "restart_count": 0, "queued_requests": queue_size}
+    )
+
+
 @app.post("/_logstash/simulate")
 async def simulate_log(request: Request):
     """
     Proxy endpoint for simulation log input.
     Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 9449.
-
-    This allows LogstashUI to send simulation logs over HTTPS (via nginx) while
-    Logstash's HTTP input plugin only accepts HTTP on localhost.
+    
+    Queues requests when Logstash is unhealthy and processes them when it recovers.
     """
     try:
         # Get the JSON body from the request
         log_data = await request.json()
-
-        # Forward to local Logstash HTTP input on port 9449
-        response = requests.post(
-            "http://127.0.0.1:9449",
-            json=log_data,
-            timeout=10
-        )
-        response.raise_for_status()
-
-        logger.info(
-            f"Forwarded simulation log to Logstash: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
-
-        return JSONResponse(
-            status_code=200,
-            content={"status": "success", "message": "Log forwarded to Logstash"}
-        )
+        slot_id = log_data.get('slot')
+        
+        # Check if Logstash is healthy
+        supervisor = logstash_supervisor.get_supervisor()
+        is_healthy = supervisor and supervisor.is_healthy
+        
+        if not is_healthy:
+            # Queue the request with slot configuration for restoration
+            slot_config = None
+            if slot_id:
+                # Get current slot configuration to restore later
+                slot_state = slots.get_slot_state()
+                if slot_id in slot_state:
+                    slot_data = slot_state[slot_id]
+                    slot_config = {
+                        'slot_id': slot_id,
+                        'pipeline_name': slot_data.get('pipeline_name'),
+                        'pipelines': slot_data.get('pipelines')
+                    }
+            
+            with _queue_lock:
+                _simulation_queue.append({
+                    'log_data': log_data,
+                    'slot_config': slot_config,
+                    'queued_at': time.time()
+                })
+                queue_size = len(_simulation_queue)
+            
+            logger.warning(f"Logstash unhealthy - queued simulation request (queue size: {queue_size})")
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "queued",
+                    "message": "Logstash is restarting, request queued for processing",
+                    "queue_position": queue_size
+                }
+            )
+        
+        # Logstash is healthy - forward immediately with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                timeout = 10 + (attempt * 5)  # 10s, 15s, 20s
+                logger.debug(f"Simulation attempt {attempt + 1}/{max_retries}, timeout={timeout}s")
+                
+                # Forward to local Logstash HTTP input on port 9449
+                response = requests.post(
+                    "http://127.0.0.1:9449",
+                    json=log_data,
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                logger.info(
+                    f"Forwarded simulation log to Logstash: slot={slot_id}, run_id={log_data.get('run_id')}")
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={"status": "success", "message": "Log forwarded to Logstash"}
+                )
+                
+            except requests.exceptions.Timeout as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Simulation timeout on attempt {attempt + 1}, retrying...")
+                    await asyncio.sleep(1)
+                    continue
+                else:
+                    logger.error(f"Simulation failed after {max_retries} attempts: {e}")
+                    raise
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Simulation request failed on attempt {attempt + 1}, retrying: {e}")
+                    await asyncio.sleep(1)
+                    continue
+                else:
+                    logger.error(f"Simulation failed after {max_retries} attempts: {e}")
+                    raise
+                    
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to forward log to Logstash: {e}")
         raise HTTPException(

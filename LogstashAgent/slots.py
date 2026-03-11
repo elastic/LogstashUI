@@ -198,6 +198,58 @@ def clear_all_slots():
         _slots.clear()
 
 
+def evict_all_slots_and_cleanup():
+    """
+    Evict all slots and clean up all pipeline files from conf.d.
+    This should be called before Logstash restart to prevent mismatch
+    between slots state and Logstash's loaded pipelines.
+    
+    Returns:
+        List of evicted slot IDs
+    """
+    logger.info("Evicting all slots and cleaning up conf.d folder for Logstash restart")
+    evicted_slots = []
+    
+    with _slots_lock:
+        # Get all current slots before clearing
+        slots_to_cleanup = list(_slots.items())
+        
+        # Clear the slots dictionary
+        _slots.clear()
+        evicted_slots = [slot_id for slot_id, _ in slots_to_cleanup]
+    
+    # Delete all pipeline files outside the lock
+    for slot_id, slot_data in slots_to_cleanup:
+        try:
+            _delete_slot_pipelines(slot_id, slot_data)
+        except Exception as e:
+            logger.error(f"Error cleaning up slot {slot_id} during evict_all: {e}")
+    
+    # Also clean up any orphaned pipeline files in conf.d
+    try:
+        import main
+        conf_d_path = main.PIPELINES_DIR
+        if os.path.exists(conf_d_path):
+            orphaned_files = []
+            for filename in os.listdir(conf_d_path):
+                if filename.startswith('slot') and filename.endswith('.conf'):
+                    file_path = os.path.join(conf_d_path, filename)
+                    try:
+                        os.remove(file_path)
+                        orphaned_files.append(filename)
+                        logger.debug(f"Removed orphaned pipeline file: {filename}")
+                    except Exception as e:
+                        logger.error(f"Error removing orphaned file {filename}: {e}")
+            
+            if orphaned_files:
+                logger.info(f"Cleaned up {len(orphaned_files)} orphaned pipeline files from conf.d")
+    except Exception as e:
+        logger.error(f"Error cleaning up orphaned files: {e}")
+    
+    logger.info(f"Evicted all {len(evicted_slots)} slots and cleaned up conf.d folder")
+    return evicted_slots
+
+
 def evict_expired_slots() -> List[int]:
     """
     Evict slots that haven't been accessed within the TTL period.

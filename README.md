@@ -4,7 +4,7 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
-<img src="Docs/images/simulate.png" width="100%">
+<img src="docs/images/simulate.png" width="100%">
 
 ## Overview
 
@@ -55,19 +55,19 @@ And that's it!
 ## Add Your First Connection
 
 ### 1. Create an initial user
-<img src="Docs/images/login.png" width="400px">
+<img src="docs/images/login.png" width="400px">
 
 ### 2. Add a connection
-<img src="Docs/images/new_connection.gif" width="800px">
+<img src="docs/images/new_connection.gif" width="800px">
 
 ### 3. Start managing pipelines!
-<img src="Docs/images/simulate.gif" width="800px">
+<img src="docs/images/simulate.gif" width="800px">
 
 
 ### Optional: Add monitoring to your connections:
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. Once Logstash monitoring data is indexed into Elasticsearch, metrics and logs will appear in the UI.
 
-<img src="Docs/images/monitoring.png" width="800px">
+<img src="docs/images/monitoring.png" width="800px">
 
 ## Updating
 

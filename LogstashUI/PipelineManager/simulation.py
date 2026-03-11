@@ -906,6 +906,56 @@ def GetSimulationNodeStatus(request):
         }, status=200)
 
 
+@login_required
+def GetSimulationNodeHealth(request):
+    """
+    Check the health status of Logstash within the simulation node.
+    
+    Returns:
+        JSON response with:
+        - healthy: Boolean indicating if Logstash is healthy
+        - restarting: Boolean indicating if Logstash is restarting
+        - restart_count: Number of times Logstash has restarted
+        - queued_requests: Number of queued simulation requests
+    """
+    try:
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/health"
+        
+        try:
+            response = requests.get(logstash_agent_url, timeout=3, verify=False)
+            response.raise_for_status()
+            
+            health_data = response.json()
+            
+            return JsonResponse({
+                "healthy": health_data.get("healthy", False),
+                "restarting": health_data.get("restarting", False),
+                "restart_count": health_data.get("restart_count", 0),
+                "queued_requests": health_data.get("queued_requests", 0)
+            }, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to get Logstash health from agent: {e}")
+            return JsonResponse({
+                "healthy": False,
+                "restarting": False,
+                "restart_count": 0,
+                "queued_requests": 0,
+                "error": str(e)
+            }, status=200)
+    
+    except Exception as e:
+        logger.error(f"Error in GetSimulationNodeHealth: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "healthy": False,
+            "restarting": False,
+            "restart_count": 0,
+            "queued_requests": 0,
+            "error": str(e)
+        }, status=200)
+
+
 @require_admin_role
 def ValidateLogstashConfig(request):
     """
