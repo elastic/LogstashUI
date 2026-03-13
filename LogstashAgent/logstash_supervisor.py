@@ -14,7 +14,7 @@ from logstash_api import LogstashAPI
 import slots
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Enable debug logging for supervisor
+logger.setLevel(logging.INFO)  # Set to INFO level for supervisor
 
 class LogstashSupervisor:
     """
@@ -42,11 +42,11 @@ class LogstashSupervisor:
         self.threshold_duration_seconds = 30.0
         
         # RSS thresholds will be calculated dynamically based on JVM heap size
-        # Restart when RSS reaches 1.0x heap to prevent stunned state
-        # This is aggressive but necessary due to unfixable memory leak
-        # Critical threshold: RSS > 1.0x heap (immediate restart to prevent stun)
+        # Restart when RSS reaches 1.2x heap to prevent stunned state
+        # Increased from 1.0x to allow batch simulations to complete
+        # Critical threshold: RSS > 1.2x heap (immediate restart to prevent stun)
         # (JVM overhead + off-heap memory + OS buffers)
-        self.rss_critical_multiplier = 1.0  # Restart at 100% of heap
+        self.rss_critical_multiplier = 1.2  # Restart at 120% of heap
         self.heap_max_gb: Optional[float] = None  # Will be fetched from Logstash API
         
         # Tracking
@@ -73,6 +73,15 @@ class LogstashSupervisor:
         
         logger.info("Starting Logstash process...")
         logger.debug("[START] Preparing environment variables")
+        
+        # Clean up lock file from previous instance to prevent "data directory already in use" error
+        lock_file = "/usr/share/logstash/data/.lock"
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+                logger.info(f"Removed stale lock file: {lock_file}")
+            except Exception as e:
+                logger.warning(f"Failed to remove lock file {lock_file}: {e}")
         
         # Prepare environment - copy all environment variables
         env = os.environ.copy()
@@ -123,10 +132,25 @@ class LogstashSupervisor:
         logger.debug(f"[STOP] Process state: poll={self.process.poll()}")
         
         try:
+            # Check if process is already dead
+            if self.process.poll() is not None:
+                logger.info(f"Logstash process already terminated (exit code: {self.process.returncode})")
+                # Still cleanup any orphaned child processes
+                self._cleanup_orphaned_processes()
+                self.process = None
+                return
+            
             if graceful:
                 # Send SIGTERM for graceful shutdown
-                logger.debug(f"[STOP] Sending SIGTERM to process group {os.getpgid(self.process.pid)}")
-                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                try:
+                    pgid = os.getpgid(self.process.pid)
+                    logger.debug(f"[STOP] Sending SIGTERM to process group {pgid}")
+                    os.killpg(pgid, signal.SIGTERM)
+                except ProcessLookupError:
+                    logger.warning("[STOP] Process already terminated before SIGTERM could be sent")
+                    self._cleanup_orphaned_processes()
+                    self.process = None
+                    return
                 
                 # Wait up to 30 seconds for graceful shutdown
                 logger.debug("[STOP] Waiting up to 30s for graceful shutdown")
@@ -137,22 +161,59 @@ class LogstashSupervisor:
                 except subprocess.TimeoutExpired:
                     logger.warning("Graceful shutdown timed out, forcing kill")
                     logger.debug("[STOP] Sending SIGKILL to force termination")
-                    os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
-                    self.process.wait()
-                    logger.debug(f"[STOP] Process killed, exit code: {self.process.returncode}")
+                    try:
+                        pgid = os.getpgid(self.process.pid)
+                        os.killpg(pgid, signal.SIGKILL)
+                        self.process.wait()
+                        logger.debug(f"[STOP] Process killed, exit code: {self.process.returncode}")
+                    except ProcessLookupError:
+                        logger.warning("[STOP] Process already terminated before SIGKILL could be sent")
             else:
                 # Force kill
-                logger.debug(f"[STOP] Sending SIGKILL to process group {os.getpgid(self.process.pid)}")
-                os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
-                self.process.wait()
-                logger.info("Logstash killed")
-                logger.debug(f"[STOP] Process exit code: {self.process.returncode}")
+                try:
+                    pgid = os.getpgid(self.process.pid)
+                    logger.debug(f"[STOP] Sending SIGKILL to process group {pgid}")
+                    os.killpg(pgid, signal.SIGKILL)
+                    self.process.wait()
+                    logger.info("Logstash killed")
+                    logger.debug(f"[STOP] Process exit code: {self.process.returncode}")
+                except ProcessLookupError:
+                    logger.warning("[STOP] Process terminated unexpectedly")
+        finally:
+            # Aggressively cleanup any remaining Logstash processes
+            self._cleanup_orphaned_processes()
+            self.process = None
+            logger.debug("[STOP] Process reference cleared")
+    
+    def _cleanup_orphaned_processes(self):
+        """Kill any orphaned Logstash/Java processes that might be holding ports"""
+        try:
+            import psutil
+            killed_count = 0
+            
+            # Find all java processes that look like Logstash
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    # Check if it's a Java process with logstash in the command line
+                    if proc.info['name'] == 'java' and proc.info['cmdline']:
+                        cmdline = ' '.join(proc.info['cmdline'])
+                        if 'logstash' in cmdline.lower():
+                            logger.warning(f"Found orphaned Logstash process PID {proc.info['pid']}, killing it")
+                            proc.kill()
+                            proc.wait(timeout=5)
+                            killed_count += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    pass
+            
+            if killed_count > 0:
+                logger.info(f"Cleaned up {killed_count} orphaned Logstash process(es)")
+                # Give the OS time to release ports
+                import time
+                time.sleep(2)
+        except ImportError:
+            logger.debug("psutil not available, skipping orphaned process cleanup")
         except Exception as e:
-            logger.error(f"Error stopping Logstash: {e}")
-            logger.debug(f"[STOP] Exception details: {type(e).__name__}", exc_info=True)
-        
-        self.process = None
-        logger.debug("[STOP] Process reference cleared")
+            logger.error(f"Error during orphaned process cleanup: {e}")
     
     def restart_logstash(self, reason: str = "Manual restart"):
         """Restart the Logstash process"""
@@ -237,7 +298,7 @@ class LogstashSupervisor:
                 if heap_max > 0 and self.heap_max_gb is None:
                     self.heap_max_gb = heap_max / (1024 ** 3)
                     logger.info(f"JVM heap max detected: {self.heap_max_gb:.2f}GB")
-                    logger.info(f"RSS critical threshold: {self.heap_max_gb * self.rss_critical_multiplier:.2f}GB (immediate restart)")
+                    logger.info(f"RSS critical threshold: {self.heap_max_gb * self.rss_critical_multiplier:.2f}GB ({self.rss_critical_multiplier}x heap - immediate restart)")
                     logger.debug(f"[HEAP] Cached heap_max_gb for RSS calculations")
                 
                 if heap_max > 0:
@@ -379,14 +440,14 @@ class LogstashSupervisor:
                 logger.info(f"[TIMER RESET] JVM heap back to normal")
                 self.high_memory_start_time = None
         
-        # Check RSS memory - CRITICAL: Restart immediately at 1.0x heap to prevent stun
+        # Check RSS memory - CRITICAL: Restart immediately at 1.3x heap to prevent stun
         if rss_gb and self.heap_max_gb:
             rss_critical_gb = self.heap_max_gb * self.rss_critical_multiplier
             
             if rss_gb > rss_critical_gb:
                 # Immediate restart to prevent Logstash from getting stunned
-                logger.warning(f"RSS memory at {rss_gb:.2f}GB > heap size {rss_critical_gb:.2f}GB - preventing stun")
-                return f"RSS memory at {rss_gb:.2f}GB exceeds heap size {rss_critical_gb:.2f}GB (preventing stunned state)"
+                logger.warning(f"RSS memory at {rss_gb:.2f}GB > critical threshold {rss_critical_gb:.2f}GB ({self.rss_critical_multiplier}x heap) - preventing stun")
+                return f"RSS memory at {rss_gb:.2f}GB exceeds critical threshold {rss_critical_gb:.2f}GB ({self.rss_critical_multiplier}x heap - preventing stunned state)"
             else:
                 heap_str = f"{heap_percent:.1f}%" if heap_percent is not None else "N/A"
                 logger.debug(f"[MEMORY] Heap: {heap_str}, RSS: {rss_gb:.2f}GB / {rss_critical_gb:.2f}GB")
@@ -489,6 +550,11 @@ def start_supervised_logstash():
     """Start Logstash under supervision"""
     supervisor = get_supervisor()
     supervisor.start_logstash()
+
+def trigger_restart(reason: str = "Manual restart"):
+    """Trigger a Logstash restart from external code (e.g., when simulation POST fails)"""
+    supervisor = get_supervisor()
+    supervisor.restart_logstash(reason)
 
 def shutdown_supervisor():
     """Shutdown the supervisor"""

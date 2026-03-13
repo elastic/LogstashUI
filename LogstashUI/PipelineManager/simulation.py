@@ -492,14 +492,24 @@ end
                 # Add run_id for tracking this specific simulation run
                 log_data["run_id"] = run_id
 
+                # Send simulation to LogstashAgent
+                # LogstashAgent handles retries (3x with 1s, 2s, 3s timeouts)
+                # If all retries fail, LogstashAgent triggers restart and queues the request
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
                     verify=False,
-                    timeout=10
+                    timeout=10  # Timeout to allow LogstashAgent's 3 retries to complete (1s+2s+3s=6s)
                 )
+                
+                # Check if request was queued (202 status)
+                if response.status_code == 202:
+                    logger.warning(f"Simulation request queued - Logstash is restarting")
+                    return HttpResponse(f'<div class="text-yellow-400">Simulation queued - Logstash is restarting. Results will appear when ready.</div>')
+                
                 response.raise_for_status()
                 logger.info(f"Sent simulation input to pipeline '{pipeline_name}'")
+                
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to send simulation input: {e}")
                 return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')

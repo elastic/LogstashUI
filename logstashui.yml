@@ -1,8 +1,10 @@
 simulation:
   # embedded - Runs in a local container (slower)
-  # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running) https://www.elastic.co/docs/reference/logstash/installing-logstash
+  # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running. If you have pipelines or configuration it will overwrite / remove it) https://www.elastic.co/docs/reference/logstash/installing-logstash
+  # Host mode is currently linux only
   mode: embedded # embedded | host
 
   host:
     # Path to the Logstash binary on the simulation node
     logstash_binary: /usr/share/logstash/bin/logstash
+    logstash_settings: /etc/logstash/

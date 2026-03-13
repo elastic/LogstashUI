@@ -18,6 +18,12 @@ let isSelectionMode = false;
  * This function reuses the existing slot preallocation mechanism
  */
 function triggerPipelineWarmingAndChecking() {
+    // In embedded mode, don't warm up pipeline on component changes
+    // Only warm up when user opens simulation modal
+    if (typeof simulationMode !== 'undefined' && simulationMode === 'embedded') {
+        return;
+    }
+    
     // Check if there are any filter components
     const hasFilters = components && components.filter && components.filter.length > 0;
 
@@ -2524,6 +2530,13 @@ window.openSimulateModal = function() {
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
+        
+        // Trigger slot preallocation when modal opens
+        // This warms up the pipeline so it's ready when user clicks "Run Simulation"
+        const slotPreallocation = document.getElementById('slotPreallocation');
+        if (slotPreallocation && typeof htmx !== 'undefined') {
+            htmx.trigger(slotPreallocation, 'simulationModalOpened');
+        }
     }
 };
 
@@ -2742,6 +2755,23 @@ function checkFilePathRequiredPlugins() {
     }
 }
 
+// Listen for slot preallocation completion to update status
+document.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'slotPreallocationResult') {
+        // Check if the response contains a slot-id (successful allocation)
+        const slotElement = event.detail.target.querySelector('[data-slot-id]');
+        if (slotElement) {
+            const slotId = slotElement.getAttribute('data-slot-id');
+            if (slotId) {
+                // Store the slot ID globally
+                currentSlotId = slotId;
+                // Check pipeline status
+                checkPipelineLoadStatus();
+            }
+        }
+    }
+});
+
 /**
  * Check if the pipeline successfully loaded in Logstash
  * Called after slot preallocation completes
@@ -2778,7 +2808,7 @@ async function checkPipelineLoadStatus() {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                 </svg>
             `;
-            statusMessage.textContent = '⚠ Simulation Error';
+            statusMessage.textContent = 'Simulation Error';
             statusMessage.className = 'text-xs font-medium text-yellow-400';
             return;
         }
@@ -2793,7 +2823,7 @@ async function checkPipelineLoadStatus() {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                 </svg>
             `;
-            statusMessage.textContent = '⚠ Simulation Failed';
+            statusMessage.textContent = 'Simulation Failed';
             statusMessage.className = 'text-xs font-medium text-yellow-400';
             return;
         }
@@ -2816,11 +2846,15 @@ async function checkPipelineLoadStatus() {
             // Check pipeline status using the slot pipeline name
             const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch pipeline status');
+            // Try to parse response even if status is not OK (e.g., 500 errors may still have is_running field)
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                throw new Error('Failed to parse response from server');
             }
 
-            const data = await response.json();
+            // Check is_running field regardless of HTTP status code
             const isRunning = data.is_running;
 
             statusIcon.classList.remove('animate-spin');
@@ -2843,19 +2877,29 @@ async function checkPipelineLoadStatus() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                     </svg>
                 `;
-                statusMessage.textContent = '⚠ Simulation Error';
+                statusMessage.textContent = 'Simulation Error';
                 statusMessage.className = 'text-xs font-medium text-yellow-400';
             }
 
         } catch (error) {
             console.error('Error checking pipeline status:', error);
 
-            // Unknown - Error occurred
+            // Don't overwrite a successful green status with yellow on transient errors
+            // If the status is already green (Simulation Ready), keep it
+            if (statusMessage.textContent === 'Simulation Ready') {
+                console.log('Status already shows Simulation Ready, not overwriting with error state');
+                return;
+            }
+
+            // Unknown - Error occurred (network failure or unparseable response)
             statusIcon.classList.remove('animate-spin');
             statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600 bg-yellow-900/30';
-            statusIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
-            statusIcon.className = 'w-4 h-4 text-yellow-400';
-            statusMessage.textContent = '⚠ Unable to verify status';
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            `;
+            statusMessage.textContent = 'Unable to verify status';
             statusMessage.className = 'text-xs font-medium text-yellow-400';
         }
     }

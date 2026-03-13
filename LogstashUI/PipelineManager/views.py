@@ -42,8 +42,11 @@ def _load_plugin_data():
     return data
 
 def PipelineEditor(request):
+    from django.conf import settings
+    
     context = {
-        "plugin_data": _load_plugin_data()
+        "plugin_data": _load_plugin_data(),
+        "simulation_mode": settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
     }
 
     if request.method == "GET":

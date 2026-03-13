@@ -369,6 +369,13 @@ async def _process_simulation_queue():
             if time_since_healthy < 10:
                 continue
             
+            # Verify Logstash port 9449 is actually ready before processing queue
+            try:
+                test_response = requests.get("http://127.0.0.1:9449", timeout=2)
+            except Exception:
+                logger.debug("Logstash port 9449 not ready yet, waiting...")
+                continue
+            
             # Process all queued requests
             while True:
                 queued_item = None
@@ -407,18 +414,34 @@ async def _process_simulation_queue():
                             logger.error(f"Failed to restore slot {slot_id}: {e}")
                             continue
                     
-                    # Forward the simulation request
-                    try:
-                        response = requests.post(
-                            "http://127.0.0.1:9449",
-                            json=log_data,
-                            timeout=20
-                        )
-                        response.raise_for_status()
-                        logger.info(f"Queued simulation processed successfully: slot={log_data.get('slot')}")
-                    except Exception as e:
-                        logger.error(f"Failed to process queued simulation: {e}")
-                        # Don't re-queue, just log the failure
+                    # Forward the simulation request with retries
+                    max_retries = 3
+                    success = False
+                    for attempt in range(max_retries):
+                        try:
+                            timeout = 2 + attempt  # 2s, 3s, 4s
+                            response = requests.post(
+                                "http://127.0.0.1:9449",
+                                json=log_data,
+                                timeout=timeout
+                            )
+                            response.raise_for_status()
+                            logger.info(f"Queued simulation processed successfully: slot={log_data.get('slot')}")
+                            success = True
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"Queued simulation attempt {attempt + 1} failed, retrying: {e}")
+                                await asyncio.sleep(1)
+                            else:
+                                logger.error(f"Failed to process queued simulation after {max_retries} attempts: {e}")
+                    
+                    if not success:
+                        # Re-queue the failed item at the front for retry later
+                        with _queue_lock:
+                            _simulation_queue.appendleft(queued_item)
+                        logger.warning("Re-queued failed simulation for retry later")
+                        break  # Stop processing queue, will retry on next iteration
                         
         except asyncio.CancelledError:
             logger.info("Queue processor cancelled")
@@ -507,7 +530,7 @@ async def simulate_log(request: Request):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                timeout = 10 + (attempt * 5)  # 10s, 15s, 20s
+                timeout = 1 + attempt  # 1s, 2s, 3s - aggressive timeouts to detect hung Logstash
                 logger.debug(f"Simulation attempt {attempt + 1}/{max_retries}, timeout={timeout}s")
                 
                 # Forward to local Logstash HTTP input on port 9449
@@ -532,16 +555,83 @@ async def simulate_log(request: Request):
                     await asyncio.sleep(1)
                     continue
                 else:
-                    logger.error(f"Simulation failed after {max_retries} attempts: {e}")
-                    raise
+                    # All retries failed - Logstash is likely stunned/OOM
+                    logger.error(f"Simulation failed after {max_retries} attempts due to timeout - triggering restart")
+                    
+                    # Queue the request for retry after restart
+                    slot_config = None
+                    if slot_id:
+                        slot_state = slots.get_slot_state()
+                        if slot_id in slot_state:
+                            slot_data = slot_state[slot_id]
+                            slot_config = {
+                                'slot_id': slot_id,
+                                'pipeline_name': slot_data.get('pipeline_name'),
+                                'pipelines': slot_data.get('pipelines')
+                            }
+                    
+                    with _queue_lock:
+                        _simulation_queue.append({
+                            'log_data': log_data,
+                            'slot_config': slot_config,
+                            'queued_at': time.time()
+                        })
+                        queue_size = len(_simulation_queue)
+                    
+                    # Trigger restart
+                    logstash_supervisor.trigger_restart("Simulation POST failed - Logstash stunned/OOM")
+                    
+                    logger.warning(f"Queued failed simulation for retry after restart (queue size: {queue_size})")
+                    return JSONResponse(
+                        status_code=202,
+                        content={
+                            "status": "queued",
+                            "message": "Logstash unresponsive, triggering restart and queuing request",
+                            "queue_position": queue_size
+                        }
+                    )
+                    
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
                     logger.warning(f"Simulation request failed on attempt {attempt + 1}, retrying: {e}")
                     await asyncio.sleep(1)
                     continue
                 else:
-                    logger.error(f"Simulation failed after {max_retries} attempts: {e}")
-                    raise
+                    # All retries failed - Logstash is likely stunned/OOM
+                    logger.error(f"Simulation failed after {max_retries} attempts: {e} - triggering restart")
+                    
+                    # Queue the request for retry after restart
+                    slot_config = None
+                    if slot_id:
+                        slot_state = slots.get_slot_state()
+                        if slot_id in slot_state:
+                            slot_data = slot_state[slot_id]
+                            slot_config = {
+                                'slot_id': slot_id,
+                                'pipeline_name': slot_data.get('pipeline_name'),
+                                'pipelines': slot_data.get('pipelines')
+                            }
+                    
+                    with _queue_lock:
+                        _simulation_queue.append({
+                            'log_data': log_data,
+                            'slot_config': slot_config,
+                            'queued_at': time.time()
+                        })
+                        queue_size = len(_simulation_queue)
+                    
+                    # Trigger restart
+                    logstash_supervisor.trigger_restart(f"Simulation POST failed: {str(e)}")
+                    
+                    logger.warning(f"Queued failed simulation for retry after restart (queue size: {queue_size})")
+                    return JSONResponse(
+                        status_code=202,
+                        content={
+                            "status": "queued",
+                            "message": "Logstash unresponsive, triggering restart and queuing request",
+                            "queue_position": queue_size
+                        }
+                    )
                     
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to forward log to Logstash: {e}")

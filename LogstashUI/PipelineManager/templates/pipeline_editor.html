@@ -163,32 +163,14 @@
                 stateMessage.className = 'text-xs font-medium text-yellow-300';
                 const queuedCount = data.queued_requests || 0;
                 stateMessage.textContent = queuedCount > 0 ? `Restarting (${queuedCount} queued)` : 'Restarting';
-            } else {
-                // Logstash is unhealthy
-                stateDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
-                stateIcon.outerHTML = `
-                    <svg id="logstashStateIcon" class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                `;
-                stateMessage.className = 'text-xs font-medium text-red-300';
-                stateMessage.textContent = 'Sim Node Unhealthy';
             }
+            // Note: If neither healthy nor restarting, don't update UI
+            // This prevents transient failures (e.g., during validation) from showing false "unhealthy" state
+            // The UI will keep showing the last known good state
         } catch (error) {
             console.error('Error checking Logstash state:', error);
-            const stateDiv = document.getElementById('logstashState');
-            const stateIcon = document.getElementById('logstashStateIcon');
-            const stateMessage = document.getElementById('logstashStateMessage');
-            
-            // Show error state
-            stateDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
-            stateIcon.outerHTML = `
-                <svg id="logstashStateIcon" class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            `;
-            stateMessage.className = 'text-xs font-medium text-red-300';
-            stateMessage.textContent = 'State Unknown';
+            // Don't update UI on network errors - keep last known state
+            // This prevents brief network issues from showing false "unhealthy" state
         }
     }
     
@@ -379,10 +361,34 @@
     // This must be done before the slotPreallocation element is parsed
     document.addEventListener('DOMContentLoaded', function() {
         const preallocationResult = document.getElementById('slotPreallocationResult');
+        const slotPreallocation = document.getElementById('slotPreallocation');
+        
         if (preallocationResult) {
             preallocationResult.addEventListener('htmx:afterSwap', function(event) {
                 // Small delay to ensure DOM is fully updated
                 setTimeout(checkPipelineLoadStatus, 100);
+            });
+        }
+        
+        // Listen for when preallocation request starts (for embedded mode)
+        if (slotPreallocation) {
+            slotPreallocation.addEventListener('htmx:beforeRequest', function(event) {
+                // Show 'Allocating pipeline slot...' when request starts
+                const statusContainer = document.getElementById('pipelineLoadStatus');
+                const statusIcon = document.getElementById('pipelineStatusIcon');
+                const statusMessage = document.getElementById('pipelineStatusMessage');
+                
+                if (statusContainer && statusIcon && statusMessage) {
+                    statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
+                    statusIcon.outerHTML = `
+                        <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    `;
+                    statusMessage.className = 'text-xs font-medium text-gray-300';
+                    statusMessage.textContent = 'Allocating pipeline slot...';
+                }
             });
         }
         
@@ -799,6 +805,14 @@
                 </div>
                 
                 <!-- Pipeline Status Chip -->
+                {% if simulation_mode == 'embedded' %}
+                <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
+                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                    </svg>
+                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400">Slot unallocated</span>
+                </div>
+                {% else %}
                 <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
                     <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -806,6 +820,7 @@
                     </svg>
                     <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-300">Allocating pipeline slot...</span>
                 </div>
+                {% endif %}
                 
                 <!-- Simulation Logs Button -->
                 <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
@@ -1207,20 +1222,22 @@
 
 <!-- Slot preallocation - warm up a slot when page loads so simulations are fast -->
 <!-- Empty log_text means only allocate slot, don't run simulation -->
-<!-- Also triggers on pipelineChanged event when plugins are added/removed/changed -->
+<!-- For 'host' mode: triggers on load, pipelineChanged, and simulationModalOpened -->
+<!-- For 'embedded' mode: only triggers on simulationModalOpened -->
 <div id="slotPreallocation"
      hx-post="/ConnectionManager/SimulatePipeline/"
      hx-target="#slotPreallocationResult"
      hx-swap="innerHTML"
      hx-vals="js:{components: components, log_text: ''}"
      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-     hx-trigger="load, pipelineChanged"
+     hx-trigger="{% if simulation_mode == 'host' %}load, pipelineChanged, simulationModalOpened{% else %}simulationModalOpened{% endif %}"
      class="hidden">
 </div>
 <div id="slotPreallocationResult" class="hidden"></div>
 
 <script>
     const pipelineName = "{{ pipeline_name }}";
+    const simulationMode = "{{ simulation_mode }}";
     // currentSlotId is declared in the early script block above
     
     // Store original pipeline text for Text mode

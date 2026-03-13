@@ -1924,7 +1924,14 @@ function initSimulationResults(runId) {
                     const warning = document.createElement('span');
                     warning.id = 'loading-timeout-warning';
                     warning.className = 'text-xs text-yellow-400 ml-2';
-                    warning.textContent = 'This is taking a while, you should check the logs using the button to the right.';
+                    
+                    // Check if user is in embedded mode (simulationMode is defined globally in pipeline_editor.html)
+                    if (typeof simulationMode !== 'undefined' && simulationMode === 'embedded') {
+                        warning.textContent = "This is taking a while. You're using embedded mode. If you're seeing instability please consider switching to host mode.";
+                    } else {
+                        warning.textContent = 'This is taking a while, you should check the logs using the button to the right.';
+                    }
+                    
                     loadingIndicator.appendChild(warning);
                 }
             }

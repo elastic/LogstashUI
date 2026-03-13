@@ -13,10 +13,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os, platform
 from Common.encryption import get_django_secret_key
+from .config import CONFIG
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# LogstashUI Runtime Configuration
+# Loaded from YAML file specified in LOGSTASHUI_CONFIG environment variable
+# Falls back to DEFAULT_CONFIG if not specified
+LOGSTASHUI_CONFIG = CONFIG
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
