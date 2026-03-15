@@ -155,10 +155,10 @@ if [ "$MODE" == "host" ]; then
         echo "Please ensure LogstashAgent/logstashagent.yml has correct paths"
     fi
     
-    echo "Starting LogstashAgent on port 9501"
+    echo "Starting LogstashAgent on port 9501 (localhost only)"
     cd LogstashAgent
-    # Start in background using nohup
-    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 9501 > ../logstashagent.log 2>&1 &
+    # Start in background using nohup - bind to 127.0.0.1 for security
+    nohup python3 -m uvicorn main:app --host 127.0.0.1 --port 9501 > ../logstashagent.log 2>&1 &
     AGENT_PID=$!
     echo $AGENT_PID > ../logstashagent.pid
     cd ..
@@ -212,5 +212,5 @@ echo ""
 echo "Containers are running in the background."
 echo "To stop LogstashUI, run: ./stop_logstashui.sh"
 echo ""
-echo "Access LogstashUI at: https://localhost"
+echo "Access LogstashUI at: https://your_ip_or_hostname_here"
 echo ""

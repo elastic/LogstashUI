@@ -163,9 +163,9 @@ if /i "%MODE%"=="host" (
         echo Please ensure LogstashAgent\logstashagent.yml has correct paths
     )
     
-    echo Starting LogstashAgent on port 9501
+    echo Starting LogstashAgent on port 9501 (localhost only)
     cd LogstashAgent
-    start "LogstashAgent" cmd /K "python -m uvicorn main:app --host 0.0.0.0 --port 9501"
+    start "LogstashAgent" cmd /K "python -m uvicorn main:app --host 127.0.0.1 --port 9501"
     cd ..
     
     echo Waiting 5 seconds for agent to initialize
@@ -208,7 +208,7 @@ echo.
 echo Containers are running in the background.
 echo To stop LogstashUI, run: stop_logstashui.bat
 echo.
-echo Access LogstashUI at: https://localhost
+echo Access LogstashUI at: https://your_ip_or_hostname_here
 echo.
 
 REM Restore original directory
