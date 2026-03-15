@@ -1,12 +1,19 @@
 """
-Sync LogstashAgent config from logstashui.yml to LogstashAgent/logstashagent.yml
+Sync LogstashAgent config from logstashui.yml (or logstashui.example.yml) to LogstashAgent/logstashagent.yml
 """
 import yaml
 import sys
+import os
 
 try:
+    # Check for logstashui.yml first, fallback to logstashui.example.yml
+    if os.path.exists('logstashui.yml'):
+        config_file = 'logstashui.yml'
+    else:
+        config_file = 'logstashui.example.yml'
+    
     # Read main config
-    with open('logstashui.yml', 'r') as f:
+    with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
     
     # Extract agent config

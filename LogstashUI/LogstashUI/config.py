@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG = {
     "simulation": {
         "mode": "embedded",
-        "host": {
+        "logstash_agent": {
+            "mode": "simulation",
             "logstash_binary": "/usr/share/logstash/bin/logstash",
-            "logstash_settings": "/etc/logstash"
+            "logstash_settings": "/etc/logstash",
+            "logstash_log_path": "/var/log/logstash"
         }
     }
 }

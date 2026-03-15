@@ -53,9 +53,9 @@ def get_config_path() -> str:
 CONFIG_PATH = get_config_path()
 
 def load_agent_config() -> dict:
-    """Load logstashagent.yml configuration, with fallback to logstashui.yml if mounted"""
-    # First, try to load from mounted logstashui.yml (docker-compose mounts this)
-    logstashui_config_path = "/etc/logstashui.yml"
+    """Load logstashagent.yml configuration, with fallback to logstashui.example.yml if mounted"""
+    # First, try to load from mounted logstashui.example.yml (docker-compose mounts this)
+    logstashui_config_path = "/etc/logstashui.example.yml"
     if os.path.exists(logstashui_config_path):
         try:
             with open(logstashui_config_path, 'r') as f:

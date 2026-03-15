@@ -1,6 +1,6 @@
 #!/bin/bash
 # LogstashUI Startup Script
-# Detects mode from logstashui.yml and starts accordingly
+# Detects mode from logstashui.example.yml and starts accordingly
 # - Host mode: Starts native Python agent on Linux, then containers (without agent container)
 # - Embedded mode: Starts all containers including agent
 #
@@ -92,7 +92,7 @@ cd "$SCRIPT_DIR/.."
 echo "Current directory: $(pwd)"
 echo ""
 
-# Check if logstashui.yml exists
+# Check if logstashui.example.yml exists
 if [ ! -f "logstashui.yml" ]; then
     echo "ERROR: logstashui.yml not found!"
     echo "Expected location: $(pwd)/logstashui.yml"
@@ -105,8 +105,8 @@ fi
 echo "Found logstashui.yml"
 echo ""
 
-# Parse the simulation mode from logstashui.yml (under simulation.mode)
-MODE=$(grep -m 1 "^\s*mode:" logstashui.yml | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
+# Parse the simulation mode from logstashui.example.yml (under simulation.mode)
+MODE=$(grep -m 1 "^\s*mode:" logstashui.example.yml | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
 
 # Default to embedded if parsing fails
 if [ -z "$MODE" ]; then
@@ -143,7 +143,7 @@ if [ "$MODE" == "host" ]; then
     
     echo ""
     echo "Preparing LogstashAgent configuration"
-    # Copy logstash_agent config from logstashui.yml to LogstashAgent/logstashagent.yml
+    # Copy logstash_agent config from logstashui.example.yml to LogstashAgent/logstashagent.yml
     python3 bin/sync_config.py
     if [ $? -ne 0 ]; then
         echo "WARNING: Could not update agent config automatically"
