@@ -2,7 +2,55 @@
 set -e
 
 # Create data directory if it doesn't exist
-mkdir -p /app/LogstashUI/data
+mkdir -p /app/data
+
+# Diagnostic: Check data directory permissions and contents
+echo "=========================================="
+echo "Database Directory Diagnostics"
+echo "=========================================="
+echo "Directory permissions:"
+ls -lah /app/ | grep data
+echo ""
+echo "Directory contents:"
+ls -lah /app/data/
+echo ""
+echo "Current user: $(whoami)"
+echo "User ID: $(id)"
+echo ""
+
+# Check if database file exists and is readable
+if [ -f /app/data/db.sqlite3 ]; then
+    echo "Database file exists ($(stat -c%s /app/data/db.sqlite3) bytes)"
+    if [ -r /app/data/db.sqlite3 ]; then
+        echo "Database file is readable"
+    else
+        echo "WARNING: Database file exists but is NOT readable!"
+    fi
+    if [ -w /app/data/db.sqlite3 ]; then
+        echo "Database file is writable"
+    else
+        echo "WARNING: Database file exists but is NOT writable!"
+    fi
+    
+    # Check if migrations table exists
+    echo ""
+    echo "Checking for existing migrations table..."
+    if sqlite3 /app/data/db.sqlite3 "SELECT COUNT(*) FROM django_migrations;" 2>/dev/null; then
+        MIGRATION_COUNT=$(sqlite3 /app/data/db.sqlite3 "SELECT COUNT(*) FROM django_migrations;" 2>/dev/null)
+        echo "Found django_migrations table with $MIGRATION_COUNT entries"
+    else
+        echo "No django_migrations table found (fresh database)"
+    fi
+else
+    echo "Database file does not exist - will be created"
+fi
+echo "=========================================="
+echo ""
+
+# Show what migrations Django thinks need to be applied
+echo "Checking migration status..."
+python manage.py showmigrations
+echo ""
 
 # Run migrations
 python manage.py migrate --noinput

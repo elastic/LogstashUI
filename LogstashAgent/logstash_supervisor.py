@@ -9,6 +9,7 @@ import logging
 import os
 import signal
 import psutil
+import shutil
 from typing import Optional
 from logstash_api import LogstashAPI
 import slots
@@ -27,41 +28,178 @@ class LogstashSupervisor:
     TODO: Add detection for production vs simulation nodes in the future.
     """
     
-    def __init__(self):
+    def __init__(self, config: dict = None):
         self.process: Optional[subprocess.Popen] = None
         self.monitor_thread: Optional[threading.Thread] = None
         self.should_run = True
+        
+        # Load configuration
+        self.config = config or {}
+        self.simulation_mode_type = self.config.get('simulation_mode', 'embedded')  # 'embedded' or 'host'
+        self.logstash_binary = self.config.get('logstash_binary', '/usr/share/logstash/bin/logstash')
+        self.logstash_settings = self.config.get('logstash_settings', '/etc/logstash/')
+        self.logstash_log_path = self.config.get('logstash_log_path', '/var/log/logstash')
+        
+        # Ensure settings path ends with /
+        if not self.logstash_settings.endswith('/'):
+            self.logstash_settings += '/'
+        
+        # Ensure log path does NOT end with /
+        if self.logstash_log_path.endswith('/'):
+            self.logstash_log_path = self.logstash_log_path.rstrip('/')
         
         # TODO: In the future, detect if this is a simulation node vs production node
         # For now, always default to simulation mode (supervised Logstash with memory monitoring)
         # Production nodes would run Logstash without supervision
         self.simulation_mode = True
         
-        # Memory thresholds
-        self.heap_threshold_percent = 90.0
-        self.threshold_duration_seconds = 30.0
+        # Memory thresholds - CONSERVATIVE: Only restart in truly critical situations
+        # Manager relies on sim node status, so avoid operational restarts
+        self.heap_threshold_percent = 95.0  # Only restart at 95% heap (was 90%)
+        self.threshold_duration_seconds = 60.0  # Wait 60s before restart (was 30s)
         
         # RSS thresholds will be calculated dynamically based on JVM heap size
-        # Restart when RSS reaches 1.2x heap to prevent stunned state
-        # Increased from 1.0x to allow batch simulations to complete
-        # Critical threshold: RSS > 1.2x heap (immediate restart to prevent stun)
-        # (JVM overhead + off-heap memory + OS buffers)
-        self.rss_critical_multiplier = 1.2  # Restart at 120% of heap
+        # CONSERVATIVE: Only restart when RSS is critically high to prevent stunned state
+        # With 4GB heap, this allows up to 6GB RSS before restart
+        # (JVM overhead + off-heap memory + OS buffers + safety margin)
+        self.rss_critical_multiplier = 1.5  # Restart at 150% of heap (was 1.2x)
         self.heap_max_gb: Optional[float] = None  # Will be fetched from Logstash API
         
         # Tracking
         self.high_memory_start_time: Optional[float] = None
         self.restart_count = 0
         self.api_unresponsive_count = 0
-        self.api_unresponsive_threshold = 3  # Restart after 3 consecutive API failures
+        self.api_unresponsive_threshold = 6  # Restart after 6 consecutive API failures (30s total, was 3)
         self.pipeline_mismatch_start_time: Optional[float] = None
-        self.pipeline_mismatch_threshold_seconds = 15.0  # Restart after 15s of mismatch
+        self.pipeline_mismatch_threshold_seconds = 30.0  # Restart after 30s of mismatch (was 15s)
         
         # Logstash health state for request queuing
         self.is_healthy = False  # Set to True once Logstash API responds
         self.is_restarting = False  # Set to True during restart process
         
-        logger.info(f"LogstashSupervisor initialized (simulation_mode={self.simulation_mode})")
+        logger.info(f"LogstashSupervisor initialized (mode={self.simulation_mode_type}, binary={self.logstash_binary}, settings={self.logstash_settings})")
+    
+    def setup_host_mode(self):
+        """
+        Set up host mode by copying all config files from container to host.
+        This overwrites the host's Logstash configuration with our simulation configs.
+        """
+        logger.info(f"Setting up host mode - copying configs to {self.logstash_settings}")
+        
+        # Source directory - check local first (native mode), then Docker path
+        local_config_dir = os.path.join(os.path.dirname(__file__), "config")
+        docker_config_dir = "/app/config"
+        
+        if os.path.exists(local_config_dir):
+            container_config_dir = local_config_dir
+            logger.info(f"Using local config directory: {container_config_dir}")
+        elif os.path.exists(docker_config_dir):
+            container_config_dir = docker_config_dir
+            logger.info(f"Using Docker config directory: {container_config_dir}")
+        else:
+            raise FileNotFoundError(f"Config directory not found. Tried: {local_config_dir}, {docker_config_dir}")
+        
+        # Files to copy directly to settings root
+        config_files = [
+            'jvm.options',
+            'log4j2.properties',
+            'logstash.yml',
+            'pipelines.yml'
+        ]
+        
+        # Pipeline config files to copy to conf.d
+        pipeline_files = [
+            'simulate_start.conf',
+            'simulate_end.conf'
+        ]
+        
+        try:
+            # Create settings directory if it doesn't exist
+            os.makedirs(self.logstash_settings, exist_ok=True)
+            logger.info(f"Ensured settings directory exists: {self.logstash_settings}")
+            
+            # Copy config files to settings root
+            for filename in config_files:
+                src = os.path.join(container_config_dir, filename)
+                dst = os.path.join(self.logstash_settings, filename)
+                
+                if os.path.exists(src):
+                    shutil.copy2(src, dst)
+                    logger.info(f"Copied {filename} to {dst}")
+                else:
+                    logger.warning(f"Source file not found: {src}")
+            
+            # Update log4j2.properties with custom log path if configured
+            log4j2_path = os.path.join(self.logstash_settings, 'log4j2.properties')
+            if os.path.exists(log4j2_path):
+                with open(log4j2_path, 'r') as f:
+                    log4j2_content = f.read()
+                
+                # Replace /var/log/logstash with custom log path (use forward slashes for consistency)
+                normalized_log_path = self.logstash_log_path.replace('\\', '/')
+                log4j2_content = log4j2_content.replace('/var/log/logstash', normalized_log_path)
+                
+                with open(log4j2_path, 'w') as f:
+                    f.write(log4j2_content)
+                logger.info(f"Updated log4j2.properties with log path: {normalized_log_path}")
+            
+            # Create config directory for static pipeline configs (simulate_start.conf, simulate_end.conf)
+            config_path = os.path.join(self.logstash_settings, 'config')
+            os.makedirs(config_path, exist_ok=True)
+            logger.info(f"Created config directory: {config_path}")
+            
+            # Copy pipeline files to config/ (not conf.d/)
+            for filename in pipeline_files:
+                src = os.path.join(container_config_dir, filename)
+                dst = os.path.join(config_path, filename)
+                
+                if os.path.exists(src):
+                    shutil.copy2(src, dst)
+                    logger.info(f"Copied {filename} to {dst}")
+                else:
+                    logger.warning(f"Source file not found: {src}")
+            
+            # Create conf.d directory for dynamic pipeline configs (slot pipelines)
+            conf_d_path = os.path.join(self.logstash_settings, 'conf.d')
+            os.makedirs(conf_d_path, exist_ok=True)
+            logger.info(f"Created conf.d directory for dynamic pipelines: {conf_d_path}")
+            
+            # Update pipelines.yml to use correct paths for host mode
+            pipelines_yml_path = os.path.join(self.logstash_settings, 'pipelines.yml')
+            if os.path.exists(pipelines_yml_path):
+                with open(pipelines_yml_path, 'r') as f:
+                    content = f.read()
+                
+                # Replace container paths with host paths
+                # Static pipelines (simulate_start/end) go in config/
+                # Convert backslashes to forward slashes for YAML compatibility on Windows
+                host_config_path = f'{self.logstash_settings}config/'.replace('\\', '/')
+                
+                # Replace both quoted and unquoted paths
+                # Handle quotes with and without spaces
+                content = content.replace('path.config: "/etc/logstash/config/', f'path.config: "{host_config_path}')
+                content = content.replace('path.config: /etc/logstash/config/', f'path.config: {host_config_path}')
+                content = content.replace('"/etc/logstash/config/', f'"{host_config_path}')
+                content = content.replace('/etc/logstash/config/', host_config_path)
+                
+                with open(pipelines_yml_path, 'w') as f:
+                    f.write(content)
+                logger.info(f"Updated pipelines.yml with host paths (using forward slashes): {host_config_path}")
+            
+            # Create pipeline-metadata directory
+            metadata_dir = os.path.join(self.logstash_settings, 'pipeline-metadata')
+            os.makedirs(metadata_dir, exist_ok=True)
+            logger.info(f"Created pipeline-metadata directory: {metadata_dir}")
+            
+            # Create log directory if it doesn't exist
+            os.makedirs(self.logstash_log_path, exist_ok=True)
+            logger.info(f"Ensured log directory exists: {self.logstash_log_path}")
+            
+            logger.info("Host mode setup complete")
+            
+        except Exception as e:
+            logger.error(f"Error setting up host mode: {e}", exc_info=True)
+            raise
     
     def start_logstash(self):
         """Start the Logstash process"""
@@ -71,11 +209,24 @@ class LogstashSupervisor:
             logger.debug(f"[START] Existing process PID: {self.process.pid}")
             return
         
-        logger.info("Starting Logstash process...")
+        logger.info(f"Starting Logstash in {self.simulation_mode_type} mode...")
         logger.debug("[START] Preparing environment variables")
         
-        # Clean up lock file from previous instance to prevent "data directory already in use" error
-        lock_file = "/usr/share/logstash/data/.lock"
+        # Setup host mode if needed (copy configs to host)
+        if self.simulation_mode_type == 'host':
+            logger.info("Host mode detected - setting up host configuration")
+            self.setup_host_mode()
+        
+        # Determine lock file path based on mode
+        if self.simulation_mode_type == 'embedded':
+            lock_file = "/usr/share/logstash/data/.lock"
+        else:  # host mode
+            # Derive from logstash binary path
+            # /usr/share/logstash/bin/logstash -> /usr/share/logstash/data/.lock
+            logstash_home = os.path.dirname(os.path.dirname(self.logstash_binary))
+            lock_file = os.path.join(logstash_home, "data", ".lock")
+        
+        # Clean up lock file from previous instance
         if os.path.exists(lock_file):
             try:
                 os.remove(lock_file)
@@ -85,31 +236,83 @@ class LogstashSupervisor:
         
         # Prepare environment - copy all environment variables
         env = os.environ.copy()
-        env['LS_JAVA_OPTS'] = "-Dlog4j.configurationFile=/etc/logstash/log4j2.properties"
+        
+        # Set log4j config path based on mode
+        if self.simulation_mode_type == 'embedded':
+            env['LS_JAVA_OPTS'] = "-Dlog4j.configurationFile=/etc/logstash/log4j2.properties"
+        else:  # host mode
+            log4j_path = os.path.join(self.logstash_settings, 'log4j2.properties')
+            env['LS_JAVA_OPTS'] = f"-Dlog4j.configurationFile={log4j_path}"
         
         # Ensure LOGSTASH_URL is available to Logstash
         # This is critical for http output plugin in simulate_end.conf and simulate_start.conf
-        if 'LOGSTASH_URL' not in env:
-            # Set default for standalone builds (works on Docker Desktop)
-            env['LOGSTASH_URL'] = 'http://host.docker.internal:8080'
-            logger.info(f"LOGSTASH_URL not set, using default: {env['LOGSTASH_URL']}")
-            logger.debug("[START] Using default LOGSTASH_URL")
-        else:
-            logger.info(f"LOGSTASH_URL: {env['LOGSTASH_URL']}")
-            logger.debug(f"[START] Using existing LOGSTASH_URL from environment")
+        # Always set based on mode to ensure correct routing, unless explicitly overridden
+        existing_url = env.get('LOGSTASH_URL', '')
         
-        # Start Logstash
+        # Only override if not explicitly set (i.e., using defaults)
+        # Docker-compose sets this to https://nginx, which we should preserve
+        # Dockerfile default is http://host.docker.internal:8080
+        if not existing_url or existing_url in ['http://host.docker.internal:8080', 'http://localhost:8080']:
+            # Set based on mode:
+            # - Host mode: Logstash runs natively, access Django via nginx HTTPS proxy on localhost:443
+            # - Embedded mode: Container mode -> use host.docker.internal for standalone builds
+            if self.simulation_mode_type == 'host':
+                env['LOGSTASH_URL'] = 'https://localhost'
+            else:
+                env['LOGSTASH_URL'] = 'http://host.docker.internal:8080'
+            logger.info(f"LOGSTASH_URL set for {self.simulation_mode_type} mode: {env['LOGSTASH_URL']}")
+        else:
+            logger.info(f"LOGSTASH_URL already set (preserving): {env['LOGSTASH_URL']}")
+        
+        # Validate binary exists
+        if not os.path.exists(self.logstash_binary):
+            error_msg = f"Logstash binary not found at: {self.logstash_binary}"
+            logger.error(error_msg)
+            logger.error("For host mode, ensure:")
+            logger.error("1. If running natively: Use Windows paths (C:\\logstash-9.3.1\\...\\bin\\logstash.bat)")
+            logger.error("2. If running in container: Mount host directory and use container paths (/host/logstash/bin/logstash)")
+            logger.error("3. Start with bin/start_logstashui.bat to automatically detect mode")
+            raise FileNotFoundError(error_msg)
+        
+        # Make binary executable (needed for mounted Windows files on Linux)
+        # Skip on Windows as chmod doesn't work the same way
+        if os.name != 'nt':
+            try:
+                os.chmod(self.logstash_binary, 0o755)
+                logger.debug(f"Set executable permissions on {self.logstash_binary}")
+            except Exception as e:
+                logger.warning(f"Could not set executable permissions: {e}")
+        
+        # Start Logstash with configured paths
         logger.debug("[START] Launching Logstash subprocess")
+        logger.info(f"Executing: {self.logstash_binary} --path.settings {self.logstash_settings}")
+        
+        # Prepare subprocess arguments
+        # On Windows, strip trailing slashes/backslashes; on Linux, strip trailing forward slashes
+        settings_path = self.logstash_settings.rstrip('/').rstrip('\\')
+        
+        # preexec_fn only works on Unix-like systems
+        # Use DEVNULL for stdout/stderr to prevent pipe blocking on Windows
+        # Logstash writes to its own log files configured via log4j2.properties
+        popen_kwargs = {
+            'env': env,
+            'stdout': subprocess.DEVNULL,
+            'stderr': subprocess.DEVNULL
+        }
+        
+        if os.name != 'nt':
+            popen_kwargs['preexec_fn'] = os.setsid  # Create new process group for clean shutdown (Unix only)
+        
         self.process = subprocess.Popen(
-            ['/usr/share/logstash/bin/logstash', '--path.settings', '/etc/logstash'],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            preexec_fn=os.setsid  # Create new process group for clean shutdown
+            [self.logstash_binary, '--path.settings', settings_path],
+            **popen_kwargs
         )
         
         logger.info(f"Logstash started with PID {self.process.pid}")
-        logger.debug(f"[START] Process group ID: {os.getpgid(self.process.pid)}")
+        if os.name != 'nt':
+            logger.debug(f"[START] Process group ID: {os.getpgid(self.process.pid)}")
+        else:
+            logger.debug("[START] Running on Windows (process groups not applicable)")
         
         # Start monitoring thread if in simulation mode
         if self.simulation_mode and not self.monitor_thread:
@@ -478,6 +681,19 @@ class LogstashSupervisor:
                     logger.error(f"Logstash process died (exit code: {exit_code})")
                     logger.debug(f"[MONITOR] Process crash detected - process exists: {self.process is not None}, poll: {self.process.poll() if self.process else 'N/A'}")
                     
+                    # Capture and log stderr/stdout to see why it crashed
+                    if self.process:
+                        try:
+                            stdout, stderr = self.process.communicate(timeout=1)
+                            if stderr:
+                                stderr_text = stderr.decode('utf-8', errors='replace')
+                                logger.error(f"Logstash stderr output:\n{stderr_text}")
+                            if stdout:
+                                stdout_text = stdout.decode('utf-8', errors='replace')
+                                logger.info(f"Logstash stdout output:\n{stdout_text}")
+                        except Exception as e:
+                            logger.warning(f"Could not capture process output: {e}")
+                    
                     # Restart on crash
                     self.restart_logstash(f"Process crash (exit code: {exit_code})")
                     continue
@@ -539,16 +755,16 @@ class LogstashSupervisor:
 # Global supervisor instance
 _supervisor: Optional[LogstashSupervisor] = None
 
-def get_supervisor() -> LogstashSupervisor:
+def get_supervisor(config: dict = None) -> LogstashSupervisor:
     """Get or create the global supervisor instance"""
     global _supervisor
     if _supervisor is None:
-        _supervisor = LogstashSupervisor()
+        _supervisor = LogstashSupervisor(config=config)
     return _supervisor
 
-def start_supervised_logstash():
+def start_supervised_logstash(config: dict = None):
     """Start Logstash under supervision"""
-    supervisor = get_supervisor()
+    supervisor = get_supervisor(config=config)
     supervisor.start_logstash()
 
 def trigger_restart(reason: str = "Manual restart"):

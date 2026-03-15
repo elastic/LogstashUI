@@ -6,6 +6,19 @@
 -Xms4g
 -Xmx4g
 
+
+-XX:+UseG1GC
+-XX:InitiatingHeapOccupancyPercent=30
+-XX:G1ReservePercent=15
+-XX:G1PeriodicGCInterval=10000
+-XX:+G1PeriodicGCInvokesConcurrent
+-XX:G1PeriodicGCSystemLoadThreshold=0.0
+
+-XX:MaxMetaspaceSize=512m
+-XX:MetaspaceSize=256m
+
+-XX:ReservedCodeCacheSize=256m
+
 ################################################################
 ## Expert settings
 ################################################################
@@ -48,7 +61,7 @@
 
 # generate a heap dump when an allocation from the Java heap fails
 # heap dumps are created in the working directory of the JVM
--XX:+HeapDumpOnOutOfMemoryError
+#-XX:+HeapDumpOnOutOfMemoryError
 
 # specify an alternative path for heap dumps
 # ensure the directory exists and has sufficient space

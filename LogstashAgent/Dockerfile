@@ -55,6 +55,7 @@ RUN chmod +x /entrypoint.sh && \
 # Can be overridden at build time or runtime
 ARG LOGSTASH_URL=http://host.docker.internal:8080
 ENV LOGSTASH_URL=${LOGSTASH_URL}
+ENV MALLOC_ARENA_MAX=4
 
 # Switch back to logstash user
 USER logstash

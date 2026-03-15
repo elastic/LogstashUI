@@ -11,8 +11,8 @@ api.http.host: "0.0.0.0"
 api.http.port: 9600
 
 # Logging
-log.level: info
-path.logs: /var/log/logstash
+#log.level: info
+#path.logs: /var/log/logstash
 
-# Note: When pipelines.yml exists in the settings directory and path.config
-# is NOT set, Logstash will automatically use only pipelines.yml
+# Multi-pipeline mode: Logstash will automatically read pipelines.yml
+# when it exists in the settings directory and no path.config is set

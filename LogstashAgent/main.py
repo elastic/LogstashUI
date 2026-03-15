@@ -35,6 +35,67 @@ logger = logging.getLogger(__name__)
 # Reduce httpx logging noise - only show warnings and errors
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# Load agent configuration
+# Check for config in current directory first (native mode), then Docker path
+def get_config_path() -> str:
+    """Get the path to logstashagent.yml - current dir for native, /app for Docker"""
+    local_path = os.path.join(os.path.dirname(__file__), "logstashagent.yml")
+    docker_path = "/app/logstashagent.yml"
+    
+    if os.path.exists(local_path):
+        return local_path
+    elif os.path.exists(docker_path):
+        return docker_path
+    else:
+        # Return local path as default for better error messages
+        return local_path
+
+CONFIG_PATH = get_config_path()
+
+def load_agent_config() -> dict:
+    """Load logstashagent.yml configuration, with fallback to logstashui.yml if mounted"""
+    # First, try to load from mounted logstashui.yml (docker-compose mounts this)
+    logstashui_config_path = "/etc/logstashui.yml"
+    if os.path.exists(logstashui_config_path):
+        try:
+            with open(logstashui_config_path, 'r') as f:
+                full_config = yaml.safe_load(f)
+                # logstash_agent is nested under simulation section
+                if full_config and 'simulation' in full_config:
+                    simulation_config = full_config['simulation']
+                    if 'logstash_agent' in simulation_config:
+                        agent_config = simulation_config['logstash_agent'].copy()
+                        # Add simulation mode from parent config
+                        if 'mode' in simulation_config:
+                            agent_config['simulation_mode'] = simulation_config['mode']
+                        if 'mode' not in agent_config:
+                            agent_config['mode'] = 'simulation'
+                        logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode={agent_config.get('simulation_mode', 'embedded')}")
+                        return agent_config
+        except Exception as e:
+            logger.warning(f"Failed to load config from {logstashui_config_path}: {e}, falling back to logstashagent.yml")
+    
+    # Fallback to logstashagent.yml
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+            logger.info(f"Loaded agent config from {CONFIG_PATH}: simulation_mode={config.get('simulation_mode', 'embedded')}")
+            return config
+    except FileNotFoundError:
+        logger.warning(f"Config file {CONFIG_PATH} not found, using embedded mode defaults")
+        return {
+            'mode': 'simulation',
+            'simulation_mode': 'embedded',
+            'logstash_binary': '/usr/share/logstash/bin/logstash',
+            'logstash_settings': '/etc/logstash/'
+        }
+    except Exception as e:
+        logger.error(f"Error loading config: {e}")
+        raise
+
+# Global config
+AGENT_CONFIG = load_agent_config()
+
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
 
 # Request queue for simulation requests during Logstash restarts
@@ -47,7 +108,7 @@ async def startup_event():
     """Start Logstash under supervision when FastAPI starts"""
     global _queue_processor_task
     logger.info("FastAPI startup - initializing Logstash supervisor")
-    logstash_supervisor.start_supervised_logstash()
+    logstash_supervisor.start_supervised_logstash(config=AGENT_CONFIG)
     # Wait for Logstash to initialize
     await asyncio.sleep(5)
     logger.info("Logstash supervision started")
@@ -73,10 +134,28 @@ async def shutdown_event():
 # Also register atexit handler for clean shutdown
 atexit.register(logstash_supervisor.shutdown_supervisor)
 
-# Configuration paths
-PIPELINES_YML_PATH = "/etc/logstash/pipelines.yml"
-PIPELINES_DIR = "/etc/logstash/conf.d"
-METADATA_DIR = "/etc/logstash/pipeline-metadata"
+# Configuration paths - dynamically set based on mode
+def get_logstash_paths():
+    """Get Logstash paths based on configuration (Docker vs native)"""
+    logstash_settings = AGENT_CONFIG.get('logstash_settings', '/etc/logstash/')
+    
+    # Ensure settings path ends with /
+    if not logstash_settings.endswith('/') and not logstash_settings.endswith('\\'):
+        logstash_settings += '/'
+    
+    # Normalize to forward slashes for consistency
+    logstash_settings = logstash_settings.replace('\\', '/')
+    
+    return {
+        'pipelines_yml': f"{logstash_settings}pipelines.yml",
+        'conf_d': f"{logstash_settings}conf.d",
+        'metadata': f"{logstash_settings}pipeline-metadata"
+    }
+
+LOGSTASH_PATHS = get_logstash_paths()
+PIPELINES_YML_PATH = LOGSTASH_PATHS['pipelines_yml']
+PIPELINES_DIR = LOGSTASH_PATHS['conf_d']
+METADATA_DIR = LOGSTASH_PATHS['metadata']
 
 # Ensure directories exist
 os.makedirs(PIPELINES_DIR, exist_ok=True)
@@ -136,17 +215,38 @@ def _load_pipelines_yml() -> list:
 
 def _save_pipelines_yml(pipelines: list):
     """Save the pipelines.yml file atomically, ensuring static pipelines are preserved"""
+    # Get logstash settings path from config
+    logstash_settings = AGENT_CONFIG.get('logstash_settings', '/etc/logstash/')
+    
+    # Detect OS and handle path separators appropriately
+    is_windows = os.name == 'nt'
+    
+    if is_windows:
+        # Windows: Ensure path ends with backslash, then escape for YAML
+        if not logstash_settings.endswith('/') and not logstash_settings.endswith('\\'):
+            logstash_settings += '\\'
+        # YAML requires backslashes to be escaped, so C:\path becomes C:\\path
+        yaml_path = logstash_settings.replace('\\', '\\\\')
+        path_sep = '\\\\'
+    else:
+        # Linux/Docker: Use forward slashes (no escaping needed)
+        if not logstash_settings.endswith('/'):
+            logstash_settings += '/'
+        yaml_path = logstash_settings
+        path_sep = '/'
+    
     # Define static pipelines that must always be present
+    # Static pipeline .conf files are in config/config/ subdirectory
     static_pipelines = [
         {
             'pipeline.id': 'simulate-start',
             'pipeline.workers': 1,
-            'path.config': '/etc/logstash/config/simulate_start.conf'
+            'path.config': f'{yaml_path}config{path_sep}simulate_start.conf'
         },
         {
             'pipeline.id': 'simulate-end',
             'pipeline.workers': 1,
-            'path.config': '/etc/logstash/config/simulate_end.conf'
+            'path.config': f'{yaml_path}config{path_sep}simulate_end.conf'
         }
     ]
     
@@ -754,7 +854,13 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
 
     if not pipeline_exists:
         # Add new pipeline entry
-        config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf"
+        # Handle path separators based on OS
+        if os.name == 'nt':
+            # Windows: Convert to backslashes and escape for YAML
+            config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf".replace('/', '\\').replace('\\', '\\\\')
+        else:
+            # Linux/Docker: Use forward slashes (no escaping needed)
+            config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf"
         new_pipeline = {
             'pipeline.id': pipeline_id,
             'path.config': config_path,

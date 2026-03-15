@@ -8,7 +8,8 @@ services:
     expose:
       - "8080"
     volumes:
-      - logstashui_data:/app/LogstashUI/data
+      - logstashui_data:/app/data
+      - ./logstashui.yml:/app/logstashui.yml:ro
     environment:
       - DEBUG=False
       # SECRET_KEY: Optional - will auto-generate and persist in data/.django_secret_key if not set
@@ -17,9 +18,15 @@ services:
       # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com,192.168.1.100
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
-      # LOGSTASH_AGENT_URL: Automatically set in settings.py based on DEBUG mode
-      # DEBUG=True: http://logstashagent:9500 (direct)
-      # DEBUG=False: https://nginx:9500 (via nginx proxy with self-signed cert)
+      # LOGSTASHUI_CONFIG: Path to configuration file for simulation mode detection
+      - LOGSTASHUI_CONFIG=/app/logstashui.yml
+      # LOGSTASH_AGENT_URL: Automatically set in settings.py based on simulation mode
+      # Host mode: http://host.docker.internal:9500 (native agent on host)
+      # Embedded mode + DEBUG=True: http://logstashagent:9500 (direct)
+      # Embedded mode + DEBUG=False: https://nginx:9500 (via nginx proxy)
+    # Enable host.docker.internal on Linux (automatic on Docker Desktop)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - logstashui_network
@@ -30,11 +37,21 @@ services:
     build:
       context: ./LogstashAgent
       dockerfile: Dockerfile
+    profiles:
+      - embedded  # Only start this container in embedded mode
     ports:
       - "9600:9600"  # Logstash API
       - "9449:9449"  # Logstash HTTP input (for sample events)
     expose:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
+    volumes:
+      # Mount host Logstash directory for host mode (Windows/Linux)
+      # Uncomment and adjust path for your system:
+      # Windows: - C:\logstash-9.3.1:/host/logstash
+      # Linux:   - /usr/share/logstash:/host/logstash
+      - C:\logstash-9.3.1\logstash-9.3.1:/host/logstash
+      # Mount logstashui.yml for dynamic config (read-only)
+      - ./logstashui.yml:/etc/logstashui.yml:ro
     environment:
       # Override default LOGSTASH_URL (default: http://host.docker.internal:8080 for local dev)
       # In docker-compose, use nginx for HTTPS routing
@@ -44,7 +61,7 @@ services:
     # Allows container to reach host machine when running Django locally
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: unless-stopped
+    # No restart policy - only runs in embedded mode via profile
     networks:
       - logstashui_network
 
@@ -53,24 +70,38 @@ services:
     ports:
       - "443:443"
       - "80:80"
-      - "9500:9500"  # LogstashAgent API proxy (HTTP in debug, HTTPS in production)
+      - "9500:9500"  # LogstashAgent API proxy (HTTPS)
     volumes:
-      - ./LogstashUI/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./LogstashUI/nginx.conf:/etc/nginx/nginx.conf.template:ro
+      - ./logstashui.yml:/etc/logstashui.yml:ro
       - nginx_certs:/etc/nginx/certs
     depends_on:
       - logstashui
     restart: unless-stopped
     networks:
       - logstashui_network
-    entrypoint: /bin/sh -c "
-      if [ ! -f /etc/nginx/certs/cert.pem ]; then
-        apk add --no-cache openssl &&
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048
-          -keyout /etc/nginx/certs/key.pem
-          -out /etc/nginx/certs/cert.pem
-          -subj '/CN=localhost';
-      fi &&
-      nginx -g 'daemon off;'"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -f /etc/nginx/certs/cert.pem ]; then
+          apk add --no-cache openssl &&
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /etc/nginx/certs/key.pem \
+            -out /etc/nginx/certs/cert.pem \
+            -subj '/CN=localhost'
+        fi
+        apk add --no-cache py3-pip
+        pip3 install pyyaml --break-system-packages
+        MODE=$$(python3 -c 'import yaml; print(yaml.safe_load(open("/etc/logstashui.yml")).get("simulation", {}).get("mode", "embedded"))')
+        if [ "$$MODE" = "host" ]; then
+          UPSTREAM="host.docker.internal:9501"
+        else
+          UPSTREAM="logstashagent:9500"
+        fi
+        sed "s/AGENT_UPSTREAM_PLACEHOLDER/$$UPSTREAM/g" /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+        echo "Nginx configured for $$MODE mode, agent upstream $$UPSTREAM"
+        nginx -g 'daemon off;'
 
 volumes:
   logstashui_data:

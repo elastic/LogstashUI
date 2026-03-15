@@ -1,10 +1,16 @@
 simulation:
   # embedded - Runs in a local container (slower)
-  # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running. If you have pipelines or configuration it will overwrite / remove it) https://www.elastic.co/docs/reference/logstash/installing-logstash
-  # Host mode is currently linux only
-  mode: embedded # embedded | host
+  # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running. If you have pipelines or configuration it will overwrite / remove it)
+  mode: host # embedded | host
 
-  host:
-    # Path to the Logstash binary on the simulation node
-    logstash_binary: /usr/share/logstash/bin/logstash
-    logstash_settings: /etc/logstash/
+  # This YML gets passed through to the simulation agent
+  # When running via start_logstashui.bat, the agent reads this config
+  logstash_agent:
+    mode: simulation
+    
+    # For Windows host mode, use Windows paths (agent runs natively)
+    # For Linux host mode, use Linux paths
+    # For embedded mode, these are ignored (uses container paths)
+    logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
+    logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
+    logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs #/var/log/logstash
