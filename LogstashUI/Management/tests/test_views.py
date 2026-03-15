@@ -900,3 +900,168 @@ class TestLogsDownloadErrorPath:
         response = authenticated_client.get('/Management/Logs/download')
         assert response.status_code == 500
         assert b'Error downloading log file' in response.content
+
+
+# ============================================================================
+# SECTION 12: BootstrapLoginView — Race Condition Test
+# ============================================================================
+
+@pytest.mark.django_db
+class TestFirstRunRaceCondition:
+    """
+    Test the race-condition guard in BootstrapLoginView.form_valid (lines 71–78).
+    When a concurrent request creates a user between the form-class selection and
+    the select_for_update() check inside the atomic block, the view must redirect
+    back to the login page without creating a duplicate user.
+    """
+
+    def test_race_condition_redirects_to_login(self, client):
+        """
+        Simulate a concurrent first-user creation: select_for_update().exists()
+        returns True even though no users existed when the form class was chosen.
+        The view should redirect back to the login path and create no user.
+        """
+        from unittest.mock import MagicMock, patch
+
+        assert not User.objects.exists()
+
+        mock_qs = MagicMock()
+        mock_qs.exists.return_value = True
+
+        with patch.object(User.objects, 'select_for_update', return_value=mock_qs):
+            response = client.post('/Management/Login/', {
+                'username': 'firstadmin',
+                'password1': 'StrongPass123!',
+                'password2': 'StrongPass123!',
+            })
+
+        # Should redirect back to the login page
+        assert response.status_code == 302
+        # No user should have been created
+        assert not User.objects.exists()
+
+
+# ============================================================================
+# SECTION 13: Profile-Less User Edge Cases
+# ============================================================================
+
+@pytest.mark.django_db
+class TestProfileLessBranches:
+    """
+    Cover the defensive else-branches in Users() that run when a user has no
+    profile record.  Normally the post_save signal always creates one, but the
+    view guards against the case where that record is absent.
+    """
+
+    def test_update_role_creates_profile_when_missing(self, authenticated_client, db):
+        """
+        update_role on a user whose profile was deleted should create a new
+        UserProfile with the requested role rather than raising an error.
+        """
+        from Management.models import UserProfile
+
+        user = User.objects.create_user(
+            username='noprofileuser', password='pass123', email='np@example.com'
+        )
+        # Remove the signal-created profile so the else-branch is exercised
+        UserProfile.objects.filter(user=user).delete()
+
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'update_role',
+            'user_id': user.id,
+            'role': 'readonly',
+        })
+
+        assert response.status_code == 200
+        # Profile should now exist with the correct role
+        assert UserProfile.objects.filter(user=user, role='readonly').exists()
+        user.refresh_from_db()
+        assert not user.is_superuser
+        assert not user.is_staff
+
+
+# ============================================================================
+# SECTION 14: Unauthenticated Access
+# ============================================================================
+
+@pytest.mark.django_db
+class TestUnauthenticatedAccess:
+    """
+    Verify that unauthenticated (anonymous) requests cannot reach or mutate
+    protected views.  An anonymous POST to /Management/Users/ must not be able
+    to create a user regardless of whether auth is enforced by a decorator,
+    middleware, or URL-level login_required.
+    """
+
+    def test_anonymous_get_users_page_blocked(self, client, db):
+        """Anonymous GET to Users page should be redirected to login"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.get('/Management/Users/')
+        assert response.status_code == 302
+
+    def test_anonymous_post_cannot_create_user(self, client, db):
+        """Anonymous POST must not create a new user"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.post('/Management/Users/', {
+            'action': 'add',
+            'username': 'hacker',
+            'password': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+            'email': 'hacker@evil.com',
+        })
+        assert response.status_code == 302
+        assert not User.objects.filter(username='hacker').exists()
+
+    def test_anonymous_get_logs_page_blocked(self, client, db):
+        """Anonymous GET to Logs page should be redirected to login"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.get('/Management/Logs/')
+        assert response.status_code == 302
+
+    def test_anonymous_get_management_page_blocked(self, client, db):
+        """Anonymous GET to Management page should be redirected to login"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.get('/Management/')
+        assert response.status_code == 302
+
+
+# ============================================================================
+# SECTION 15: _generate_user_table_rows Unit Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGenerateUserTableRows:
+    """Unit tests for the _generate_user_table_rows helper"""
+
+    def test_returns_empty_string_for_empty_queryset(self, rf):
+        """Returns an empty string when passed an empty queryset"""
+        from Management.views import _generate_user_table_rows
+
+        request = rf.get('/Management/Users/')
+        result = _generate_user_table_rows(User.objects.none(), request)
+        assert result == ''
+
+    def test_renders_row_for_each_user(self, rf, db):
+        """Result contains each user's username"""
+        from Management.views import _generate_user_table_rows
+
+        User.objects.create_user(username='alice', password='pass123')
+        User.objects.create_user(username='bob', password='pass123')
+        request = rf.get('/Management/Users/')
+        result = _generate_user_table_rows(User.objects.all(), request)
+        assert 'alice' in result
+        assert 'bob' in result
+
+    def test_concatenates_multiple_rows(self, rf, db):
+        """HTML rows are concatenated into a single string"""
+        from Management.views import _generate_user_table_rows
+
+        User.objects.create_user(username='user1', password='pass123')
+        User.objects.create_user(username='user2', password='pass123')
+        User.objects.create_user(username='user3', password='pass123')
+        request = rf.get('/Management/Users/')
+        result = _generate_user_table_rows(User.objects.all(), request)
+        # Three users means at least three separate occurrences of row markup
+        assert result.count('user1') >= 1
+        assert result.count('user2') >= 1
+        assert result.count('user3') >= 1

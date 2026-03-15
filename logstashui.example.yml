@@ -16,4 +16,4 @@ simulation:
     # Windows example
     #logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
     #logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
-    #logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs #/var/log/logstash
+    #logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs

@@ -93,6 +93,19 @@ REM Debug: Show current directory
 echo Current directory: %CD%
 echo.
 
+REM Ensure logstashui.yml exists (required for Docker volume mount)
+REM If it doesn't exist, create a copy from logstashui.example.yml
+if not exist "logstashui.yml" (
+    if exist "logstashui.example.yml" (
+        echo Creating logstashui.yml copy from logstashui.example.yml
+        copy logstashui.example.yml logstashui.yml >nul
+    ) else (
+        echo ERROR: logstashui.example.yml not found!
+        echo Current directory: %CD%
+        exit /b 1
+    )
+)
+
 REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
 if exist "logstashui.yml" (
     set CONFIG_FILE=logstashui.yml
@@ -115,90 +128,119 @@ REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
 REM Parse the simulation mode from config file (under simulation.mode)
+REM Search for the line with "# embedded | host" comment to identify the right mode line
 set MODE=embedded
-for /f "tokens=2 delims=: " %%a in ('findstr /i "mode:" !CONFIG_FILE!') do (
-    REM Get the first 'mode:' value which is simulation.mode
-    if "!MODE!"=="embedded" set MODE=%%a
+for /f "tokens=2 delims=: " %%a in ('findstr /C:"# embedded | host" !CONFIG_FILE!') do (
+    set MODE=%%a
 )
 
 REM Remove any trailing comments or whitespace
-set MODE=%MODE: =%
-set MODE=%MODE:#=%
+set MODE=!MODE: =!
+for /f "tokens=1 delims=#" %%a in ("!MODE!") do set MODE=%%a
+set MODE=!MODE: =!
 
-echo Detected mode: %MODE%
+echo Detected mode: !MODE!
 echo.
 
-if /i "%MODE%"=="host" (
-    echo ========================================
-    echo HOST MODE DETECTED
-    echo ========================================
-    echo Starting LogstashAgent natively on Windows
-    echo This allows the agent to control your host Logstash instance.
-    echo.
-    
-    REM Check if Python is available
-    python --version >nul 2>&1
-    if errorlevel 1 (
-        echo ERROR: Python not found in PATH!
-        echo Please install Python 3.9+ and ensure it's in your PATH.
-        exit /b 1
-    )
-    
-    REM Install/update Python dependencies for LogstashAgent
-    echo Installing Python dependencies for LogstashAgent
-    python -m pip install -r LogstashAgent\requirements.txt
-    if errorlevel 1 (
-        echo ERROR: Failed to install dependencies!
-        echo Please check that Python and pip are working correctly.
-        exit /b 1
-    )
-    echo Dependencies installed successfully
-    
-    echo.
-    echo Preparing LogstashAgent configuration
-    REM Copy logstash_agent config from logstashui.yml to LogstashAgent/logstashagent.yml
-    python bin\sync_config.py
-    if errorlevel 1 (
-        echo WARNING: Could not update agent config automatically
-        echo Please ensure LogstashAgent\logstashagent.yml has correct paths
-    )
-    
-    echo Starting LogstashAgent on port 9501 (localhost only)
-    cd LogstashAgent
-    start "LogstashAgent" cmd /K "python -m uvicorn main:app --host 127.0.0.1 --port 9501"
-    cd ..
-    
-    echo Waiting 5 seconds for agent to initialize
-    ping 127.0.0.1 -n 6 >nul
-    
-    echo.
-    echo ========================================
-    echo Starting Docker containers (UI + Nginx only)
-    echo ========================================
-    echo Note: LogstashAgent container will NOT start (running natively instead)
-    echo Note: Native agent runs on port 9501, nginx proxies from 9500 to 9501
-    echo.
-    
-    REM Ensure agent container is stopped in host mode
-    echo Stopping any existing containers
-    %DOCKER_COMPOSE% stop logstashagent 2>nul
-    %DOCKER_COMPOSE% rm -f logstashagent 2>nul
-    
-    REM Start only logstashui and nginx in detached mode
-    REM Nginx will detect host mode and proxy to host.docker.internal:9501
-    %DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
-    
+if /i "!MODE!"=="host" (
+    goto HOST_MODE
 ) else (
-    echo ========================================
-    echo EMBEDDED MODE DETECTED
-    echo ========================================
-    echo Starting all containers including embedded LogstashAgent
-    echo Logstash will run inside the agent container.
-    echo.
-    
-    REM Start all containers in detached mode with embedded profile
-    %DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
+    goto EMBEDDED_MODE
 )
+
+:HOST_MODE
+echo ========================================
+echo HOST MODE DETECTED
+echo ========================================
+echo Starting LogstashAgent natively on Windows
+echo This allows the agent to control your host Logstash instance.
+echo.
+
+REM Check if Python is available
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Python not found in PATH!
+    echo Please install Python 3.9+ and ensure it's in your PATH.
+    exit /b 1
+)
+
+REM Setup virtual environment for LogstashAgent
+if not exist "LogstashAgent\.venv" (
+    echo Creating virtual environment in LogstashAgent\.venv
+    python -m venv LogstashAgent\.venv
+    if errorlevel 1 (
+        echo ERROR: Failed to create virtual environment!
+        echo Please ensure Python venv module is available
+        exit /b 1
+    )
+)
+
+echo Activating virtual environment
+call LogstashAgent\.venv\Scripts\activate.bat
+
+REM Install/update Python dependencies for LogstashAgent
+echo Installing Python dependencies for LogstashAgent
+pip install -r LogstashAgent\requirements.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install dependencies!
+    echo Please check that Python and pip are working correctly.
+    call LogstashAgent\.venv\Scripts\deactivate.bat
+    exit /b 1
+)
+echo Dependencies installed successfully
+
+echo.
+echo Preparing LogstashAgent configuration
+REM Copy logstash_agent config from logstashui.yml to LogstashAgent/logstashagent.yml
+python bin\sync_config.py
+if errorlevel 1 (
+    echo WARNING: Could not update agent config automatically
+    echo Please ensure LogstashAgent\logstashagent.yml has correct paths
+)
+
+echo Starting LogstashAgent on port 9501 (localhost only)
+cd LogstashAgent
+REM Start uvicorn using the virtual environment's Python
+start "LogstashAgent" cmd /K ".venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 9501"
+cd ..
+
+REM Deactivate virtual environment (agent is running in separate window)
+call LogstashAgent\.venv\Scripts\deactivate.bat
+
+echo Waiting 5 seconds for agent to initialize
+ping 127.0.0.1 -n 6 >nul
+
+echo.
+echo ========================================
+echo Starting Docker containers (UI + Nginx only)
+echo ========================================
+echo Note: LogstashAgent container will NOT start (running natively instead)
+echo Note: Native agent runs on port 9501, nginx proxies from 9500 to 9501
+echo.
+
+REM Ensure agent container is stopped in host mode
+echo Stopping any existing containers
+%DOCKER_COMPOSE% stop logstashagent 2>nul
+%DOCKER_COMPOSE% rm -f logstashagent 2>nul
+
+REM Start only logstashui and nginx in detached mode
+REM Nginx will detect host mode and proxy to host.docker.internal:9501
+%DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
+goto END_MODE_SELECTION
+
+:EMBEDDED_MODE
+echo ========================================
+echo EMBEDDED MODE DETECTED
+echo ========================================
+echo Starting all containers including embedded LogstashAgent
+echo Logstash will run inside the agent container.
+echo.
+
+REM Start all containers in detached mode with embedded profile
+%DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
+goto END_MODE_SELECTION
+
+:END_MODE_SELECTION
 
 echo.
 echo ========================================

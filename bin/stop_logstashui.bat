@@ -45,8 +45,16 @@ REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
 REM Detect mode from config file
+REM Search for the line with "# embedded | host" comment to identify the right mode line
 echo Detecting simulation mode from !CONFIG_FILE!
-for /f "tokens=2" %%a in ('findstr /C:"simulation_mode:" !CONFIG_FILE!') do set MODE=%%a
+set MODE=embedded
+for /f "tokens=2 delims=: " %%a in ('findstr /C:"# embedded | host" !CONFIG_FILE!') do (
+    set MODE=%%a
+)
+REM Remove any trailing comments or whitespace
+set MODE=!MODE: =!
+for /f "tokens=1 delims=#" %%a in ("!MODE!") do set MODE=%%a
+set MODE=!MODE: =!
 
 echo Detected mode: !MODE!
 echo.
@@ -70,7 +78,7 @@ if /i "!MODE!"=="host" (
     
     echo.
     echo Stopping Docker containers (UI + Nginx)
-    %DOCKER_COMPOSE% down
+    %DOCKER_COMPOSE% down --remove-orphans
     
     REM Force remove agent container if it exists
     echo Removing any stray agent containers
@@ -81,7 +89,11 @@ if /i "!MODE!"=="host" (
     echo EMBEDDED MODE SHUTDOWN
     echo ========================================
     echo Stopping all containers
-    %DOCKER_COMPOSE% down
+    
+    REM Force remove logstashagent container first (prevents stale network references)
+    docker rm -f logstashui-logstashagent-1 2>nul
+    
+    %DOCKER_COMPOSE% down --remove-orphans
 )
 
 echo.

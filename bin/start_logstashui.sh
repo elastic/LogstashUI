@@ -76,7 +76,7 @@ else
     
     # Call stop script first to ensure clean state
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    "$SCRIPT_DIR/stop_logstashui.sh" >/dev/null 2>&1 || true
+    "$SCRIPT_DIR/stop_logstashui.sh" || true
 fi
 
 echo ""
@@ -91,6 +91,19 @@ cd "$SCRIPT_DIR/.."
 # Debug: Show current directory
 echo "Current directory: $(pwd)"
 echo ""
+
+# Ensure logstashui.yml exists (required for Docker volume mount)
+# If it doesn't exist, create a symlink to logstashui.example.yml
+if [ ! -f "logstashui.yml" ]; then
+    if [ -f "logstashui.example.yml" ]; then
+        echo "Creating logstashui.yml symlink to logstashui.example.yml"
+        ln -s logstashui.example.yml logstashui.yml
+    else
+        echo "ERROR: logstashui.example.yml not found!"
+        echo "Current directory: $(pwd)"
+        exit 1
+    fi
+fi
 
 # Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
 if [ -f "logstashui.yml" ]; then
@@ -136,12 +149,27 @@ if [ "$MODE" == "host" ]; then
         exit 1
     fi
     
+    # Setup virtual environment for LogstashAgent
+    if [ ! -d "LogstashAgent/.venv" ]; then
+        echo "Creating virtual environment in LogstashAgent/.venv"
+        python3 -m venv LogstashAgent/.venv
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to create virtual environment!"
+            echo "Please ensure python3-venv is installed (apt-get install python3-venv)"
+            exit 1
+        fi
+    fi
+    
+    echo "Activating virtual environment"
+    source LogstashAgent/.venv/bin/activate
+    
     # Install/update Python dependencies for LogstashAgent
     echo "Installing Python dependencies for LogstashAgent"
-    python3 -m pip install -r LogstashAgent/requirements.txt
+    pip install -r LogstashAgent/requirements.txt
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to install dependencies!"
         echo "Please check that Python and pip are working correctly."
+        deactivate
         exit 1
     fi
     echo "Dependencies installed successfully"
@@ -158,10 +186,14 @@ if [ "$MODE" == "host" ]; then
     echo "Starting LogstashAgent on port 9501 (localhost only)"
     cd LogstashAgent
     # Start in background using nohup - bind to 127.0.0.1 for security
-    nohup python3 -m uvicorn main:app --host 127.0.0.1 --port 9501 > ../logstashagent.log 2>&1 &
+    # Run uvicorn in the activated virtual environment context
+    nohup .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 9501 > ../logstashagent.log 2>&1 &
     AGENT_PID=$!
     echo $AGENT_PID > ../logstashagent.pid
     cd ..
+    
+    # Deactivate virtual environment (agent is running in background)
+    deactivate
     
     echo "LogstashAgent started with PID: $AGENT_PID"
     echo "Waiting 5 seconds for agent to initialize"
@@ -196,11 +228,27 @@ else
     echo "Logstash will run inside the agent container."
     echo ""
     
+    # Force remove any existing logstashagent container to prevent stale network references
+    docker rm -f logstashui-logstashagent-1 2>/dev/null || true
+    
     # Start all containers in detached mode with embedded profile
+    # Retry once if network failure occurs
     if [ -n "$REBUILD_FLAG" ]; then
-        $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG
+        $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG || {
+            echo "Startup failed, cleaning up and retrying..."
+            docker rm -f logstashui-logstashagent-1 2>/dev/null || true
+            $DOCKER_COMPOSE down --remove-orphans
+            sleep 1
+            $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG
+        }
     else
-        $DOCKER_COMPOSE --profile embedded up -d
+        $DOCKER_COMPOSE --profile embedded up -d || {
+            echo "Startup failed, cleaning up and retrying..."
+            docker rm -f logstashui-logstashagent-1 2>/dev/null || true
+            $DOCKER_COMPOSE down --remove-orphans
+            sleep 1
+            $DOCKER_COMPOSE --profile embedded up -d
+        }
     fi
 fi
 

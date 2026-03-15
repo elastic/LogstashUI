@@ -3,7 +3,8 @@
 # LogstashUI Shutdown Script
 # ========================================
 
-set -e  # Exit on error
+# Note: We don't use 'set -e' here because we want to attempt all cleanup steps
+# even if some fail (e.g., containers already stopped)
 
 # Detect docker-compose command (hyphen vs space)
 if command -v docker-compose &> /dev/null; then
@@ -85,7 +86,7 @@ if [ "$MODE" == "host" ]; then
     
     echo ""
     echo "Stopping Docker containers (UI + Nginx)"
-    $DOCKER_COMPOSE down
+    $DOCKER_COMPOSE down --remove-orphans
     
     # Force remove agent container if it exists
     echo "Removing any stray agent containers"
@@ -96,7 +97,11 @@ else
     echo "EMBEDDED MODE SHUTDOWN"
     echo "========================================"
     echo "Stopping all containers"
-    $DOCKER_COMPOSE down
+    
+    # Force remove logstashagent container first (prevents stale network references)
+    docker rm -f logstashui-logstashagent-1 2>/dev/null || true
+    
+    $DOCKER_COMPOSE down --remove-orphans
 fi
 
 echo ""
