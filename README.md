@@ -28,22 +28,43 @@ Instead of editing configuration files manually, pipelines can be authored visua
 - 8 GB RAM
 - 4 CPU Cores
 
+### Software
+
+#### For Embedded mode (See Quick Start)
+- [Docker](https://www.docker.com/get-started/)
+
+#### For [Host mode](docs/host_mode.md) (If you have a simulation-heavy use case)
+- [Docker](https://www.docker.com/get-started/)
+- [Python 3.12+](https://www.python.org/downloads/)
+- [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+
+
 ### For Local Development
-- [Python 3.10+](https://www.python.org/downloads/)
+- [Python 3.12+](https://www.python.org/downloads/)
 - [Node.js & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
 - [Elasticsearch 8.x or later](https://cloud.elastic.co)
 - [Docker](https://www.docker.com/get-started/)
 
 
-## Quick Start
-
-Run LogstashUI with Docker compose:
-
+## Quick Start - Embedded Mode
+> [!TIP]
+> If you plan on doing a lot of simulations, consider using [host mode](docs/host_mode.md). It's more performant.
+### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd LogstashUI
-docker compose up -d
+cd LogstashUI/bin
 ````
+
+### Run LogstashUI
+#### Linux
+```cmd
+./start_logstashui.sh
+```
+
+#### Windows
+```cmd
+start_logstashui.bat
+```
 
 Once the containers are running, navigate to your host in your browser:
 
@@ -74,15 +95,18 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
 
 To update LogstashUI to the latest version:
+
+#### Linux
 ```bash
-git pull
-docker compose down
-docker compose pull
-docker compose up -d
+cd LogstashUI/bin
+./start_logstashui.sh --update
 ```
 
-
-Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
+#### Windows
+```cmd
+cd LogstashUI\bin
+start_logstashui.bat --update
+```
 
 ## Limitations
 - Currently, the translation engine cannot process comments inside plugin blocks. For example:

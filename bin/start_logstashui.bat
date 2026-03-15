@@ -7,24 +7,77 @@ REM
 REM Usage:
 REM   start_logstashui.bat          - Start with existing images
 REM   start_logstashui.bat --rebuild - Rebuild images before starting
+REM   start_logstashui.bat --update  - Pull latest code and images, then start
 
 REM IMPORTANT: Don't enable delayed expansion yet - it breaks paths with exclamation marks
 setlocal disabledelayedexpansion
 
+REM Detect docker-compose command (hyphen vs space)
+docker-compose version >nul 2>&1
+if %errorlevel% equ 0 (
+    set DOCKER_COMPOSE=docker-compose
+) else (
+    docker compose version >nul 2>&1
+    if %errorlevel% equ 0 (
+        set DOCKER_COMPOSE=docker compose
+    ) else (
+        echo ERROR: Neither 'docker-compose' nor 'docker compose' found!
+        echo Please install Docker Desktop or Docker Compose.
+        exit /b 1
+    )
+)
+
+echo Using Docker Compose command: %DOCKER_COMPOSE%
+echo.
+
 REM Parse command line arguments
 set REBUILD_FLAG=
+set UPDATE_MODE=0
 if "%1"=="--rebuild" set REBUILD_FLAG=--build
+if "%1"=="--update" set UPDATE_MODE=1
 
 echo ========================================
 echo LogstashUI Startup
 echo ========================================
 echo.
-echo Ensuring clean state - stopping any existing services...
-echo.
-
-REM Call stop script first to ensure clean state
-REM Suppress pause at end of stop script
-call "%~dp0stop_logstashui.bat" >nul 2>&1
+REM Handle update mode
+if %UPDATE_MODE%==1 (
+    echo ========================================
+    echo UPDATE MODE
+    echo ========================================
+    echo Pulling latest code from git...
+    echo.
+    
+    git pull
+    if errorlevel 1 (
+        echo WARNING: Git pull failed. Continuing with existing code...
+        echo.
+    ) else (
+        echo Git pull successful!
+        echo.
+    )
+    
+    echo Stopping containers...
+    call "%~dp0stop_logstashui.bat" >nul 2>&1
+    
+    echo.
+    echo Pulling latest Docker images...
+    %DOCKER_COMPOSE% pull
+    if errorlevel 1 (
+        echo WARNING: Failed to pull some images. Continuing...
+        echo.
+    ) else (
+        echo Images pulled successfully!
+        echo.
+    )
+) else (
+    echo Ensuring clean state - stopping any existing services...
+    echo.
+    
+    REM Call stop script first to ensure clean state
+    REM Suppress pause at end of stop script
+    call "%~dp0stop_logstashui.bat" >nul 2>&1
+)
 
 echo.
 echo ========================================
@@ -123,12 +176,12 @@ if /i "%MODE%"=="host" (
     
     REM Ensure agent container is stopped in host mode
     echo Stopping any existing containers
-    docker-compose stop logstashagent 2>nul
-    docker-compose rm -f logstashagent 2>nul
+    %DOCKER_COMPOSE% stop logstashagent 2>nul
+    %DOCKER_COMPOSE% rm -f logstashagent 2>nul
     
     REM Start only logstashui and nginx in detached mode
     REM Nginx will detect host mode and proxy to host.docker.internal:9501
-    docker-compose up -d %REBUILD_FLAG% logstashui nginx
+    %DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
     
 ) else (
     echo ========================================
@@ -139,7 +192,7 @@ if /i "%MODE%"=="host" (
     echo.
     
     REM Start all containers in detached mode with embedded profile
-    docker-compose --profile embedded up -d %REBUILD_FLAG%
+    %DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
 )
 
 echo.

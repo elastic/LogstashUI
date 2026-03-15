@@ -45,11 +45,6 @@ services:
     expose:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
     volumes:
-      # Mount host Logstash directory for host mode (Windows/Linux)
-      # Uncomment and adjust path for your system:
-      # Windows: - C:\logstash-9.3.1:/host/logstash
-      # Linux:   - /usr/share/logstash:/host/logstash
-      - C:\logstash-9.3.1\logstash-9.3.1:/host/logstash
       # Mount logstashui.yml for dynamic config (read-only)
       - ./logstashui.yml:/etc/logstashui.yml:ro
     environment:

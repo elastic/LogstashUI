@@ -1,7 +1,7 @@
 simulation:
   # embedded - Runs in a local container (slower)
   # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running. If you have pipelines or configuration it will overwrite / remove it)
-  mode: host # embedded | host
+  mode: embedded # embedded | host
 
   # This YML gets passed through to the simulation agent
   # When running via start_logstashui.bat, the agent reads this config
