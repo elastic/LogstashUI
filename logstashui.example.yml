@@ -7,10 +7,13 @@ simulation:
   # When running via start_logstashui.bat, the agent reads this config
   logstash_agent:
     mode: simulation
-    
-    # For Windows host mode, use Windows paths (agent runs natively)
-    # For Linux host mode, use Linux paths
-    # For embedded mode, these are ignored (uses container paths)
-    logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
-    logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
-    logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs #/var/log/logstash
+
+    # Linux example, default
+    logstash_binary: /usr/share/logstash/bin/logstash
+    logstash_settings: /etc/logstash
+    logstash_log_path: /var/log/logstash
+
+    # Windows example
+    #logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
+    #logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
+    #logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs #/var/log/logstash
