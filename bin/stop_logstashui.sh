@@ -26,16 +26,20 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-# Check if logstashui.example.yml exists
-if [ ! -f "logstashui.yml" ]; then
-    echo "ERROR: logstashui.yml not found!"
-    echo "Please run this script from the bin directory or ensure the file exists."
+# Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
+if [ -f "logstashui.yml" ]; then
+    CONFIG_FILE="logstashui.yml"
+elif [ -f "logstashui.example.yml" ]; then
+    CONFIG_FILE="logstashui.example.yml"
+else
+    echo "ERROR: No config file found!"
+    echo "Expected logstashui.yml or logstashui.example.yml in project root."
     exit 1
 fi
 
-# Detect mode from logstashui.example.yml
-echo "Detecting simulation mode"
-MODE=$(grep -m 1 "^\s*mode:" logstashui.example.yml | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
+# Detect mode from config file
+echo "Detecting simulation mode from $CONFIG_FILE"
+MODE=$(grep -m 1 "^\s*mode:" "$CONFIG_FILE" | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
 
 # Default to embedded if parsing fails
 if [ -z "$MODE" ]; then

@@ -30,19 +30,23 @@ echo.
 REM Save current directory and change to project root
 pushd "%~dp0.."
 
-REM Check if logstashui.yml exists
-if not exist "logstashui.yml" (
-    echo ERROR: logstashui.yml not found!
-    echo Please run this script from the bin directory or ensure the file exists.
+REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
+if exist "logstashui.yml" (
+    set CONFIG_FILE=logstashui.yml
+) else if exist "logstashui.example.yml" (
+    set CONFIG_FILE=logstashui.example.yml
+) else (
+    echo ERROR: No config file found!
+    echo Expected logstashui.yml or logstashui.example.yml in project root.
     exit /b 1
 )
 
 REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
-REM Detect mode from logstashui.yml
-echo Detecting simulation mode
-for /f "tokens=2" %%a in ('findstr /C:"simulation_mode:" logstashui.yml') do set MODE=%%a
+REM Detect mode from config file
+echo Detecting simulation mode from !CONFIG_FILE!
+for /f "tokens=2" %%a in ('findstr /C:"simulation_mode:" !CONFIG_FILE!') do set MODE=%%a
 
 echo Detected mode: !MODE!
 echo.

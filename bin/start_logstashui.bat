@@ -93,25 +93,30 @@ REM Debug: Show current directory
 echo Current directory: %CD%
 echo.
 
-REM Check if logstashui.yml exists
-if not exist "logstashui.yml" (
-    echo ERROR: logstashui.yml not found!
-    echo Expected location: %CD%\logstashui.yml
+REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
+if exist "logstashui.yml" (
+    set CONFIG_FILE=logstashui.yml
+) else if exist "logstashui.example.yml" (
+    set CONFIG_FILE=logstashui.example.yml
+) else (
+    echo ERROR: No config file found!
+    echo Expected logstashui.yml or logstashui.example.yml in project root.
+    echo Current directory: %CD%
     echo.
     echo Directory contents:
     dir /b
     exit /b 1
 )
 
-echo Found logstashui.yml
+echo Using config file: %CONFIG_FILE%
 echo.
 
 REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
-REM Parse the simulation mode from logstashui.yml (under simulation.mode)
+REM Parse the simulation mode from config file (under simulation.mode)
 set MODE=embedded
-for /f "tokens=2 delims=: " %%a in ('findstr /i "mode:" logstashui.yml') do (
+for /f "tokens=2 delims=: " %%a in ('findstr /i "mode:" !CONFIG_FILE!') do (
     REM Get the first 'mode:' value which is simulation.mode
     if "!MODE!"=="embedded" set MODE=%%a
 )

@@ -92,21 +92,26 @@ cd "$SCRIPT_DIR/.."
 echo "Current directory: $(pwd)"
 echo ""
 
-# Check if logstashui.example.yml exists
-if [ ! -f "logstashui.yml" ]; then
-    echo "ERROR: logstashui.yml not found!"
-    echo "Expected location: $(pwd)/logstashui.yml"
+# Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
+if [ -f "logstashui.yml" ]; then
+    CONFIG_FILE="logstashui.yml"
+elif [ -f "logstashui.example.yml" ]; then
+    CONFIG_FILE="logstashui.example.yml"
+else
+    echo "ERROR: No config file found!"
+    echo "Expected logstashui.yml or logstashui.example.yml in project root."
+    echo "Current directory: $(pwd)"
     echo ""
     echo "Directory contents:"
     ls -la
     exit 1
 fi
 
-echo "Found logstashui.yml"
+echo "Using config file: $CONFIG_FILE"
 echo ""
 
-# Parse the simulation mode from logstashui.example.yml (under simulation.mode)
-MODE=$(grep -m 1 "^\s*mode:" logstashui.example.yml | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
+# Parse the simulation mode from config file (under simulation.mode)
+MODE=$(grep -m 1 "^\s*mode:" "$CONFIG_FILE" | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
 
 # Default to embedded if parsing fails
 if [ -z "$MODE" ]; then
