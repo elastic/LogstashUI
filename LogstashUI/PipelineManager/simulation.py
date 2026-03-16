@@ -78,13 +78,20 @@ def SimulatePipeline(request):
         # Get LogstashAgent URL early so we can use it in instrumentation
         logstash_agent_url = settings.LOGSTASH_AGENT_URL
 
-        # Determine LOGSTASH_URL for Ruby code based on DEBUG mode
-        # DEBUG=True: http://host.docker.internal:8080
-        # DEBUG=False: https://host.docker.internal
-        if settings.DEBUG:
-            logstash_ui_url = "http://host.docker.internal:8080"
+        # Determine LOGSTASH_URL for Ruby code based on simulation mode
+        # Host mode: Logstash runs natively on host, use https://localhost
+        # Embedded mode: Logstash runs in container, use host.docker.internal
+        simulation_mode = settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
+        
+        if simulation_mode == 'host':
+            # Host mode: Logstash runs natively on host, access Django via nginx on localhost:443
+            logstash_ui_url = "https://localhost"
         else:
-            logstash_ui_url = "https://host.docker.internal"
+            # Embedded mode: Logstash runs in container
+            if settings.DEBUG:
+                logstash_ui_url = "http://host.docker.internal:8080"
+            else:
+                logstash_ui_url = "https://host.docker.internal"
 
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls

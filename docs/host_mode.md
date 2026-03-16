@@ -220,3 +220,15 @@ Or run with appropriate permissions:
 ```bash
 sudo chown -R $USER:$USER /etc/logstash /var/log/logstash
 ```
+
+
+## Known Limitations
+### Timing precision in Host Mode for Windows
+
+When running in Host mode on Windows, plugin execution times are rounded to whole milliseconds (1.000ms, 2.000ms, etc.) due to JRuby's time precision on Windows.
+
+This means that sub-ms plugin execution get rounded to 0.0ms, resulting in timing not displaying at all for plugins with less than 1ms execution.
+
+This still allows us to see the relative performance of plugins, but it does not provide accurate sub-millisecond timing like you get in every mode other than Windows Host mode.
+
+For accurate sub-millisecond timing during development on Windows, use Embedded mode or Host mode on Linux.
