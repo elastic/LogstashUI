@@ -14,8 +14,6 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ## Features
 
-## Features
-
 <details>
 <summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
 
