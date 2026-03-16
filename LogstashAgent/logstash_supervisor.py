@@ -308,9 +308,10 @@ class LogstashSupervisor:
         # On Linux host mode, run as logstash user (not root)
         # Logstash refuses to run as root for security reasons
         if os.name != 'nt' and self.simulation_mode_type == 'host':
-            # Use sudo to run as logstash user
-            cmd = ['sudo', '-u', 'logstash', self.logstash_binary, '--path.settings', settings_path]
-            logger.info(f"Running as logstash user: {' '.join(cmd)}")
+            # Use sudo -E to run as logstash user and preserve environment variables (especially LOGSTASH_URL)
+            cmd = ['sudo', '-E', '-u', 'logstash', self.logstash_binary, '--path.settings', settings_path]
+            logger.info(f"Running as logstash user with preserved env: {' '.join(cmd)}")
+            logger.info(f"LOGSTASH_URL will be: {env.get('LOGSTASH_URL', 'NOT SET')}")
         else:
             cmd = [self.logstash_binary, '--path.settings', settings_path]
         

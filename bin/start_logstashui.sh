@@ -188,7 +188,7 @@ if [ "$MODE" == "host" ]; then
     fi
     
     echo ""
-    echo "Setting Logstash data directory ownership for logstash user"
+    echo "Setting Logstash directory ownership for logstash user"
     # Detect Logstash home from config - default to /usr/share/logstash
     LOGSTASH_HOME=$(grep -m 1 "logstash_binary:" "$PROJECT_ROOT/$CONFIG_FILE" | sed 's/.*logstash_binary:\s*\(.*\)\/bin\/logstash.*/\1/' | tr -d '[:space:]')
     if [ -z "$LOGSTASH_HOME" ]; then
@@ -202,6 +202,24 @@ if [ "$MODE" == "host" ]; then
         echo "Set ownership of $LOGSTASH_HOME/data to logstash:logstash"
     else
         echo "WARNING: $LOGSTASH_HOME/data not found, skipping chown"
+    fi
+    
+    # Ensure logstash user owns the log directory
+    # Detect log path from config - default to /var/log/logstash
+    LOGSTASH_LOG_PATH=$(grep -m 1 "logstash_log_path:" "$PROJECT_ROOT/$CONFIG_FILE" | sed 's/.*logstash_log_path:\s*\(.*\)/\1/' | tr -d '[:space:]')
+    if [ -z "$LOGSTASH_LOG_PATH" ]; then
+        LOGSTASH_LOG_PATH="/var/log/logstash"
+    fi
+    echo "Logstash log path: $LOGSTASH_LOG_PATH"
+    
+    if [ -d "$LOGSTASH_LOG_PATH" ]; then
+        sudo chown -R logstash:logstash "$LOGSTASH_LOG_PATH"
+        echo "Set ownership of $LOGSTASH_LOG_PATH to logstash:logstash"
+    else
+        echo "WARNING: $LOGSTASH_LOG_PATH not found, creating it"
+        sudo mkdir -p "$LOGSTASH_LOG_PATH"
+        sudo chown -R logstash:logstash "$LOGSTASH_LOG_PATH"
+        echo "Created and set ownership of $LOGSTASH_LOG_PATH to logstash:logstash"
     fi
     echo ""
     
