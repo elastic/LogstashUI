@@ -2,11 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+import os
 import subprocess
 import threading
 import time
 import logging
-import os
+from typing import Optional
 import signal
 import psutil
 import shutil
@@ -254,7 +255,8 @@ class LogstashSupervisor:
         # Dockerfile default is http://host.docker.internal:8080
         if not existing_url or existing_url in ['http://host.docker.internal:8080', 'http://localhost:8080']:
             # Set based on mode:
-            # - Host mode: Logstash runs natively, access Django via nginx HTTPS proxy on localhost:443
+            # - Host mode: Logstash runs natively on host, access Django via nginx HTTPS proxy on localhost:443
+            #   https://localhost works from both inside and outside containers
             # - Embedded mode: Container mode -> use host.docker.internal for standalone builds
             if self.simulation_mode_type == 'host':
                 env['LOGSTASH_URL'] = 'https://localhost'

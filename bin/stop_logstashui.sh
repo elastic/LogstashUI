@@ -82,7 +82,21 @@ if [ "$MODE" == "host" ]; then
         kill -9 $PIDS 2>/dev/null || true
     fi
     
-    echo "LogstashAgent stopped"
+    # Kill Logstash process (managed by the agent)
+    # Port 9600 is Logstash API, port 9449 is HTTP input
+    echo "Stopping Logstash process"
+    LOGSTASH_PIDS=$(lsof -ti:9600,9449 2>/dev/null || true)
+    if [ -n "$LOGSTASH_PIDS" ]; then
+        echo "Killing Logstash processes: $LOGSTASH_PIDS"
+        kill $LOGSTASH_PIDS 2>/dev/null || true
+        sleep 2
+        # Force kill if still running
+        if lsof -ti:9600,9449 2>/dev/null; then
+            kill -9 $LOGSTASH_PIDS 2>/dev/null || true
+        fi
+    fi
+    
+    echo "LogstashAgent and Logstash stopped"
     
     echo ""
     echo "Stopping Docker containers (UI + Nginx)"

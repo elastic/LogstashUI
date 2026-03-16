@@ -1402,9 +1402,13 @@ async def validate_logstash_config(request: Request):
             
             logger.info(f"Validating config for pipeline '{pipeline_name}' at {temp_file_path}")
             
+            # Get logstash binary path from config
+            logstash_binary = AGENT_CONFIG.get('logstash_binary', '/usr/share/logstash/bin/logstash')
+            logger.info(f"Using Logstash binary: {logstash_binary}")
+            
             # Run logstash validation
             result = subprocess.run(
-                ["logstash", "--config.test_and_exit", "-f", temp_file_path, "--log.format", "json"],
+                [logstash_binary, "--config.test_and_exit", "-f", temp_file_path, "--log.format", "json"],
                 capture_output=True,
                 text=True,
                 timeout=30
