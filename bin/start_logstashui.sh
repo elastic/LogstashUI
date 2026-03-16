@@ -187,6 +187,24 @@ if [ "$MODE" == "host" ]; then
         echo "Please ensure LogstashAgent/logstashagent.yml has correct paths"
     fi
     
+    echo ""
+    echo "Setting Logstash data directory ownership for logstash user"
+    # Detect Logstash home from config - default to /usr/share/logstash
+    LOGSTASH_HOME=$(grep -m 1 "logstash_binary:" "$PROJECT_ROOT/$CONFIG_FILE" | sed 's/.*logstash_binary:\s*\(.*\)\/bin\/logstash.*/\1/' | tr -d '[:space:]')
+    if [ -z "$LOGSTASH_HOME" ]; then
+        LOGSTASH_HOME="/usr/share/logstash"
+    fi
+    echo "Logstash home: $LOGSTASH_HOME"
+    
+    # Ensure logstash user owns the data directory
+    if [ -d "$LOGSTASH_HOME/data" ]; then
+        sudo chown -R logstash:logstash "$LOGSTASH_HOME/data"
+        echo "Set ownership of $LOGSTASH_HOME/data to logstash:logstash"
+    else
+        echo "WARNING: $LOGSTASH_HOME/data not found, skipping chown"
+    fi
+    echo ""
+    
     echo "Starting LogstashAgent on port 9501 (accessible remotely)"
     cd "$PROJECT_ROOT/LogstashAgent"
     # Start in background using nohup - bind to 0.0.0.0 for remote access

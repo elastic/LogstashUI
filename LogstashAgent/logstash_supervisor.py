@@ -303,8 +303,17 @@ class LogstashSupervisor:
         if os.name != 'nt':
             popen_kwargs['preexec_fn'] = os.setsid  # Create new process group for clean shutdown (Unix only)
         
+        # On Linux host mode, run as logstash user (not root)
+        # Logstash refuses to run as root for security reasons
+        if os.name != 'nt' and self.simulation_mode_type == 'host':
+            # Use sudo to run as logstash user
+            cmd = ['sudo', '-u', 'logstash', self.logstash_binary, '--path.settings', settings_path]
+            logger.info(f"Running as logstash user: {' '.join(cmd)}")
+        else:
+            cmd = [self.logstash_binary, '--path.settings', settings_path]
+        
         self.process = subprocess.Popen(
-            [self.logstash_binary, '--path.settings', settings_path],
+            cmd,
             **popen_kwargs
         )
         
