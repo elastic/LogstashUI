@@ -78,13 +78,20 @@ def SimulatePipeline(request):
         # Get LogstashAgent URL early so we can use it in instrumentation
         logstash_agent_url = settings.LOGSTASH_AGENT_URL
 
-        # Determine LOGSTASH_URL for Ruby code based on DEBUG mode
-        # DEBUG=True: http://host.docker.internal:8080
-        # DEBUG=False: https://host.docker.internal
-        if settings.DEBUG:
-            logstash_ui_url = "http://host.docker.internal:8080"
+        # Determine LOGSTASH_URL for Ruby code based on simulation mode
+        # Host mode: Logstash runs natively on host, use https://localhost
+        # Embedded mode: Logstash runs in container, use host.docker.internal
+        simulation_mode = settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
+        
+        if simulation_mode == 'host':
+            # Host mode: Logstash runs natively on host, access Django via nginx on localhost:443
+            logstash_ui_url = "https://localhost"
         else:
-            logstash_ui_url = "https://host.docker.internal"
+            # Embedded mode: Logstash runs in container
+            if settings.DEBUG:
+                logstash_ui_url = "http://host.docker.internal:8080"
+            else:
+                logstash_ui_url = "https://host.docker.internal"
 
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls
@@ -322,7 +329,6 @@ end
                                 "code": instrumentation_code
                             }
                         }
-
                         instrumented.append(instrumentation_plugin)
 
             return instrumented
@@ -493,14 +499,24 @@ end
                 # Add run_id for tracking this specific simulation run
                 log_data["run_id"] = run_id
 
+                # Send simulation to LogstashAgent
+                # LogstashAgent handles retries (3x with 1s, 2s, 3s timeouts)
+                # If all retries fail, LogstashAgent triggers restart and queues the request
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
                     verify=False,
-                    timeout=10
+                    timeout=10  # Timeout to allow LogstashAgent's 3 retries to complete (1s+2s+3s=6s)
                 )
+                
+                # Check if request was queued (202 status)
+                if response.status_code == 202:
+                    logger.warning(f"Simulation request queued - Logstash is restarting")
+                    return HttpResponse(f'<div class="text-yellow-400">Simulation queued - Logstash is restarting. Results will appear when ready.</div>')
+                
                 response.raise_for_status()
                 logger.info(f"Sent simulation input to pipeline '{pipeline_name}'")
+                
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to send simulation input: {e}")
                 return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
@@ -861,3 +877,175 @@ def UploadFile(request):
         logger.error(f"Error in UploadFile: {e}")
         logger.error(traceback.format_exc())
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def GetSimulationNodeStatus(request):
+    """
+    Check the health status of the LogstashAgent.
+    
+    Returns:
+        JSON response with:
+        - status: "running" if agent is healthy, "not_responding" otherwise
+        - message: Human-readable status message
+        - agent_info: Additional info from agent (if available)
+    """
+    try:
+        logstash_agent_url = settings.LOGSTASH_AGENT_URL
+        
+        try:
+            response = requests.get(logstash_agent_url, timeout=3, verify=False)
+            response.raise_for_status()
+            
+            agent_data = response.json()
+            
+            return JsonResponse({
+                "status": "running",
+                "message": "Agent Running",
+                "agent_info": agent_data
+            }, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"LogstashAgent not responding: {e}")
+            return JsonResponse({
+                "status": "not_responding",
+                "message": "Agent Not Responding",
+                "error": str(e)
+            }, status=200)
+    
+    except Exception as e:
+        logger.error(f"Error in GetSimulationNodeStatus: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "status": "error",
+            "message": "Agent Not Responding",
+            "error": str(e)
+        }, status=200)
+
+
+@login_required
+def GetSimulationNodeHealth(request):
+    """
+    Check the health status of Logstash within the simulation node.
+    
+    Returns:
+        JSON response with:
+        - healthy: Boolean indicating if Logstash is healthy
+        - restarting: Boolean indicating if Logstash is restarting
+        - restart_count: Number of times Logstash has restarted
+        - queued_requests: Number of queued simulation requests
+    """
+    try:
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/health"
+        
+        try:
+            response = requests.get(logstash_agent_url, timeout=3, verify=False)
+            response.raise_for_status()
+            
+            health_data = response.json()
+            
+            return JsonResponse({
+                "healthy": health_data.get("healthy", False),
+                "restarting": health_data.get("restarting", False),
+                "restart_count": health_data.get("restart_count", 0),
+                "queued_requests": health_data.get("queued_requests", 0)
+            }, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to get Logstash health from agent: {e}")
+            return JsonResponse({
+                "healthy": False,
+                "restarting": False,
+                "restart_count": 0,
+                "queued_requests": 0,
+                "error": str(e)
+            }, status=200)
+    
+    except Exception as e:
+        logger.error(f"Error in GetSimulationNodeHealth: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "healthy": False,
+            "restarting": False,
+            "restart_count": 0,
+            "queued_requests": 0,
+            "error": str(e)
+        }, status=200)
+
+
+@require_admin_role
+def ValidateLogstashConfig(request):
+    """
+    Validate a Logstash pipeline configuration by sending it to LogstashAgent
+    for validation using logstash --config.test_and_exit.
+    
+    Expected POST parameters:
+        - components: JSON string of pipeline components
+        - pipeline_name: Name of the pipeline (used for temp file naming)
+    
+    Returns:
+        JSON response with:
+        - status: "OK" or "ERROR"
+        - notifications: List of warning/deprecation messages
+        - error: Error message if validation failed
+    """
+    if request.method != 'POST':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        components_json = request.POST.get('components')
+        pipeline_name = request.POST.get('pipeline_name', 'pipeline')
+        
+        if not components_json:
+            return JsonResponse({
+                "status": "ERROR",
+                "error": "No pipeline components provided"
+            }, status=400)
+        
+        try:
+            components = json.loads(components_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse components JSON: {e}")
+            return JsonResponse({
+                "status": "ERROR",
+                "error": "Invalid components data"
+            }, status=400)
+        
+        # Convert components to Logstash config
+        converter = logstash_config_parse.ComponentToPipeline(components, test=False)
+        logstash_config = converter.components_to_logstash_config()
+        
+        # Send to LogstashAgent for validation
+        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/validate"
+        
+        try:
+            response = requests.post(
+                logstash_agent_url,
+                json={
+                    "pipeline_name": pipeline_name,
+                    "config": logstash_config
+                },
+                verify=False,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            validation_result = response.json()
+            logger.info(f"Validation result for pipeline '{pipeline_name}': {validation_result.get('status')}")
+            
+            return JsonResponse(validation_result, status=200)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to validate config via LogstashAgent: {e}")
+            return JsonResponse({
+                "status": "ERROR",
+                "error": f"Failed to connect to LogstashAgent: {str(e)}"
+            }, status=500)
+    
+    except Exception as e:
+        logger.error(f"Error in ValidateLogstashConfig: {e}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            "status": "ERROR",
+            "error": str(e)
+        }, status=500)

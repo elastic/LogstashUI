@@ -4,7 +4,7 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
-<img src="Docs/images/simulate.png" width="100%">
+<img src="docs/images/simulate.png" width="100%">
 
 ## Overview
 
@@ -14,36 +14,84 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ## Features
 
-- **Visual Pipeline Editor** — Build and modify Logstash pipelines using a graphical interface or raw configuration
-- **Pipeline Simulation** — Execute pipelines against sample events and inspect transformations step-by-step
-- **Multi-Instance Management** — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management
-- **Pipeline Monitoring** — View metrics and performance for running pipelines
-- **SNMP Support** — Configure polling, traps, and discovery through a web interface
+<details>
+<summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
+
+![Visual Pipeline Editor](docs/images/graph.gif)
+
+</details>
+
+<details>
+<summary><b>Pipeline Simulation</b> — Execute pipelines against sample events and inspect transformations step-by-step</summary>
+
+![Pipeline Simulation](docs/images/simulate.gif)
+
+</details>
+
+<details>
+<summary><b>Multi-Instance Management</b> — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management</summary>
+
+</details>
+
+<details>
+<summary><b>Pipeline Monitoring</b> — View metrics and performance for running pipelines</summary>
+
+![Pipeline Monitoring](docs/images/monitoring.png)
+
+</details>
+
+<details>
+<summary><b>SNMP Support</b> — Configure polling, traps, and discovery through a web interface</summary>
+
+![SNMP Support](docs/images/snmp.gif)
+
+</details>
 
 
 ## Requirements
 
 ### System Requirements
 **Minimum:**
-- 4 GB RAM
-- 2 CPU Cores
+- 8 GB RAM
+- 4 CPU Cores
+
+### Software
+
+#### For Embedded mode (See Quick Start)
+- [Docker](https://www.docker.com/get-started/)
+
+#### For [Host mode](docs/host_mode.md) (If you have a simulation-heavy use case)
+- [Docker](https://www.docker.com/get-started/)
+- [Python 3.12+](https://www.python.org/downloads/)
+- [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+
 
 ### For Local Development
-- [Python 3.10+](https://www.python.org/downloads/)
+- [Python 3.12+](https://www.python.org/downloads/)
 - [Node.js & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
 - [Elasticsearch 8.x or later](https://cloud.elastic.co)
 - [Docker](https://www.docker.com/get-started/)
 
 
-## Quick Start
-
-Run LogstashUI with Docker compose:
-
+## Quick Start - Embedded Mode
+> [!TIP]
+> If you plan on doing a lot of simulations, consider using [host mode](docs/host_mode.md). It's more performant.
+### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd LogstashUI
-docker compose up -d
+cd LogstashUI/bin
 ````
+
+### Run LogstashUI
+#### Linux
+```cmd
+./start_logstashui.sh
+```
+
+#### Windows
+```cmd
+start_logstashui.bat
+```
 
 Once the containers are running, navigate to your host in your browser:
 
@@ -55,34 +103,37 @@ And that's it!
 ## Add Your First Connection
 
 ### 1. Create an initial user
-<img src="Docs/images/login.png" width="400px">
+<img src="docs/images/login.png" width="400px">
 
 ### 2. Add a connection
-<img src="Docs/images/new_connection.gif" width="800px">
+<img src="docs/images/new_connection.gif" width="800px">
 
 ### 3. Start managing pipelines!
-<img src="Docs/images/simulate.gif" width="800px">
+<img src="docs/images/simulate.gif" width="800px">
 
 
 ### Optional: Add monitoring to your connections:
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. Once Logstash monitoring data is indexed into Elasticsearch, metrics and logs will appear in the UI.
 
-<img src="Docs/images/monitoring.png" width="800px">
+<img src="docs/images/monitoring.png" width="800px">
 
 ## Updating
 
 LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
 
 To update LogstashUI to the latest version:
+
+#### Linux
 ```bash
-git pull
-docker compose down
-docker compose pull
-docker compose up -d
+cd LogstashUI/bin
+./start_logstashui.sh --update
 ```
 
-
-Your data (database, configurations) persists in Docker volumes, so it won't be lost during updates.
+#### Windows
+```cmd
+cd LogstashUI\bin
+start_logstashui.bat --update
+```
 
 ## Limitations
 - Currently, the translation engine cannot process comments inside plugin blocks. For example:

@@ -8,6 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     nodejs \
     npm \
+    sqlite3 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -26,7 +27,7 @@ RUN python manage.py tailwind build
 RUN python manage.py collectstatic --noinput --clear
 
 RUN groupadd -r appuser && useradd -r -g appuser appuser
-RUN mkdir -p /app/LogstashUI/data && \
+RUN mkdir -p /app/data && \
     chown -R appuser:appuser /app && \
     chmod -R 755 /app
 

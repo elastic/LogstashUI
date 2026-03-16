@@ -13,10 +13,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os, platform
 from Common.encryption import get_django_secret_key
+from .config import CONFIG
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# LogstashUI Runtime Configuration
+# Loaded from YAML file specified in LOGSTASHUI_CONFIG environment variable
+# Falls back to DEFAULT_CONFIG if not specified
+LOGSTASHUI_CONFIG = CONFIG
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -248,15 +253,25 @@ else:
 
 # LogstashAgent Configuration
 # URL for the LogstashAgent API
-# In production (DEBUG=False): Use nginx proxy with HTTPS for internal communication
-# In development (DEBUG=True): Use direct HTTP connection
 # Can be overridden with LOGSTASH_AGENT_URL environment variable
+# 
+# Routing based on simulation mode:
+# - Host mode: Direct to host.docker.internal:9501 (native agent on host)
+# - Embedded mode: Via nginx proxy to logstashagent:9500 (container)
 if DEBUG:
-    # Development: Direct HTTP connection to LogstashAgent
+    # Development: Direct HTTP connection (for local testing without containers)
     LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://127.0.0.1:9500')
 else:
-    # Production: HTTPS through nginx reverse proxy (self-signed cert)
-    LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'https://nginx:9500')
+    # Production: Check simulation mode from config
+    simulation_mode = LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
+    
+    if simulation_mode == 'host':
+        # Host mode: Agent runs natively on host port 9501
+        # Use HTTP to host.docker.internal (no SSL for internal communication)
+        LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://host.docker.internal:9501')
+    else:
+        # Embedded mode: Agent runs in container, accessed via nginx proxy
+        LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'https://nginx:9500')
 
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/

@@ -2,7 +2,7 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from fastapi import FastAPI, HTTPException, Path, Query, Request
+from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -18,24 +18,171 @@ from logstash_api import LogstashAPI, PipelineNotFoundError
 import requests
 import time
 import base64
+import asyncio
+import atexit
+import logstash_supervisor
+from collections import deque
+import threading
+from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
-# Configure logging
+# Configure logging with file output
+# Create data/logs directory if it doesn't exist
+LOGS_DIR = Path(__file__).parent / 'data' / 'logs'
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Setup logging configuration
 logging.basicConfig(
     level=logging.INFO,
     format='[%(levelname)s] %(asctime)s %(name)s %(funcName)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        # Console handler
+        logging.StreamHandler(),
+        # File handler with rotation
+        RotatingFileHandler(
+            LOGS_DIR / 'logstashagent.log',
+            maxBytes=1024 * 1024 * 10,  # 10 MB
+            backupCount=5,
+        )
+    ]
 )
 logger = logging.getLogger(__name__)
 
 # Reduce httpx logging noise - only show warnings and errors
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+logger.info(f"LogstashAgent logging initialized - logs directory: {LOGS_DIR}")
+
+# Load agent configuration
+# Check for config in current directory first (native mode)
+def get_config_path() -> str:
+    """Get the path to logstashagent.yml - only used for native/host mode"""
+    local_path = os.path.join(os.path.dirname(__file__), "logstashagent.yml")
+    return local_path
+
+CONFIG_PATH = get_config_path()
+
+def load_agent_config() -> dict:
+    """Load logstashagent.yml configuration, with fallback to logstashui.yml or logstashui.example.yml if mounted"""
+    # First, try to load from mounted logstashui.yml (preferred), then logstashui.example.yml
+    # Check /app first (docker-compose mounts), then /etc (legacy)
+    config_paths = [
+        "/app/logstashui.yml",
+        "/app/logstashui.example.yml",
+        "/etc/logstashui.yml",
+        "/etc/logstashui.example.yml"
+    ]
+    
+    for logstashui_config_path in config_paths:
+        if os.path.exists(logstashui_config_path):
+            try:
+                with open(logstashui_config_path, 'r') as f:
+                    full_config = yaml.safe_load(f)
+                    # logstash_agent is nested under simulation section
+                    if full_config and 'simulation' in full_config:
+                        simulation_config = full_config['simulation']
+                        if 'logstash_agent' in simulation_config:
+                            agent_config = simulation_config['logstash_agent'].copy()
+                            # Add simulation mode from parent config
+                            if 'mode' in simulation_config:
+                                agent_config['simulation_mode'] = simulation_config['mode']
+                            if 'mode' not in agent_config:
+                                agent_config['mode'] = 'simulation'
+                            
+                            # FORCE embedded mode to use container paths (ignore config file paths)
+                            if agent_config.get('simulation_mode') == 'embedded':
+                                agent_config['logstash_binary'] = '/usr/share/logstash/bin/logstash'
+                                agent_config['logstash_settings'] = '/etc/logstash'
+                                agent_config['logstash_log_path'] = '/var/log/logstash'
+                                logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode=embedded (forced Linux paths)")
+                            else:
+                                logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode={agent_config.get('simulation_mode', 'embedded')}")
+                            return agent_config
+            except Exception as e:
+                logger.warning(f"Failed to load config from {logstashui_config_path}: {e}, trying next path")
+    
+    # Fallback to logstashagent.yml
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            config = yaml.safe_load(f)
+            logger.info(f"Loaded agent config from {CONFIG_PATH}: simulation_mode={config.get('simulation_mode', 'embedded')}")
+            return config
+    except FileNotFoundError:
+        logger.warning(f"Config file {CONFIG_PATH} not found, using embedded mode defaults")
+        return {
+            'mode': 'simulation',
+            'simulation_mode': 'embedded',
+            'logstash_binary': '/usr/share/logstash/bin/logstash',
+            'logstash_settings': '/etc/logstash/'
+        }
+    except Exception as e:
+        logger.error(f"Error loading config: {e}")
+        raise
+
+# Global config
+AGENT_CONFIG = load_agent_config()
+
 app = FastAPI(title="LogstashAgent API", version="0.0.1")
 
-# Configuration paths
-PIPELINES_YML_PATH = "/etc/logstash/pipelines.yml"
-PIPELINES_DIR = "/etc/logstash/conf.d"
-METADATA_DIR = "/etc/logstash/pipeline-metadata"
+# Request queue for simulation requests during Logstash restarts
+_simulation_queue: deque = deque(maxlen=100)  # Max 100 queued requests
+_queue_lock = threading.Lock()
+_queue_processor_task: Optional[asyncio.Task] = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Start Logstash under supervision when FastAPI starts"""
+    global _queue_processor_task
+    logger.info("FastAPI startup - initializing Logstash supervisor")
+    logstash_supervisor.start_supervised_logstash(config=AGENT_CONFIG)
+    # Wait for Logstash to initialize
+    await asyncio.sleep(5)
+    logger.info("Logstash supervision started")
+    
+    # Start queue processor
+    _queue_processor_task = asyncio.create_task(_process_simulation_queue())
+    logger.info("Simulation queue processor started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown Logstash supervisor when FastAPI stops"""
+    global _queue_processor_task
+    logger.info("FastAPI shutdown - stopping queue processor")
+    if _queue_processor_task:
+        _queue_processor_task.cancel()
+        try:
+            await _queue_processor_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("FastAPI shutdown - stopping Logstash supervisor")
+    logstash_supervisor.shutdown_supervisor()
+
+# Also register atexit handler for clean shutdown
+atexit.register(logstash_supervisor.shutdown_supervisor)
+
+# Configuration paths - dynamically set based on mode
+def get_logstash_paths():
+    """Get Logstash paths based on configuration (Docker vs native)"""
+    logstash_settings = AGENT_CONFIG.get('logstash_settings', '/etc/logstash/')
+    
+    # Ensure settings path ends with /
+    if not logstash_settings.endswith('/') and not logstash_settings.endswith('\\'):
+        logstash_settings += '/'
+    
+    # Normalize to forward slashes for consistency
+    logstash_settings = logstash_settings.replace('\\', '/')
+    
+    return {
+        'pipelines_yml': f"{logstash_settings}pipelines.yml",
+        'conf_d': f"{logstash_settings}conf.d",
+        'metadata': f"{logstash_settings}pipeline-metadata"
+    }
+
+LOGSTASH_PATHS = get_logstash_paths()
+PIPELINES_YML_PATH = LOGSTASH_PATHS['pipelines_yml']
+PIPELINES_DIR = LOGSTASH_PATHS['conf_d']
+METADATA_DIR = LOGSTASH_PATHS['metadata']
 
 # Ensure directories exist
 os.makedirs(PIPELINES_DIR, exist_ok=True)
@@ -94,12 +241,55 @@ def _load_pipelines_yml() -> list:
 
 
 def _save_pipelines_yml(pipelines: list):
-    """Save the pipelines.yml file atomically"""
+    """Save the pipelines.yml file atomically, ensuring static pipelines are preserved"""
+    # Get logstash settings path from config
+    logstash_settings = AGENT_CONFIG.get('logstash_settings', '/etc/logstash/')
+    
+    # Detect OS and handle path separators appropriately
+    is_windows = os.name == 'nt'
+    
+    if is_windows:
+        # Windows: Ensure path ends with backslash, then escape for YAML
+        if not logstash_settings.endswith('/') and not logstash_settings.endswith('\\'):
+            logstash_settings += '\\'
+        # YAML requires backslashes to be escaped, so C:\path becomes C:\\path
+        yaml_path = logstash_settings.replace('\\', '\\\\')
+        path_sep = '\\\\'
+    else:
+        # Linux/Docker: Use forward slashes (no escaping needed)
+        if not logstash_settings.endswith('/'):
+            logstash_settings += '/'
+        yaml_path = logstash_settings
+        path_sep = '/'
+    
+    # Define static pipelines that must always be present
+    # Static pipeline .conf files are in config/config/ subdirectory
+    static_pipelines = [
+        {
+            'pipeline.id': 'simulate-start',
+            'pipeline.workers': 1,
+            'path.config': f'{yaml_path}config{path_sep}simulate_start.conf'
+        },
+        {
+            'pipeline.id': 'simulate-end',
+            'pipeline.workers': 1,
+            'path.config': f'{yaml_path}config{path_sep}simulate_end.conf'
+        }
+    ]
+    
+    # Remove any existing static pipeline entries from the input list
+    static_ids = {'simulate-start', 'simulate-end'}
+    dynamic_pipelines = [p for p in pipelines if p.get('pipeline.id') not in static_ids]
+    
+    # Combine static pipelines (first) with dynamic pipelines
+    final_pipelines = static_pipelines + dynamic_pipelines
+    
     temp_path = f"{PIPELINES_YML_PATH}.tmp"
     try:
         with open(temp_path, 'w') as f:
-            yaml.dump(pipelines, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(final_pipelines, f, default_flow_style=False, sort_keys=False)
         os.replace(temp_path, PIPELINES_YML_PATH)
+        logger.debug(f"Saved pipelines.yml with {len(static_pipelines)} static + {len(dynamic_pipelines)} dynamic pipelines")
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -279,34 +469,297 @@ async def root():
     }
 
 
+async def _process_simulation_queue():
+    """
+    Background task that processes queued simulation requests when Logstash becomes healthy.
+    """
+    logger.info("Queue processor started")
+    last_healthy_time = None
+    
+    while True:
+        try:
+            await asyncio.sleep(2)  # Check every 2 seconds
+            
+            supervisor = logstash_supervisor.get_supervisor()
+            if not supervisor or not supervisor.is_healthy:
+                last_healthy_time = None
+                continue
+            
+            # Track when Logstash became healthy
+            if last_healthy_time is None:
+                last_healthy_time = time.time()
+                logger.info("Logstash became healthy, waiting 10s for full initialization before processing queue")
+                continue
+            
+            # Wait at least 10 seconds after Logstash becomes healthy before processing
+            time_since_healthy = time.time() - last_healthy_time
+            if time_since_healthy < 10:
+                continue
+            
+            # Verify Logstash port 9449 is actually ready before processing queue
+            try:
+                test_response = requests.get("http://127.0.0.1:9449", timeout=2)
+            except Exception:
+                logger.debug("Logstash port 9449 not ready yet, waiting...")
+                continue
+            
+            # Process all queued requests
+            while True:
+                queued_item = None
+                with _queue_lock:
+                    if _simulation_queue:
+                        queued_item = _simulation_queue.popleft()
+                    else:
+                        break
+                
+                if queued_item:
+                    log_data = queued_item['log_data']
+                    slot_config = queued_item.get('slot_config')
+                    
+                    logger.info(f"Processing queued simulation: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
+                    
+                    # Restore slot configuration if needed
+                    if slot_config:
+                        slot_id = slot_config['slot_id']
+                        pipeline_name = slot_config['pipeline_name']
+                        pipelines = slot_config['pipelines']
+                        
+                        # Re-allocate slot (will reuse if hash matches)
+                        try:
+                            # Check if slot already exists
+                            existing_slots = slots.get_slot_state()
+                            slot_exists = slot_id in existing_slots
+                            
+                            if not slot_exists:
+                                # Allocate slot and create pipelines
+                                slots.allocate_slot(pipeline_name, pipelines)
+                                await _create_slot_pipelines(slot_id, pipelines)
+                                logger.info(f"Restored slot {slot_id} configuration")
+                            else:
+                                logger.info(f"Slot {slot_id} already exists, skipping restoration")
+                        except Exception as e:
+                            logger.error(f"Failed to restore slot {slot_id}: {e}")
+                            continue
+                    
+                    # Forward the simulation request with retries
+                    max_retries = 3
+                    success = False
+                    for attempt in range(max_retries):
+                        try:
+                            timeout = 2 + attempt  # 2s, 3s, 4s
+                            response = requests.post(
+                                "http://127.0.0.1:9449",
+                                json=log_data,
+                                timeout=timeout
+                            )
+                            response.raise_for_status()
+                            logger.info(f"Queued simulation processed successfully: slot={log_data.get('slot')}")
+                            success = True
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"Queued simulation attempt {attempt + 1} failed, retrying: {e}")
+                                await asyncio.sleep(1)
+                            else:
+                                logger.error(f"Failed to process queued simulation after {max_retries} attempts: {e}")
+                    
+                    if not success:
+                        # Re-queue the failed item at the front for retry later
+                        with _queue_lock:
+                            _simulation_queue.appendleft(queued_item)
+                        logger.warning("Re-queued failed simulation for retry later")
+                        break  # Stop processing queue, will retry on next iteration
+                        
+        except asyncio.CancelledError:
+            logger.info("Queue processor cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in queue processor: {e}", exc_info=True)
+            await asyncio.sleep(5)
+
+
+@app.get("/_logstash/health")
+async def logstash_health():
+    """
+    Check if Logstash is healthy and ready to accept simulation requests.
+    Returns health status from supervisor.
+    """
+    supervisor = logstash_supervisor.get_supervisor()
+    with _queue_lock:
+        queue_size = len(_simulation_queue)
+    
+    if supervisor:
+        return JSONResponse(
+            status_code=200 if supervisor.is_healthy else 503,
+            content={
+                "healthy": supervisor.is_healthy,
+                "restarting": supervisor.is_restarting,
+                "restart_count": supervisor.restart_count,
+                "queued_requests": queue_size
+            }
+        )
+    return JSONResponse(
+        status_code=503,
+        content={"healthy": False, "restarting": False, "restart_count": 0, "queued_requests": queue_size}
+    )
+
+
 @app.post("/_logstash/simulate")
 async def simulate_log(request: Request):
     """
     Proxy endpoint for simulation log input.
     Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 9449.
-
-    This allows LogstashUI to send simulation logs over HTTPS (via nginx) while
-    Logstash's HTTP input plugin only accepts HTTP on localhost.
+    
+    Queues requests when Logstash is unhealthy and processes them when it recovers.
     """
     try:
         # Get the JSON body from the request
         log_data = await request.json()
-
-        # Forward to local Logstash HTTP input on port 9449
-        response = requests.post(
-            "http://127.0.0.1:9449",
-            json=log_data,
-            timeout=10
-        )
-        response.raise_for_status()
-
-        logger.info(
-            f"Forwarded simulation log to Logstash: slot={log_data.get('slot')}, run_id={log_data.get('run_id')}")
-
-        return JSONResponse(
-            status_code=200,
-            content={"status": "success", "message": "Log forwarded to Logstash"}
-        )
+        slot_id = log_data.get('slot')
+        
+        # Check if Logstash is healthy
+        supervisor = logstash_supervisor.get_supervisor()
+        is_healthy = supervisor and supervisor.is_healthy
+        
+        if not is_healthy:
+            # Queue the request with slot configuration for restoration
+            slot_config = None
+            if slot_id:
+                # Get current slot configuration to restore later
+                slot_state = slots.get_slot_state()
+                if slot_id in slot_state:
+                    slot_data = slot_state[slot_id]
+                    slot_config = {
+                        'slot_id': slot_id,
+                        'pipeline_name': slot_data.get('pipeline_name'),
+                        'pipelines': slot_data.get('pipelines')
+                    }
+            
+            with _queue_lock:
+                _simulation_queue.append({
+                    'log_data': log_data,
+                    'slot_config': slot_config,
+                    'queued_at': time.time()
+                })
+                queue_size = len(_simulation_queue)
+            
+            logger.warning(f"Logstash unhealthy - queued simulation request (queue size: {queue_size})")
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "queued",
+                    "message": "Logstash is restarting, request queued for processing",
+                    "queue_position": queue_size
+                }
+            )
+        
+        # Logstash is healthy - forward immediately with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                timeout = 1 + attempt  # 1s, 2s, 3s - aggressive timeouts to detect hung Logstash
+                logger.debug(f"Simulation attempt {attempt + 1}/{max_retries}, timeout={timeout}s")
+                
+                # Forward to local Logstash HTTP input on port 9449
+                response = requests.post(
+                    "http://127.0.0.1:9449",
+                    json=log_data,
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                logger.info(
+                    f"Forwarded simulation log to Logstash: slot={slot_id}, run_id={log_data.get('run_id')}")
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={"status": "success", "message": "Log forwarded to Logstash"}
+                )
+                
+            except requests.exceptions.Timeout as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Simulation timeout on attempt {attempt + 1}, retrying...")
+                    await asyncio.sleep(1)
+                    continue
+                else:
+                    # All retries failed - Logstash is likely stunned/OOM
+                    logger.error(f"Simulation failed after {max_retries} attempts due to timeout - triggering restart")
+                    
+                    # Queue the request for retry after restart
+                    slot_config = None
+                    if slot_id:
+                        slot_state = slots.get_slot_state()
+                        if slot_id in slot_state:
+                            slot_data = slot_state[slot_id]
+                            slot_config = {
+                                'slot_id': slot_id,
+                                'pipeline_name': slot_data.get('pipeline_name'),
+                                'pipelines': slot_data.get('pipelines')
+                            }
+                    
+                    with _queue_lock:
+                        _simulation_queue.append({
+                            'log_data': log_data,
+                            'slot_config': slot_config,
+                            'queued_at': time.time()
+                        })
+                        queue_size = len(_simulation_queue)
+                    
+                    # Trigger restart
+                    logstash_supervisor.trigger_restart("Simulation POST failed - Logstash stunned/OOM")
+                    
+                    logger.warning(f"Queued failed simulation for retry after restart (queue size: {queue_size})")
+                    return JSONResponse(
+                        status_code=202,
+                        content={
+                            "status": "queued",
+                            "message": "Logstash unresponsive, triggering restart and queuing request",
+                            "queue_position": queue_size
+                        }
+                    )
+                    
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Simulation request failed on attempt {attempt + 1}, retrying: {e}")
+                    await asyncio.sleep(1)
+                    continue
+                else:
+                    # All retries failed - Logstash is likely stunned/OOM
+                    logger.error(f"Simulation failed after {max_retries} attempts: {e} - triggering restart")
+                    
+                    # Queue the request for retry after restart
+                    slot_config = None
+                    if slot_id:
+                        slot_state = slots.get_slot_state()
+                        if slot_id in slot_state:
+                            slot_data = slot_state[slot_id]
+                            slot_config = {
+                                'slot_id': slot_id,
+                                'pipeline_name': slot_data.get('pipeline_name'),
+                                'pipelines': slot_data.get('pipelines')
+                            }
+                    
+                    with _queue_lock:
+                        _simulation_queue.append({
+                            'log_data': log_data,
+                            'slot_config': slot_config,
+                            'queued_at': time.time()
+                        })
+                        queue_size = len(_simulation_queue)
+                    
+                    # Trigger restart
+                    logstash_supervisor.trigger_restart(f"Simulation POST failed: {str(e)}")
+                    
+                    logger.warning(f"Queued failed simulation for retry after restart (queue size: {queue_size})")
+                    return JSONResponse(
+                        status_code=202,
+                        content={
+                            "status": "queued",
+                            "message": "Logstash unresponsive, triggering restart and queuing request",
+                            "queue_position": queue_size
+                        }
+                    )
+                    
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to forward log to Logstash: {e}")
         raise HTTPException(
@@ -361,7 +814,7 @@ async def list_pipelines():
 
 
 @app.get("/_logstash/pipeline/{pipeline_id}")
-async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
+async def get_pipeline(pipeline_id: str = FastAPIPath(..., description="Pipeline ID")):
     """Get a specific pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
 
@@ -428,7 +881,13 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
 
     if not pipeline_exists:
         # Add new pipeline entry
-        config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf"
+        # Handle path separators based on OS
+        if os.name == 'nt':
+            # Windows: Convert to backslashes and escape for YAML
+            config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf".replace('/', '\\').replace('\\', '\\\\')
+        else:
+            # Linux/Docker: Use forward slashes (no escaping needed)
+            config_path = f"{PIPELINES_DIR}/{pipeline_id}.conf"
         new_pipeline = {
             'pipeline.id': pipeline_id,
             'path.config': config_path,
@@ -475,7 +934,7 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
 
 
 @app.delete("/_logstash/pipeline/{pipeline_id}")
-async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
+async def delete_pipeline(pipeline_id: str = FastAPIPath(..., description="Pipeline ID")):
     """Delete a pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
 
@@ -725,7 +1184,7 @@ async def get_slots():
 
 
 @app.delete("/_logstash/slots/{slot_id}")
-async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=10)):
+async def release_slot(slot_id: int = FastAPIPath(..., description="Slot ID", ge=1, le=10)):
     """Release a specific slot."""
     success = slots.release_slot(slot_id)
 
@@ -737,7 +1196,7 @@ async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=
 
 @app.get("/_logstash/pipeline/{pipeline_id}/logs")
 async def get_pipeline_logs(
-        pipeline_id: str = Path(..., description="Pipeline ID"),
+        pipeline_id: str = FastAPIPath(..., description="Pipeline ID"),
         max_entries: int = Query(50, description="Maximum number of log entries to return", ge=1, le=500),
         min_level: str = Query("WARN", description="Minimum log level (DEBUG, INFO, WARN, ERROR)"),
         min_timestamp: int = Query(None,
@@ -892,4 +1351,155 @@ async def write_file(request: Request):
         raise HTTPException(
             status_code=500,
             detail=f"Error writing file: {str(e)}"
+        )
+
+
+@app.post("/_logstash/validate")
+async def validate_logstash_config(request: Request):
+    """
+    Validate a Logstash pipeline configuration using logstash --config.test_and_exit.
+    
+    Request body:
+        - pipeline_name: Name of the pipeline (used for temp file naming)
+        - config: The Logstash configuration to validate
+    
+    Returns:
+        - status: "OK" or "ERROR"
+        - notifications: List of warning/deprecation messages
+        - error: Error message if validation failed
+    """
+    import subprocess
+    import tempfile
+    
+    try:
+        body = await request.json()
+        pipeline_name = body.get("pipeline_name", "pipeline")
+        config = body.get("config")
+        
+        if not config:
+            raise HTTPException(
+                status_code=400,
+                detail="No configuration provided"
+            )
+        
+        # Create temporary config file
+        temp_file_path = f"/tmp/{pipeline_name}.conf"
+        
+        try:
+            # Replace keystore variables without defaults to avoid validation failures
+            # Pattern: ${variable_name} -> ${variable_name:test}
+            # Don't replace if already has a default: ${variable_name:existing_default}
+            import re
+            config_with_defaults = re.sub(
+                r'\$\{([^}:]+)\}',  # Match ${variable_name} without colon
+                r'${\1:test}',       # Replace with ${variable_name:test}
+                config
+            )
+            
+            # Write config to temp file
+            with open(temp_file_path, 'w') as f:
+                f.write(config_with_defaults)
+            
+            logger.info(f"Validating config for pipeline '{pipeline_name}' at {temp_file_path}")
+            
+            # Get logstash binary path from config
+            logstash_binary = AGENT_CONFIG.get('logstash_binary', '/usr/share/logstash/bin/logstash')
+            logger.info(f"Using Logstash binary: {logstash_binary}")
+            
+            # Run logstash validation
+            result = subprocess.run(
+                [logstash_binary, "--config.test_and_exit", "-f", temp_file_path, "--log.format", "json"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Parse output to extract notifications by log level
+            notifications_by_level = {}
+            output_lines = result.stdout.strip().split('\n')
+            
+            for line in output_lines:
+                try:
+                    log_entry = json.loads(line)
+                    # Extract log entries with logEvent
+                    if "logEvent" in log_entry:
+                        message = log_entry["logEvent"].get("message", "")
+                        logger_name = log_entry.get("loggerName", "")
+                        level = log_entry.get("level", "INFO")
+                        
+                        # Filter out noise
+                        if "Reflections took" in message or "pipelines.yml" in message:
+                            continue
+                        
+                        # Only include relevant log levels
+                        if level in ["FATAL", "ERROR", "WARN", "INFO"]:
+                            # Skip generic INFO messages unless they're important
+                            if level == "INFO":
+                                # Filter out logstash.runner INFO logs - not useful to users
+                                if logger_name == "logstash.runner":
+                                    continue
+                                # Only include specific INFO messages
+                                if not any(keyword in message.lower() for keyword in ["deprecated", "warning", "error"]):
+                                    continue
+                            
+                            # Initialize level list if not exists
+                            if level not in notifications_by_level:
+                                notifications_by_level[level] = []
+                            
+                            # Remove discussion forum text if present
+                            cleaned_message = message.replace(
+                                "If you have any questions about this, please ask it on the https://discuss.elastic.co/c/logstash discussion forum",
+                                ""
+                            ).strip()
+                            
+                            # Add entry with plugin and message
+                            notifications_by_level[level].append({
+                                "plugin": logger_name,
+                                "message": cleaned_message
+                            })
+                except json.JSONDecodeError:
+                    # Skip non-JSON lines (like "Configuration OK")
+                    if "Configuration OK" in line:
+                        logger.info("Configuration validation passed")
+                    continue
+            
+            # Determine overall status based on log levels present
+            if "FATAL" in notifications_by_level or "ERROR" in notifications_by_level:
+                status = "ERROR"
+            elif "WARN" in notifications_by_level:
+                status = "WARN"
+            elif result.returncode == 0:
+                status = "OK"
+            else:
+                status = "ERROR"
+            
+            logger.info(f"Validation result for pipeline '{pipeline_name}': {status}, levels: {list(notifications_by_level.keys())}")
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": status,
+                    "notifications": notifications_by_level
+                }
+            )
+        
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                logger.debug(f"Removed temp file: {temp_file_path}")
+    
+    except subprocess.TimeoutExpired:
+        logger.error(f"Validation timeout for pipeline '{pipeline_name}'")
+        raise HTTPException(
+            status_code=500,
+            detail="Validation timeout - configuration took too long to validate"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error validating configuration: {str(e)}"
         )

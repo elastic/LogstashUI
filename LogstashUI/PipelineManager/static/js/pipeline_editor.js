@@ -18,6 +18,12 @@ let isSelectionMode = false;
  * This function reuses the existing slot preallocation mechanism
  */
 function triggerPipelineWarmingAndChecking() {
+    // In embedded mode, don't warm up pipeline on component changes
+    // Only warm up when user opens simulation modal
+    if (typeof simulationMode !== 'undefined' && simulationMode === 'embedded') {
+        return;
+    }
+    
     // Check if there are any filter components
     const hasFilters = components && components.filter && components.filter.length > 0;
 
@@ -36,17 +42,17 @@ function triggerPipelineWarmingAndChecking() {
     const statusMessage = document.getElementById('pipelineStatusMessage');
 
     if (statusBanner && statusIcon && statusMessage) {
-        statusBanner.style.display = 'flex';
-        statusBanner.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 bg-gray-700';
+        statusBanner.style.display = 'inline-flex';
+        statusBanner.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
 
         // Set loading spinner - statusIcon is already an SVG element
         statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
-        statusIcon.setAttribute('class', 'w-5 h-5 animate-spin text-gray-300');
+        statusIcon.setAttribute('class', 'w-4 h-4 animate-spin text-gray-300');
         statusIcon.setAttribute('fill', 'currentColor');
         statusIcon.setAttribute('viewBox', '0 0 24 24');
 
         statusMessage.textContent = 'Allocating pipeline slot...';
-        statusMessage.className = 'text-sm font-medium text-gray-300';
+        statusMessage.className = 'text-xs font-medium text-gray-300';
     }
 
     // Trigger the slot preallocation using HTMX
@@ -615,13 +621,66 @@ function updateBlockingProblemsIndicator() {
         });
     }
     
-    // Update indicator visibility and content
-    if (problems.length > 0) {
-        content.innerHTML = problems.join('');
-        indicator.classList.remove('hidden');
-    } else {
-        indicator.classList.add('hidden');
+    // Count total problem items
+    const totalProblems = emptyConditionals.length + missingFields.length;
+    
+    // Update the count display
+    const countElement = document.getElementById('blockingProblemsCount');
+    if (countElement) {
+        countElement.textContent = totalProblems;
     }
+    
+    // Update capsule styling based on problem count
+    const capsule = document.getElementById('blockingProblemsCapsule');
+    const iconContainer = document.getElementById('blockingProblemsIconContainer');
+    
+    if (totalProblems > 0) {
+        // Red styling when there are problems
+        if (capsule) {
+            capsule.className = 'flex items-center gap-3 px-4 py-2 bg-red-900/30 rounded-lg border border-red-600/50 hover:bg-red-900/40 transition-colors';
+        }
+        if (iconContainer) {
+            iconContainer.className = 'flex items-center justify-center w-8 h-8 bg-red-600/20 rounded-lg';
+            const svg = iconContainer.querySelector('svg');
+            if (svg) svg.className = 'w-5 h-5 text-red-400';
+        }
+        // Update text colors
+        const labelElements = capsule?.querySelectorAll('.text-gray-400');
+        labelElements?.forEach(el => {
+            el.classList.remove('text-gray-400');
+            el.classList.add('text-red-300');
+        });
+        const countEl = document.getElementById('blockingProblemsCount');
+        if (countEl) {
+            countEl.classList.remove('text-white');
+            countEl.classList.add('text-red-400');
+        }
+    } else {
+        // Normal gray styling when no problems
+        if (capsule) {
+            capsule.className = 'flex items-center gap-3 px-4 py-2 bg-gray-700/50 rounded-lg border border-gray-600/50 hover:bg-gray-700 transition-colors';
+        }
+        if (iconContainer) {
+            iconContainer.className = 'flex items-center justify-center w-8 h-8 bg-gray-600/20 rounded-lg';
+            const svg = iconContainer.querySelector('svg');
+            if (svg) svg.className = 'w-5 h-5 text-gray-400';
+        }
+        // Update text colors back to gray
+        const labelElements = capsule?.querySelectorAll('.text-red-300');
+        labelElements?.forEach(el => {
+            el.classList.remove('text-red-300');
+            el.classList.add('text-gray-400');
+        });
+        const countEl = document.getElementById('blockingProblemsCount');
+        if (countEl) {
+            countEl.classList.remove('text-red-400');
+            countEl.classList.add('text-white');
+        }
+    }
+    
+    // Update indicator visibility and content
+    content.innerHTML = problems.join('');
+    indicator.classList.remove('hidden');
 }
 
 function loadExistingComponents() {
@@ -691,6 +750,20 @@ function loadExistingComponents() {
     // Restore simulation data if we were in simulation mode
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
         markExecutedPlugins(simulationNodes, originalEventData);
+    }
+    
+    // If in graph mode, re-render the graph
+    if (window.currentEditorMode === 'graph' && typeof renderGraphEditor === 'function') {
+        // Capture newly added plugin ID for animation
+        if (newlyAddedPluginId && typeof window.newlyAddedComponentId !== 'undefined') {
+            window.newlyAddedComponentId = newlyAddedPluginId;
+        }
+        renderGraphEditor();
+    }
+    
+    // Update stats strip with current plugin counts
+    if (typeof updateStatsStrip === 'function') {
+        updateStatsStrip();
     }
 }
 
@@ -1679,6 +1752,9 @@ function addConditionAtPosition(type, index, isConditional = false, parentId = n
         components[type].splice(index, 0, newCondition);
     }
 
+    // Dispatch event to mark UI as changed (before loadExistingComponents clears the ID)
+    document.body.dispatchEvent(new CustomEvent('componentAdded'));
+    
     // Refresh the UI
     loadExistingComponents();
 }
@@ -1726,7 +1802,9 @@ function addConditionToConditional(type, conditionalId, blockType, index, elseIf
         plugin: 'if',
         config: {
             condition: '[message]',
-            plugins: []
+            plugins: [],
+            else_ifs: [],
+            else: null
         }
     };
 
@@ -2110,7 +2188,7 @@ function removeComponent(componentId) {
     }
 }
 
-function addElseIfToConditional(componentId) {
+async function addElseIfToConditional(componentId) {
 // Find the conditional component
     const component = findComponentById(componentId);
     if (!component || component.plugin !== 'if') {
@@ -2118,8 +2196,13 @@ function addElseIfToConditional(componentId) {
         return;
     }
 
-// Prompt for condition
-    const condition = prompt('Enter the else-if condition:', '[message]');
+// Prompt for condition using custom modal
+    const condition = await ConfirmationModal.prompt(
+        'Enter the else-if condition:',
+        '[message]',
+        'Add Else-If Condition',
+        'e.g., [message] == "error"'
+    );
     if (!condition) {
         return;
     }
@@ -2136,6 +2219,10 @@ function addElseIfToConditional(componentId) {
     };
 
     component.config.else_ifs.push(elseIfBlock);
+    
+    // Set the newly added else_if as the component to highlight in graph mode
+    const newElseIfIndex = component.config.else_ifs.length - 1;
+    window.newlyAddedComponentId = component.id + '_elseif_' + newElseIfIndex;
 
 // Refresh the UI to show the new empty else-if block
     loadExistingComponents();
@@ -2147,8 +2234,8 @@ function addElseIfToConditional(componentId) {
     triggerPipelineWarmingAndChecking();
 }
 
-function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
-    // console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}`);
+function addPluginToConditional(componentId, blockType, elseIfIndex = null, index = null) {
+    // console.log(`addPluginToConditional called - componentId: ${componentId}, blockType: ${blockType}, elseIfIndex: ${elseIfIndex}, index: ${index}`);
 
 // Find the conditional component
     const component = findComponentById(componentId);
@@ -2158,7 +2245,7 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
     }
 
 // Store the context for the plugin selection callback
-    const context = {componentId, blockType, elseIfIndex};
+    const context = {componentId, blockType, elseIfIndex, index};
 
 // Store the context in the modal's dataset for later use
     const modal = document.getElementById('pluginModal');
@@ -2233,8 +2320,12 @@ function addPluginToConditional(componentId, blockType, elseIfIndex = null) {
         // Mark animation as pending until config modal closes (BEFORE loadExistingComponents)
         pendingAnimationPluginId = newlyAddedPluginId;
 
-// Add the plugin to the appropriate block
-        targetPlugins.push(newPlugin);
+// Add the plugin to the appropriate block at the specified index
+        if (context.index !== null && context.index !== undefined) {
+            targetPlugins.splice(context.index, 0, newPlugin);
+        } else {
+            targetPlugins.push(newPlugin);
+        }
 
 // Clean up the context
         if (modal.dataset.context) {
@@ -2298,6 +2389,9 @@ function addElseToConditional(componentId) {
 
 // Initialize the else block with empty plugins array
     component.config.else = {plugins: []};
+    
+    // Set the newly added else as the component to highlight in graph mode
+    window.newlyAddedComponentId = component.id + '_else';
 
 // Refresh the UI to show the new empty else block
     loadExistingComponents();
@@ -2436,6 +2530,13 @@ window.openSimulateModal = function() {
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
+        
+        // Trigger slot preallocation when modal opens
+        // This warms up the pipeline so it's ready when user clicks "Run Simulation"
+        const slotPreallocation = document.getElementById('slotPreallocation');
+        if (slotPreallocation && typeof htmx !== 'undefined') {
+            htmx.trigger(slotPreallocation, 'simulationModalOpened');
+        }
     }
 };
 
@@ -2653,6 +2754,156 @@ function checkFilePathRequiredPlugins() {
         warningDiv.classList.add('hidden');
     }
 }
+
+// Listen for slot preallocation completion to update status
+document.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'slotPreallocationResult') {
+        // Check if the response contains a slot-id (successful allocation)
+        const slotElement = event.detail.target.querySelector('[data-slot-id]');
+        if (slotElement) {
+            const slotId = slotElement.getAttribute('data-slot-id');
+            if (slotId) {
+                // Store the slot ID globally
+                currentSlotId = slotId;
+                // Check pipeline status
+                checkPipelineLoadStatus();
+            }
+        }
+    }
+});
+
+/**
+ * Check if the pipeline successfully loaded in Logstash
+ * Called after slot preallocation completes
+ */
+async function checkPipelineLoadStatus() {
+        const statusContainer = document.getElementById('pipelineLoadStatus');
+        const statusIcon = document.getElementById('pipelineStatusIcon');
+        const statusMessage = document.getElementById('pipelineStatusMessage');
+
+        if (!statusContainer || !statusIcon || !statusMessage) {
+            console.error('Pipeline status elements not found');
+            return;
+        }
+
+        // Get slot_id from preallocation result
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+
+        const slotElement = preallocationResult?.querySelector('[data-slot-id]');
+
+        const slotId = slotElement?.getAttribute('data-slot-id');
+        const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
+
+        // Store slot_id globally for logs viewer (even if pipeline failed)
+        if (slotId) {
+            currentSlotId = slotId;
+        }
+
+        // If pipeline already failed during allocation, show failure immediately
+        if (pipelineFailed) {
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            `;
+            statusMessage.textContent = 'Simulation Error';
+            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            return;
+        }
+
+        if (!slotId) {
+            // No slot_id means the pipeline failed to allocate a slot entirely
+            console.error('Slot ID not found in preallocation result - pipeline failed to allocate');
+            statusContainer.classList.remove('hidden');
+            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            `;
+            statusMessage.textContent = 'Simulation Failed';
+            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            return;
+        }
+
+        // The actual pipeline name in Logstash is slot{id}-filter1
+        const slotPipelineName = `slot${slotId}-filter1`;
+
+        // Show loading state
+        statusContainer.classList.remove('hidden');
+        statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
+        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
+        statusIcon.classList.add('animate-spin', 'w-5', 'h-5', 'text-gray-300');
+        statusMessage.textContent = 'Running simulation...';
+        statusMessage.className = 'text-xs font-medium text-gray-300';
+
+        try {
+            // Backend already verifies pipelines are running before returning slot allocation
+            // No need to wait - check status immediately
+
+            // Check pipeline status using the slot pipeline name
+            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+
+            // Try to parse response even if status is not OK (e.g., 500 errors may still have is_running field)
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                throw new Error('Failed to parse response from server');
+            }
+
+            // Check is_running field regardless of HTTP status code
+            const isRunning = data.is_running;
+
+            statusIcon.classList.remove('animate-spin');
+
+            if (isRunning) {
+                // Success - Pipeline is running
+                statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
+                statusIcon.outerHTML = `
+                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                statusMessage.textContent = 'Simulation Ready';
+                statusMessage.className = 'text-xs font-medium text-green-300';
+            } else {
+                // Failure - Pipeline not running
+                statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
+                statusIcon.outerHTML = `
+                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                `;
+                statusMessage.textContent = 'Simulation Error';
+                statusMessage.className = 'text-xs font-medium text-yellow-400';
+            }
+
+        } catch (error) {
+            console.error('Error checking pipeline status:', error);
+
+            // Don't overwrite a successful green status with yellow on transient errors
+            // If the status is already green (Simulation Ready), keep it
+            if (statusMessage.textContent === 'Simulation Ready') {
+                console.log('Status already shows Simulation Ready, not overwriting with error state');
+                return;
+            }
+
+            // Unknown - Error occurred (network failure or unparseable response)
+            statusIcon.classList.remove('animate-spin');
+            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600 bg-yellow-900/30';
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            `;
+            statusMessage.textContent = 'Unable to verify status';
+            statusMessage.className = 'text-xs font-medium text-yellow-400';
+        }
+    }
+
 
 // Toggle file path input enabled/disabled based on ignore checkbox
 window.toggleFilePathInput = function(inputId, isIgnored) {

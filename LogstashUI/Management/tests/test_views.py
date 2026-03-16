@@ -607,3 +607,461 @@ class TestLogsEndpoints:
         assert '<script>alert' not in content
         # The escaped version should be present (or at minimum the raw tag is absent)
         assert '&lt;script&gt;' in content or '<script>' not in content
+
+
+# ============================================================================
+# SECTION 6: Management View
+# ============================================================================
+
+@pytest.mark.django_db
+class TestManagementView:
+    """Tests for the Management() view — basic smoke tests"""
+
+    def test_management_page_loads(self, authenticated_client):
+        """GET /Management/ should render successfully"""
+        response = authenticated_client.get('/Management/')
+        assert response.status_code == 200
+
+    def test_management_page_uses_template(self, authenticated_client):
+        """Management view should use management.html template"""
+        response = authenticated_client.get('/Management/')
+        assert response.status_code == 200
+        assert any(
+            'management.html' in t.name
+            for t in response.templates
+        )
+
+
+# ============================================================================
+# SECTION 7: Users View — GET + Edge Cases
+# ============================================================================
+
+@pytest.mark.django_db
+class TestUsersViewGet:
+    """Tests for the Users() GET request path"""
+
+    def test_users_page_loads(self, authenticated_client, test_user):
+        """GET /Management/Users/ should render 200"""
+        response = authenticated_client.get('/Management/Users/')
+        assert response.status_code == 200
+
+    def test_users_page_lists_users(self, authenticated_client, test_user):
+        """Users page should include existing usernames in the response"""
+        response = authenticated_client.get('/Management/Users/')
+        assert response.status_code == 200
+        assert b'testuser' in response.content
+
+    def test_create_user_with_readonly_role(self, authenticated_client):
+        """Creating a user with role='readonly' should set is_superuser=False"""
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'add',
+            'username': 'rouser',
+            'password': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+            'email': 'ro@example.com',
+            'role': 'readonly',
+        })
+        assert response.status_code == 200
+        assert b'window.location.reload()' in response.content
+        user = User.objects.get(username='rouser')
+        assert not user.is_superuser
+        assert not user.is_staff
+        assert user.profile.role == 'readonly'
+
+    def test_update_password_user_not_found(self, authenticated_client):
+        """update_password with a non-existent user_id returns a friendly error"""
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'update_password',
+            'user_id': 999999,
+            'new_password': 'NewPass123!',
+            'new_password2': 'NewPass123!',
+        })
+        assert response.status_code == 200
+        assert b'User not found' in response.content
+
+    def test_update_password_weak_rejected(self, authenticated_client, db):
+        """update_password should reject a weak password and not change it"""
+        target = User.objects.create_user(
+            username='weakpwuser', password='OldPass123!', email='w@example.com'
+        )
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'update_password',
+            'user_id': target.id,
+            'new_password': '123',
+            'new_password2': '123',
+        })
+        assert response.status_code == 200
+        assert b'red-500' in response.content
+        target.refresh_from_db()
+        assert target.check_password('OldPass123!'), "Password must not have changed"
+
+    def test_delete_nonexistent_user(self, authenticated_client, test_user, db):
+        """delete action with a non-existent user_id returns a toast script error"""
+        # Ensure there are at least two users so the last-user guard doesn't fire
+        User.objects.create_user(username='extra', password='pass123', email='e@e.com')
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'delete',
+            'user_id': 999999,
+        })
+        assert response.status_code == 200
+        assert b'User not found' in response.content
+
+    def test_unknown_action_returns_users_page(self, authenticated_client, test_user):
+        """An unrecognised POST action should fall through to the GET render"""
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'completely_made_up',
+        })
+        # Falls through all elif branches → renders users.html
+        assert response.status_code == 200
+
+
+# ============================================================================
+# SECTION 8: _set_django_permissions Unit Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestSetDjangoPermissions:
+    """Unit tests for the _set_django_permissions helper"""
+
+    def test_admin_role_sets_superuser_and_staff(self, test_user):
+        """admin role → is_superuser=True, is_staff=True"""
+        from Management.views import _set_django_permissions
+        test_user.is_superuser = False
+        test_user.is_staff = False
+        test_user.save()
+        _set_django_permissions(test_user, 'admin')
+        test_user.refresh_from_db()
+        assert test_user.is_superuser
+        assert test_user.is_staff
+
+    def test_readonly_role_clears_superuser_and_staff(self, test_user):
+        """readonly role → is_superuser=False, is_staff=False"""
+        from Management.views import _set_django_permissions
+        _set_django_permissions(test_user, 'readonly')
+        test_user.refresh_from_db()
+        assert not test_user.is_superuser
+        assert not test_user.is_staff
+
+
+# ============================================================================
+# SECTION 9: _read_log_file Unit Tests
+# ============================================================================
+
+class TestReadLogFile:
+    """Unit tests for the _read_log_file helper (no DB needed)"""
+
+    def test_returns_empty_list_when_file_missing(self, tmp_path):
+        """Returns [] if the log file does not exist"""
+        from Management.views import _read_log_file
+        result = _read_log_file(str(tmp_path / 'nonexistent.log'))
+        assert result == []
+
+    def test_reads_all_lines(self, tmp_path):
+        """All lines from the file are returned when no filter is applied"""
+        from Management.views import _read_log_file
+        log_file = tmp_path / 'test.log'
+        log_file.write_text("line1\nline2\nline3\n", encoding='utf-8')
+        result = _read_log_file(str(log_file))
+        assert result == ['line1', 'line2', 'line3']
+
+    def test_filter_returns_only_matching_lines(self, tmp_path):
+        """user_filter returns only lines containing the search term (case-insensitive)"""
+        from Management.views import _read_log_file
+        log_file = tmp_path / 'test.log'
+        log_file.write_text(
+            "INFO admin logged in\nINFO testuser did something\nERROR testuser failed\n",
+            encoding='utf-8'
+        )
+        result = _read_log_file(str(log_file), user_filter='testuser')
+        assert len(result) == 2
+        assert all('testuser' in line for line in result)
+
+    def test_filter_is_case_insensitive(self, tmp_path):
+        """Filter search is case-insensitive"""
+        from Management.views import _read_log_file
+        log_file = tmp_path / 'test.log'
+        log_file.write_text("INFO AdminUser logged in\nINFO other user\n", encoding='utf-8')
+        result = _read_log_file(str(log_file), user_filter='adminuser')
+        assert len(result) == 1
+        assert 'AdminUser' in result[0]
+
+    def test_returns_at_most_1000_lines(self, tmp_path):
+        """Only the last 1000 lines are returned, not the whole file"""
+        from Management.views import _read_log_file
+        log_file = tmp_path / 'test.log'
+        lines = [f"line {i}" for i in range(1500)]
+        log_file.write_text('\n'.join(lines), encoding='utf-8')
+        result = _read_log_file(str(log_file))
+        assert len(result) == 1000
+        # The LAST 1000 lines should be returned
+        assert result[0] == 'line 500'
+        assert result[-1] == 'line 1499'
+
+    def test_returns_empty_list_on_exception(self, tmp_path, monkeypatch):
+        """If an error occurs reading the file, returns [] instead of raising"""
+        from Management.views import _read_log_file
+        log_file = tmp_path / 'test.log'
+        log_file.write_text("some content\n", encoding='utf-8')
+
+        # Monkeypatch open to raise an OSError mid-read
+        def bad_open(*args, **kwargs):
+            raise OSError("disk error")
+
+        monkeypatch.setattr('builtins.open', bad_open)
+        result = _read_log_file(str(log_file))
+        assert result == []
+
+    def test_strips_trailing_newlines(self, tmp_path):
+        """Lines are right-stripped of whitespace/newlines"""
+        from Management.views import _read_log_file
+        log_file = tmp_path / 'test.log'
+        log_file.write_bytes(b"line with spaces   \nline2\n")
+        result = _read_log_file(str(log_file))
+        assert result[0] == 'line with spaces'
+        assert result[1] == 'line2'
+
+
+# ============================================================================
+# SECTION 10: LogsFilter Color-Coding Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestLogsFilterColorCoding:
+    """Verify that LogsFilter assigns the correct CSS color classes"""
+
+    def _write_log(self, tmp_path, content):
+        log_file = tmp_path / 'logstashui.log'
+        log_file.write_text(content, encoding='utf-8')
+        return tmp_path
+
+    def test_error_line_gets_red_class(self, authenticated_client, settings, tmp_path):
+        """Lines containing 'ERROR' get text-red-400"""
+        settings.LOGS_DIR = self._write_log(tmp_path, "2026-01-01 ERROR something failed\n")
+        response = authenticated_client.get('/Management/Logs/filter')
+        assert b'text-red-400' in response.content
+
+    def test_critical_line_gets_red_class(self, authenticated_client, settings, tmp_path):
+        """Lines containing 'CRITICAL' also get text-red-400"""
+        settings.LOGS_DIR = self._write_log(tmp_path, "2026-01-01 CRITICAL catastrophic\n")
+        response = authenticated_client.get('/Management/Logs/filter')
+        assert b'text-red-400' in response.content
+
+    def test_warning_line_gets_yellow_class(self, authenticated_client, settings, tmp_path):
+        """Lines containing 'WARNING' get text-yellow-400"""
+        settings.LOGS_DIR = self._write_log(tmp_path, "2026-01-01 WARNING low disk space\n")
+        response = authenticated_client.get('/Management/Logs/filter')
+        assert b'text-yellow-400' in response.content
+
+    def test_info_line_gets_blue_class(self, authenticated_client, settings, tmp_path):
+        """Lines containing 'INFO' get text-blue-400"""
+        settings.LOGS_DIR = self._write_log(tmp_path, "2026-01-01 INFO user logged in\n")
+        response = authenticated_client.get('/Management/Logs/filter')
+        assert b'text-blue-400' in response.content
+
+    def test_debug_line_gets_gray_class(self, authenticated_client, settings, tmp_path):
+        """Lines without a recognised level get text-gray-300"""
+        settings.LOGS_DIR = self._write_log(tmp_path, "2026-01-01 DEBUG some detail\n")
+        response = authenticated_client.get('/Management/Logs/filter')
+        assert b'text-gray-300' in response.content
+
+    def test_empty_log_shows_no_entries_message(self, authenticated_client, settings, tmp_path):
+        """When no log entries exist, shows 'No log entries found' message"""
+        settings.LOGS_DIR = self._write_log(tmp_path, "")
+        response = authenticated_client.get('/Management/Logs/filter')
+        assert b'No log entries found' in response.content
+
+
+# ============================================================================
+# SECTION 11: LogsDownload Error Path
+# ============================================================================
+
+@pytest.mark.django_db
+class TestLogsDownloadErrorPath:
+    """Test the error handling path for LogsDownload"""
+
+    def test_logs_download_open_error_returns_500(
+        self, authenticated_client, settings, tmp_path, monkeypatch
+    ):
+        """If opening the log file raises an exception, return 500"""
+        log_file = tmp_path / 'logstashui.log'
+        log_file.write_text("some content\n", encoding='utf-8')
+        settings.LOGS_DIR = tmp_path
+
+        # Patch open to raise an OSError
+        original_open = open
+
+        def bad_open(path, *args, **kwargs):
+            if 'logstashui.log' in str(path):
+                raise OSError("simulated disk error")
+            return original_open(path, *args, **kwargs)
+
+        monkeypatch.setattr('builtins.open', bad_open)
+
+        response = authenticated_client.get('/Management/Logs/download')
+        assert response.status_code == 500
+        assert b'Error downloading log file' in response.content
+
+
+# ============================================================================
+# SECTION 12: BootstrapLoginView — Race Condition Test
+# ============================================================================
+
+@pytest.mark.django_db
+class TestFirstRunRaceCondition:
+    """
+    Test the race-condition guard in BootstrapLoginView.form_valid (lines 71–78).
+    When a concurrent request creates a user between the form-class selection and
+    the select_for_update() check inside the atomic block, the view must redirect
+    back to the login page without creating a duplicate user.
+    """
+
+    def test_race_condition_redirects_to_login(self, client):
+        """
+        Simulate a concurrent first-user creation: select_for_update().exists()
+        returns True even though no users existed when the form class was chosen.
+        The view should redirect back to the login path and create no user.
+        """
+        from unittest.mock import MagicMock, patch
+
+        assert not User.objects.exists()
+
+        mock_qs = MagicMock()
+        mock_qs.exists.return_value = True
+
+        with patch.object(User.objects, 'select_for_update', return_value=mock_qs):
+            response = client.post('/Management/Login/', {
+                'username': 'firstadmin',
+                'password1': 'StrongPass123!',
+                'password2': 'StrongPass123!',
+            })
+
+        # Should redirect back to the login page
+        assert response.status_code == 302
+        # No user should have been created
+        assert not User.objects.exists()
+
+
+# ============================================================================
+# SECTION 13: Profile-Less User Edge Cases
+# ============================================================================
+
+@pytest.mark.django_db
+class TestProfileLessBranches:
+    """
+    Cover the defensive else-branches in Users() that run when a user has no
+    profile record.  Normally the post_save signal always creates one, but the
+    view guards against the case where that record is absent.
+    """
+
+    def test_update_role_creates_profile_when_missing(self, authenticated_client, db):
+        """
+        update_role on a user whose profile was deleted should create a new
+        UserProfile with the requested role rather than raising an error.
+        """
+        from Management.models import UserProfile
+
+        user = User.objects.create_user(
+            username='noprofileuser', password='pass123', email='np@example.com'
+        )
+        # Remove the signal-created profile so the else-branch is exercised
+        UserProfile.objects.filter(user=user).delete()
+
+        response = authenticated_client.post('/Management/Users/', {
+            'action': 'update_role',
+            'user_id': user.id,
+            'role': 'readonly',
+        })
+
+        assert response.status_code == 200
+        # Profile should now exist with the correct role
+        assert UserProfile.objects.filter(user=user, role='readonly').exists()
+        user.refresh_from_db()
+        assert not user.is_superuser
+        assert not user.is_staff
+
+
+# ============================================================================
+# SECTION 14: Unauthenticated Access
+# ============================================================================
+
+@pytest.mark.django_db
+class TestUnauthenticatedAccess:
+    """
+    Verify that unauthenticated (anonymous) requests cannot reach or mutate
+    protected views.  An anonymous POST to /Management/Users/ must not be able
+    to create a user regardless of whether auth is enforced by a decorator,
+    middleware, or URL-level login_required.
+    """
+
+    def test_anonymous_get_users_page_blocked(self, client, db):
+        """Anonymous GET to Users page should be redirected to login"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.get('/Management/Users/')
+        assert response.status_code == 302
+
+    def test_anonymous_post_cannot_create_user(self, client, db):
+        """Anonymous POST must not create a new user"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.post('/Management/Users/', {
+            'action': 'add',
+            'username': 'hacker',
+            'password': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+            'email': 'hacker@evil.com',
+        })
+        assert response.status_code == 302
+        assert not User.objects.filter(username='hacker').exists()
+
+    def test_anonymous_get_logs_page_blocked(self, client, db):
+        """Anonymous GET to Logs page should be redirected to login"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.get('/Management/Logs/')
+        assert response.status_code == 302
+
+    def test_anonymous_get_management_page_blocked(self, client, db):
+        """Anonymous GET to Management page should be redirected to login"""
+        User.objects.create_user(username='existing', password='pass123')
+        response = client.get('/Management/')
+        assert response.status_code == 302
+
+
+# ============================================================================
+# SECTION 15: _generate_user_table_rows Unit Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGenerateUserTableRows:
+    """Unit tests for the _generate_user_table_rows helper"""
+
+    def test_returns_empty_string_for_empty_queryset(self, rf):
+        """Returns an empty string when passed an empty queryset"""
+        from Management.views import _generate_user_table_rows
+
+        request = rf.get('/Management/Users/')
+        result = _generate_user_table_rows(User.objects.none(), request)
+        assert result == ''
+
+    def test_renders_row_for_each_user(self, rf, db):
+        """Result contains each user's username"""
+        from Management.views import _generate_user_table_rows
+
+        User.objects.create_user(username='alice', password='pass123')
+        User.objects.create_user(username='bob', password='pass123')
+        request = rf.get('/Management/Users/')
+        result = _generate_user_table_rows(User.objects.all(), request)
+        assert 'alice' in result
+        assert 'bob' in result
+
+    def test_concatenates_multiple_rows(self, rf, db):
+        """HTML rows are concatenated into a single string"""
+        from Management.views import _generate_user_table_rows
+
+        User.objects.create_user(username='user1', password='pass123')
+        User.objects.create_user(username='user2', password='pass123')
+        User.objects.create_user(username='user3', password='pass123')
+        request = rf.get('/Management/Users/')
+        result = _generate_user_table_rows(User.objects.all(), request)
+        # Three users means at least three separate occurrences of row markup
+        assert result.count('user1') >= 1
+        assert result.count('user2') >= 1
+        assert result.count('user3') >= 1

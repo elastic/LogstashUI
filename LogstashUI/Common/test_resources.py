@@ -3,13 +3,19 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from django.contrib.auth.models import User
-from django.test import Client
+from django.test import Client, RequestFactory
 from PipelineManager.models import Connection
 
 import pytest
 
 
 ##### Fixtures #####
+@pytest.fixture
+def request_factory():
+    """Django RequestFactory for creating mock requests"""
+    return RequestFactory()
+
+
 @pytest.fixture
 def authenticated_client(client, test_user):
     """Client with authenticated user"""

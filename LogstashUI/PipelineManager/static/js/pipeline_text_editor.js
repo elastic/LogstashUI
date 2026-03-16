@@ -25,17 +25,22 @@ let textModeInitialContent = '';
 /**
  * Switch to UI mode
  */
-function switchToUIMode() {
+async function switchToUIMode() {
     // Check if text has been modified
     if (textHasChanges) {
-        // Show warning dialog
-        const confirmed = confirm(
-            'Switching to UI mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?'
-        );
-        
-        if (!confirmed) {
-            // User cancelled, don't switch modes
-            return;
+        // Check if user has disabled conversion warnings
+        if (!shouldSkipConversionWarning()) {
+            // Show warning dialog
+            const confirmed = await ConfirmationModal.show(
+                'Switching to UI mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?',
+                'Switch to UI Mode',
+                'Continue'
+            );
+            
+            if (!confirmed) {
+                // User cancelled, don't switch modes
+                return;
+            }
         }
     }
     
@@ -138,7 +143,13 @@ function switchToUIMode() {
         })
         .catch(error => {
             console.error('Error converting config to components:', error);
-            alert('Failed to convert pipeline configuration: ' + error.message);
+            ConfirmationModal.show(
+                'Failed to convert pipeline configuration:',
+                'Configuration Error',
+                'OK',
+                error.message,
+                true
+            );
         });
     } else {
         // No text changes, just switch modes
@@ -151,6 +162,13 @@ function switchToUIMode() {
  */
 function performUISwitch() {
     currentEditorMode = 'ui';
+    window.currentEditorMode = currentEditorMode;
+    
+    // Save mode preference to localStorage
+    localStorage.setItem('lastEditorMode', 'ui');
+    
+    // Clear any open autocomplete hints
+    clearAutocompleteHints();
     
     // Reset text change tracking
     textHasChanges = false;
@@ -159,22 +177,27 @@ function performUISwitch() {
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
     const textBtn = document.getElementById('textModeBtn');
+    const graphBtn = document.getElementById('graphModeBtn');
     
     if (uiBtn && textBtn) {
-        uiBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors bg-green-600 text-white relative z-10';
-        textBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors text-gray-300 hover:bg-gray-600 relative z-10';
-        
-        // Add flash animation
-        addFlashAnimation(uiBtn);
+        uiBtn.className = 'w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active';
+        textBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        if (graphBtn) {
+            graphBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        }
     }
     
-    // Show UI container, hide text container
+    // Show UI container, hide text and graph containers
     const uiContainer = document.getElementById('uiModeContainer');
     const textContainer = document.getElementById('textModeContainer');
+    const graphContainer = document.getElementById('graphModeContainer');
     
     if (uiContainer && textContainer) {
         uiContainer.classList.remove('hidden');
         textContainer.classList.add('hidden');
+    }
+    if (graphContainer) {
+        graphContainer.classList.add('hidden');
     }
     
     // Enable View Code and Simulate Pipeline buttons
@@ -186,26 +209,35 @@ function performUISwitch() {
  */
 function switchToTextMode() {
     currentEditorMode = 'text';
+    window.currentEditorMode = currentEditorMode;
+    
+    // Save mode preference to localStorage
+    localStorage.setItem('lastEditorMode', 'text');
     
     // Update button styles
     const uiBtn = document.getElementById('uiModeBtn');
     const textBtn = document.getElementById('textModeBtn');
+    const graphBtn = document.getElementById('graphModeBtn');
     
     if (uiBtn && textBtn) {
-        uiBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors text-gray-300 hover:bg-gray-600 relative z-10';
-        textBtn.className = 'px-4 py-2 rounded-md font-medium transition-colors bg-green-600 text-white relative z-10';
-        
-        // Add flash animation
-        addFlashAnimation(textBtn);
+        uiBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        textBtn.className = 'w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active';
+        if (graphBtn) {
+            graphBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        }
     }
     
-    // Hide UI container, show text container
+    // Hide UI and graph containers, show text container
     const uiContainer = document.getElementById('uiModeContainer');
     const textContainer = document.getElementById('textModeContainer');
+    const graphContainer = document.getElementById('graphModeContainer');
     
     if (uiContainer && textContainer) {
         uiContainer.classList.add('hidden');
         textContainer.classList.remove('hidden');
+    }
+    if (graphContainer) {
+        graphContainer.classList.add('hidden');
     }
     
     // Disable View Code and Simulate Pipeline buttons
@@ -780,6 +812,73 @@ function getTypeBadgeClass(inputType) {
 }
 
 /**
+ * Check if cursor is inside an option value (after => or inside {}/[])
+ */
+function isInsideOptionValue(cm, cursor) {
+    // Simple check: if current line has => before cursor, we're in a value
+    const currentLine = cm.getLine(cursor.line);
+    const lineUpToCursor = currentLine.substring(0, cursor.ch);
+    if (lineUpToCursor.includes('=>')) {
+        return true;
+    }
+    
+    // More complex check: scan backwards to see if we're inside an unclosed { or [ that follows =>
+    // We need to track brace/bracket depth and look for => before opening braces/brackets
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    
+    // Scan backwards from cursor
+    for (let lineNum = cursor.line; lineNum >= 0; lineNum--) {
+        const lineText = cm.getLine(lineNum);
+        const endCh = (lineNum === cursor.line) ? cursor.ch : lineText.length;
+        
+        // Scan characters from right to left on this line
+        for (let ch = endCh - 1; ch >= 0; ch--) {
+            const char = lineText[ch];
+            
+            if (char === '}') {
+                braceDepth++;
+            } else if (char === '{') {
+                if (braceDepth > 0) {
+                    braceDepth--;
+                } else {
+                    // Found an unclosed opening brace - check if there's => before it on this line
+                    const beforeBrace = lineText.substring(0, ch);
+                    if (beforeBrace.includes('=>')) {
+                        return true; // We're inside a hash value
+                    }
+                    // This is a plugin or section opening, stop here
+                    return false;
+                }
+            } else if (char === ']') {
+                bracketDepth++;
+            } else if (char === '[') {
+                if (bracketDepth > 0) {
+                    bracketDepth--;
+                } else {
+                    // Found an unclosed opening bracket - check if there's => before it on this line
+                    const beforeBracket = lineText.substring(0, ch);
+                    if (beforeBracket.includes('=>')) {
+                        return true; // We're inside an array value
+                    }
+                    // Not a value array, stop here
+                    return false;
+                }
+            }
+        }
+        
+        // Don't scan too far back - stop at plugin declarations
+        const trimmed = lineText.trim();
+        if (lineNum < cursor.line && /^\w+\s*\{/.test(trimmed)) {
+            // Hit a plugin declaration, stop scanning
+            break;
+        }
+    }
+    
+    return false;
+}
+
+/**
  * Show autocomplete for plugin options
  */
 function showOptionAutocomplete(cm, plugin) {
@@ -835,24 +934,49 @@ function showOptionAutocomplete(cm, plugin) {
                     const cursor = cm.getCursor();
                     const line = cm.getLine(cursor.line);
                     const currentIndent = line.match(/^\s*/)[0];
+                    const inputType = (data.option.input_type || '').toLowerCase();
                     
-                    // Get placeholder for this option type
-                    const placeholder = getPlaceholderForType(data.option.input_type);
-                    const optionLine = data.text + ' => ' + placeholder;
-                    
-                    // Replace the current line
-                    cm.replaceRange(
-                        currentIndent + optionLine,
-                        { line: cursor.line, ch: 0 },
-                        { line: cursor.line, ch: line.length }
-                    );
-                    
-                    // Select the placeholder
-                    const placeholderStart = currentIndent.length + data.text.length + ' => '.length;
-                    cm.setSelection(
-                        { line: cursor.line, ch: placeholderStart },
-                        { line: cursor.line, ch: placeholderStart + placeholder.length }
-                    );
+                    // Check if this is a hash or array type - use multi-line format
+                    if (inputType.includes('hash') || inputType.includes('array')) {
+                        const indentUnit = '  ';
+                        let optionText = '';
+                        
+                        if (inputType.includes('hash')) {
+                            // Multi-line hash format
+                            optionText = data.text + ' => {\n' + currentIndent + indentUnit + '\n' + currentIndent + '}';
+                        } else {
+                            // Multi-line array format
+                            optionText = data.text + ' => [\n' + currentIndent + indentUnit + '\n' + currentIndent + ']';
+                        }
+                        
+                        // Replace the current line
+                        cm.replaceRange(
+                            currentIndent + optionText,
+                            { line: cursor.line, ch: 0 },
+                            { line: cursor.line, ch: line.length }
+                        );
+                        
+                        // Position cursor on the empty line inside the braces/brackets
+                        cm.setCursor({ line: cursor.line + 1, ch: currentIndent.length + indentUnit.length });
+                    } else {
+                        // Single-line format for other types
+                        const placeholder = getPlaceholderForType(data.option.input_type);
+                        const optionLine = data.text + ' => ' + placeholder;
+                        
+                        // Replace the current line
+                        cm.replaceRange(
+                            currentIndent + optionLine,
+                            { line: cursor.line, ch: 0 },
+                            { line: cursor.line, ch: line.length }
+                        );
+                        
+                        // Select the placeholder
+                        const placeholderStart = currentIndent.length + data.text.length + ' => '.length;
+                        cm.setSelection(
+                            { line: cursor.line, ch: placeholderStart },
+                            { line: cursor.line, ch: placeholderStart + placeholder.length }
+                        );
+                    }
                 }
             });
         }
@@ -1332,7 +1456,12 @@ function initializeTextEditor() {
         const currentPlugin = detectCurrentPlugin(cm, cursor);
         
         if (currentPlugin) {
-            // We're inside a plugin - show option autocomplete
+            // We're inside a plugin - check if we should show option autocomplete
+            
+            // Don't show autocomplete if we're inside an option value
+            if (isInsideOptionValue(cm, cursor)) {
+                return;
+            }
 
             // Check if line contains only whitespace or partial word (option name)
             if (trimmedLine === '' || /^[a-zA-Z_]+$/.test(trimmedLine)) {
@@ -1345,6 +1474,12 @@ function initializeTextEditor() {
             }
         } else {
             // Not inside a plugin - show plugin autocomplete
+            
+            // Don't show autocomplete if we're inside an option value (e.g., inside a hash or array)
+            if (isInsideOptionValue(cm, cursor)) {
+                return;
+            }
+            
             const section = detectCurrentSection(cm, cursor);
 
             if (!section) return;
@@ -1585,6 +1720,15 @@ function updateTextEditorStats() {
 // Old textarea functions removed - CodeMirror handles this now
 
 /**
+ * Clear any open CodeMirror autocomplete hints
+ */
+function clearAutocompleteHints() {
+    // Remove any visible CodeMirror hint widgets
+    const hints = document.querySelectorAll('.CodeMirror-hints');
+    hints.forEach(hint => hint.remove());
+}
+
+/**
  * Add flash animation to a button
  */
 function addFlashAnimation(button) {
@@ -1640,8 +1784,305 @@ function enableEditorButtons() {
     }
 }
 
+/**
+ * Switch to Graph mode
+ */
+async function switchToGraphMode() {
+    // Check if text has been modified
+    if (textHasChanges) {
+        // Check if user has disabled conversion warnings
+        if (!shouldSkipConversionWarning()) {
+            // Show warning dialog
+            const confirmed = await ConfirmationModal.show(
+                'Switching to Graph mode will reformat this configuration to match the visual editor. Some formatting or inline comments may change.\n\nContinue?',
+                'Switch to Graph Mode',
+                'Continue'
+            );
+            
+            if (!confirmed) {
+                // User cancelled, don't switch modes
+                return;
+            }
+        }
+    }
+    
+    // If text has changes, convert it to components
+    if (textHasChanges && codeMirrorEditor) {
+        const configText = codeMirrorEditor.getValue();
+        
+        if (!configText) {
+            console.error('No config text to convert');
+            alert('No pipeline configuration to convert');
+            return;
+        }
+        
+        // Convert config text to components via API
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        const formData = new FormData();
+        formData.append('config_text', configText);
+        
+        fetch('/ConnectionManager/ConfigToComponents/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to convert config to components');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            
+            // If data is a string, parse it
+            let parsedData = data;
+            if (typeof data === 'string') {
+                parsedData = JSON.parse(data);
+            }
+            
+            // The API returns the components structure directly
+            // If it's an array, it needs to be converted to the expected object format
+            let convertedComponents;
+            if (Array.isArray(parsedData)) {
+                // Data is an array [input, filter, output] - convert to object
+                convertedComponents = {
+                    input: parsedData[0] || [],
+                    filter: parsedData[1] || [],
+                    output: parsedData[2] || []
+                };
+            } else {
+                // Data is already an object
+                convertedComponents = parsedData;
+            }
+
+            // Update the global components variable
+            if (typeof components !== 'undefined') {
+
+                
+                // Clear existing arrays and push new items (preserves Proxy/reactive behavior)
+                components.input.length = 0;
+                components.filter.length = 0;
+                components.output.length = 0;
+
+                // Use Array.isArray and check length
+                if (Array.isArray(convertedComponents.input) && convertedComponents.input.length > 0) {
+                    components.input.push(...convertedComponents.input);
+                }
+                if (Array.isArray(convertedComponents.filter) && convertedComponents.filter.length > 0) {
+                    components.filter.push(...convertedComponents.filter);
+                }
+                if (Array.isArray(convertedComponents.output) && convertedComponents.output.length > 0) {
+                    const pushResult = components.output.push(...convertedComponents.output);
+                } else {
+                    console.error('Output check failed - isArray:', Array.isArray(convertedComponents.output), 'length:', convertedComponents.output?.length);
+                }
+
+            } else {
+                console.error('Global components variable is undefined!');
+            }
+            
+            // Switch to Graph mode first
+            performGraphSwitch();
+            
+            // Use setTimeout to ensure Graph container is visible before rendering
+            setTimeout(() => {
+                
+                // Render the graph with the new components
+                if (typeof renderGraphEditor === 'function') {
+                    renderGraphEditor();
+                } else {
+                    console.error('renderGraphEditor function not found!');
+                }
+                
+                // Mark UI as changed since we just loaded from text
+                // This ensures switching back to Text mode will convert components to config
+                uiHasChanges = true;
+            }, 100);
+        })
+        .catch(error => {
+            console.error('Error converting config to components:', error);
+            ConfirmationModal.show(
+                'Failed to convert pipeline configuration:',
+                'Configuration Error',
+                'OK',
+                error.message,
+                true
+            );
+        });
+    } else {
+        // No text changes, just switch modes
+        performGraphSwitch();
+    }
+}
+
+/**
+ * Perform the actual Graph mode switch (internal helper)
+ */
+function performGraphSwitch() {
+    currentEditorMode = 'graph';
+    window.currentEditorMode = currentEditorMode;
+    
+    // Save mode preference to localStorage
+    localStorage.setItem('lastEditorMode', 'graph');
+    
+    // Clear any open autocomplete hints
+    clearAutocompleteHints();
+    
+    // Reset text change tracking
+    textHasChanges = false;
+    textModeInitialContent = '';
+    
+    // Update button styles
+    const uiBtn = document.getElementById('uiModeBtn');
+    const textBtn = document.getElementById('textModeBtn');
+    const graphBtn = document.getElementById('graphModeBtn');
+    
+    if (uiBtn && textBtn && graphBtn) {
+        uiBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        textBtn.className = 'w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600';
+        graphBtn.className = 'w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active';
+    }
+    
+    // Hide UI and Text containers, show Graph container
+    const uiContainer = document.getElementById('uiModeContainer');
+    const textContainer = document.getElementById('textModeContainer');
+    const graphContainer = document.getElementById('graphModeContainer');
+    
+    if (uiContainer && textContainer && graphContainer) {
+        uiContainer.classList.add('hidden');
+        textContainer.classList.add('hidden');
+        graphContainer.classList.remove('hidden');
+    }
+    
+    // Render the graph with current components
+    if (typeof renderGraphEditor === 'function') {
+        renderGraphEditor();
+    }
+    
+    // Enable View Code button but disable Simulate button in Graph mode
+    const viewCodeBtn = document.getElementById('viewCode');
+    const simulateBtn = document.getElementById('simulatePipeline');
+    
+    if (viewCodeBtn) {
+        viewCodeBtn.disabled = false;
+        viewCodeBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        viewCodeBtn.classList.add('hover:bg-gray-600');
+    }
+    
+    if (simulateBtn) {
+        simulateBtn.disabled = true;
+        simulateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        simulateBtn.classList.remove('hover:bg-purple-700');
+    }
+}
+
+/**
+ * Toggle fullscreen mode for text editor
+ */
+let isTextFullscreen = false;
+
+function toggleTextFullscreen() {
+    const container = document.getElementById('textEditorContainer');
+    const btn = document.getElementById('textFullscreenBtn');
+    
+    if (!container || !btn) return;
+    
+    isTextFullscreen = !isTextFullscreen;
+    
+    if (isTextFullscreen) {
+        // Enter fullscreen
+        container.style.position = 'fixed';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.right = '0';
+        container.style.bottom = '0';
+        container.style.zIndex = '9999';
+        container.style.backgroundColor = '#1a1d23';
+        
+        // Change icon to minimize
+        btn.innerHTML = `
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        `;
+        btn.title = 'Exit fullscreen';
+    } else {
+        // Exit fullscreen
+        container.style.position = '';
+        container.style.top = '';
+        container.style.left = '';
+        container.style.right = '';
+        container.style.bottom = '';
+        container.style.zIndex = '';
+        container.style.backgroundColor = '';
+        
+        // Change icon back to expand
+        btn.innerHTML = `
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>
+        `;
+        btn.title = 'Toggle fullscreen';
+    }
+    
+    // Refresh CodeMirror to adjust to new size
+    if (codeMirrorEditor) {
+        setTimeout(() => codeMirrorEditor.refresh(), 100);
+    }
+}
+
+// Make function globally available
+window.toggleTextFullscreen = toggleTextFullscreen;
+
+/**
+ * Initialize conversion warning checkbox from localStorage
+ */
+function initializeConversionWarningCheckbox() {
+    const checkbox = document.getElementById('disableConversionWarning');
+    if (!checkbox) return;
+    
+    // Load saved preference from localStorage
+    const savedPreference = localStorage.getItem('disableConversionWarning');
+    if (savedPreference === 'true') {
+        checkbox.checked = true;
+    }
+    
+    // Save preference when checkbox changes
+    checkbox.addEventListener('change', function() {
+        localStorage.setItem('disableConversionWarning', this.checked);
+    });
+}
+
+/**
+ * Check if conversion warnings are disabled
+ */
+function shouldSkipConversionWarning() {
+    return localStorage.getItem('disableConversionWarning') === 'true';
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    // Set initial mode to UI
-    switchToUIMode();
+    // Initialize conversion warning checkbox
+    initializeConversionWarningCheckbox();
+    
+    // Load last editor mode from localStorage, default to UI if not set
+    const lastMode = localStorage.getItem('lastEditorMode') || 'ui';
+    
+    // Switch to the saved mode
+    switch(lastMode) {
+        case 'text':
+            switchToTextMode();
+            break;
+        case 'graph':
+            switchToGraphMode();
+            break;
+        case 'ui':
+        default:
+            switchToUIMode();
+            break;
+    }
 });

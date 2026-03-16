@@ -513,6 +513,9 @@ def _strip_inline_comments(config_text: str) -> str:
     
     Standalone comment lines inside conditional blocks (if/else) are preserved.
     Standalone comment lines at the section level are preserved.
+    
+    Multiline single-quoted strings (common for inline Ruby code) are passed
+    through completely unchanged — # characters inside them are not comments.
     """
     lines = config_text.split('\n')
     result_lines = []
@@ -520,10 +523,36 @@ def _strip_inline_comments(config_text: str) -> str:
     # Track whether we're inside a plugin block (not a conditional or section block)
     # We need to track the stack of block types
     block_stack = []  # Stack of block types: 'section', 'conditional', 'plugin'
+
+    # Track multiline single-quoted string state ACROSS line boundaries.
+    # Logstash uses single-quoted strings for multi-line Ruby code blocks, e.g.:
+    #   code => '
+    #     event.set("field", value)  # this # is NOT a comment
+    #   '
+    in_multiline_string = False  # True when we're inside an unclosed single-quote
     
     for line in lines:
         stripped = line.lstrip()
-        
+
+        # If we're inside a multiline single-quoted string, check if this line
+        # closes it (contains an unescaped single quote). Pass the line through
+        # unchanged regardless — no comment stripping, no block tracking.
+        if in_multiline_string:
+            # Scan for a closing single quote (not escaped)
+            escaped = False
+            for char in line:
+                if escaped:
+                    escaped = False
+                    continue
+                if char == '\\':
+                    escaped = True
+                    continue
+                if char == "'":
+                    in_multiline_string = False
+                    break
+            result_lines.append(line)
+            continue
+
         # Detect what kind of block is opening on this line
         # Check for section blocks (input/filter/output)
         if stripped.startswith(('input {', 'filter {', 'output {')):
@@ -619,6 +648,11 @@ def _strip_inline_comments(config_text: str) -> str:
             
             cleaned_chars.append(char)
         
+        # If we finished the line while still inside a single-quoted string,
+        # the string is multiline — mark it so subsequent lines are preserved.
+        if in_string and string_char == "'":
+            in_multiline_string = True
+
         result_lines.append(''.join(cleaned_chars))
     
     return '\n'.join(result_lines)

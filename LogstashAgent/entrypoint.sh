@@ -5,14 +5,10 @@ echo "=========================================="
 echo "  Starting LogstashAgent"
 echo "=========================================="
 
-# Set default LOGSTASH_URL if not provided (for standalone docker run)
-export LOGSTASH_URL="${LOGSTASH_URL:-https://nginx}"
-echo "Using LOGSTASH_URL: $LOGSTASH_URL"
-
-# Update simulate_end.conf with the correct URL
-echo "Updating simulate_end.conf with LOGSTASH_URL..."
-sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/ConnectionManager/StreamSimulate/\"|url => \"${LOGSTASH_URL}/ConnectionManager/StreamSimulate/\"|g" /etc/logstash/config/simulate_end.conf
-sed -i "s|url => \"\${LOGSTASH_URL:http://host.docker.internal:8080}/ConnectionManager/StreamSimulate/\"|url => \"${LOGSTASH_URL}/ConnectionManager/StreamSimulate/\"|g" /etc/logstash/config/simulate_start.conf
+# LOGSTASH_URL is set via Dockerfile ENV (default: http://127.0.0.1:8080)
+# Can be overridden via docker-compose or docker run -e
+# Logstash will use ${LOGSTASH_URL:default} syntax in config files for environment variable substitution
+echo "LOGSTASH_URL: $LOGSTASH_URL"
 
 # Ensure log directory exists and has proper permissions
 echo "Setting up log directory..."
@@ -26,28 +22,16 @@ else
     echo "- WARNING: log4j2.properties not found!"
 fi
 
-# Start Logstash in the background with explicit log4j2 config
-echo "Starting Logstash with pipelines.yml and custom logging..."
-export LS_JAVA_OPTS="-Dlog4j.configurationFile=/etc/logstash/log4j2.properties"
-# Ensure LOGSTASH_URL is available to Logstash process
-env LOGSTASH_URL="$LOGSTASH_URL" /usr/share/logstash/bin/logstash --path.settings /etc/logstash &
-LOGSTASH_PID=$!
-
-# Wait a moment for Logstash to initialize
-sleep 5
-
-# Start FastAPI sidecar
-echo "Starting FastAPI sidecar on port 9500..."
-cd /app
-uvicorn main:app --host 0.0.0.0 --port 9500 &
-FASTAPI_PID=$!
-
+# LogstashAgent will start and supervise Logstash via Python
+echo "Starting FastAPI sidecar (which will supervise Logstash)..."
 echo "=========================================="
-echo "  LogstashAgent is ready!"
+echo "  LogstashAgent starting..."
+echo "  - Logstash will be supervised by FastAPI"
 echo "  - Logstash API: http://localhost:9600"
 echo "  - Simulation HTTP Input: http://localhost:9449"
 echo "  - FastAPI Sidecar: http://localhost:9500"
 echo "=========================================="
 
-# Wait for both processes
-wait $LOGSTASH_PID $FASTAPI_PID
+cd /app
+# Listen on 0.0.0.0 so nginx can access via Docker network
+exec uvicorn main:app --host 0.0.0.0 --port 9500

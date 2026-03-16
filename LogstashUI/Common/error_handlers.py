@@ -2,11 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from django.shortcuts import render
+from django.template.response import TemplateResponse
 
 
 def handler400(request, exception=None):
-    return render(request, 'error.html', {
+    return TemplateResponse(request, 'error.html', {
         'error_code': '400',
         'error_title': 'Bad Request',
         'error_message': 'The server could not understand your request.',
@@ -15,7 +15,7 @@ def handler400(request, exception=None):
 
 
 def handler403(request, exception=None):
-    return render(request, 'error.html', {
+    return TemplateResponse(request, 'error.html', {
         'error_code': '403',
         'error_title': 'Access Denied',
         'error_message': 'You do not have permission to access this resource.',
@@ -24,7 +24,7 @@ def handler403(request, exception=None):
 
 
 def handler404(request, exception=None):
-    return render(request, 'error.html', {
+    return TemplateResponse(request, 'error.html', {
         'error_code': '404',
         'error_title': 'Page Not Found',
         'error_message': 'The page you are looking for does not exist.',
@@ -34,8 +34,7 @@ def handler404(request, exception=None):
 
 
 def handler500(request, exception=None):
-
-    return render(request, 'error.html', {
+    return TemplateResponse(request, 'error.html', {
         'error_code': '500',
         'error_title': 'Server Error',
         'error_message': 'Something went wrong on our end!',

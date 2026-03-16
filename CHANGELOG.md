@@ -1,3 +1,40 @@
+## [0.3.0] - 03/16/2026
+
+### Added
+- Host mode for Windows and Linux with environment variable preservation
+- Log files for LogstashAgent
+- Scripts for Linux host mode
+- Runtime configuration (replaces build-time config)
+- Startup scripts that force shutdown first and manage a `.venv` file
+- Graph view in the Pipeline Editor with recursive nested condition support
+- Custom popup/modal to replace native browser alerts, matching app theme
+- Ability to validate pipelines on click
+- Stats strip in the Pipeline Editor
+- User preference persistence for last-used editor mode (text vs. graph)
+- Toggle in text mode to suppress mode-switch confirmation popup
+- Regression tests for Common, Management, Monitoring, PipelineManager, Site, SNMP, and Utilities
+- `popup.html` for themed in-app alerts
+- GitAttributes file to prevent line ending changes on commit
+
+### Changed
+- Default simulation mode is now `embedded`
+- ElasticAgent simulation node now listens on localhost only instead of all interfaces
+- Logstash supervisor tuned to be more aggressive on restarts and better handle large pipeline simulations
+- Startup scripts now activate and manage a `.venv` instead of installing dependencies directly
+- Reworked Pipeline Editor top bar UI — more responsive and reactive
+- Updated Dockerfile and Docker Compose to support server, development, and Docker Compose modes
+- Renamed and reorganized docs
+- Text editor behavior now consistent when switching between text and graph modes
+- Default YML config example reset to clean state
+
+### Fixed
+- Linux host mode permissions and file permission quirks
+- Database not persisting due to path mismatch
+- Stop script now more reliably terminates the agent
+- Testing config now works with the supplied binary instead of hardcoded Linux path
+- Windows Server limitations documented for host mode
+- Drop return path for pipelines
+
 ## [0.2.1] - 03/05/2026
 
 ### Added

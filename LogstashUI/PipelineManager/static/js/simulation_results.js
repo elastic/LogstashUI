@@ -1032,14 +1032,24 @@ function createForceDirectedGraph(graphData) {
     // Create a container group for zoom/pan
     const container = svg.append("g");
 
-    // Add zoom behavior
+    // Add zoom behavior - restrict to horizontal panning only
     const zoom = d3.zoom()
-        .scaleExtent([0.1, 4])
+        .scaleExtent([1, 1])  // Disable zooming, only allow panning
+        .translateExtent([[0, 0], [width, height]])  // Limit panning boundaries
+        .extent([[0, 0], [containerElement.clientWidth, height]])  // Set viewport extent
+        .filter((event) => {
+            // Allow mouse wheel and drag events
+            return !event.ctrlKey && !event.button;
+        })
         .on("zoom", (event) => {
-            container.attr("transform", event.transform);
+            // Only allow horizontal translation, lock vertical position
+            const transform = event.transform;
+            // Clamp y to 0 to prevent any vertical movement
+            container.attr("transform", `translate(${transform.x}, 0) scale(1)`);
         });
 
-    svg.call(zoom);
+    svg.call(zoom)
+        .on("wheel.zoom", null);  // Disable mouse wheel zoom completely
 
     // Create arrow marker for links
     svg.append("defs").append("marker")
@@ -1508,15 +1518,36 @@ function createForceDirectedGraph(graphData) {
                 : `<div style="color: #6b7280; font-style: italic;">No changes</div>`);
         }
 
-        nodeTooltip.html(title + content)
+        nodeTooltip.html(`
+            <div style="position: relative;">
+                <button id="closeNodeTooltipBtn" 
+                        style="position: absolute; top: 0; right: 0; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 4px; width: 20px; height: 20px; z-index: 100; line-height: 1; pointer-events: auto;"
+                        onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">✕</button>
+                <div style="padding-right: 20px;">
+                    ${title}${content}
+                </div>
+            </div>
+        `)
             .style("visibility", "visible")
+            .style("pointer-events", "auto")
             .style("left", (event.pageX + 10) + "px")
             .style("top", (event.pageY - 10) + "px");
+        
+        // Add click handler directly to the button after it's added to DOM
+        setTimeout(() => {
+            const closeBtn = document.getElementById('closeNodeTooltipBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    nodeTooltip.style("visibility", "hidden");
+                });
+            }
+        }, 0);
     }
 
-    function hideNodeTooltip() {
+    window.hideNodeTooltip = function() {
         nodeTooltip.style("visibility", "hidden");
-    }
+    };
 }
 
 /**
@@ -1877,7 +1908,7 @@ function initSimulationResults(runId) {
     showOverlayLoadingBlock();
 
     let pollCount = 0;
-    const maxPolls = 120; // Poll for 120 * 250ms = 30 seconds max
+    const maxPolls = 240; // Poll for 240 * 250ms = 60 seconds max (handles Logstash restarts)
     const pollInterval = 250; // Poll every 250ms for faster updates
     let receivedFinal = false; // Track if we've received the final event
     let originalEvent = null; // Store the original event for baseline comparison
@@ -1893,7 +1924,14 @@ function initSimulationResults(runId) {
                     const warning = document.createElement('span');
                     warning.id = 'loading-timeout-warning';
                     warning.className = 'text-xs text-yellow-400 ml-2';
-                    warning.textContent = 'This is taking a while, you should check the logs using the button to the right.';
+                    
+                    // Check if user is in embedded mode (simulationMode is defined globally in pipeline_editor.html)
+                    if (typeof simulationMode !== 'undefined' && simulationMode === 'embedded') {
+                        warning.textContent = "This is taking a while. You're using embedded mode. If you're seeing instability please consider switching to host mode.";
+                    } else {
+                        warning.textContent = 'This is taking a while, you should check the logs using the button to the right.';
+                    }
+                    
                     loadingIndicator.appendChild(warning);
                 }
             }

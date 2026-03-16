@@ -1,4 +1,4 @@
-FROM docker.elastic.co/logstash/logstash:9.3.0
+FROM docker.elastic.co/logstash/logstash:9.3.1
 
 # Switch to root to install dependencies
 USER root
@@ -18,8 +18,10 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY slots.py .
 COPY log_analyzer.py .
-COPY logstashagent.yml .
 COPY logstash_api.py .
+COPY logstash_supervisor.py .
+# Note: logstashagent.yml is mounted at runtime via docker-compose volumes
+# Config is read from /app/logstashui.yml (preferred) or /app/logstashui.example.yml
 
 # Create directories for Logstash configs and pipelines
 RUN mkdir -p /etc/logstash \
@@ -48,6 +50,13 @@ RUN chown -R logstash:logstash /etc/logstash /var/log/logstash /app /tmp && \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && \
     chown logstash:logstash /entrypoint.sh
+
+# Set default LOGSTASH_URL for local development
+# Uses host.docker.internal which works cross-platform with extra_hosts in docker-compose
+# Can be overridden at build time or runtime
+ARG LOGSTASH_URL=http://host.docker.internal:8080
+ENV LOGSTASH_URL=${LOGSTASH_URL}
+ENV MALLOC_ARENA_MAX=4
 
 # Switch back to logstash user
 USER logstash

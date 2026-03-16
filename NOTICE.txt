@@ -98,7 +98,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
--------------- annotated-types -------------- 
+-------------- annotated-types --------------
 The MIT License (MIT)
 
 Copyright (c) 2022 the contributors
@@ -121,7 +121,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- anyio -------------- 
+-------------- anyio --------------
 The MIT License (MIT)
 
 Copyright (c) 2018 Alex Grönholm
@@ -143,7 +143,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- asgiref -------------- 
+-------------- asgiref --------------
 Copyright (c) Django Software Foundation and individual contributors.
 All rights reserved.
 
@@ -172,7 +172,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- certifi -------------- 
+-------------- certifi --------------
 This package contains a modified version of ca-bundle.crt:
 
 ca-bundle.crt -- Bundle of CA Root Certificates
@@ -194,32 +194,32 @@ one at http://mozilla.org/MPL/2.0/.
 ***** END LICENSE BLOCK *****
 @(#) $RCSfile: certdata.txt,v $ $Revision: 1.80 $ $Date: 2011/11/03 15:11:58 $
 
--------------- cffi -------------- 
+-------------- cffi --------------
 
 Except when otherwise stated (look for LICENSE files in directories or
 information at the beginning of each file) all software and
-documentation is licensed as follows: 
+documentation is licensed as follows:
 
     MIT No Attribution
 
-    Permission is hereby granted, free of charge, to any person 
-    obtaining a copy of this software and associated documentation 
-    files (the "Software"), to deal in the Software without 
-    restriction, including without limitation the rights to use, 
-    copy, modify, merge, publish, distribute, sublicense, and/or 
-    sell copies of the Software, and to permit persons to whom the 
+    Permission is hereby granted, free of charge, to any person
+    obtaining a copy of this software and associated documentation
+    files (the "Software"), to deal in the Software without
+    restriction, including without limitation the rights to use,
+    copy, modify, merge, publish, distribute, sublicense, and/or
+    sell copies of the Software, and to permit persons to whom the
     Software is furnished to do so.
 
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
-    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
     DEALINGS IN THE SOFTWARE.
 
 
--------------- charset-normalizer -------------- 
+-------------- charset-normalizer --------------
 MIT License
 
 Copyright (c) 2025 TAHRI Ahmed R.
@@ -242,7 +242,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- click -------------- 
+-------------- click --------------
 Copyright 2014 Pallets
 
 Redistribution and use in source and binary forms, with or without
@@ -272,7 +272,7 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- codemirror -------------- 
+-------------- codemirror --------------
 MIT License
 
 Copyright (C) 2017 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
@@ -295,7 +295,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
--------------- colorama -------------- 
+-------------- colorama --------------
 Copyright (c) 2010 Jonathan Hartley
 All rights reserved.
 
@@ -324,7 +324,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- cross-env -------------- 
+-------------- cross-env --------------
 The MIT License (MIT)
 Copyright (c) 2017-2025 Kent C. Dodds
 
@@ -346,12 +346,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- cryptography -------------- 
+-------------- cryptography --------------
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to cryptography are made
 under the terms of *both* these licenses.
 
--------------- d3 -------------- 
+-------------- d3 --------------
 Copyright 2010-2023 Mike Bostock
 
 Permission to use, copy, modify, and/or distribute this software for any purpose
@@ -366,7 +366,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
--------------- daisyui -------------- 
+-------------- daisyui --------------
 MIT License
 
 Copyright (c) 2020 Pouya Saadeghi
@@ -389,7 +389,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- django-browser-reload -------------- 
+-------------- django-browser-reload --------------
 MIT License
 
 Copyright (c) 2021 Adam Johnson
@@ -412,7 +412,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- django-htmx -------------- 
+-------------- django-htmx --------------
 MIT License
 
 Copyright (c) 2020 Adam Johnson
@@ -435,7 +435,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- django-login-required-middleware -------------- 
+-------------- django-login-required-middleware --------------
 The MIT License
 
 Copyright (c) 2019 Cleiton de Lima Pinto
@@ -458,7 +458,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
--------------- django-tailwind -------------- 
+-------------- django-tailwind --------------
 The MIT License (MIT)
 
 Copyright (c) 2019 Tim Kamanin
@@ -481,7 +481,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
--------------- elastic-transport -------------- 
+-------------- elastic-transport --------------
 
                                  Apache License
                            Version 2.0, January 2004
@@ -659,7 +659,7 @@ THE SOFTWARE.
       of your accepting any such warranty or additional liability.
 
 
--------------- elasticsearch -------------- 
+-------------- elasticsearch --------------
 
                                  Apache License
                            Version 2.0, January 2004
@@ -837,7 +837,7 @@ THE SOFTWARE.
       of your accepting any such warranty or additional liability.
 
 
--------------- exceptiongroup -------------- 
+-------------- exceptiongroup --------------
 The MIT License (MIT)
 
 Copyright (c) 2022 Alex Grönholm
@@ -912,7 +912,7 @@ products or services of Licensee, or any third party.
 agrees to be bound by the terms and conditions of this License
 Agreement.
 
--------------- fastapi -------------- 
+-------------- fastapi --------------
 The MIT License (MIT)
 
 Copyright (c) 2018 Sebastián Ramírez
@@ -935,7 +935,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
--------------- gunicorn -------------- 
+-------------- gunicorn --------------
 2009-2026 (c) Benoît Chesneau <benoitc@gunicorn.org>
 2009-2015 (c) Paul J. Davis <paul.joseph.davis@gmail.com>
 
@@ -960,7 +960,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
--------------- h11 -------------- 
+-------------- h11 --------------
 The MIT License (MIT)
 
 Copyright (c) 2016 Nathaniel J. Smith <njs@pobox.com> and other contributors
@@ -984,7 +984,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- htmx -------------- 
+-------------- htmx --------------
 Zero-Clause BSD
 =============
 
@@ -999,7 +999,7 @@ DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
 AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
--------------- httpcore -------------- 
+-------------- httpcore --------------
 Copyright © 2020, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
 
@@ -1028,7 +1028,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- httpx -------------- 
+-------------- httpx --------------
 Copyright © 2019, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
 
@@ -1042,7 +1042,7 @@ Redistribution and use in source and binary forms, with or without modification,
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- idna -------------- 
+-------------- idna --------------
 BSD 3-Clause License
 
 Copyright (c) 2013-2025, Kim Davies and contributors.
@@ -1075,7 +1075,7 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- lark -------------- 
+-------------- lark --------------
 Copyright © 2017 Erez Shinan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -1095,12 +1095,12 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- packaging -------------- 
+-------------- packaging --------------
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
--------------- postcss -------------- 
+-------------- postcss --------------
 The MIT License (MIT)
 
 Copyright 2013 Andrey Sitnik <andrey@sitnik.ru>
@@ -1122,7 +1122,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- postcss-cli -------------- 
+-------------- postcss-cli --------------
 License (MIT)
 
 Copyright (c) 2016 Michael Ciniawsky
@@ -1145,7 +1145,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- postcss-nested -------------- 
+-------------- postcss-nested --------------
 The MIT License (MIT)
 
 Copyright 2014 Andrey Sitnik <andrey@sitnik.ru>
@@ -1167,7 +1167,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- postcss-simple-vars -------------- 
+-------------- postcss-simple-vars --------------
 The MIT License (MIT)
 
 Copyright 2015 Andrey Sitnik <andrey@sitnik.ru>
@@ -1189,7 +1189,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- pycparser -------------- 
+-------------- pycparser --------------
 pycparser -- A C parser in Python
 
 Copyright (c) 2008-2022, Eli Bendersky
@@ -1198,27 +1198,27 @@ All rights reserved.
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
 
-* Redistributions of source code must retain the above copyright notice, this 
+* Redistributions of source code must retain the above copyright notice, this
   list of conditions and the following disclaimer.
-* Redistributions in binary form must reproduce the above copyright notice, 
-  this list of conditions and the following disclaimer in the documentation 
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
   and/or other materials provided with the distribution.
-* Neither the name of the copyright holder nor the names of its contributors may 
-  be used to endorse or promote products derived from this software without 
+* Neither the name of the copyright holder nor the names of its contributors may
+  be used to endorse or promote products derived from this software without
   specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE 
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE 
-GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
-HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
-LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- pydantic -------------- 
+-------------- pydantic --------------
 The MIT License (MIT)
 
 Copyright (c) 2017 to present Pydantic Services Inc. and individual contributors.
@@ -1241,7 +1241,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- pydantic_core -------------- 
+-------------- pydantic_core --------------
 The MIT License (MIT)
 
 Copyright (c) 2022 Samuel Colvin
@@ -1264,10 +1264,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- pygrok -------------- 
+-------------- pygrok --------------
 The MIT License (MIT)
 
-Copyright (c) 2014 
+Copyright (c) 2014
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -1287,7 +1287,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- python-dateutil -------------- 
+-------------- python-dateutil --------------
 Copyright 2017- Paul Ganssle <paul@ganssle.io>
 Copyright 2017- dateutil contributors (see AUTHORS file)
 
@@ -1343,7 +1343,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 The above BSD License Applies to all code, even that also covered by Apache 2.0.
 
--------------- regex -------------- 
+-------------- regex --------------
 This work was derived from the 're' module of CPython 2.6 and CPython 3.1,
 copyright (c) 1998-2001 by Secret Labs AB and licensed under CNRI's Python 1.6
 license.
@@ -1553,7 +1553,7 @@ All additions and alterations are licensed under the Apache 2.0 License.
    See the License for the specific language governing permissions and
    limitations under the License.
 
--------------- requests -------------- 
+-------------- requests --------------
 
                                  Apache License
                            Version 2.0, January 2004
@@ -1730,7 +1730,7 @@ All additions and alterations are licensed under the Apache 2.0 License.
       incurred by, or claims asserted against, such Contributor by reason
       of your accepting any such warranty or additional liability.
 
--------------- rimraf -------------- 
+-------------- rimraf --------------
 # Blue Oak Model License
 
 Version 1.0.0
@@ -1787,7 +1787,7 @@ without any warranty or condition, and no contributor
 will be liable to anyone for any damages related to this
 software or this license, under any kind of legal claim.***
 
--------------- six -------------- 
+-------------- six --------------
 Copyright (c) 2010-2024 Benjamin Peterson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -1807,7 +1807,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- sqlparse -------------- 
+-------------- sqlparse --------------
 Copyright (c) 2016, Andi Albrecht <albrecht.andi@gmail.com>
 All rights reserved.
 
@@ -1834,7 +1834,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- starlette -------------- 
+-------------- starlette --------------
 Copyright © 2018, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
 
@@ -1863,7 +1863,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- tailwindcss -------------- 
+-------------- tailwindcss --------------
 MIT License
 
 Copyright (c) Tailwind Labs, Inc.
@@ -1886,7 +1886,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- typing-inspection -------------- 
+-------------- typing-inspection --------------
 The MIT License (MIT)
 
 Copyright (c) 2017-2019 Ivan Levkivskyi
@@ -1908,7 +1908,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- typing_extensions -------------- 
+-------------- typing_extensions --------------
 A. HISTORY OF THE SOFTWARE
 ==========================
 
@@ -2189,7 +2189,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
--------------- tzdata -------------- 
+-------------- tzdata --------------
 Apache Software License 2.0
 
 Copyright (c) 2020, Paul Ganssle (Google)
@@ -2206,7 +2206,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
--------------- urllib3 -------------- 
+-------------- urllib3 --------------
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors.
@@ -2229,7 +2229,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------- uvicorn -------------- 
+-------------- uvicorn --------------
 Copyright © 2017-present, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
 
@@ -2258,7 +2258,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--------------- whitenoise -------------- 
+-------------- whitenoise --------------
 The MIT License (MIT)
 
 Copyright (c) 2013 David Evans
@@ -2280,25 +2280,3 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
--------------- annotated-doc --------------
-The MIT License (MIT)
-
-Copyright (c) 2025 Sebastián Ramírez
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
