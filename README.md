@@ -14,11 +14,40 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ## Features
 
-- **Visual Pipeline Editor** — Build and modify Logstash pipelines using a graphical interface or raw configuration
-- **Pipeline Simulation** — Execute pipelines against sample events and inspect transformations step-by-step
-- **Multi-Instance Management** — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management
-- **Pipeline Monitoring** — View metrics and performance for running pipelines
-- **SNMP Support** — Configure polling, traps, and discovery through a web interface
+## Features
+
+<details>
+<summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
+
+![Visual Pipeline Editor](docs/images/graph.gif)
+
+</details>
+
+<details>
+<summary><b>Pipeline Simulation</b> — Execute pipelines against sample events and inspect transformations step-by-step</summary>
+
+![Pipeline Simulation](docs/images/simulate.gif)
+
+</details>
+
+<details>
+<summary><b>Multi-Instance Management</b> — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management</summary>
+
+</details>
+
+<details>
+<summary><b>Pipeline Monitoring</b> — View metrics and performance for running pipelines</summary>
+
+![Pipeline Monitoring](docs/images/monitoring.png)
+
+</details>
+
+<details>
+<summary><b>SNMP Support</b> — Configure polling, traps, and discovery through a web interface</summary>
+
+![SNMP Support](docs/images/snmp.gif)
+
+</details>
 
 
 ## Requirements
