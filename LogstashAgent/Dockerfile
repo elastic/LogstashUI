@@ -18,9 +18,10 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY slots.py .
 COPY log_analyzer.py .
-COPY logstashagent.yml .
 COPY logstash_api.py .
 COPY logstash_supervisor.py .
+# Note: logstashagent.yml is mounted at runtime via docker-compose volumes
+# Config is read from /app/logstashui.yml (preferred) or /app/logstashui.example.yml
 
 # Create directories for Logstash configs and pipelines
 RUN mkdir -p /etc/logstash \

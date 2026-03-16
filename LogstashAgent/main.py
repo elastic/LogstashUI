@@ -36,44 +36,52 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Load agent configuration
-# Check for config in current directory first (native mode), then Docker path
+# Check for config in current directory first (native mode)
 def get_config_path() -> str:
-    """Get the path to logstashagent.yml - current dir for native, /app for Docker"""
+    """Get the path to logstashagent.yml - only used for native/host mode"""
     local_path = os.path.join(os.path.dirname(__file__), "logstashagent.yml")
-    docker_path = "/app/logstashagent.yml"
-    
-    if os.path.exists(local_path):
-        return local_path
-    elif os.path.exists(docker_path):
-        return docker_path
-    else:
-        # Return local path as default for better error messages
-        return local_path
+    return local_path
 
 CONFIG_PATH = get_config_path()
 
 def load_agent_config() -> dict:
-    """Load logstashagent.yml configuration, with fallback to logstashui.example.yml if mounted"""
-    # First, try to load from mounted logstashui.example.yml (docker-compose mounts this)
-    logstashui_config_path = "/etc/logstashui.example.yml"
-    if os.path.exists(logstashui_config_path):
-        try:
-            with open(logstashui_config_path, 'r') as f:
-                full_config = yaml.safe_load(f)
-                # logstash_agent is nested under simulation section
-                if full_config and 'simulation' in full_config:
-                    simulation_config = full_config['simulation']
-                    if 'logstash_agent' in simulation_config:
-                        agent_config = simulation_config['logstash_agent'].copy()
-                        # Add simulation mode from parent config
-                        if 'mode' in simulation_config:
-                            agent_config['simulation_mode'] = simulation_config['mode']
-                        if 'mode' not in agent_config:
-                            agent_config['mode'] = 'simulation'
-                        logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode={agent_config.get('simulation_mode', 'embedded')}")
-                        return agent_config
-        except Exception as e:
-            logger.warning(f"Failed to load config from {logstashui_config_path}: {e}, falling back to logstashagent.yml")
+    """Load logstashagent.yml configuration, with fallback to logstashui.yml or logstashui.example.yml if mounted"""
+    # First, try to load from mounted logstashui.yml (preferred), then logstashui.example.yml
+    # Check /app first (docker-compose mounts), then /etc (legacy)
+    config_paths = [
+        "/app/logstashui.yml",
+        "/app/logstashui.example.yml",
+        "/etc/logstashui.yml",
+        "/etc/logstashui.example.yml"
+    ]
+    
+    for logstashui_config_path in config_paths:
+        if os.path.exists(logstashui_config_path):
+            try:
+                with open(logstashui_config_path, 'r') as f:
+                    full_config = yaml.safe_load(f)
+                    # logstash_agent is nested under simulation section
+                    if full_config and 'simulation' in full_config:
+                        simulation_config = full_config['simulation']
+                        if 'logstash_agent' in simulation_config:
+                            agent_config = simulation_config['logstash_agent'].copy()
+                            # Add simulation mode from parent config
+                            if 'mode' in simulation_config:
+                                agent_config['simulation_mode'] = simulation_config['mode']
+                            if 'mode' not in agent_config:
+                                agent_config['mode'] = 'simulation'
+                            
+                            # FORCE embedded mode to use container paths (ignore config file paths)
+                            if agent_config.get('simulation_mode') == 'embedded':
+                                agent_config['logstash_binary'] = '/usr/share/logstash/bin/logstash'
+                                agent_config['logstash_settings'] = '/etc/logstash'
+                                agent_config['logstash_log_path'] = '/var/log/logstash'
+                                logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode=embedded (forced Linux paths)")
+                            else:
+                                logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode={agent_config.get('simulation_mode', 'embedded')}")
+                            return agent_config
+            except Exception as e:
+                logger.warning(f"Failed to load config from {logstashui_config_path}: {e}, trying next path")
     
     # Fallback to logstashagent.yml
     try:

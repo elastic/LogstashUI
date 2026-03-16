@@ -74,7 +74,7 @@ set PATH=%PATH%;C:\Python312
 ```bash
 # Ubuntu/Debian
 sudo apt-get update
-sudo apt-get install python3.12 python3-pip python-venv
+sudo apt-get install python3.12 python3-pip python3.12-venv
 
 # Verify installation
 python3 --version

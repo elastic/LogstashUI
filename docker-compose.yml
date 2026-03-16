@@ -9,6 +9,7 @@ services:
       - "8080"
     volumes:
       - logstashui_data:/app/data
+      - ./logstashui.yml:/app/logstashui.yml:ro
       - ./logstashui.example.yml:/app/logstashui.example.yml:ro
     environment:
       - DEBUG=False
@@ -19,7 +20,8 @@ services:
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
       # LOGSTASHUI_CONFIG: Path to configuration file for simulation mode detection
-      - LOGSTASHUI_CONFIG=/app/logstashui.example.yml
+      # Prefers logstashui.yml, falls back to logstashui.example.yml in config.py
+      - LOGSTASHUI_CONFIG=/app/logstashui.yml
       # LOGSTASH_AGENT_URL: Automatically set in settings.py based on simulation mode
       # Host mode: http://host.docker.internal:9500 (native agent on host)
       # Embedded mode + DEBUG=True: http://logstashagent:9500 (direct)
@@ -45,8 +47,9 @@ services:
     expose:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
     volumes:
-      # Mount logstashui.example.yml for dynamic config (read-only)
-      - ./logstashui.example.yml:/etc/logstashui.example.yml:ro
+      # Mount config files for dynamic runtime config (read-only)
+      - ./logstashui.yml:/app/logstashui.yml:ro
+      - ./logstashui.example.yml:/app/logstashui.example.yml:ro
     environment:
       # Override default LOGSTASH_URL (default: http://host.docker.internal:8080 for local dev)
       # In docker-compose, use nginx for HTTPS routing

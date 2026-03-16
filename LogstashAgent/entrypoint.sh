@@ -33,4 +33,5 @@ echo "  - FastAPI Sidecar: http://localhost:9500"
 echo "=========================================="
 
 cd /app
-exec uvicorn main:app --host 127.0.0.1 --port 9500
+# Listen on 0.0.0.0 so nginx can access via Docker network
+exec uvicorn main:app --host 0.0.0.0 --port 9500

@@ -88,8 +88,11 @@ echo ""
 # Change to the repository root directory (parent of bin)
 cd "$SCRIPT_DIR/.."
 
+# Store absolute path to project root
+PROJECT_ROOT="$(pwd)"
+
 # Debug: Show current directory
-echo "Current directory: $(pwd)"
+echo "Current directory: $PROJECT_ROOT"
 echo ""
 
 # Ensure logstashui.yml exists (required for Docker volume mount)
@@ -150,18 +153,19 @@ if [ "$MODE" == "host" ]; then
     fi
     
     # Setup virtual environment for LogstashAgent
-    if [ ! -d "LogstashAgent/.venv" ]; then
-        echo "Creating virtual environment in LogstashAgent/.venv"
-        python3 -m venv LogstashAgent/.venv
+    VENV_PATH="$PROJECT_ROOT/LogstashAgent/.venv"
+    if [ ! -d "$VENV_PATH" ]; then
+        echo "Creating virtual environment in $VENV_PATH"
+        python3 -m venv "$VENV_PATH"
         if [ $? -ne 0 ]; then
             echo "ERROR: Failed to create virtual environment!"
-            echo "Please ensure python3-venv is installed (apt-get install python3-venv)"
+            echo "Please ensure python3-venv is installed (apt-get install python3.12-venv)"
             exit 1
         fi
     fi
     
     echo "Activating virtual environment"
-    source LogstashAgent/.venv/bin/activate
+    source "$VENV_PATH/bin/activate"
     
     # Install/update Python dependencies for LogstashAgent
     echo "Installing Python dependencies for LogstashAgent"
@@ -183,14 +187,14 @@ if [ "$MODE" == "host" ]; then
         echo "Please ensure LogstashAgent/logstashagent.yml has correct paths"
     fi
     
-    echo "Starting LogstashAgent on port 9501 (localhost only)"
-    cd LogstashAgent
-    # Start in background using nohup - bind to 127.0.0.1 for security
+    echo "Starting LogstashAgent on port 9501 (accessible remotely)"
+    cd "$PROJECT_ROOT/LogstashAgent"
+    # Start in background using nohup - bind to 0.0.0.0 for remote access
     # Run uvicorn in the activated virtual environment context
-    nohup .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 9501 > ../logstashagent.log 2>&1 &
+    nohup "$VENV_PATH/bin/python" -m uvicorn main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
     AGENT_PID=$!
-    echo $AGENT_PID > ../logstashagent.pid
-    cd ..
+    echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
+    cd "$PROJECT_ROOT"
     
     # Deactivate virtual environment (agent is running in background)
     deactivate
