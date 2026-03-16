@@ -63,6 +63,9 @@ db.sqlite3-journal
 LogstashUI/LogstashUI/data/
 !LogstashUI/SNMP/data/
 
+# LogstashAgent data directory (logs, etc.)
+LogstashAgent/data/
+
 # Flask stuff:
 instance/
 .webassets-cache

@@ -2,7 +2,7 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from fastapi import FastAPI, HTTPException, Path, Query, Request
+from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -23,17 +23,36 @@ import atexit
 import logstash_supervisor
 from collections import deque
 import threading
+from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
-# Configure logging
+# Configure logging with file output
+# Create data/logs directory if it doesn't exist
+LOGS_DIR = Path(__file__).parent / 'data' / 'logs'
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Setup logging configuration
 logging.basicConfig(
     level=logging.INFO,
     format='[%(levelname)s] %(asctime)s %(name)s %(funcName)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        # Console handler
+        logging.StreamHandler(),
+        # File handler with rotation
+        RotatingFileHandler(
+            LOGS_DIR / 'logstashagent.log',
+            maxBytes=1024 * 1024 * 10,  # 10 MB
+            backupCount=5,
+        )
+    ]
 )
 logger = logging.getLogger(__name__)
 
 # Reduce httpx logging noise - only show warnings and errors
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+logger.info(f"LogstashAgent logging initialized - logs directory: {LOGS_DIR}")
 
 # Load agent configuration
 # Check for config in current directory first (native mode)
@@ -795,7 +814,7 @@ async def list_pipelines():
 
 
 @app.get("/_logstash/pipeline/{pipeline_id}")
-async def get_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
+async def get_pipeline(pipeline_id: str = FastAPIPath(..., description="Pipeline ID")):
     """Get a specific pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
 
@@ -915,7 +934,7 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
 
 
 @app.delete("/_logstash/pipeline/{pipeline_id}")
-async def delete_pipeline(pipeline_id: str = Path(..., description="Pipeline ID")):
+async def delete_pipeline(pipeline_id: str = FastAPIPath(..., description="Pipeline ID")):
     """Delete a pipeline (mimics Elasticsearch API)"""
     _validate_pipeline_id(pipeline_id)
 
@@ -1165,7 +1184,7 @@ async def get_slots():
 
 
 @app.delete("/_logstash/slots/{slot_id}")
-async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=10)):
+async def release_slot(slot_id: int = FastAPIPath(..., description="Slot ID", ge=1, le=10)):
     """Release a specific slot."""
     success = slots.release_slot(slot_id)
 
@@ -1177,7 +1196,7 @@ async def release_slot(slot_id: int = Path(..., description="Slot ID", ge=1, le=
 
 @app.get("/_logstash/pipeline/{pipeline_id}/logs")
 async def get_pipeline_logs(
-        pipeline_id: str = Path(..., description="Pipeline ID"),
+        pipeline_id: str = FastAPIPath(..., description="Pipeline ID"),
         max_entries: int = Query(50, description="Maximum number of log entries to return", ge=1, le=500),
         min_level: str = Query("WARN", description="Minimum log level (DEBUG, INFO, WARN, ERROR)"),
         min_timestamp: int = Query(None,
