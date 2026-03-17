@@ -27,7 +27,7 @@ def get_elastic_connections_from_list():
 
 def get_elastic_connection(connection_id):
     elastic_creds = _get_creds(connection_id)
-    return Elasticsearch(**elastic_creds)
+    return Elasticsearch(**elastic_creds, verify_certs=False)
 
 def _get_creds(connection_id):
 

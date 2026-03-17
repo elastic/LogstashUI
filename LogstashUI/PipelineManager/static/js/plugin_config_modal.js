@@ -64,6 +64,22 @@ window.PluginConfigModal = (function () {
 
         // Add configuration fields based on plugin options
         if (pluginInfo.options && Object.keys(pluginInfo.options).length > 0) {
+            // Add search bar for filtering fields
+            const searchContainer = document.createElement('div');
+            searchContainer.className = 'mb-4 pb-4 border-b border-gray-700';
+            searchContainer.innerHTML = `
+                <div class="relative">
+                    <input type="text" 
+                           id="configFieldSearch" 
+                           placeholder="Search fields..."
+                           class="w-full p-2 pl-10 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           oninput="PluginConfigModal.filterFields(this.value)">
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+            `;
+            configForm.appendChild(searchContainer);
             // Convert options to array and separate into important and advanced
             const allOptions = Object.entries(pluginInfo.options)
                 .filter(([key]) => !key.startsWith('_'));  // Skip internal fields
@@ -86,7 +102,19 @@ window.PluginConfigModal = (function () {
                 }
             });
 
-            // Keep important fields in their original order (as defined in the JSON)
+            // Sort important fields: Required:Yes first, then non-required
+            importantOptions.sort((a, b) => {
+                const aRequired = a[1].required === 'Yes';
+                const bRequired = b[1].required === 'Yes';
+                
+                // If one is required and the other isn't, required comes first
+                if (aRequired && !bRequired) return -1;
+                if (!aRequired && bRequired) return 1;
+                
+                // If both have same required status, maintain original order (stable sort)
+                return 0;
+            });
+            
             // Sort advanced fields alphabetically
             advancedOptions.sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -458,6 +486,7 @@ window.PluginConfigModal = (function () {
             if (advancedOptions.length > 0) {
                 const advancedSection = document.createElement('div');
                 advancedSection.className = 'mt-6 border-t border-gray-700 pt-4';
+                advancedSection.id = 'advancedSettingsSection';
 
                 const advancedHeader = document.createElement('div');
                 advancedHeader.className = 'flex items-center justify-between cursor-pointer mb-4';
@@ -479,6 +508,7 @@ window.PluginConfigModal = (function () {
 
                 const advancedContent = document.createElement('div');
                 advancedContent.className = 'advanced-content hidden space-y-4';
+                advancedContent.id = 'advancedSettingsContent';
 
                 // Render advanced fields
                 advancedOptions.forEach(([key, option]) => {
@@ -1343,6 +1373,66 @@ window.PluginConfigModal = (function () {
             lowerFieldName.includes('secret');
     }
 
+    // Filter fields based on search query
+    function filterFields(query) {
+        const searchQuery = query.toLowerCase().trim();
+        const configForm = document.getElementById('configForm');
+        if (!configForm) return;
+        
+        // Get all field groups (both important and advanced)
+        const allFieldGroups = configForm.querySelectorAll('[data-field-name]');
+        const advancedSection = document.getElementById('advancedSettingsSection');
+        const advancedContent = document.getElementById('advancedSettingsContent');
+        
+        let hasVisibleFields = false;
+        let hasVisibleAdvancedFields = false;
+        
+        // If search is empty, show all fields and collapse advanced settings
+        if (!searchQuery) {
+            allFieldGroups.forEach(fieldGroup => {
+                fieldGroup.style.display = '';
+            });
+            
+            // Collapse advanced settings when search is cleared
+            if (advancedSection && advancedContent) {
+                advancedContent.classList.add('hidden');
+                const icon = advancedSection.querySelector('.toggle-icon');
+                if (icon) {
+                    icon.classList.remove('rotate-180');
+                }
+            }
+            return;
+        }
+        
+        // Filter fields based on search query
+        allFieldGroups.forEach(fieldGroup => {
+            const fieldName = fieldGroup.dataset.fieldName.toLowerCase();
+            const isMatch = fieldName.includes(searchQuery);
+            
+            // Show/hide based on match
+            fieldGroup.style.display = isMatch ? '' : 'none';
+            
+            if (isMatch) {
+                hasVisibleFields = true;
+                
+                // Check if this field is in advanced settings
+                const isInAdvanced = advancedContent && advancedContent.contains(fieldGroup);
+                if (isInAdvanced) {
+                    hasVisibleAdvancedFields = true;
+                }
+            }
+        });
+        
+        // Auto-expand advanced settings if there are matching fields inside
+        if (advancedSection && advancedContent && hasVisibleAdvancedFields) {
+            advancedContent.classList.remove('hidden');
+            const icon = advancedSection.querySelector('.toggle-icon');
+            if (icon) {
+                icon.classList.add('rotate-180');
+            }
+        }
+    }
+
     // Public API
     return {
         init,
@@ -1350,6 +1440,7 @@ window.PluginConfigModal = (function () {
         hide,
         cancel,
         saveConfig,
+        filterFields,
         getPluginData: () => pluginData
     };
 })();

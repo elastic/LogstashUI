@@ -2091,8 +2091,14 @@ function findComponentById(id) {
     return null;
 }
 
-function removeComponent(componentId) {
-    if (!confirm('Are you sure you want to remove this component?')) {
+async function removeComponent(componentId) {
+    const confirmed = await ConfirmationModal.show(
+        'Are you sure you want to remove this component?',
+        'Remove Component',
+        'Remove'
+    );
+    
+    if (!confirmed) {
         return;
     }
 
