@@ -973,6 +973,9 @@ function renderBranchLayout(svg, allComponents) {
     const horizontalSpacing = 220;
     const filterStartX = 100;
     let currentY = 80;
+    
+    // Track last conditional's branch metadata for filter-to-output connection
+    let lastConditionalBranchData = null;
 
     // Render Input section - always render, even if empty
     // Always horizontal, centered over first filter
@@ -1648,6 +1651,17 @@ function renderBranchLayout(svg, allComponents) {
                 // Move currentY to after all branches
                 currentY = maxBranchEndY;
                 
+                // Store branch metadata if this is the last filter component (for filter-to-output connection)
+                if (index === processedComponents.filter.length - 1) {
+                    lastConditionalBranchData = {
+                        branchEndPositions: [...branchEndPositions],
+                        branchWidths: [...branchWidths],
+                        dynamicBranchStartX: dynamicBranchStartX,
+                        isMultiBranch: isMultiBranch,
+                        branchCount: branchCount
+                    };
+                }
+                
                 // Add extra spacing after conditionals for better visual separation
                 const conditionalExtraSpacing = 20;
                 
@@ -1739,7 +1753,8 @@ function renderBranchLayout(svg, allComponents) {
                 });
                 
                 // Add hover area and buttons after the entire conditional for adding plugin/condition after it
-                const afterConditionalY = currentY;
+                // Position buttons lower to rest on the convergence area
+                const afterConditionalY = currentY + (conditionalExtraSpacing / 2);
                 const afterConditionalHoverHeight = 40;
                 
                 const afterConditionalHoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -1753,7 +1768,7 @@ function renderBranchLayout(svg, allComponents) {
                 
                 const afterConditionalButtonFO = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
                 afterConditionalButtonFO.setAttribute('x', filterStartX + (nodeWidth / 2) - 95);
-                afterConditionalButtonFO.setAttribute('y', afterConditionalY + 5);
+                afterConditionalButtonFO.setAttribute('y', afterConditionalY + 10);
                 afterConditionalButtonFO.setAttribute('width', '190');
                 afterConditionalButtonFO.setAttribute('height', '30');
                 afterConditionalButtonFO.setAttribute('overflow', 'visible');
@@ -1832,7 +1847,11 @@ function renderBranchLayout(svg, allComponents) {
         });
         
         // Add hover area and buttons after the last filter plugin
-        if (processedComponents.filter.length > 0) {
+        // Skip if last filter is a conditional (conditionals have their own "after conditional" buttons)
+        const lastFilterComponent = processedComponents.filter[processedComponents.filter.length - 1];
+        const shouldAddAfterFilterButtons = processedComponents.filter.length > 0 && !lastFilterComponent.isBranchPoint;
+        
+        if (shouldAddAfterFilterButtons) {
             // Store the position right after the last filter for the connection line
             const lastFilterBottomY = currentY;
             
@@ -1918,21 +1937,112 @@ function renderBranchLayout(svg, allComponents) {
     if (true) {
         // Draw connection line from filter to output (only if filter has components AND output has components)
         if (processedComponents.filter.length > 0 && processedComponents.output.length > 0) {
-            // Start line from bottom of last filter (currentY - verticalSpacing)
-            const lineStartY = currentY - verticalSpacing;
-            // Add spacing for the connection line
-            currentY += 100;
-            const lineEndY = currentY;
-            const line = createConnectionLine(
-                filterStartX + nodeWidth / 2, lineStartY,
-                filterStartX + nodeWidth / 2, lineEndY,
-                false,
-                'output',
-                0,
-                false
-            );
-            g.appendChild(line);
+            // Check if the last filter component is a conditional (branch point)
+            const lastFilterComponent = processedComponents.filter[processedComponents.filter.length - 1];
+            
+            if (lastFilterComponent.isBranchPoint && lastConditionalBranchData) {
+                // Last filter is a conditional - use stored branch metadata
+                const { branchEndPositions, branchWidths, dynamicBranchStartX, isMultiBranch, branchCount } = lastConditionalBranchData;
+                
+                // Add spacing for the connection line
+                const connectionSpacing = 100;
+                const rejoinY = currentY + (connectionSpacing / 2);
+                currentY += connectionSpacing;
+                const lineEndY = currentY;
+                
+                if (isMultiBranch) {
+                    // Draw vertical lines from each branch up to rejoin point
+                    let convergenceCumulativeX = dynamicBranchStartX;
+                    
+                    branchEndPositions.forEach((branchEndY, branchIndex) => {
+                        const branchWidth = branchWidths[branchIndex];
+                        const branchCenterX = convergenceCumulativeX + (branchWidth / 2);
+                        
+                        const verticalLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        verticalLine.setAttribute('x1', branchCenterX);
+                        verticalLine.setAttribute('y1', branchEndY);
+                        verticalLine.setAttribute('x2', branchCenterX);
+                        verticalLine.setAttribute('y2', rejoinY);
+                        verticalLine.setAttribute('stroke', '#6b7280');
+                        verticalLine.setAttribute('stroke-width', 2);
+                        verticalLine.setAttribute('stroke-dasharray', '5,5');
+                        g.appendChild(verticalLine);
+                        
+                        convergenceCumulativeX += branchWidth + branchHorizontalSpacing;
+                    });
+                    
+                    // Draw horizontal line connecting all branches at rejoin point
+                    const leftmostBranchCenterX = dynamicBranchStartX + (branchWidths[0] / 2);
+                    const rightmostBranchCenterX = dynamicBranchStartX + branchWidths.reduce((sum, w, idx) => {
+                        if (idx < branchCount - 1) {
+                            return sum + w + branchHorizontalSpacing;
+                        }
+                        return sum + w;
+                    }, 0) - branchWidths[branchCount - 1] + (branchWidths[branchCount - 1] / 2);
+                    
+                    const horizontalLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    horizontalLine.setAttribute('x1', leftmostBranchCenterX);
+                    horizontalLine.setAttribute('y1', rejoinY);
+                    horizontalLine.setAttribute('x2', rightmostBranchCenterX);
+                    horizontalLine.setAttribute('y2', rejoinY);
+                    horizontalLine.setAttribute('stroke', '#6b7280');
+                    horizontalLine.setAttribute('stroke-width', 2);
+                    horizontalLine.setAttribute('stroke-dasharray', '5,5');
+                    g.appendChild(horizontalLine);
+                    
+                    // Draw vertical line from rejoin point down to output section
+                    // We'll extend this line later to connect to the first output component
+                    const targetX = filterStartX + (nodeWidth / 2);
+                    const finalVerticalLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    finalVerticalLine.setAttribute('x1', targetX);
+                    finalVerticalLine.setAttribute('y1', rejoinY);
+                    finalVerticalLine.setAttribute('x2', targetX);
+                    finalVerticalLine.setAttribute('y2', lineEndY);
+                    finalVerticalLine.setAttribute('stroke', '#6b7280');
+                    finalVerticalLine.setAttribute('stroke-width', 2);
+                    finalVerticalLine.setAttribute('stroke-dasharray', '5,5');
+                    finalVerticalLine.setAttribute('data-connection-line', 'filter-to-output');
+                    g.appendChild(finalVerticalLine);
+                } else {
+                    // Single branch: draw simple line from branch to output
+                    const branchWidth = branchWidths[0];
+                    const branchCenterX = dynamicBranchStartX + (branchWidth / 2);
+                    const branchEndY = branchEndPositions[0];
+                    
+                    const line = createConnectionLine(
+                        branchCenterX, branchEndY,
+                        filterStartX + nodeWidth / 2, lineEndY,
+                        false,
+                        'output',
+                        0,
+                        false
+                    );
+                    g.appendChild(line);
+                }
+            } else {
+                // Last filter is a regular plugin - draw simple connection line
+                const lineStartY = currentY - verticalSpacing;
+                // Add spacing for the connection line
+                currentY += 100;
+                const lineEndY = currentY;
+                const line = createConnectionLine(
+                    filterStartX + nodeWidth / 2, lineStartY,
+                    filterStartX + nodeWidth / 2, lineEndY,
+                    false,
+                    'output',
+                    0,
+                    false
+                );
+                line.setAttribute('data-connection-line', 'filter-to-output');
+                g.appendChild(line);
+            }
         }
+        
+        // Add extra spacing before OUTPUT label to prevent collision with convergence lines
+        currentY += 20;
+        
+        // Store the Y position where the connection line should end (before the label)
+        const connectionLineEndY = currentY - 20;
         
         const label = createSectionLabel('OUTPUT', filterStartX, currentY - 45, '#a855f7');
         g.appendChild(label);
@@ -1964,6 +2074,43 @@ function renderBranchLayout(svg, allComponents) {
         } else {
         
         processedComponents.output.forEach((component, index) => {
+            // For the first output component, extend the connection line to reach it
+            if (index === 0 && processedComponents.filter.length > 0) {
+                // Update the connection line to extend to the first output component
+                const connectionLine = g.querySelector('[data-connection-line="filter-to-output"]');
+                if (connectionLine) {
+                    // Check if it's a line element (from conditional) or group element (from regular plugin)
+                    if (connectionLine.tagName === 'line') {
+                        // Simple line element - just update y2
+                        connectionLine.setAttribute('y2', currentY);
+                    } else if (connectionLine.tagName === 'g') {
+                        // Group element from createConnectionLine - find the path inside
+                        const pathElement = connectionLine.querySelector('path');
+                        if (pathElement) {
+                            const d = pathElement.getAttribute('d');
+                            // Parse the path: M x1 y1 L x1 midY L x2 midY L x2 y2
+                            const parts = d.split(' ');
+                            if (parts.length >= 11) {
+                                const x1 = parseFloat(parts[1]);
+                                const y1 = parseFloat(parts[2]);
+                                const x2 = parseFloat(parts[7]);
+                                const newMidY = (y1 + currentY) / 2;
+                                
+                                // Update the path with new coordinates
+                                const newPath = `M ${x1} ${y1} L ${x1} ${newMidY} L ${x2} ${newMidY} L ${x2} ${currentY}`;
+                                pathElement.setAttribute('d', newPath);
+                                
+                                // Also update the hit area (second path element)
+                                const paths = connectionLine.querySelectorAll('path');
+                                if (paths[1]) {
+                                    paths[1].setAttribute('d', newPath);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Add hover area between components (including before first component for output)
             if (index > 0 || index === 0) {
                 const betweenY = index === 0 ? currentY - (verticalSpacing / 2) : currentY - verticalSpacing;
@@ -3144,7 +3291,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const componentId = btn.dataset.componentId;
             
             // Find the conditional component in the filter array
-            const filterComponents = window.components?.filter || [];
+            // Use the global components variable, not window.components
+            const filterComponents = (typeof components !== 'undefined' ? components.filter : window.components?.filter) || [];
             const conditionalIndex = filterComponents.findIndex(c => c.id === componentId);
             
             if (conditionalIndex !== -1) {
@@ -3161,7 +3309,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const componentId = btn.dataset.componentId;
             
             // Find the conditional component in the filter array
-            const filterComponents = window.components?.filter || [];
+            // Use the global components variable, not window.components
+            const filterComponents = (typeof components !== 'undefined' ? components.filter : window.components?.filter) || [];
             const conditionalIndex = filterComponents.findIndex(c => c.id === componentId);
             
             if (conditionalIndex !== -1) {
