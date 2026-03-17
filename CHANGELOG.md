@@ -1,3 +1,7 @@
+## [0.3.2] - 03/16/2026
+### Changed
+Fixed elastic host connection string
+
 ## [0.3.1] - 03/16/2026
 
 ### Added
