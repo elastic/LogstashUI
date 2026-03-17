@@ -1,3 +1,15 @@
+## [0.3.1] - 03/16/2026
+
+### Added
+Added a search bar to the top of the plugin config modal
+
+### Changed
+Allow unverified elastic connections
+Swapped a javascript alert for our popup box (styled it)
+
+### Fixed
+Fixed minor visual line bugs in the graph
+
 ## [0.3.0] - 03/16/2026
 
 ### Added
