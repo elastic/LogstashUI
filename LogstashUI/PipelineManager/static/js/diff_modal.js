@@ -961,15 +961,13 @@ async function confirmSavePipeline() {
             return; // Don't proceed with success flow
         }
 
-        // Show success message
-        document.getElementById('saveStatus').innerHTML = `
-      <span class="text-green-400">${responseText}</span>
-    `;
+        // Show success toast notification
+        if (typeof showToast === 'function') {
+            showToast(responseText || 'Pipeline saved successfully!', 'success');
+        }
 
         // Close modal after successful save
-        setTimeout(() => {
-            hideDiffModal();
-        }, 1500);
+        hideDiffModal();
 
     } catch (error) {
         console.error('Error saving pipeline:', error);
