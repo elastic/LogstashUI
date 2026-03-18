@@ -1,3 +1,17 @@
+## [0.3.3] - 03/17/2026
+
+### Added
+- Converted delete alerts/confirmation boxes to use stylized popup components  
+- Saving a pipeline now shows a toast notification instead of shifting UI elements  
+
+### Changed
+- Pipeline manager table now displays hostname when a node is added via URL instead of Cloud ID  
+- Defaulted `logstashagent.yml` to Linux configuration  
+
+### Fixed
+- Improved handling of messages sent to pipelines that never loaded  
+- Fixed pipeline eviction issue caused by runtime config not being properly detected  
+
 ## [0.3.2] - 03/16/2026
 ### Changed
 Fixed elastic host connection string
