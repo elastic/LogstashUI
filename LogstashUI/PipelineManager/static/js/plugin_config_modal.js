@@ -1014,13 +1014,13 @@ window.PluginConfigModal = (function () {
               <input type="text"
                      class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                      placeholder="Key"
-                     value="${escapeHtml(key)}"
+                     value="${String(key).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'key')">
               <span class="text-gray-400">=></span>
               <input type="text"
                      class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                      placeholder="Value"
-                     value="${escapeHtml(value)}"
+                     value="${String(value).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'value')">
               <button type="button"
                       class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
@@ -1066,7 +1066,7 @@ window.PluginConfigModal = (function () {
               <input type="text"
                      class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                      placeholder="Value"
-                     value="${escapeHtml(value)}"
+                     value="${String(value).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                      onchange="updateArrayItem('${container.id}', '${hiddenField.id}', this, ${index})">
               <button type="button"
                       class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
@@ -1787,7 +1787,7 @@ function populateArrayOfHashesValues(component) {
                                 </select>
                             `;
                         } else {
-                            const escapedValue = String(existingValue).replace(/"/g, '&quot;');
+                            const escapedValue = String(existingValue).replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                             inputHtml = `<input type="text" class="${inputClass}" placeholder="${optKey}" data-field="${optKey}" value="${escapedValue}" onchange="updateArrayOfHashesField('${container.id}', '${hiddenField.id}')">`;
                         }
 
@@ -2016,7 +2016,7 @@ function populateKeyListHashValues(component) {
                                 <input type="text"
                                        class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
                                        placeholder="Value"
-                                       value="${escapeHtml(val)}"
+                                       value="${String(val).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                                        onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
                                 <button type="button"
                                         class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
@@ -2035,13 +2035,13 @@ function populateKeyListHashValues(component) {
                             <input type="text"
                                    class="flex-1 p-2 bg-gray-700/50 border border-gray-600/50 rounded text-white text-sm section-key focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50"
                                    placeholder="Key (e.g., message, field1)"
-                                   value="${escapeHtml(key)}"
+                                   value="${String(key).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                                    onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
                             <button type="button"
                                     class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                                     onclick="removeKeyListHashSection('${container.id}', '${hiddenField.id}', this)">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 0 00-1 1v3M4 7h16" />
                                 </svg>
                                 Remove Section
                             </button>
