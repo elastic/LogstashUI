@@ -136,7 +136,7 @@
               </td>
 
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ connection.name }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300" title="{{ connection.cloud_id }}">{{ connection.cloud_id|truncatechars:12 }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300" title="{% if connection.host %}{{ connection.host }}{% else %}{{ connection.cloud_id }}{% endif %}">{% if connection.host %}{{ connection.host|truncatechars:20 }}{% else %}{{ connection.cloud_id|truncatechars:12 }}{% endif %}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
                       hx-get="/ConnectionManager/TestConnectivity?test={{ connection.pk }}"
@@ -175,11 +175,8 @@
                       <div class="px-1 py-1">
                         <form method="POST">
                           {% csrf_token %}
-                          <a hx-post="/ConnectionManager/DeleteConnection/{{ connection.pk }}/"
-                           hx-trigger="click" 
-                           hx-confirm="Are you sure you want to delete this connection?" 
-                           hx-swap="beforeend" 
-                           hx-target="body"
+                          <a href="#"
+                           onclick="event.preventDefault(); deleteConnection({{ connection.pk }}); return false;"
                            class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" 
                            role="menuitem">
                           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -319,6 +316,58 @@
       menu.classList.add('hidden');
     });
   }, true);
+
+  // Delete connection with custom popup
+  async function deleteConnection(connectionId) {
+    const confirmed = await ConfirmationModal.show(
+      'Are you sure you want to delete this connection?',
+      'Delete Connection',
+      'Delete'
+    );
+    
+    if (confirmed) {
+      htmx.ajax('POST', `/ConnectionManager/DeleteConnection/${connectionId}/`, {
+        target: 'body',
+        swap: 'beforeend',
+        headers: {
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+      });
+    }
+  }
+
+  // Delete pipeline with custom popup (globally accessible for collapsible_row.html)
+  window.deletePipeline = async function(pipelineEsId, pipelineName, connectionEsId) {
+    const confirmed = await ConfirmationModal.show(
+      'Are you sure you want to delete this pipeline?',
+      'Delete Pipeline',
+      'Delete'
+    );
+    
+    if (confirmed) {
+      fetch('/ConnectionManager/DeletePipeline/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: new URLSearchParams({
+          'es_id': pipelineEsId,
+          'pipeline': pipelineName
+        })
+      }).then(response => {
+        if (response.status !== 403) {
+          // Refresh the pipeline list
+          htmx.ajax('GET', `/ConnectionManager/GetPipelines/${connectionEsId}/`, {
+            target: `#pipelines-${connectionEsId}`,
+            swap: 'innerHTML'
+          });
+        }
+      }).catch(error => {
+        console.error('Error deleting pipeline:', error);
+      });
+    }
+  }
 </script>
 
 <script src="{% static 'js/pipeline_list.js' %}"></script>
