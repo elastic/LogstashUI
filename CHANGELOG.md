@@ -1,3 +1,7 @@
+## [0.3.4] - 03/17/2026
+### Changed
+- Quick fix to make simulation of dropped messages work universally
+
 ## [0.3.3] - 03/17/2026
 
 ### Added

@@ -91,8 +91,9 @@ def SimulatePipeline(request):
             if settings.DEBUG:
                 logstash_ui_url = "http://host.docker.internal:8080"
             else:
-                logstash_ui_url = "https://host.docker.internal"
+                logstash_ui_url = "https://nginx"
 
+        print("USING THIS URL: ", logstash_ui_url)
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls
 
