@@ -275,6 +275,9 @@ def evict_expired_slots() -> List[int]:
                 except (ValueError, AttributeError):
                     # If we can't parse the timestamp, evict the slot to be safe
                     slots_to_evict.append((slot_id, slot_data))
+            else:
+                # No last_accessed timestamp, evict to be safe
+                slots_to_evict.append((slot_id, slot_data))
 
         # Evict the expired slots
         for slot_id, slot_data in slots_to_evict:
@@ -284,6 +287,9 @@ def evict_expired_slots() -> List[int]:
     # Delete Logstash pipelines for evicted slots (outside the lock)
     for slot_id, slot_data in slots_to_evict:
         _delete_slot_pipelines(slot_id, slot_data)
+
+    if evicted_slots:
+        logger.info(f"Evicted {len(evicted_slots)} expired slots: {evicted_slots}")
 
     return evicted_slots
 
@@ -647,7 +653,7 @@ def _delete_slot_pipelines(slot_id: int, slot_data: Dict[str, Any]):
 def _background_cleanup_worker():
     """
     Background worker thread that periodically evicts expired and failed slots.
-    Runs every 15 seconds to quickly catch and clean up failed pipelines.
+    Runs every 60 seconds to clean up expired and failed pipelines.
     """
     while True:
         try:
@@ -670,6 +676,9 @@ def _background_cleanup_worker():
 def _load_config() -> Dict[str, Any]:
     """
     Load configuration from logstashagent.yml.
+    
+    Falls back to simulation mode defaults if config file is not found,
+    ensuring the background cleanup thread always starts in containerized environments.
 
     Returns:
         Dictionary with configuration settings
@@ -677,16 +686,22 @@ def _load_config() -> Dict[str, Any]:
     config_path = os.path.join(os.path.dirname(__file__), 'logstashagent.yml')
 
     if not os.path.exists(config_path):
-        logger.warning(f"[Slots] Config file not found at {config_path}, using defaults")
-        return {}
+        logger.warning(f"[Slots] Config file not found at {config_path}, using simulation mode defaults")
+        return {
+            'mode': 'simulation',
+            'simulation_mode': 'embedded'
+        }
 
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-            return config if config else {}
+            return config if config else {'mode': 'simulation', 'simulation_mode': 'embedded'}
     except Exception as e:
-        logger.error(f"[Slots] Error loading config: {e}, using defaults")
-        return {}
+        logger.error(f"[Slots] Error loading config: {e}, using simulation mode defaults")
+        return {
+            'mode': 'simulation',
+            'simulation_mode': 'embedded'
+        }
 
 
 # Conditionally start the background cleanup thread based on config

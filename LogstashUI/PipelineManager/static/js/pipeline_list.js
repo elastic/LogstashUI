@@ -141,7 +141,7 @@ function renderPipelineList(esId) {
                                 </svg>
                                 Clone
                             </button>
-                            <button onclick="deletePipelineFromList('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}')"
+                            <button onclick="deletePipeline('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}', '${escapeHtml(esId)}')"
                                class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
                                role="menuitem"
                                type="button">

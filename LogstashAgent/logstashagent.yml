@@ -1,5 +1,6 @@
-logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
-logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs
-logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
 mode: simulation
-simulation_mode: host
+simulation_mode: embedded
+# Linux example, default
+logstash_binary: /usr/share/logstash/bin/logstash
+logstash_settings: /etc/logstash
+logstash_log_path: /var/log/logstash

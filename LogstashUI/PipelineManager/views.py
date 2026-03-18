@@ -458,8 +458,14 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
 @require_admin_role
 def DeletePipeline(request):
     if request.method == "POST":
-        es_id = request.POST.get("es_id")
-        pipeline_name = request.POST.get("pipeline")
+        # Handle both JSON and form data
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+            es_id = data.get("es_id")
+            pipeline_name = data.get("pipeline")
+        else:
+            es_id = request.POST.get("es_id")
+            pipeline_name = request.POST.get("pipeline")
 
         # Validate pipeline name
         is_valid, error_msg = validate_pipeline_name(pipeline_name)
@@ -470,7 +476,7 @@ def DeletePipeline(request):
         es.logstash.delete_pipeline(id=pipeline_name)
 
         logger.warning(f"User '{request.user.username}' deleted pipeline '{pipeline_name}' (Connection ID: {es_id})")
-        return HttpResponse("Pipeline deleted successfully!")
+        return HttpResponse(status=204)  # No content - prevents text from being inserted into page
 
 
 @require_admin_role

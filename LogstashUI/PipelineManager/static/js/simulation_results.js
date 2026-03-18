@@ -1878,6 +1878,15 @@ function updateDocumentCounter() {
 
 // Global cleanup function
 window.cleanupSimulation = function() {
+    // Clear all active pollers to stop any ongoing polling
+    if (window.activePollers) {
+        console.log('cleanupSimulation: Clearing', window.activePollers.size, 'active pollers');
+        window.activePollers.clear();
+    }
+    
+    // Remove loading block
+    hideOverlayLoadingBlock();
+    
     // Remove overlay
     const overlay = document.getElementById('simulation-overlay');
     if (overlay) {
@@ -1927,7 +1936,7 @@ function initSimulationResults(runId) {
                     
                     // Check if user is in embedded mode (simulationMode is defined globally in pipeline_editor.html)
                     if (typeof simulationMode !== 'undefined' && simulationMode === 'embedded') {
-                        warning.textContent = "This is taking a while. You're using embedded mode. If you're seeing instability please consider switching to host mode.";
+                        warning.textContent = "This is taking a while. You're using embedded mode. Consider switching to host mode, or view logs by clicking the button on the right.";
                     } else {
                         warning.textContent = 'This is taking a while, you should check the logs using the button to the right.';
                     }
@@ -1945,10 +1954,52 @@ function initSimulationResults(runId) {
         }
 
         if (pollCount >= maxPolls) {
-            const stream = document.getElementById('results-stream');
-            if (stream && stream.innerHTML.trim() === '') {
-                stream.innerHTML = '<span class="text-yellow-400">No results received. Check Logstash logs.</span>';
+            console.warn('Polling timeout reached for run_id:', runId);
+            
+            // Clean up active pollers
+            if (window.activePollers) {
+                window.activePollers.delete(runId);
+                console.log('Removed timed-out runId from activePollers. Remaining:', window.activePollers.size);
             }
+            
+            // Clear the loading timeout
+            if (loadingTimeout) {
+                clearTimeout(loadingTimeout);
+            }
+            
+            // Hide loading indicator
+            const loadingIndicator = document.getElementById('simulation-loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+            
+            // Remove loading block if no more active pollers
+            if (!window.activePollers || window.activePollers.size === 0) {
+                console.log('No more active pollers after timeout, hiding loading block');
+                hideOverlayLoadingBlock();
+            }
+            
+            // Show timeout error message
+            const resultsContainer = document.getElementById('results-container');
+            if (resultsContainer) {
+                resultsContainer.innerHTML = `
+                    <div class="w-full p-4 bg-red-900/30 border-y border-red-600">
+                        <div class="flex items-center gap-3">
+                            <svg class="w-6 h-6 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <div>
+                                <h3 class="text-base font-semibold text-red-400">Simulation Timeout</h3>
+                                <p class="text-sm text-red-200">
+                                    No results received after 60 seconds. The pipeline may have failed or encountered an error.
+                                    Click "View Logs" to check for errors.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
             return;
         }
 
@@ -2300,11 +2351,15 @@ function initSimulationResults(runId) {
                                         // Remove from active pollers
                                         if (window.activePollers) {
                                             window.activePollers.delete(runId);
+                                            console.log('Removed runId from activePollers. Remaining:', window.activePollers.size);
                                         }
                                         
                                         // Remove loading block only if no more active pollers
                                         if (!window.activePollers || window.activePollers.size === 0) {
+                                            console.log('No more active pollers, hiding loading block');
                                             hideOverlayLoadingBlock();
+                                        } else {
+                                            console.log('Still have active pollers:', window.activePollers.size);
                                         }
                                     }
                                 } else {
@@ -2441,12 +2496,18 @@ function showOverlayLoadingBlock() {
     // Remove any existing block first
     hideOverlayLoadingBlock();
     
-    const overlay = document.getElementById('simulation-overlay');
-    if (!overlay) {
+    const resultsContainer = document.getElementById('results-container');
+    if (!resultsContainer) {
+        console.error('showOverlayLoadingBlock: results-container not found');
         return;
     }
     
-    // Create a blocking overlay that covers only the simulation overlay bar
+    console.log('showOverlayLoadingBlock: Creating loading block in results-container');
+    
+    // Ensure results-container has position: relative
+    resultsContainer.style.position = 'relative';
+    
+    // Create a blocking overlay that covers only the canvas area (not the header)
     const block = document.createElement('div');
     block.id = 'overlay-loading-block';
     block.style.cssText = `
@@ -2461,7 +2522,8 @@ function showOverlayLoadingBlock() {
         cursor: wait;
     `;
     
-    overlay.appendChild(block);
+    resultsContainer.appendChild(block);
+    console.log('showOverlayLoadingBlock: Loading block appended to results-container');
 }
 
 /**
@@ -2470,7 +2532,10 @@ function showOverlayLoadingBlock() {
 function hideOverlayLoadingBlock() {
     const block = document.getElementById('overlay-loading-block');
     if (block) {
+        console.log('hideOverlayLoadingBlock: Removing loading block');
         block.remove();
+    } else {
+        console.log('hideOverlayLoadingBlock: No loading block found to remove');
     }
 }
 
