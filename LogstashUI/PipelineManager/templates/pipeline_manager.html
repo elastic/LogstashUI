@@ -53,10 +53,10 @@
           <div id="connectionDropdown" class="hidden absolute left-1/2 transform -translate-x-1/2 z-10 mt-2 w-56 origin-top rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none">
             <div class="py-1">
               <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
-                Centralized Pipeline Management
+                Elasticsearch
               </a>
-              <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
-                Logstash Agent - Coming soon!
+              <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
+                Logstash Agent
               </a>
             </div>
           </div>
@@ -82,10 +82,10 @@
       <div id="connectionDropdown" class="hidden absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none">
         <div class="py-1">
           <a id="centralizedPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
-            Centralized Pipeline Management
+            Elasticsearch
           </a>
-          <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-500 cursor-not-allowed" disabled>
-            Logstash Agent - Coming soon!
+          <a id="agentPipelineBtn" href="#" class="w-full flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-600">
+            Logstash Agent
           </a>
         </div>
       </div>
@@ -240,8 +240,7 @@
 
   document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
     e.preventDefault();
-    e.stopPropagation();
-    // Do nothing - this feature is coming soon
+    document.getElementById('connectionFormFlyout').classList.remove('hidden');
   });
 
   // Set connection type based on which button was clicked
@@ -249,12 +248,15 @@
     document.getElementById('connectionTypeField').value = 'CENTRALIZED';
     document.getElementById('centralizedFields').classList.remove('hidden');
     document.getElementById('agentFields').classList.add('hidden');
+    document.getElementById('connectionNameField').classList.remove('hidden');
   });
 
   document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
     e.preventDefault();
-    e.stopPropagation();
-    // Do nothing - this feature is coming soon
+    document.getElementById('connectionTypeField').value = 'AGENT';
+    document.getElementById('centralizedFields').classList.add('hidden');
+    document.getElementById('agentFields').classList.remove('hidden');
+    document.getElementById('connectionNameField').classList.add('hidden');
   });
 
   // Set flag to indicate we're on the pipeline manager page
