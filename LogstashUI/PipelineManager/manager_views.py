@@ -1,0 +1,508 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
+from django.shortcuts import render
+from django.http import HttpResponse, JsonResponse
+from django.template.loader import get_template
+from django.conf import settings
+
+from .forms import ConnectionForm
+from PipelineManager.models import Connection as ConnectionTable
+
+from Common.decorators import require_admin_role
+from Common.logstash_utils import get_logstash_pipeline
+from Common.elastic_utils import get_elastic_connection, test_elastic_connectivity
+from Common.validators import validate_pipeline_name
+
+from datetime import datetime, timezone
+from html import escape
+
+import logging
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+@require_admin_role
+def AgentPolicies(request):
+    """
+    View for managing Logstash Agent Policies
+    """
+    context = {}
+    return render(request, "components/pipeline_manager/agent_policies.html", context=context)
+
+
+def PipelineManager(request):
+    """Builds the table of pipelines"""
+    context = {}
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+    
+    context['connections'] = connections
+    context['has_connections'] = len(connections) > 0
+    context['form'] = ConnectionForm()
+
+    return render(request, "pipeline_manager.html", context=context)
+
+
+def test_connectivity(connection_id):
+    """
+    Test connectivity to an Elasticsearch connection.
+    Pure Python function for programmatic use.
+    
+    Args:
+        connection_id: ID of the connection to test
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    if not connection_id:
+        return (False, "No connection ID provided")
+    
+    try:
+        elastic_connection = get_elastic_connection(connection_id)
+        result = test_elastic_connectivity(elastic_connection)
+        return (True, result)
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Connection test against {connection_id} failed: {error_msg}")
+        return (False, error_msg)
+
+
+def TestConnectivity(request):
+    """
+    Django view to test connectivity to an Elasticsearch connection.
+    Returns HTML response for HTMX.
+    """
+    test_id = request.GET.get('test')
+    
+    if not test_id:
+        return HttpResponse("No connection ID provided", status=400)
+    
+    logger.info(f"User '{request.user.username}' testing connection {test_id}")
+    success, message = test_connectivity(test_id)
+    
+    if success:
+        return HttpResponse("""
+            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
+                onload="setTimeout(() => this.remove(), 3000);">
+                <p>{0}</p>
+            </div>
+        """.format(escape(str(message))))
+    else:
+        return HttpResponse("""
+            <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
+                <p>Connection failed: {0}</p>
+            </div>
+        """.format(escape(str(message))))
+
+
+def GetConnections(request):
+    """Get all connections for dropdown population"""
+    try:
+        connections = ConnectionTable.objects.all().values('id', 'name', 'connection_type')
+        return JsonResponse(list(connections), safe=False, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_admin_role
+def AddConnection(request):
+    if request.method == "POST":
+
+        form = ConnectionForm(request.POST)
+
+        if form.is_valid():
+            # Save the connection temporarily
+            new_connection = form.save()
+
+            # Test the connection
+            success, message = test_connectivity(new_connection.id)
+
+            if not success:
+                # If test fails, delete the connection and return JSON error
+                new_connection.delete()
+                logger.error(f"User '{request.user.username}' failed to add connection, {new_connection.id}")
+                
+                return JsonResponse({
+                    'success': False,
+                    'error': str(message)
+                }, status=200)
+
+            # Connection test succeeded, return JSON response
+            logger.info(f"User '{request.user.username}' added a new connection, {new_connection.id}")
+            logger.info(f"Returning success response with connection ID: {new_connection.id}")
+            return JsonResponse({
+                'success': True,
+                'connection_id': new_connection.id,
+                'message': 'Connection created and tested successfully!'
+            }, status=200)
+        else:
+            logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
+            return JsonResponse({
+                'success': False,
+                'error': str(form.errors)
+            }, status=200)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@require_admin_role
+def DeleteConnection(request, connection_id=None):
+    if request.method != "POST":
+        return HttpResponse("Method not allowed", status=405)
+    
+    if not connection_id:
+        return HttpResponse("Connection ID is required", status=400)
+    
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return HttpResponse(
+            '<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">Connection not found</div>',
+            status=404
+        )
+    
+    connection_name = connection.name
+    connection.delete()
+    logger.warning(
+        f"User '{request.user.username}' deleted connection '{connection_name}' (ID: {connection_id})")
+
+    return HttpResponse("""
+        <script>
+            showToast('Connection deleted successfully!', 'success');
+            // Reload the page to show the updated connections
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+        </script>
+    """)
+
+
+def GetPipelines(request, connection_id):
+    context = {}
+    try:
+        connection = ConnectionTable.objects.get(pk=connection_id)
+    except ConnectionTable.DoesNotExist:
+        return HttpResponse(
+            '<div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">Connection not found</div>',
+            status=404
+        )
+
+    logstash_pipelines = []
+    if connection.connection_type == "CENTRALIZED":
+        # --- Gets our pipelines from the connection
+        try:
+            es = get_elastic_connection(connection.id)
+            pipelines = es.logstash.get_pipeline()
+
+            for pipeline_name, pipeline_data in pipelines.items():
+                # Format last_modified timestamp
+                last_modified_str = pipeline_data.get("last_modified", "")
+                formatted_date = ""
+                if last_modified_str:
+                    try:
+                        # Parse ISO 8601 format: 2025-11-23T05:30:52.421Z
+                        dt = datetime.fromisoformat(last_modified_str.replace('Z', '+00:00'))
+                        # Format as "Tuesday, January 14th 2025"
+                        day = dt.day
+                        suffix = 'th' if 11 <= day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+                        formatted_date = dt.strftime(f'%A, %B {day}{suffix} %Y')
+                    except Exception:
+                        formatted_date = last_modified_str  # Fallback to original if parsing fails
+
+                logstash_pipelines.append(
+                    {
+                        "es_id": connection.id,
+                        "es_name": connection.name,
+                        "name": pipeline_name,
+                        "description": pipeline_data.get("description", ""),
+                        "last_modified": formatted_date
+                    }
+                )
+
+        except Exception as e:
+            logger.exception("Couldn't connect to Elastic")
+
+    context['pipelines'] = logstash_pipelines
+    context['es_id'] = connection.id
+
+    logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
+    html = logstash_template.render(context)
+    return HttpResponse(html)
+
+
+@require_admin_role
+def UpdatePipelineSettings(request):
+    if request.method == "POST":
+        try:
+            es_id = request.POST.get("es_id")
+            pipeline_name = request.POST.get("pipeline")
+
+            # Validate required fields
+            if not es_id or not pipeline_name:
+                return HttpResponse(
+                    '<div class="text-red-400 text-sm">Error: Missing pipeline ID or connection ID</div>',
+                    status=400
+                )
+
+            # Validate pipeline name
+            is_valid, error_msg = validate_pipeline_name(pipeline_name)
+            if not is_valid:
+                return HttpResponse(
+                    f'<div class="text-red-400 text-sm">{error_msg}</div>',
+                    status=400
+                )
+
+            # Get form values
+            description = request.POST.get("description", "")
+            pipeline_workers = request.POST.get("pipeline_workers")
+            pipeline_batch_size = request.POST.get("pipeline_batch_size")
+            pipeline_batch_delay = request.POST.get("pipeline_batch_delay")
+            queue_type = request.POST.get("queue_type")
+            queue_max_bytes = request.POST.get("queue_max_bytes")
+            queue_max_bytes_unit = request.POST.get("queue_max_bytes_unit")
+            queue_checkpoint_writes = request.POST.get("queue_checkpoint_writes")
+
+            # Build settings body - only include non-empty values
+            current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+            settings_body = {
+                "pipeline": current_pipeline_config['pipeline'],
+                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                "pipeline_metadata": {
+                    "version": current_pipeline_config['pipeline_metadata']['version'] + 1,
+                    "type": "logstash_pipeline"
+                },
+                "username": "LogstashUI",
+                "pipeline_settings": {},
+
+            }
+
+            if 'description' in current_pipeline_config:
+                settings_body['description'] = current_pipeline_config['description']
+
+            if description:
+                settings_body["description"] = description
+            if pipeline_workers:
+                settings_body['pipeline_settings']["pipeline.workers"] = int(pipeline_workers)
+            if pipeline_batch_size:
+                settings_body['pipeline_settings']["pipeline.batch.size"] = int(pipeline_batch_size)
+            if pipeline_batch_delay:
+                settings_body['pipeline_settings']["pipeline.batch.delay"] = int(pipeline_batch_delay)
+            if queue_type:
+                settings_body['pipeline_settings']["queue.type"] = queue_type
+            if queue_max_bytes:
+                settings_body['pipeline_settings']["queue.max_bytes"] = f"{queue_max_bytes}{queue_max_bytes_unit}"
+            if queue_checkpoint_writes:
+                settings_body['pipeline_settings']["queue.checkpoint.writes"] = int(queue_checkpoint_writes)
+
+            # Get Elasticsearch connection and update pipeline settings
+            es = get_elastic_connection(es_id)
+            es.logstash.put_pipeline(id=pipeline_name, body=settings_body)
+
+            logger.info(
+                f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' (Connection ID: {es_id})")
+            # Return empty response - toast notification handled by JavaScript
+            return HttpResponse('', status=200)
+
+        except Exception as e:
+            # Return simple error message - toast notification handled by JavaScript
+            logger.error(f"Error updating pipeline settings: {str(e)}")
+            return HttpResponse(str(e), status=500)
+
+    return HttpResponse('Invalid request method', status=405)
+
+
+@require_admin_role
+def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=None):
+    """
+    Create a pipeline in Elasticsearch or LogstashAgent.
+
+    Args:
+        request: Django request object
+        simulate: If True, send to LogstashAgent instead of Elasticsearch
+        pipeline_name: Pipeline name (used when called directly for simulation)
+        pipeline_config: Pipeline config string (used when called directly for simulation)
+    """
+
+    if request.method == "POST" or simulate:
+        # Get parameters from POST or function arguments
+        if not simulate:
+            es_id = request.POST.get("es_id")
+            pipeline_name = request.POST.get("pipeline")
+            pipeline_config = request.POST.get("pipeline_config", "").strip()
+
+        # Validate pipeline name
+        is_valid, error_msg = validate_pipeline_name(pipeline_name)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
+        # Use provided config or default empty config
+        if pipeline_config:
+            pipeline_content = pipeline_config
+        else:
+            pipeline_content = "input {}\nfilter {}\noutput {}"
+
+        # Build the pipeline body
+        pipeline_body = {
+            "pipeline": pipeline_content,
+            "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            "pipeline_metadata": {
+                "version": 1,
+                "type": "logstash_pipeline"
+            },
+            "username": "LogstashUI",
+            "pipeline_settings": {
+                "pipeline.batch.delay": 50,
+                "pipeline.batch.size": 125,
+                "pipeline.workers": 1,
+                "queue.checkpoint.writes": 1024,
+                "queue.max_bytes": "1gb",
+                "queue.type": "memory"
+            },
+            "description": ""
+        }
+
+        if simulate:
+            # Send to LogstashAgent
+            logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_name}"
+
+            try:
+                response = requests.put(
+                    logstash_agent_url,
+                    json=pipeline_body,
+                    verify=False,  # --insecure equivalent
+                    timeout=10
+                )
+                response.raise_for_status()
+                logger.info(
+                    f"User '{request.user.username}' created simulation pipeline '{pipeline_name}' in LogstashAgent")
+                return HttpResponse("Simulation pipeline created successfully!", status=200)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to create simulation pipeline in LogstashAgent: {e}")
+                return HttpResponse(f"Failed to create simulation pipeline: {str(e)}", status=500)
+        else:
+            # Send to Elasticsearch
+            es = get_elastic_connection(es_id)
+            pipeline_doc = es.logstash.put_pipeline(
+                id=pipeline_name,
+                body=pipeline_body
+            )
+
+            logger.info(
+                f"User '{request.user.username}' created new pipeline '{pipeline_name}' (Connection ID: {es_id})")
+            response = HttpResponse("Pipeline created successfully!")
+            response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
+            return response
+
+
+@require_admin_role
+def DeletePipeline(request):
+    if request.method == "POST":
+        # Handle both JSON and form data
+        import json
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+            es_id = data.get("es_id")
+            pipeline_name = data.get("pipeline")
+        else:
+            es_id = request.POST.get("es_id")
+            pipeline_name = request.POST.get("pipeline")
+
+        # Validate pipeline name
+        is_valid, error_msg = validate_pipeline_name(pipeline_name)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
+        es = get_elastic_connection(es_id)
+        es.logstash.delete_pipeline(id=pipeline_name)
+
+        logger.warning(f"User '{request.user.username}' deleted pipeline '{pipeline_name}' (Connection ID: {es_id})")
+        return HttpResponse(status=204)  # No content - prevents text from being inserted into page
+
+
+@require_admin_role
+def ClonePipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        source_pipeline = request.POST.get("source_pipeline")
+        new_pipeline = request.POST.get("new_pipeline")
+
+        # Validate source pipeline name
+        is_valid, error_msg = validate_pipeline_name(source_pipeline)
+        if not is_valid:
+            return HttpResponse(f"Invalid source pipeline name: {error_msg}", status=400)
+
+        # Validate new pipeline name
+        is_valid, error_msg = validate_pipeline_name(new_pipeline)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
+        try:
+            es = get_elastic_connection(es_id)
+
+            # Get the source pipeline configuration
+            source_config = es.logstash.get_pipeline(id=source_pipeline)
+
+            if source_pipeline not in source_config:
+                return HttpResponse(f"Source pipeline '{source_pipeline}' not found", status=404)
+
+            source_data = source_config[source_pipeline]
+
+            # Check if new pipeline name already exists
+            existing_pipelines = es.logstash.get_pipeline()
+            if new_pipeline in existing_pipelines:
+                return HttpResponse(f"Pipeline '{new_pipeline}' already exists. Please choose a different name.",
+                                    status=400)
+
+            # Create the new pipeline with the same configuration as the source
+            es.logstash.put_pipeline(
+                id=new_pipeline,
+                body={
+                    "pipeline": source_data['pipeline'],
+                    "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                    "pipeline_metadata": {
+                        "version": 1,
+                        "type": "logstash_pipeline"
+                    },
+                    "username": "LogstashUI",
+                    "pipeline_settings": source_data.get('pipeline_settings', {}),
+                    "description": source_data.get('description', f"Cloned from {source_pipeline}")
+                }
+            )
+
+            logger.info(
+                f"User '{request.user.username}' cloned pipeline '{source_pipeline}' to '{new_pipeline}' (Connection ID: {es_id})")
+
+            # Close the modal and refresh the pipeline list
+            response = HttpResponse("""
+                <script>
+                    document.getElementById('clonePipelineModal').close();
+                    htmx.ajax('GET', '/ConnectionManager/GetPipelines/""" + escape(str(es_id)) + """/', 
+                              {target: '#pipelines-""" + escape(str(es_id)) + """', swap: 'innerHTML'});
+                </script>
+            """)
+            return response
+
+        except Exception as e:
+            logger.error(f"Error cloning pipeline: {str(e)}")
+            return HttpResponse(f"Error cloning pipeline: {str(e)}", status=500)
+
+
+def GetPipeline(request):
+    if request.method == "GET":
+        es_id = request.GET.get("es_id")
+        pipeline_name = request.GET.get("pipeline")
+
+        # Validate required parameters
+        if not es_id or not pipeline_name:
+            return JsonResponse({"error": "Missing required parameters: es_id and pipeline"}, status=400)
+
+        pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+        
+        # Handle case where pipeline couldn't be fetched
+        if not pipeline_config:
+            return JsonResponse({"error": f"Could not fetch pipeline '{pipeline_name}' from connection {es_id}"}, status=400)
+
+        pipeline_string = pipeline_config['pipeline']
+
+        return JsonResponse({"code": pipeline_string})

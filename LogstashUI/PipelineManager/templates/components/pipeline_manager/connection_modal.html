@@ -73,8 +73,11 @@
               ">
               {% csrf_token %}
 
-              <!-- Connection Name Field -->
-              <div class="mb-4">
+              <!-- Hidden connection type field -->
+              <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
+
+              <!-- Connection Name Field (only for centralized connections) -->
+              <div id="connectionNameField" class="mb-4">
                 <label for="{{ form.name.id_for_label }}" class="form-label">
                   Connection Name <span class="text-red-500">*</span>
                 </label>
@@ -84,9 +87,6 @@
                 {% endif %}
                 <p class="text-gray-400 text-xs mt-1">A descriptive name for this connection</p>
               </div>
-
-              <!-- Hidden connection type field -->
-              <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
 
               <!-- Centralized Connection Fields -->
               <div id="centralizedFields">
@@ -167,12 +167,43 @@
                 </div>
               </div>
 
-              <!-- Logstash Agent Connection Fields - Coming Soon -->
+              <!-- Logstash Agent Connection Fields -->
               <div id="agentFields" class="hidden">
-                <div class="p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
-                  <p class="text-blue-400 text-sm">
-                    Logstash Agent connection support is coming soon! This will allow you to connect to remote Logstash instances.
+                <!-- Notice -->
+                <div class="p-4 mb-4 bg-blue-900/20 border border-blue-600 rounded-lg">
+                  <p class="text-blue-300 text-sm">
+                    Adding Logstash Agent to your Logstash node will make your instance of Logstash fully managed by LogstashUI
                   </p>
+                </div>
+
+                <!-- Agent Policy Dropdown -->
+                <div class="mb-4">
+                  <label for="agentPolicy" class="block text-sm font-medium text-gray-300 mb-2">
+                    Agent Policy <span class="text-red-500">*</span>
+                  </label>
+                  <select id="agentPolicy" name="agent_policy" class="select select-bordered w-full">
+                    <option value="">Select a policy...</option>
+                    <option value="add_new" class="font-bold text-primary">+ Add Agent Policy</option>
+                    <option value="default" selected>Default</option>
+                  </select>
+                  <p class="text-gray-400 text-xs mt-1">Select the policy to apply to this agent</p>
+                </div>
+
+                <!-- Linux Installation Commands -->
+                <div class="mb-4">
+                  <label class="form-label mb-2 block">Linux</label>
+                  <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 font-mono text-sm">
+                    <div class="flex justify-between items-center mb-2">
+                      <span class="text-gray-400 text-xs">BASH</span>
+                      <button type="button" onclick="copyToClipboard('linuxCommands')" class="text-blue-400 hover:text-blue-300 text-xs">
+                        Copy
+                      </button>
+                    </div>
+                    <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>pip install logstash-agent
+logstash-agent --enroll {enrollment_token}
+systemctl enable logstash-agent
+systemctl start logstash-agent</code></pre>
+                  </div>
                 </div>
               </div>
 
@@ -207,11 +238,14 @@
   document.getElementById('connectionForm').addEventListener('submit', function(e) {
     // Only validate visible fields
     if (document.getElementById('connectionTypeField').value === 'AGENT') {
-      // Logstash Agent not yet implemented - prevent submission
-      e.preventDefault();
-      e.stopPropagation();
-      showToast('Logstash Agent connections are coming soon!', 'info');
-      return;
+      // Validate agent policy is selected
+      const agentPolicy = document.querySelector('[name="agent_policy"]');
+      if (!agentPolicy || !agentPolicy.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        showToast('Please select an agent policy', 'error');
+        return;
+      }
     } else {
       // For centralized form, validate based on selected auth type
       const authType = document.querySelector('input[name="auth_type"]:checked').value;
@@ -244,6 +278,17 @@
   });
 
 
+
+  // Handle agent policy selection change
+  const agentPolicySelect = document.getElementById('agentPolicy');
+  if (agentPolicySelect) {
+    agentPolicySelect.addEventListener('change', function(e) {
+      if (this.value === 'add_new') {
+        // Redirect to agent policies page
+        window.location.href = '/PipelineManager/AgentPolicies/';
+      }
+    });
+  }
 
   // Toggle between Cloud ID and Node URL fields (for centralized connections)
   document.querySelectorAll('input[name="connection_mode"]').forEach(radio => {
@@ -328,6 +373,45 @@
           return false;
         }
       }
+    });
+  }
+
+  // Copy to clipboard function for agent installation commands
+  function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    const copyButton = event.target;
+    
+    if (!element) {
+      console.error('Could not find element:', elementId);
+      return;
+    }
+    
+    const text = element.textContent;
+    
+    navigator.clipboard.writeText(text).then(function() {
+      // Update button text and style
+      const originalText = copyButton.textContent;
+      copyButton.textContent = 'Copied!';
+      copyButton.classList.remove('text-blue-400', 'hover:text-blue-300');
+      copyButton.classList.add('text-green-400', 'hover:text-green-300');
+      
+      // Reset button after 2 seconds
+      setTimeout(function() {
+        copyButton.textContent = originalText;
+        copyButton.classList.remove('text-green-400', 'hover:text-green-300');
+        copyButton.classList.add('text-blue-400', 'hover:text-blue-300');
+      }, 2000);
+    }, function(err) {
+      console.error('Failed to copy text: ', err);
+      copyButton.textContent = 'Failed!';
+      copyButton.classList.remove('text-blue-400', 'hover:text-blue-300');
+      copyButton.classList.add('text-red-400', 'hover:text-red-300');
+      
+      setTimeout(function() {
+        copyButton.textContent = 'Copy';
+        copyButton.classList.remove('text-red-400', 'hover:text-red-300');
+        copyButton.classList.add('text-blue-400', 'hover:text-blue-300');
+      }, 2000);
     });
   }
 

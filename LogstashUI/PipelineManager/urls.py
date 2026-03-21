@@ -3,13 +3,14 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from django.urls import path
-from . import views, simulation
+from . import simulation, manager_views, editor_views
 
 
 urlpatterns = [
 
-    path("", views.PipelineManager, name="PipelineManager"),
-    path("Pipelines/Editor/", views.PipelineEditor, name="PipelineEditor"),
+    path("", manager_views.PipelineManager, name="PipelineManager"),
+    path("Pipelines/Editor/", editor_views.PipelineEditor, name="PipelineEditor"),
+    path("AgentPolicies/", manager_views.AgentPolicies, name="AgentPolicies"),
 
     path("SimulatePipeline/", simulation.SimulatePipeline, name="SimulatePipeline"),
     path("StreamSimulate/", simulation.StreamSimulate, name="StreamSimulate"),
@@ -21,32 +22,32 @@ urlpatterns = [
     path("GetSimulationNodeHealth/", simulation.GetSimulationNodeHealth, name="GetSimulationNodeHealth"),
     path("ValidateLogstashConfig/", simulation.ValidateLogstashConfig, name="ValidateLogstashConfig"),
 
-    path('TestConnectivity', views.TestConnectivity, name='TestConnectivity'),
+    path('TestConnectivity', manager_views.TestConnectivity, name='TestConnectivity'),
 
-    path("GetConnections/", views.GetConnections, name="GetConnections"),
-    path("AddConnection", views.AddConnection, name="AddConnection"),
-    path("DeleteConnection/<int:connection_id>/", views.DeleteConnection, name="DeleteConnection"),
-    path("GetPipelines/<int:connection_id>/", views.GetPipelines, name="GetPipelines"),
+    path("GetConnections/", manager_views.GetConnections, name="GetConnections"),
+    path("AddConnection", manager_views.AddConnection, name="AddConnection"),
+    path("DeleteConnection/<int:connection_id>/", manager_views.DeleteConnection, name="DeleteConnection"),
+    path("GetPipelines/<int:connection_id>/", manager_views.GetPipelines, name="GetPipelines"),
 
-    path("GetCurrentPipelineCode/", views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
-    path("GetDiff/", views.GetDiff, name="GetDiff"),
-    path("SavePipeline/", views.SavePipeline, name="SavePipeline"),
-    path("ComponentsToConfig/", views.ComponentsToConfig, name="ComponentsToConfig"),
-    path("ConfigToComponents/", views.ConfigToComponents, name="ConfigToComponents"),
+    path("GetCurrentPipelineCode/", editor_views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
+    path("GetDiff/", editor_views.GetDiff, name="GetDiff"),
+    path("SavePipeline/", editor_views.SavePipeline, name="SavePipeline"),
+    path("ComponentsToConfig/", editor_views.ComponentsToConfig, name="ComponentsToConfig"),
+    path("ConfigToComponents/", editor_views.ConfigToComponents, name="ConfigToComponents"),
 
-    path("UpdatePipelineSettings/", views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
-    path("CreatePipeline/", views.CreatePipeline, name="CreatePipeline"),
-    path("DeletePipeline/", views.DeletePipeline, name="DeletePipeline"),
-    path("ClonePipeline/", views.ClonePipeline, name="ClonePipeline"),
-    path("GetPipeline/", views.GetPipeline, name="GetPipeline"),
+    path("UpdatePipelineSettings/", manager_views.UpdatePipelineSettings, name="UpdatePipelineSettings"),
+    path("CreatePipeline/", manager_views.CreatePipeline, name="CreatePipeline"),
+    path("DeletePipeline/", manager_views.DeletePipeline, name="DeletePipeline"),
+    path("ClonePipeline/", manager_views.ClonePipeline, name="ClonePipeline"),
+    path("GetPipeline/", manager_views.GetPipeline, name="GetPipeline"),
 
     # Elasticsearch simulation endpoints
-    path("GetElasticsearchConnections/", views.GetElasticsearchConnections, name="GetElasticsearchConnections"),
-    path("GetElasticsearchIndices/", views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
-    path("GetElasticsearchFields/", views.GetElasticsearchFields, name="GetElasticsearchFields"),
-    path("QueryElasticsearchDocuments/", views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
+    path("GetElasticsearchConnections/", editor_views.GetElasticsearchConnections, name="GetElasticsearchConnections"),
+    path("GetElasticsearchIndices/", editor_views.GetElasticsearchIndices, name="GetElasticsearchIndices"),
+    path("GetElasticsearchFields/", editor_views.GetElasticsearchFields, name="GetElasticsearchFields"),
+    path("QueryElasticsearchDocuments/", editor_views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
     
     # Plugin documentation endpoint
-    path("GetPluginDocumentation/", views.GetPluginDocumentation, name="GetPluginDocumentation")
+    path("GetPluginDocumentation/", editor_views.GetPluginDocumentation, name="GetPluginDocumentation")
 
 ]
