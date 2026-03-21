@@ -1,7 +1,7 @@
 
 # Mode determines if the agent is used for simulating
 # in LogstashUI, or for controlling an actual Logstash host
-mode: host # simulation | host
+mode: simulation # simulation | host
 
 # Only applies if mode 'mode' is set to simulation
 simulation_mode: embedded # embedded | host
