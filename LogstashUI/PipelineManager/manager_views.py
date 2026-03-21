@@ -8,7 +8,7 @@ from django.template.loader import get_template
 from django.conf import settings
 
 from .forms import ConnectionForm
-from PipelineManager.models import Connection as ConnectionTable
+from PipelineManager.models import Connection as ConnectionTable, Policy
 
 from Common.decorators import require_admin_role
 from Common.logstash_utils import get_logstash_pipeline
@@ -506,3 +506,181 @@ def GetPipeline(request):
         pipeline_string = pipeline_config['pipeline']
 
         return JsonResponse({"code": pipeline_string})
+
+
+@require_admin_role
+def add_policy(request):
+    """
+    Create a new policy
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        name = data.get('name', '').strip()
+        settings_path = data.get('settings_path', '/etc/logstash/')
+        logs_path = data.get('logs_path', '/var/log/logstash')
+        logstash_yml = data.get('logstash_yml', '')
+        jvm_options = data.get('jvm_options', '')
+        log4j2_properties = data.get('log4j2_properties', '')
+        
+        if not name:
+            return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
+        
+        # Check if policy already exists
+        if Policy.objects.filter(name=name).exists():
+            return JsonResponse({"success": False, "error": f"Policy '{name}' already exists"}, status=400)
+        
+        # Create the policy
+        policy = Policy.objects.create(
+            name=name,
+            settings_path=settings_path,
+            logs_path=logs_path,
+            logstash_yml=logstash_yml,
+            jvm_options=jvm_options,
+            log4j2_properties=log4j2_properties
+        )
+        
+        logger.info(f"User '{request.user.username}' created policy '{name}'")
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Policy '{name}' created successfully",
+            "policy_id": policy.id,
+            "policy_name": policy.name
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error creating policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def update_policy(request):
+    """
+    Update an existing policy
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        policy_name = data.get('policy_name', '').strip()
+        
+        if not policy_name:
+            return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
+        
+        # Don't allow updating Default policy
+        if policy_name.lower() == 'default policy':
+            return JsonResponse({"success": False, "error": "Cannot update Default Policy"}, status=403)
+        
+        try:
+            policy = Policy.objects.get(name=policy_name)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": f"Policy '{policy_name}' not found"}, status=404)
+        
+        # Update fields if provided
+        if 'settings_path' in data:
+            policy.settings_path = data['settings_path']
+        if 'logs_path' in data:
+            policy.logs_path = data['logs_path']
+        if 'logstash_yml' in data:
+            policy.logstash_yml = data['logstash_yml']
+        if 'jvm_options' in data:
+            policy.jvm_options = data['jvm_options']
+        if 'log4j2_properties' in data:
+            policy.log4j2_properties = data['log4j2_properties']
+        
+        policy.save()
+        
+        logger.info(f"User '{request.user.username}' updated policy '{policy_name}'")
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Policy '{policy_name}' updated successfully"
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error updating policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_policies(request):
+    """
+    Get all policies
+    """
+    try:
+        policies = Policy.objects.all().values(
+            'id', 'name', 'settings_path', 'logs_path', 
+            'logstash_yml', 'jvm_options', 'log4j2_properties',
+            'created_at', 'updated_at'
+        )
+        
+        return JsonResponse({
+            "success": True,
+            "policies": list(policies)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching policies: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def delete_policy(request):
+    """
+    Delete a policy
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        policy_name = data.get('policy_name', '').strip()
+        
+        if not policy_name:
+            return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
+        
+        # Don't allow deleting Default policy
+        if policy_name.lower() == 'default policy':
+            return JsonResponse({"success": False, "error": "Cannot delete Default Policy"}, status=403)
+        
+        try:
+            policy = Policy.objects.get(name=policy_name)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": f"Policy '{policy_name}' not found"}, status=404)
+        
+        # Check if policy is in use
+        connections_count = policy.connections.count()
+        if connections_count > 0:
+            return JsonResponse({
+                "success": False,
+                "error": f"Cannot delete policy '{policy_name}' - it is currently assigned to {connections_count} connection(s)"
+            }, status=400)
+        
+        policy.delete()
+        
+        logger.info(f"User '{request.user.username}' deleted policy '{policy_name}'")
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Policy '{policy_name}' deleted successfully"
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error deleting policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
