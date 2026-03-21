@@ -7,6 +7,48 @@ from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
 
 
+class Policy(models.Model):
+    """
+    Represents a Logstash Agent policy configuration.
+    """
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Policy name"
+    )
+    settings_path = models.CharField(
+        max_length=255,
+        default="/etc/logstash/",
+        help_text="Path to Logstash settings directory"
+    )
+    logs_path = models.CharField(
+        max_length=255,
+        default="/var/log/logstash",
+        help_text="Path to Logstash logs directory"
+    )
+    logstash_yml = models.TextField(
+        help_text="Content of logstash.yml configuration file"
+    )
+    jvm_options = models.TextField(
+        help_text="Content of jvm.options configuration file"
+    )
+    log4j2_properties = models.TextField(
+        help_text="Content of log4j2.properties configuration file"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Policy'
+        verbose_name_plural = 'Policies'
+    
+    def __str__(self):
+        return self.name
+
+
 class Connection(models.Model):
     """
     Represents a connection to either a Logstash Agent or a centralized management service.
@@ -74,6 +116,16 @@ class Connection(models.Model):
         blank=True,
         null=True,
         help_text="API key for authentication (alternative to username/password)"
+    )
+    
+    # Policy for Agent connections
+    policy = models.ForeignKey(
+        Policy,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='connections',
+        help_text="Policy to apply to this agent (only for AGENT connection type)"
     )
 
     # Metadata
