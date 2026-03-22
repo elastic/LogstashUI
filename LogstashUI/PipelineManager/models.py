@@ -5,6 +5,7 @@
 from django.db import models
 from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
+from django.contrib.auth.hashers import make_password, check_password
 
 
 class Policy(models.Model):
@@ -34,6 +35,16 @@ class Policy(models.Model):
     )
     log4j2_properties = models.TextField(
         help_text="Content of log4j2.properties configuration file"
+    )
+    
+    # Deployment tracking
+    has_undeployed_changes = models.BooleanField(
+        default=True,
+        help_text="Indicates if there are changes that haven't been deployed"
+    )
+    current_revision_number = models.IntegerField(
+        default=0,
+        help_text="Current revision number of the policy"
     )
     
     # Metadata
@@ -186,3 +197,200 @@ class Connection(models.Model):
     def get_api_key(self):
         """Get decrypted API key"""
         return decrypt_credential(self.api_key) if self.api_key else None
+
+
+class Pipeline(models.Model):
+    """
+    Represents a Logstash pipeline configuration within a policy.
+    Pipeline names must be unique within a policy, but can be reused across different policies.
+    """
+    policy = models.ForeignKey(
+        Policy,
+        on_delete=models.CASCADE,
+        related_name='pipelines',
+        help_text="Policy this pipeline belongs to"
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Pipeline name (unique within policy)"
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Description of the pipeline"
+    )
+    lscl = models.TextField(
+        help_text="Logstash Configuration Language (pipeline configuration)"
+    )
+    lscl_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="Hash of the LSCL content for change detection"
+    )
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['policy', 'name']
+        verbose_name = 'Pipeline'
+        verbose_name_plural = 'Pipelines'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['policy', 'name'],
+                name='unique_pipeline_per_policy'
+            )
+        ]
+    
+    def __str__(self):
+        return f"{self.policy.name} - {self.name}"
+
+
+class Keystore(models.Model):
+    """
+    Represents encrypted key-value pairs stored in a policy's keystore.
+    Key names must be unique within a policy, but can be reused across different policies.
+    """
+    policy = models.ForeignKey(
+        Policy,
+        on_delete=models.CASCADE,
+        related_name='keystore_entries',
+        help_text="Policy this keystore entry belongs to"
+    )
+    key_name = models.CharField(
+        max_length=100,
+        help_text="Key name (unique within policy)"
+    )
+    key_value = models.CharField(
+        max_length=512,
+        help_text="Encrypted key value"
+    )
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['policy', 'key_name']
+        verbose_name = 'Keystore Entry'
+        verbose_name_plural = 'Keystore Entries'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['policy', 'key_name'],
+                name='unique_key_per_policy'
+            )
+        ]
+    
+    def __str__(self):
+        return f"{self.policy.name} - {self.key_name}"
+    
+    def save(self, *args, **kwargs):
+        # Encrypt key_value before saving if not already encrypted
+        if self.key_value and not self._is_encrypted(self.key_value):
+            self.key_value = encrypt_credential(self.key_value)
+        super().save(*args, **kwargs)
+    
+    def _is_encrypted(self, value):
+        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        return value and value.startswith('gAAAAA')
+    
+    def get_key_value(self):
+        """Get decrypted key value"""
+        return decrypt_credential(self.key_value) if self.key_value else None
+
+
+class Revision(models.Model):
+    """
+    Represents a deployed revision (version) of a policy.
+    Each revision stores a complete snapshot of the policy state at deployment time.
+    """
+    revision_number = models.IntegerField(
+        help_text="Revision number for this deployment"
+    )
+    policy = models.ForeignKey(
+        Policy,
+        on_delete=models.CASCADE,
+        related_name='revisions',
+        help_text="Policy this revision belongs to"
+    )
+    snapshot_json = models.JSONField(
+        help_text="Complete serialized state including config files, pipelines, and keystore entries"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.CharField(
+        max_length=150,
+        help_text="Username of the user who created this revision"
+    )
+    
+    class Meta:
+        ordering = ['-revision_number', '-created_at']
+        verbose_name = 'Revision'
+        verbose_name_plural = 'Revisions'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['policy', 'revision_number'],
+                name='unique_revision_per_policy'
+            )
+        ]
+    
+    def __str__(self):
+        return f"{self.policy.name} - Revision {self.revision_number}"
+
+
+class EnrollmentToken(models.Model):
+    """
+    Represents an enrollment token used during initial agent enrollment.
+    Each token belongs to a specific policy.
+    """
+    policy = models.ForeignKey(
+        Policy,
+        on_delete=models.CASCADE,
+        related_name='enrollment_tokens',
+        help_text="Policy this enrollment token is associated with"
+    )
+    name = models.CharField(
+        max_length=100,
+        default="default",
+        help_text="Name for this enrollment token"
+    )
+    token = models.CharField(
+        max_length=512,
+        help_text="Enrollment token string"
+    )
+    
+    class Meta:
+        verbose_name = 'Enrollment Token'
+        verbose_name_plural = 'Enrollment Tokens'
+    
+    def __str__(self):
+        return f"{self.policy.name} - {self.name}"
+
+
+class ApiKey(models.Model):
+    """
+    Represents an API key used by an enrolled agent for authenticated polling/check-in.
+    Each API key belongs to a specific connection.
+    """
+    connection = models.ForeignKey(
+        Connection,
+        on_delete=models.CASCADE,
+        related_name='api_keys',
+        help_text="Connection this API key belongs to"
+    )
+    api_key = models.CharField(
+        max_length=512,
+        help_text="Hashed API key for agent authentication"
+    )
+    
+    class Meta:
+        verbose_name = 'API Key'
+        verbose_name_plural = 'API Keys'
+    
+    def __str__(self):
+        return f"{self.connection.name} - API Key"
+    
+    def save(self, *args, **kwargs):
+        # Always hash the API key before saving
+        if self.api_key:
+            self.api_key = make_password(self.api_key)
+        super().save(*args, **kwargs)
+    
+    def verify_api_key(self, raw_api_key):
+        """Verify a raw API key against the stored hash"""
+        return check_password(raw_api_key, self.api_key)

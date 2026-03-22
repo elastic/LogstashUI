@@ -8,20 +8,25 @@ from django.template.loader import get_template
 from django.conf import settings
 
 from .forms import ConnectionForm
-from PipelineManager.models import Connection as ConnectionTable, Policy
+from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken
 
 from Common.decorators import require_admin_role
 from Common.logstash_utils import get_logstash_pipeline
 from Common.elastic_utils import get_elastic_connection, test_elastic_connectivity
 from Common.validators import validate_pipeline_name
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from html import escape
 
 import logging
+import json
+import base64
+import secrets
 import requests
 
 logger = logging.getLogger(__name__)
+
+
 
 
 @require_admin_role
@@ -544,7 +549,17 @@ def add_policy(request):
             log4j2_properties=log4j2_properties
         )
         
-        logger.info(f"User '{request.user.username}' created policy '{name}'")
+        # Generate enrollment token for the new policy
+        enrollment_token = secrets.token_urlsafe(32)
+        
+        # Create enrollment token record in database with name 'default'
+        EnrollmentToken.objects.create(
+            policy=policy,
+            name='default',
+            token=enrollment_token
+        )
+        
+        logger.info(f"User '{request.user.username}' created policy '{name}' with enrollment token")
         
         return JsonResponse({
             "success": True,
@@ -683,4 +698,291 @@ def delete_policy(request):
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as e:
         logger.error(f"Error deleting policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def generate_enrollment_token(request):
+    """
+    Generate an enrollment token for Logstash Agent
+    Token contains: policy name, LogstashUI URL, enrollment token, and expiry (30 minutes)
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        policy_name = data.get('policy_name', 'Default')
+
+        # Generate a secure random enrollment token
+        enrollment_token = secrets.token_urlsafe(32)
+
+        # Get LogstashUI URL from request
+        logstash_ui_url = request.build_absolute_uri('/')[:-1]  # Remove trailing slash
+        
+        # Create token payload
+        token_payload = {
+            "logstash_ui_url": logstash_ui_url,
+            "enrollment_token": enrollment_token,
+        }
+        
+        # Encode as base64
+        json_string = json.dumps(token_payload)
+        encoded_token = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+
+        logger.info(f"User '{request.user.username}' generated enrollment token for policy '{policy_name}'")
+        
+        return JsonResponse({
+            "success": True,
+            "enrollment_token": encoded_token,
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error generating enrollment token: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+def enroll(request):
+    """
+    Enroll a Logstash Agent using an enrollment token
+    Validates token, checks expiry, and creates connection in database
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        encoded_token = data.get('enrollment_token')
+        name = data.get('name')
+        host = data.get('host')
+        api_key = data.get('api_key')
+        
+        # Validate required fields
+        if not all([encoded_token, name, host, api_key]):
+            return JsonResponse({
+                "success": False, 
+                "error": "Missing required fields: enrollment_token, name, host, api_key"
+            }, status=400)
+        
+        # Decode the base64 enrollment token
+        try:
+            decoded_json = base64.b64decode(encoded_token.encode('utf-8')).decode('utf-8')
+            token_payload = json.loads(decoded_json)
+        except Exception as e:
+            logger.error(f"Failed to decode enrollment token: {str(e)}")
+            return JsonResponse({"success": False, "error": "Invalid enrollment token format"}, status=400)
+        
+        # Extract enrollment token from payload
+        enrollment_token = token_payload.get('enrollment_token')
+        policy_name = token_payload.get('policy_name')
+        expires_at_str = token_payload.get('expires_at')
+        
+        if not enrollment_token:
+            return JsonResponse({"success": False, "error": "Invalid token payload"}, status=400)
+        
+        # Step 1: Purge expired tokens
+        current_time = datetime.now(timezone.utc)
+        expired_tokens = []
+        for token, token_data in list(ENROLLMENT_TOKENS.items()):
+            if token_data['expires_at'] < current_time:
+                expired_tokens.append(token)
+        
+        for token in expired_tokens:
+            del ENROLLMENT_TOKENS[token]
+            logger.info(f"Purged expired enrollment token")
+        
+        # Step 2: Validate enrollment token exists and is not expired
+        if enrollment_token not in ENROLLMENT_TOKENS:
+            return JsonResponse({
+                "success": False, 
+                "error": "Invalid or expired enrollment token"
+            }, status=401)
+        
+        token_data = ENROLLMENT_TOKENS[enrollment_token]
+        
+        # Verify policy name matches
+        if token_data['policy_name'] != policy_name:
+            return JsonResponse({
+                "success": False, 
+                "error": "Token policy mismatch"
+            }, status=401)
+        
+        # Step 3: Create connection in database
+        try:
+            # Get or create the policy
+            policy = None
+            if policy_name and policy_name.lower() != 'default':
+                try:
+                    policy = Policy.objects.get(name=policy_name)
+                except Policy.DoesNotExist:
+                    logger.warning(f"Policy '{policy_name}' not found, using None")
+            
+            # Create the connection
+            connection = ConnectionTable.objects.create(
+                name=name,
+                connection_type='AGENT',
+                host=host,
+                api_key=api_key,
+                policy=policy
+            )
+            
+            # Remove the used enrollment token (one-time use)
+            del ENROLLMENT_TOKENS[enrollment_token]
+            
+            logger.info(f"Agent '{name}' enrolled successfully with host '{host}' and policy '{policy_name}'")
+            
+            return JsonResponse({
+                "success": True,
+                "message": f"Agent '{name}' enrolled successfully",
+                "connection_id": connection.id
+            })
+            
+        except Exception as e:
+            logger.error(f"Error creating connection during enrollment: {str(e)}")
+            return JsonResponse({"success": False, "error": f"Failed to create connection: {str(e)}"}, status=500)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error during enrollment: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_enrollment_tokens(request):
+    """
+    Get all enrollment tokens for a specific policy.
+    """
+    try:
+        policy_id = request.GET.get('policy_id')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Get all enrollment tokens for this policy
+        tokens = EnrollmentToken.objects.filter(policy=policy)
+        
+        # Get LogstashUI URL from request
+        logstash_ui_url = request.build_absolute_uri('/')[:-1]  # Remove trailing slash
+        
+        # Serialize tokens with encoded payload
+        tokens_data = []
+        for token in tokens:
+            # Create token payload (same as generate_enrollment_token)
+            token_payload = {
+                "logstash_ui_url": logstash_ui_url,
+                "enrollment_token": token.token
+            }
+            
+            # Encode as base64
+            json_string = json.dumps(token_payload)
+            encoded_token = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+            
+            tokens_data.append({
+                "id": token.id,
+                "name": token.name,
+                "raw_token": token.token,
+                "encoded_token": encoded_token
+            })
+        
+        return JsonResponse({
+            "success": True,
+            "tokens": tokens_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching enrollment tokens: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def add_enrollment_token(request):
+    """
+    Create a new enrollment token for a policy.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        policy_id = data.get('policy_id')
+        token_name = data.get('name', 'default')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Generate enrollment token
+        enrollment_token = secrets.token_urlsafe(32)
+        
+        # Create enrollment token record in database
+        token = EnrollmentToken.objects.create(
+            policy=policy,
+            name=token_name,
+            token=enrollment_token
+        )
+        
+        logger.info(f"User '{request.user.username}' created enrollment token {token.id} for policy '{policy.name}'")
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Enrollment token created successfully",
+            "token_id": token.id
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error creating enrollment token: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def delete_enrollment_token(request):
+    """
+    Delete an enrollment token.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        token_id = data.get('token_id')
+        
+        if not token_id:
+            return JsonResponse({"success": False, "error": "Token ID is required"}, status=400)
+        
+        # Get and delete the token
+        try:
+            token = EnrollmentToken.objects.get(id=token_id)
+            policy_name = token.policy.name
+            token.delete()
+            
+            logger.info(f"User '{request.user.username}' deleted enrollment token {token_id} for policy '{policy_name}'")
+            
+            return JsonResponse({
+                "success": True,
+                "message": "Enrollment token deleted successfully"
+            })
+            
+        except EnrollmentToken.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Enrollment token not found"}, status=404)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error deleting enrollment token: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
