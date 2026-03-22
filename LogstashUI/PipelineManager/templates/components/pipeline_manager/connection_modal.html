@@ -184,13 +184,24 @@
                   <select id="agentPolicy" name="agent_policy" class="select select-bordered w-full">
                     <option value="">Select a policy...</option>
                     <option value="add_new" class="font-bold text-primary">+ Add Agent Policy</option>
-                    <option value="default" selected>Default</option>
                   </select>
                   <p class="text-gray-400 text-xs mt-1">Select the policy to apply to this agent</p>
                 </div>
 
+                <!-- Enrollment Token Dropdown -->
+                <div id="enrollmentTokenSection" class="mb-4">
+                  <label for="enrollmentToken" class="block text-sm font-medium text-gray-300 mb-2">
+                    Enrollment Token <span class="text-red-500">*</span>
+                  </label>
+                  <select id="enrollmentToken" name="enrollment_token" class="select select-bordered w-full">
+                    <option value="">Select a token...</option>
+                    <option value="add_new" class="font-bold text-primary">+ Add Token</option>
+                  </select>
+                  <p class="text-gray-400 text-xs mt-1">Select the enrollment token to use for this agent</p>
+                </div>
+
                 <!-- Linux Installation Commands -->
-                <div class="mb-4">
+                <div id="linuxCommandsSection" class="mb-4 hidden">
                   <label class="form-label mb-2 block">Linux</label>
                   <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 font-mono text-sm">
                     <div class="flex justify-between items-center mb-2">
@@ -211,7 +222,7 @@ systemctl start logstash-agent</code></pre>
                   <button type="button" onclick="closeFlyout()" class="btn btn-secondary">
                       Cancel
                   </button>
-                  <button type="submit" class="btn btn-primary">
+                  <button id="saveConnectionBtn" type="submit" class="btn btn-primary">
                       Save Connection
                   </button>
               </div>
@@ -279,15 +290,376 @@ systemctl start logstash-agent</code></pre>
 
 
 
+  // Load policies from server and populate dropdown
+  async function loadAgentPolicies() {
+    try {
+      const response = await fetch('/ConnectionManager/GetPolicies/', {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.policies) {
+        const agentPolicySelect = document.getElementById('agentPolicy');
+        if (agentPolicySelect) {
+          // Clear existing options except "Select a policy..." and "+ Add Agent Policy"
+          const selectOption = agentPolicySelect.querySelector('option[value=""]');
+          const addNewOption = agentPolicySelect.querySelector('option[value="add_new"]');
+          agentPolicySelect.innerHTML = '';
+          
+          // Re-add the select and add new options
+          if (selectOption) agentPolicySelect.appendChild(selectOption);
+          if (addNewOption) agentPolicySelect.appendChild(addNewOption);
+          
+          // Add all policies from server
+          data.policies.forEach(policy => {
+            const option = document.createElement('option');
+            option.value = policy.name.toLowerCase();
+            option.textContent = policy.name;
+            option.dataset.policyId = policy.id;
+            
+            // Insert before "+ Add Agent Policy" option
+            agentPolicySelect.insertBefore(option, addNewOption);
+          });
+          
+          // Select first policy if available and load enrollment tokens
+          if (data.policies.length > 0) {
+            agentPolicySelect.value = data.policies[0].name.toLowerCase();
+            
+            // Load enrollment tokens for the selected policy
+            const agentFields = document.getElementById('agentFields');
+            if (agentFields && !agentFields.classList.contains('hidden')) {
+              await loadEnrollmentTokens(data.policies[0].id);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading agent policies:', error);
+    }
+  }
+  
+  // Load policies on page load
+  loadAgentPolicies();
+  
   // Handle agent policy selection change
   const agentPolicySelect = document.getElementById('agentPolicy');
+  const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+  const saveConnectionBtn = document.getElementById('saveConnectionBtn');
+  
   if (agentPolicySelect) {
-    agentPolicySelect.addEventListener('change', function(e) {
+    agentPolicySelect.addEventListener('change', async function(e) {
       if (this.value === 'add_new') {
-        // Redirect to agent policies page
-        window.location.href = '/PipelineManager/AgentPolicies/';
+        // Show prompt to add new policy
+        const policyName = await ConfirmationModal.prompt(
+          'Enter a name for the new policy:',
+          '',
+          'Add New Policy',
+          'e.g., Production Policy'
+        );
+        
+        if (policyName && policyName.trim()) {
+          const trimmedName = policyName.trim();
+          
+          // Create the policy
+          try {
+            const response = await fetch('/ConnectionManager/AddPolicy/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+              },
+              body: JSON.stringify({
+                name: trimmedName,
+                settings_path: '/etc/logstash/',
+                logs_path: '/var/log/logstash',
+                logstash_yml: '',
+                jvm_options: '',
+                log4j2_properties: ''
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              showToast(data.message || 'Policy created successfully', 'success');
+              
+              // Reload policies to include the new one
+              await loadAgentPolicies();
+              
+              // Select the newly created policy
+              const newPolicyValue = trimmedName.toLowerCase().replace(/\s+/g, '_');
+              agentPolicySelect.value = newPolicyValue;
+              
+              // Load enrollment tokens for the new policy
+              await loadEnrollmentTokens(data.policy_id);
+            } else {
+              showToast(data.error || 'Failed to create policy', 'error');
+              // Reset to empty selection
+              agentPolicySelect.value = '';
+            }
+          } catch (error) {
+            console.error('Error creating policy:', error);
+            showToast('Failed to create policy: ' + error.message, 'error');
+            // Reset to empty selection
+            agentPolicySelect.value = '';
+          }
+        } else {
+          // User cancelled, reset to empty selection
+          agentPolicySelect.value = '';
+        }
+      } else if (this.value && this.value !== '') {
+        // Load enrollment tokens for selected policy
+        const selectedOption = this.options[this.selectedIndex];
+        const policyId = selectedOption.dataset.policyId;
+        
+        if (policyId) {
+          await loadEnrollmentTokens(policyId);
+        }
+      } else {
+        // Clear enrollment token dropdown and hide Linux commands when no policy is selected
+        const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+        if (enrollmentTokenSelect) {
+          enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
+        }
+        if (linuxCommandsSection) {
+          linuxCommandsSection.classList.add('hidden');
+        }
       }
     });
+    
+    // Load enrollment tokens on page load if agent fields are visible and policy is selected
+    const agentFields = document.getElementById('agentFields');
+    if (agentFields && !agentFields.classList.contains('hidden') && agentPolicySelect.value && agentPolicySelect.value !== '' && agentPolicySelect.value !== 'add_new') {
+      // Get policy ID from selected option
+      const selectedOption = agentPolicySelect.options[agentPolicySelect.selectedIndex];
+      const policyId = selectedOption.dataset.policyId;
+      
+      if (policyId) {
+        loadEnrollmentTokens(policyId);
+      }
+    }
+  }
+  
+  // Function to load enrollment tokens for a policy
+  async function loadEnrollmentTokens(policyId) {
+    try {
+      const response = await fetch(`/ConnectionManager/GetEnrollmentTokens/?policy_id=${policyId}`, {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+      
+      const data = await response.json();
+      
+      const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+      const enrollmentTokenSection = document.getElementById('enrollmentTokenSection');
+      
+      if (data.success && data.tokens && data.tokens.length > 0) {
+        // Clear existing options and rebuild
+        enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
+        
+        // Add enrollment tokens
+        data.tokens.forEach(token => {
+          const option = document.createElement('option');
+          option.value = token.id;
+          option.textContent = token.name;
+          option.dataset.encodedToken = token.encoded_token;
+          enrollmentTokenSelect.appendChild(option);
+        });
+        
+        // Add the "+ Add Token" option at the end
+        const addNewOption = document.createElement('option');
+        addNewOption.value = 'add_new';
+        addNewOption.textContent = '+ Add Token';
+        addNewOption.className = 'font-bold text-primary';
+        enrollmentTokenSelect.appendChild(addNewOption);
+        
+        // Auto-select first token if only one exists
+        if (data.tokens.length === 1) {
+          enrollmentTokenSelect.value = data.tokens[0].id;
+          enrollmentTokenSelect.dispatchEvent(new Event('change'));
+        }
+      } else {
+        // Clear enrollment token dropdown if no tokens, but keep "+ Add Token" option
+        enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
+        const addNewOption = document.createElement('option');
+        addNewOption.value = 'add_new';
+        addNewOption.textContent = '+ Add Token';
+        addNewOption.className = 'font-bold text-primary';
+        enrollmentTokenSelect.appendChild(addNewOption);
+      }
+    } catch (error) {
+      console.error('Error loading enrollment tokens:', error);
+      showToast('Failed to load enrollment tokens: ' + error.message, 'error');
+    }
+  }
+  
+  // Handle enrollment token selection change
+  const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+  if (enrollmentTokenSelect) {
+    enrollmentTokenSelect.addEventListener('change', async function() {
+      if (this.value === 'add_new') {
+        // Show prompt to add new enrollment token
+        const tokenName = await ConfirmationModal.prompt(
+          'Enter a name for the enrollment token:',
+          '',
+          'Add Enrollment Token',
+          'e.g., Production Token'
+        );
+        
+        if (tokenName && tokenName.trim()) {
+          const trimmedName = tokenName.trim();
+          
+          // Get current policy ID
+          const agentPolicySelect = document.getElementById('agentPolicy');
+          const selectedPolicyOption = agentPolicySelect.options[agentPolicySelect.selectedIndex];
+          const policyId = selectedPolicyOption.dataset.policyId;
+          
+          if (!policyId) {
+            showToast('Please select a policy first', 'error');
+            this.value = '';
+            return;
+          }
+          
+          // Create the enrollment token
+          try {
+            const response = await fetch('/ConnectionManager/AddEnrollmentToken/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+              },
+              body: JSON.stringify({
+                policy_id: policyId,
+                name: trimmedName
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              showToast(data.message || 'Enrollment token created successfully', 'success');
+              
+              // Reload enrollment tokens
+              await loadEnrollmentTokens(policyId);
+              
+              // Select the newly created token (it will be the last one added)
+              // We need to find it by name since we don't have the ID in the response
+              const options = Array.from(this.options);
+              const newTokenOption = options.find(opt => opt.textContent === trimmedName);
+              if (newTokenOption) {
+                this.value = newTokenOption.value;
+                this.dispatchEvent(new Event('change'));
+              }
+            } else {
+              showToast(data.error || 'Failed to create enrollment token', 'error');
+              // Reset to empty selection
+              this.value = '';
+            }
+          } catch (error) {
+            console.error('Error creating enrollment token:', error);
+            showToast('Failed to create enrollment token: ' + error.message, 'error');
+            // Reset to empty selection
+            this.value = '';
+          }
+        } else {
+          // User cancelled, reset to empty selection
+          this.value = '';
+        }
+      } else {
+        const selectedOption = this.options[this.selectedIndex];
+        const encodedToken = selectedOption.dataset.encodedToken;
+        
+        if (encodedToken) {
+          // Update Linux commands with the selected enrollment token
+          updateLinuxCommands(encodedToken);
+          
+          // Show Linux commands section
+          const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+          if (linuxCommandsSection) {
+            linuxCommandsSection.classList.remove('hidden');
+          }
+        } else {
+          // Hide Linux commands section when no token is selected
+          const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+          if (linuxCommandsSection) {
+            linuxCommandsSection.classList.add('hidden');
+          }
+        }
+      }
+    });
+  }
+  
+  // Function to update Linux commands with enrollment token
+  function updateLinuxCommands(encodedToken) {
+    const linuxCommandsElement = document.getElementById('linuxCommands');
+    if (linuxCommandsElement) {
+      linuxCommandsElement.innerHTML = `<code>pip install logstash-agent
+logstash-agent --enroll ${encodedToken}
+systemctl enable logstash-agent
+systemctl start logstash-agent</code>`;
+    }
+  }
+  
+  // Function to generate enrollment token - make it globally accessible
+  window.generateEnrollmentToken = async function(policyName) {
+    try {
+      const response = await fetch('/ConnectionManager/GenerateEnrollmentToken/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+          policy_name: policyName
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update the enrollment token in the installation commands
+        updateEnrollmentToken(data.enrollment_token);
+      } else {
+        showToast(data.error || 'Failed to generate enrollment token', 'error');
+      }
+    } catch (error) {
+      console.error('Error generating enrollment token:', error);
+      showToast('Failed to generate enrollment token: ' + error.message, 'error');
+    }
+  }
+  
+  // Function to update enrollment token in installation commands
+  function updateEnrollmentToken(token) {
+    const linuxCommands = document.getElementById('linuxCommands');
+    if (linuxCommands) {
+      linuxCommands.innerHTML = `<code>pip install logstash-agent
+logstash-agent --enroll ${token}
+systemctl enable logstash-agent
+systemctl start logstash-agent</code>`;
+    }
+  }
+  
+  // Helper function to get CSRF token
+  function getCsrfToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
   }
 
   // Toggle between Cloud ID and Node URL fields (for centralized connections)

@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let editor = null;
     let currentFile = 'logstash.yml';
     let currentMode = 'form'; // 'form' or 'code'
-    let currentPolicy = 'default';
+    let currentPolicy = null;
     let customPolicies = []; // Store custom policy names
     
     // Make currentFile globally accessible for save function
@@ -706,8 +706,32 @@ logger.deprecation_root.additivity = true
             // Update global currentFile reference
             window.policyCurrentFile = file;
             
+            // Handle enrollment tokens tab
+            if (file === 'enrollment-tokens') {
+                // Hide mode toggle for enrollment tokens
+                const modeToggleContainer = document.getElementById('modeToggleContainer');
+                modeToggleContainer.classList.add('hidden');
+                
+                // Hide form and code editors
+                const formModeEditor = document.getElementById('formModeEditor');
+                const codeModeEditor = document.getElementById('codeModeEditor');
+                const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+                
+                if (formModeEditor) formModeEditor.classList.add('hidden');
+                if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                if (enrollmentTokensView) {
+                    enrollmentTokensView.classList.remove('hidden');
+                    // Load enrollment tokens for current policy
+                    loadEnrollmentTokens();
+                }
+                return; // Exit early for enrollment tokens tab
+            }
+            
             // Show/hide mode toggle based on file type (only for logstash.yml)
             const modeToggleContainer = document.getElementById('modeToggleContainer');
+            const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+            if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
+            
             if (file === 'logstash.yml') {
                 modeToggleContainer.classList.remove('hidden');
                 // Automatically switch to Form mode for logstash.yml
@@ -850,25 +874,10 @@ logger.deprecation_root.additivity = true
                     const data = await response.json();
                     
                     if (data.success) {
-                        // Add new policy to the list
-                        customPolicies.push(trimmedName);
-                        
-                        // Add option to dropdown (before the + Add Policy option)
-                        const addNewOption = this.querySelector('option[value="add_new"]');
-                        const newOption = document.createElement('option');
-                        newOption.value = trimmedName.toLowerCase().replace(/\s+/g, '_');
-                        newOption.textContent = trimmedName;
-                        newOption.dataset.policyName = trimmedName;
-                        this.insertBefore(newOption, addNewOption);
-                        
-                        // Select the new policy
-                        this.value = newOption.value;
-                        currentPolicy = newOption.value;
-                        
-                        // Update UI for custom policy
-                        updatePolicyUI(false);
-                        
                         showToast(data.message, 'success');
+                        
+                        // Reload policies to refresh the UI and show main content
+                        await loadPolicies();
                     } else {
                         showToast(data.error || 'Failed to create policy', 'error');
                         this.value = currentPolicy;
@@ -904,73 +913,35 @@ logger.deprecation_root.additivity = true
         const settingsPathInput = document.getElementById('settingsPath');
         const logsPathInput = document.getElementById('logsPath');
         
-        if (isDefaultPolicy) {
-            // Show read-only indicator
-            defaultPolicyIndicator.classList.remove('hidden');
-            
-            // Hide delete button for default policy
-            deletePolicyBtn.classList.add('hidden');
-            
-            // Disable save button for default policy
-            saveBtn.disabled = true;
-            saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            saveBtn.title = 'Default Policy is read-only';
-            
-            // Disable form inputs
-            if (settingsPathInput) {
-                settingsPathInput.disabled = true;
-                settingsPathInput.classList.add('opacity-50', 'cursor-not-allowed');
-            }
-            if (logsPathInput) {
-                logsPathInput.disabled = true;
-                logsPathInput.classList.add('opacity-50', 'cursor-not-allowed');
-            }
-            
-            // Disable CodeMirror editor (but keep it visible and navigable)
-            if (editor) {
-                editor.setOption('readOnly', true);
-                editor.getWrapperElement().style.opacity = '0.6';
-                editor.getWrapperElement().style.cursor = 'not-allowed';
-            }
-            
-            // Keep mode toggle buttons enabled so users can switch views
-            // (editor will still be read-only)
-            
-            // Keep deploy button enabled
-            deployBtn.disabled = false;
-            deployBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        } else {
-            // Hide read-only indicator
-            defaultPolicyIndicator.classList.add('hidden');
-            
-            // Show delete button for custom policies
+        // All policies are now editable (no default policy)
+        // Just ensure everything is enabled
+        if (deletePolicyBtn) {
             deletePolicyBtn.classList.remove('hidden');
-            
-            // Enable save button for custom policies
+        }
+        
+        if (saveBtn) {
             saveBtn.disabled = false;
             saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             saveBtn.title = '';
-            
-            // Enable form inputs
-            if (settingsPathInput) {
-                settingsPathInput.disabled = false;
-                settingsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-            if (logsPathInput) {
-                logsPathInput.disabled = false;
-                logsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-            
-            // Enable CodeMirror editor
-            if (editor) {
-                editor.setOption('readOnly', false);
-                editor.getWrapperElement().style.opacity = '1';
-                editor.getWrapperElement().style.cursor = 'text';
-            }
-            
-            // Mode toggle buttons are always enabled
-            
-            // Keep deploy button enabled
+        }
+        
+        if (settingsPathInput) {
+            settingsPathInput.disabled = false;
+            settingsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+        
+        if (logsPathInput) {
+            logsPathInput.disabled = false;
+            logsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+        
+        if (editor) {
+            editor.setOption('readOnly', false);
+            editor.getWrapperElement().style.opacity = '1';
+            editor.getWrapperElement().style.cursor = 'text';
+        }
+        
+        if (deployBtn) {
             deployBtn.disabled = false;
             deployBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
@@ -979,8 +950,16 @@ logger.deprecation_root.additivity = true
     // Load policies on page load
     loadPolicies();
     
-    // Initialize UI for default policy (read-only)
-    updatePolicyUI(true);
+    // Add click handler for empty state Add Policy button
+    const emptyStateAddPolicyBtn = document.getElementById('emptyStateAddPolicyBtn');
+    if (emptyStateAddPolicyBtn) {
+        emptyStateAddPolicyBtn.addEventListener('click', function() {
+            // Trigger the same flow as selecting "+ Add Policy" from dropdown
+            const policySelect = document.getElementById('policySelect');
+            policySelect.value = 'add_new';
+            policySelect.dispatchEvent(new Event('change'));
+        });
+    }
     
     // Initialize in Form mode by default
     // (Form mode is already active by default in HTML)
@@ -1044,22 +1023,31 @@ async function loadPolicies() {
         if (data.success && data.policies) {
             const policySelect = document.getElementById('policySelect');
             const addNewOption = policySelect.querySelector('option[value="add_new"]');
+            const emptyState = document.getElementById('emptyState');
+            const mainContent = document.getElementById('mainContent');
             
-            // Clear existing custom policies (keep Default and + Add Policy)
+            // Clear existing policies (keep only + Add Policy)
             const options = Array.from(policySelect.options);
             options.forEach(option => {
-                if (option.value !== 'default' && option.value !== 'add_new') {
+                if (option.value !== 'add_new') {
                     option.remove();
                 }
             });
             
+            // Check if we have any policies
+            if (data.policies.length === 0) {
+                // Show empty state, hide main content
+                emptyState.classList.remove('hidden');
+                mainContent.classList.add('hidden');
+                return;
+            }
+            
+            // Hide empty state, show main content
+            emptyState.classList.add('hidden');
+            mainContent.classList.remove('hidden');
+            
             // Add policies from server
             data.policies.forEach(policy => {
-                // Skip if it's the default policy (already in dropdown)
-                if (policy.name.toLowerCase() === 'default policy') {
-                    return;
-                }
-                
                 const option = document.createElement('option');
                 option.value = policy.name.toLowerCase().replace(/\s+/g, '_');
                 option.textContent = policy.name;
@@ -1082,6 +1070,16 @@ async function loadPolicies() {
                 }
                 window.customPolicies.push(policy.name);
             });
+            
+            // Auto-select first policy if policies exist
+            if (data.policies.length > 0) {
+                const firstPolicy = data.policies[0];
+                policySelect.value = firstPolicy.name.toLowerCase().replace(/\s+/g, '_');
+                window.currentPolicy = policySelect.value;
+                
+                // Trigger change event to load the policy data
+                policySelect.dispatchEvent(new Event('change'));
+            }
         }
     } catch (error) {
         console.error('Error loading policies:', error);
@@ -1197,21 +1195,11 @@ async function deleteCurrentPolicy() {
         const data = await response.json();
         
         if (data.success) {
-            // Remove from dropdown
-            selectedOption.remove();
-            
-            // Remove from custom policies array
-            const index = window.customPolicies.indexOf(policyName);
-            if (index > -1) {
-                window.customPolicies.splice(index, 1);
-            }
-            
-            // Switch to default policy
-            policySelect.value = 'default';
-            window.currentPolicy = 'default';
-            updatePolicyUI(true);
-            
             showToast(data.message, 'success');
+            
+            // Reload policies to refresh the UI
+            // This will show empty state if no policies remain
+            await loadPolicies();
         } else {
             showToast(data.error || 'Failed to delete policy', 'error');
         }
@@ -1220,3 +1208,242 @@ async function deleteCurrentPolicy() {
         showToast('Failed to delete policy: ' + error.message, 'error');
     }
 }
+
+// Load enrollment tokens for the current policy
+async function loadEnrollmentTokens() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect.options[policySelect.selectedIndex];
+    const policyId = selectedOption.dataset.policyId;
+    
+    if (!policyId) {
+        console.error('No policy ID found');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/ConnectionManager/GetEnrollmentTokens/?policy_id=${policyId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        const tableBody = document.getElementById('enrollmentTokensTableBody');
+        const noTokensMessage = document.getElementById('noTokensMessage');
+        
+        if (data.success && data.tokens && data.tokens.length > 0) {
+            // Hide no tokens message, show table
+            noTokensMessage.classList.add('hidden');
+            tableBody.parentElement.parentElement.classList.remove('hidden');
+            
+            // Clear existing rows
+            tableBody.innerHTML = '';
+            
+            // Add token rows
+            data.tokens.forEach(token => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-700';
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-sm text-gray-300">
+                        <span class="font-medium">${escapeHtml(token.name)}</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-300">
+                        <div class="flex items-center gap-2">
+                            <button onclick="toggleTokenDisplay(${token.id}, '${escapeHtml(token.raw_token)}', '${escapeHtml(token.encoded_token)}')" class="text-yellow-400 hover:text-yellow-300 text-xs mr-2">
+                                <span id="toggle-btn-${token.id}">Reveal Raw</span>
+                            </button>
+                            <span class="font-mono text-xs break-all" id="token-display-${token.id}">${token.encoded_token}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-left">
+                        <div class="action-menu relative inline-block">
+                            <button class="action-menu-button p-1 hover:bg-gray-700 rounded" onclick="toggleEnrollmentTokenMenu(${token.id})">
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                            </button>
+                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                                <div class="px-1 py-1">
+                                    <a href="#" onclick="event.preventDefault(); copyTokenToClipboard('${escapeHtml(token.encoded_token)}'); toggleEnrollmentTokenMenu(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy
+                                    </a>
+                                    <a href="#" onclick="event.preventDefault(); deleteEnrollmentToken(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            // Show no tokens message, hide table
+            noTokensMessage.classList.remove('hidden');
+            tableBody.parentElement.parentElement.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error('Error loading enrollment tokens:', error);
+        showToast('Failed to load enrollment tokens: ' + error.message, 'error');
+    }
+}
+
+// Toggle between encoded and raw token display
+function toggleTokenDisplay(tokenId, rawToken, encodedToken) {
+    const displayElement = document.getElementById(`token-display-${tokenId}`);
+    const toggleButton = document.getElementById(`toggle-btn-${tokenId}`);
+    
+    if (displayElement.textContent === encodedToken) {
+        // Show raw token
+        displayElement.textContent = rawToken;
+        toggleButton.textContent = 'Hide Raw';
+    } else {
+        // Show encoded token
+        displayElement.textContent = encodedToken;
+        toggleButton.textContent = 'Reveal Raw';
+    }
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Toggle enrollment token menu dropdown
+function toggleEnrollmentTokenMenu(tokenId) {
+    const menu = document.getElementById(`token-menu-${tokenId}`);
+    
+    // Close all other menus
+    document.querySelectorAll('.action-menu-items').forEach(m => {
+        if (m.id !== `token-menu-${tokenId}`) {
+            m.classList.add('hidden');
+        }
+    });
+    
+    // Toggle this menu
+    menu.classList.toggle('hidden');
+}
+
+// Delete enrollment token
+async function deleteEnrollmentToken(tokenId) {
+    const confirmed = await ConfirmationModal.show(
+        'Are you sure you want to delete this enrollment token? This action cannot be undone.',
+        'Delete Enrollment Token',
+        'Delete',
+        null,
+        false
+    );
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/ConnectionManager/DeleteEnrollmentToken/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                token_id: tokenId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message || 'Enrollment token deleted successfully', 'success');
+            // Reload enrollment tokens
+            loadEnrollmentTokens();
+        } else {
+            showToast(data.error || 'Failed to delete enrollment token', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting enrollment token:', error);
+        showToast('Failed to delete enrollment token: ' + error.message, 'error');
+    }
+}
+
+// Copy token to clipboard
+function copyTokenToClipboard(token) {
+    navigator.clipboard.writeText(token).then(() => {
+        showToast('Token copied to clipboard', 'success');
+    }).catch(err => {
+        console.error('Failed to copy token:', err);
+        showToast('Failed to copy token', 'error');
+    });
+}
+
+// Add new enrollment token
+async function addEnrollmentToken() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect.options[policySelect.selectedIndex];
+    const policyId = selectedOption.dataset.policyId;
+    
+    if (!policyId) {
+        showToast('No policy selected', 'error');
+        return;
+    }
+    
+    // Show prompt to name the enrollment token
+    const tokenName = await ConfirmationModal.prompt(
+        'Enter a name for the enrollment token:',
+        '',
+        'Add Enrollment Token',
+        'e.g., Production Token'
+    );
+    
+    if (!tokenName || !tokenName.trim()) {
+        // User cancelled or entered empty name
+        return;
+    }
+    
+    const trimmedName = tokenName.trim();
+    
+    try {
+        const response = await fetch('/ConnectionManager/AddEnrollmentToken/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                policy_id: policyId,
+                name: trimmedName
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message || 'Enrollment token created successfully', 'success');
+            // Reload enrollment tokens
+            loadEnrollmentTokens();
+        } else {
+            showToast(data.error || 'Failed to create enrollment token', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating enrollment token:', error);
+        showToast('Failed to create enrollment token: ' + error.message, 'error');
+    }
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.action-menu')) {
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+});

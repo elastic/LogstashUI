@@ -33,6 +33,11 @@ urlpatterns = [
     path("AddPolicy/", manager_views.add_policy, name="AddPolicy"),
     path("UpdatePolicy/", manager_views.update_policy, name="UpdatePolicy"),
     path("DeletePolicy/", manager_views.delete_policy, name="DeletePolicy"),
+    path("GenerateEnrollmentToken/", manager_views.generate_enrollment_token, name="GenerateEnrollmentToken"),
+    path("GetEnrollmentTokens/", manager_views.get_enrollment_tokens, name="GetEnrollmentTokens"),
+    path("AddEnrollmentToken/", manager_views.add_enrollment_token, name="AddEnrollmentToken"),
+    path("DeleteEnrollmentToken/", manager_views.delete_enrollment_token, name="DeleteEnrollmentToken"),
+    path("Enroll/", manager_views.enroll, name="Enroll"),
 
     path("GetCurrentPipelineCode/", editor_views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", editor_views.GetDiff, name="GetDiff"),
