@@ -257,6 +257,12 @@
     document.getElementById('centralizedFields').classList.remove('hidden');
     document.getElementById('agentFields').classList.add('hidden');
     document.getElementById('connectionNameField').classList.remove('hidden');
+    
+    // Show Save Connection button for Centralized connections
+    const saveConnectionBtn = document.getElementById('saveConnectionBtn');
+    if (saveConnectionBtn) {
+      saveConnectionBtn.classList.remove('hidden');
+    }
   });
 
   document.getElementById('agentPipelineBtn').addEventListener('click', function(e) {
@@ -265,6 +271,15 @@
     document.getElementById('centralizedFields').classList.add('hidden');
     document.getElementById('agentFields').classList.remove('hidden');
     document.getElementById('connectionNameField').classList.add('hidden');
+    
+    // Hide Save Connection button for Agent connections
+    const saveConnectionBtn = document.getElementById('saveConnectionBtn');
+    if (saveConnectionBtn) {
+      saveConnectionBtn.classList.add('hidden');
+    }
+    
+    // Note: Linux commands section will be shown when user selects both policy and enrollment token
+    // This is handled by the enrollment token change handler in connection_modal.html
   });
 
   // Set flag to indicate we're on the pipeline manager page
