@@ -330,10 +330,8 @@ systemctl start logstash-agent</code></pre>
             agentPolicySelect.value = data.policies[0].name.toLowerCase();
             
             // Load enrollment tokens for the selected policy
-            const agentFields = document.getElementById('agentFields');
-            if (agentFields && !agentFields.classList.contains('hidden')) {
-              await loadEnrollmentTokens(data.policies[0].id);
-            }
+            // Always load tokens even if agent fields are hidden - they'll be ready when user switches to Agent type
+            await loadEnrollmentTokens(data.policies[0].id);
           }
         }
       }
@@ -479,8 +477,8 @@ systemctl start logstash-agent</code></pre>
         addNewOption.className = 'font-bold text-primary';
         enrollmentTokenSelect.appendChild(addNewOption);
         
-        // Auto-select first token if only one exists
-        if (data.tokens.length === 1) {
+        // Auto-select first token
+        if (data.tokens.length > 0) {
           enrollmentTokenSelect.value = data.tokens[0].id;
           enrollmentTokenSelect.dispatchEvent(new Event('change'));
         }
