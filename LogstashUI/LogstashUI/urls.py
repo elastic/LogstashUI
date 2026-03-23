@@ -39,6 +39,7 @@ urlpatterns = [
     path('Utilities/', include('Utilities.urls')),
     path('SNMP/', include('SNMP.urls')),
     path('Monitoring/', include('Monitoring.urls')),
+    path('NetworkConfig/', include('NetworkConfig.urls')),
     path('', include('Site.urls')),
     #path('Crash', crash)
 ]

@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'Utilities',
     'SNMP',
     'Monitoring',
+    'NetworkConfig',
     'Site',
 
     # Frameworks

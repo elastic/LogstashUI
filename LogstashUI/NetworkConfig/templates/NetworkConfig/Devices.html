@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="p-6">
+
+  <!-- Initial Empty State (shown by JS when no devices exist at all) -->
+  <div id="initialEmptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-12rem)]">
+    <div class="max-w-2xl w-full">
+      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center mb-6">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-2">Get Started with Network Config Devices</h2>
+        <p class="text-gray-300 mb-4">Add devices to manage via RESTCONF or NETCONF.</p>
+        <button id="addDeviceBtnEmpty" class="btn btn-primary flex items-center gap-x-2 mx-auto">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Device
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="mainContent">
+    <!-- Header -->
+    <div class="page-header flex justify-between items-center mb-2">
+      <h1 class="text-2xl font-bold text-white">Network Config Devices</h1>
+      <button id="addDeviceBtn" class="btn btn-primary flex items-center gap-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Device
+      </button>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
+      <div class="flex gap-4 items-end">
+        <div style="flex: 0 0 50%;">
+          <label for="searchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input type="text" id="searchInput" placeholder="Search by name or hostname..." class="input input-bordered w-full">
+        </div>
+        <div style="flex: 0 0 35%;">
+          <label for="vendorFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Vendor</label>
+          <select id="vendorFilter" class="select select-bordered w-full">
+            <option value="">All Vendors</option>
+            <option value="cisco_ios">Cisco IOS/IOS-XE</option>
+            <option value="cisco_nxos">Cisco NX-OS</option>
+            <option value="cisco_iosxr">Cisco IOS-XR</option>
+            <option value="juniper">Juniper Junos</option>
+            <option value="arista">Arista EOS</option>
+            <option value="paloalto">Palo Alto</option>
+            <option value="fortinet">Fortinet FortiOS</option>
+            <option value="generic">Generic</option>
+          </select>
+        </div>
+        <div style="flex: 0 0 13%;">
+          <label for="pageSizeSelect" class="block text-sm font-medium text-gray-300 mb-2 text-xs">Rows</label>
+          <select id="pageSizeSelect" class="select select-bordered w-full select-sm">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty / No Results states -->
+    <div id="emptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-24rem)]">
+      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center max-w-2xl w-full">
+        <h2 class="text-2xl font-bold text-white mb-2">No devices found</h2>
+        <p class="text-gray-300">Add your first device to get started.</p>
+      </div>
+    </div>
+    <div id="noResultsState" class="hidden flex items-center justify-center min-h-[calc(100vh-24rem)]">
+      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center max-w-2xl w-full">
+        <h2 class="text-2xl font-bold text-white mb-2">No results</h2>
+        <p class="text-gray-300">Try adjusting your search or filter.</p>
+      </div>
+    </div>
+
+    <!-- Devices Table -->
+    <div id="devicesTableContainer" class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+      <table class="table w-full">
+        <thead>
+          <tr class="bg-gray-700 border-b border-gray-600">
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-28">Status</th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('name')">Name <span id="sort-name" class="ml-1"></span></th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('hostname')">Hostname <span id="sort-hostname" class="ml-1"></span></th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Vendor</th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Protocol</th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Credential</th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profile</th>
+            <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('created_at')">Created <span id="sort-created_at" class="ml-1">▼</span></th>
+            <th class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="devicesTableBody" class="bg-gray-800 divide-y divide-gray-700">
+        </tbody>
+      </table>
+      <div id="loadingState" class="p-8 text-center">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <p class="text-gray-400 mt-2">Loading devices...</p>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="paginationControls" class="mt-4 flex justify-between items-center">
+      <div class="text-sm text-gray-400">
+        Showing <span id="showingStart">0</span> to <span id="showingEnd">0</span> of <span id="totalDevices">0</span> devices
+      </div>
+      <div class="flex gap-2">
+        <button id="prevPageBtn" class="btn btn-sm btn-secondary" onclick="previousPage()">Previous</button>
+        <span id="pageInfo" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
+        <button id="nextPageBtn" class="btn btn-sm btn-secondary" onclick="nextPage()">Next</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% include 'NetworkConfig/components/netconfig_devices_modal.html' %}
+{% include 'NetworkConfig/components/netconfig_credentials_modal.html' %}
+
+<script src="{% static 'js/nc_devices_table.js' %}"></script>
+<script src="{% static 'js/nc_devices_modal.js' %}"></script>
+<script src="{% static 'js/nc_credentials_modal.js' %}"></script>
+{% endblock %}

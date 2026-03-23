@@ -1,0 +1,77 @@
+<!-- Network Config Profile Form Modal -->
+<div id="ncProfileFormModal" class="hidden fixed inset-0 overflow-hidden" style="z-index: 70;">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeProfileModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-lg bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="ncProfileModalTitle" class="text-xl font-bold">Add Network Config Profile</h2>
+        <button onclick="closeProfileModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <div id="ncProfileErrorContainer"></div>
+
+        <form id="ncProfileForm">
+          {% csrf_token %}
+          <input type="hidden" id="ncProfileOriginalName" name="original_name">
+
+          <!-- Name -->
+          <div class="mb-4">
+            <label for="ncProfileName" class="block text-sm font-medium text-gray-300 mb-2">
+              Profile Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="ncProfileName" name="name" class="input input-bordered w-full" required placeholder="e.g., cisco_ios_interfaces">
+          </div>
+
+          <!-- Description -->
+          <div class="mb-4">
+            <label for="ncProfileDescription" class="block text-sm font-medium text-gray-300 mb-2">Description</label>
+            <textarea id="ncProfileDescription" name="description" class="textarea textarea-bordered w-full" rows="2" placeholder="Optional description"></textarea>
+          </div>
+
+          <!-- Vendor -->
+          <div class="mb-4">
+            <label for="ncProfileVendor" class="block text-sm font-medium text-gray-300 mb-2">Vendor</label>
+            <input type="text" id="ncProfileVendor" name="vendor" class="input input-bordered w-full" placeholder="e.g., Cisco, Juniper, Generic">
+          </div>
+
+          <!-- Type -->
+          <div class="mb-4">
+            <label for="ncProfileType" class="block text-sm font-medium text-gray-300 mb-2">Type</label>
+            <input type="text" id="ncProfileType" name="type" class="input input-bordered w-full" placeholder="e.g., Router, Switch, Firewall">
+          </div>
+
+          <!-- Profile Data (JSON) -->
+          <div class="mb-4">
+            <label for="ncProfileData" class="block text-sm font-medium text-gray-300 mb-2">
+              Profile Data (JSON) <span class="text-red-500">*</span>
+            </label>
+            <textarea id="ncProfileData" name="profile_data" class="textarea textarea-bordered w-full font-mono text-xs" rows="12" placeholder='{
+  "paths": [
+    {
+      "type": "restconf",
+      "path": "/restconf/data/ietf-interfaces:interfaces",
+      "description": "Interface statistics"
+    },
+    {
+      "type": "netconf",
+      "filter": "<interfaces xmlns=\"urn:ietf:params:xml:ns:yang:ietf-interfaces\"/>",
+      "description": "Interface config via NETCONF"
+    }
+  ]
+}'></textarea>
+            <p class="text-gray-400 text-xs mt-1">JSON object defining the data collection paths for this profile</p>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700 flex justify-between">
+            <button type="button" onclick="closeProfileModal()" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Profile</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

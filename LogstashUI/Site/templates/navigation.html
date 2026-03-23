@@ -120,6 +120,47 @@
         </details>
       </li>
 
+      <!-- Network Config -->
+      <li>
+        <details open>
+          <summary class="nav-item {% if '/NetworkConfig' in request.path %}active bg-base-300{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span class="nav-text">Network Config</span>
+          </summary>
+          <ul>
+            <li>
+              <a href="/NetworkConfig/Devices/"
+                class="nav-item {% if '/NetworkConfig/Devices' in request.path %}active bg-base-300{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span class="nav-text">Devices</span>
+              </a>
+            </li>
+            <li>
+              <a href="/NetworkConfig/Credentials/"
+                class="nav-item {% if '/NetworkConfig/Credentials' in request.path %}active bg-base-300{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <span class="nav-text">Credentials</span>
+              </a>
+            </li>
+            <li>
+              <a href="/NetworkConfig/Profiles/"
+                class="nav-item {% if '/NetworkConfig/Profiles' in request.path %}active bg-base-300{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="nav-text">Profiles</span>
+              </a>
+            </li>
+          </ul>
+        </details>
+      </li>
+
       <!-- Utilities -->
       <li>
         <details open>

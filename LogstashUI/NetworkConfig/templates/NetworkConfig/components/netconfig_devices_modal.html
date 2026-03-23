@@ -1,0 +1,112 @@
+<!-- Network Config Device Form Modal -->
+<div id="ncDeviceFormModal" class="hidden fixed inset-0 overflow-hidden" style="z-index: 60;">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDeviceModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="ncDeviceModalTitle" class="text-xl font-bold">Add Network Device</h2>
+        <button onclick="closeDeviceModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <div id="ncDeviceErrorContainer"></div>
+
+        <form id="ncDeviceForm">
+          {% csrf_token %}
+          <input type="hidden" id="ncDeviceId" name="device_id">
+
+          <!-- Name -->
+          <div class="mb-4">
+            <label for="ncDeviceName" class="block text-sm font-medium text-gray-300 mb-2">
+              Device Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="ncDeviceName" name="name" class="input input-bordered w-full" required placeholder="e.g., core-router-01">
+          </div>
+
+          <!-- Description -->
+          <div class="mb-4">
+            <label for="ncDeviceDescription" class="block text-sm font-medium text-gray-300 mb-2">Description</label>
+            <textarea id="ncDeviceDescription" name="description" class="textarea textarea-bordered w-full" rows="2" placeholder="Optional description"></textarea>
+          </div>
+
+          <!-- Vendor -->
+          <div class="mb-4">
+            <label for="ncVendor" class="block text-sm font-medium text-gray-300 mb-2">Vendor</label>
+            <select id="ncVendor" name="vendor" class="select select-bordered w-full">
+              <option value="generic">Generic</option>
+              <option value="cisco_ios">Cisco IOS/IOS-XE</option>
+              <option value="cisco_nxos">Cisco NX-OS</option>
+              <option value="cisco_iosxr">Cisco IOS-XR</option>
+              <option value="juniper">Juniper Junos</option>
+              <option value="arista">Arista EOS</option>
+              <option value="paloalto">Palo Alto</option>
+              <option value="fortinet">Fortinet FortiOS</option>
+            </select>
+          </div>
+
+          <!-- Hostname -->
+          <div class="mb-4">
+            <label for="ncHostname" class="block text-sm font-medium text-gray-300 mb-2">
+              Hostname / IP Address <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="ncHostname" name="hostname" class="input input-bordered w-full" required placeholder="192.168.1.1 or router.example.com">
+          </div>
+
+          <!-- Protocol selection -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Protocols</label>
+            <div class="flex gap-6">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="ncUseRestconf" name="use_restconf" value="true" class="checkbox checkbox-primary" checked onchange="updatePortFields()">
+                <span class="text-gray-300">RESTCONF</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="ncUseNetconf" name="use_netconf" value="true" class="checkbox checkbox-primary" onchange="updatePortFields()">
+                <span class="text-gray-300">NETCONF</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- RESTCONF Port -->
+          <div id="ncRestPortField" class="mb-4">
+            <label for="ncRestPort" class="block text-sm font-medium text-gray-300 mb-2">RESTCONF Port</label>
+            <input type="number" id="ncRestPort" name="rest_port" class="input input-bordered w-full" value="443" min="1" max="65535">
+          </div>
+
+          <!-- NETCONF Port -->
+          <div id="ncNetconfPortField" class="mb-4 hidden">
+            <label for="ncNetconfPort" class="block text-sm font-medium text-gray-300 mb-2">NETCONF Port</label>
+            <input type="number" id="ncNetconfPort" name="netconf_port" class="input input-bordered w-full" value="830" min="1" max="65535">
+          </div>
+
+          <!-- Credential -->
+          <div class="mb-4">
+            <label for="ncDeviceCredential" class="block text-sm font-medium text-gray-300 mb-2">Credential</label>
+            <select id="ncDeviceCredential" name="credential_id" class="select select-bordered w-full">
+              <option value="">None</option>
+            </select>
+            <button type="button" onclick="openCredentialModal()" class="mt-2 text-xs text-blue-400 hover:text-blue-300 underline">
+              + Add new credential
+            </button>
+          </div>
+
+          <!-- Profile -->
+          <div class="mb-4">
+            <label for="ncDeviceProfile" class="block text-sm font-medium text-gray-300 mb-2">Profile</label>
+            <select id="ncDeviceProfile" name="profile_id" class="select select-bordered w-full">
+              <option value="">None</option>
+            </select>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700 flex justify-between">
+            <button type="button" onclick="closeDeviceModal()" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Device</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
