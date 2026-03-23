@@ -7,13 +7,12 @@ import subprocess
 import threading
 import time
 import logging
-from typing import Optional
 import signal
 import psutil
 import shutil
 from typing import Optional
-from logstash_api import LogstashAPI
-import slots
+from LogstashAgent.modules.logstash_api import LogstashAPI
+from LogstashAgent.modules import slots
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Set to INFO level for supervisor
@@ -477,7 +476,7 @@ class LogstashSupervisor:
         """
         logger.debug("[SLOTS] Getting expected slot pipelines")
         try:
-            import slots
+            import LogstashAgent.modules.slots
             slot_state = slots.get_slot_state()
             expected_pipelines = set()
             logger.debug(f"[SLOTS] Retrieved {len(slot_state)} slots from state")

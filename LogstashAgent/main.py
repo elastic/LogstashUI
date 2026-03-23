@@ -12,15 +12,13 @@ import json
 import glob
 import logging
 import re
-import slots
-import log_analyzer
-from logstash_api import LogstashAPI, PipelineNotFoundError
+from LogstashAgent.modules import slots, logstash_supervisor, log_analyzer
+from LogstashAgent.modules.logstash_api import LogstashAPI
 import requests
 import time
 import base64
 import asyncio
 import atexit
-import logstash_supervisor
 from collections import deque
 import threading
 from pathlib import Path
@@ -1369,8 +1367,7 @@ async def validate_logstash_config(request: Request):
         - error: Error message if validation failed
     """
     import subprocess
-    import tempfile
-    
+
     try:
         body = await request.json()
         pipeline_name = body.get("pipeline_name", "pipeline")

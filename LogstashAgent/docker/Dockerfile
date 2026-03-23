@@ -11,15 +11,15 @@ RUN microdnf install -y python3 python3-pip && \
 WORKDIR /app
 
 # Copy Python requirements and install
-COPY requirements.txt .
+COPY ../requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy FastAPI application
-COPY main.py .
-COPY slots.py .
-COPY log_analyzer.py .
-COPY logstash_api.py .
-COPY logstash_supervisor.py .
+COPY ../main.py .
+COPY ../modules/slots.py .
+COPY ../modules/log_analyzer.py .
+COPY ../modules/logstash_api.py .
+COPY ../modules/logstash_supervisor.py .
 # Note: logstashagent.yml is mounted at runtime via docker-compose volumes
 # Config is read from /app/logstashui.yml (preferred) or /app/logstashui.example.yml
 
