@@ -1,3 +1,8 @@
+## [0.3.5] - 03/23/2026
+### Changed
+- Disabled light mode entirely
+
+
 ## [0.3.4] - 03/17/2026
 ### Changed
 - Quick fix to make simulation of dropped messages work universally
