@@ -11,6 +11,7 @@
     <meta charset="UTF-8">
     <title>Login - Logstash UI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
     {% tailwind_css %}
     <style>
         @keyframes float {
@@ -113,35 +114,24 @@
 </head>
 
 <body class="min-h-screen gradient-bg overflow-y-auto">
-    <!-- Floating Background Elements -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="floating-circle absolute top-20 left-10 w-64 h-64 bg-gray-500/5 rounded-full blur-3xl"></div>
-        <div class="floating-circle absolute bottom-20 right-10 w-96 h-96 bg-gray-400/5 rounded-full blur-3xl"></div>
-        <div class="floating-circle absolute top-1/2 left-1/2 w-80 h-80 bg-purple-500/8 rounded-full blur-3xl"></div>
-    </div>
-
     <div class="relative min-h-screen flex items-center justify-center p-4">
-        <div class="w-full max-w-md">
-            <!-- Logo Section -->
-            <div class="text-center mb-8">
-                <div class="inline-flex items-center justify-center mb-4 elastic-logo-container">
-                    <div class="relative">
-                        <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-2xl">
-                            <svg viewBox="0 0 24 24" class="w-12 h-12 text-white" fill="currentColor">
-                                <circle cx="8" cy="12" r="3"></circle>
-                                <circle cx="15" cy="8" r="2"></circle>
-                                <circle cx="15" cy="15.5" r="2.5"></circle>
-                            </svg>
-                        </div>
-                        <!-- Animated rings -->
-                        <div class="absolute inset-0 rounded-2xl border-2 border-purple-400/30 animate-ping"></div>
+        <div class="w-full max-w-md relative">
+            <!-- Centered glow effect behind everything -->
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-3xl elastic-logo-container pointer-events-none"></div>
+            
+            <!-- Logo and Title Section -->
+            <div class="text-center mb-8 relative z-10">
+                <div class="flex items-center justify-center gap-3 mb-2">
+                    <!-- Logo image -->
+                    <div class="w-12 h-12">
+                        <img src="{% static 'images/LogstashIcon.png' %}" alt="Logstash UI" class="w-full h-full object-contain">
                     </div>
+                    <h1 class="text-4xl font-bold text-white">Logstash UI</h1>
                 </div>
-                <h1 class="text-4xl font-bold text-white mb-2">Logstash UI</h1>
             </div>
 
             <!-- Login Card -->
-            <div class="login-card rounded-2xl shadow-2xl p-8">
+            <div class="login-card rounded-2xl shadow-2xl p-8 relative z-10">
                 <h2 class="text-2xl font-semibold text-white mb-6 text-center">
                     {% if is_first_run %}Create Your Account{% else %}Sign In{% endif %}
                 </h2>

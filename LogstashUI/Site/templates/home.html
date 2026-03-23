@@ -13,14 +13,14 @@
 <div class="p-6">
         <!-- Hero Section -->
         <div class="text-center mb-16">
-            <div class="inline-flex items-center justify-center w-24 h-24 bg-blue-600/20 rounded-full mb-6">
-                <svg viewBox="0 0 24 24" class="w-16 h-16 text-blue-400" fill="currentColor">
-                    <circle cx="8" cy="12" r="3"></circle>
-                    <circle cx="15" cy="8" r="2"></circle>
-                    <circle cx="15" cy="15.5" r="2.5"></circle>
-                </svg>
+            <div class="flex items-center justify-center gap-4 mb-4">
+                <div class="relative w-16 h-16">
+                    <!-- Subtle purple glow behind logo -->
+                    <div class="absolute inset-0 w-16 h-16 bg-purple-500/15 rounded-full blur-xl"></div>
+                    <img src="{% static 'images/LogstashIcon.png' %}" alt="Logstash UI" class="w-full h-full object-contain relative z-10">
+                </div>
+                <h1 class="text-5xl font-bold text-white">Welcome to LogstashUI</h1>
             </div>
-            <h1 class="text-5xl font-bold text-white mb-4">Welcome to LogstashUI</h1>
             <p class="text-xl text-gray-300 max-w-3xl mx-auto mb-8">
                 A modern web-based interface for managing and monitoring your Logstash pipelines.
             </p>
