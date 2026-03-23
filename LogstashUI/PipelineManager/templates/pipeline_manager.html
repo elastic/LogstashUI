@@ -109,6 +109,7 @@
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Type</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Host</th>
+            <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Policy</th>
             <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
             <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
           </tr>
@@ -145,6 +146,13 @@
 
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ connection.name }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300" title="{% if connection.host %}{{ connection.host }}{% else %}{{ connection.cloud_id }}{% endif %}">{% if connection.host %}{{ connection.host|truncatechars:20 }}{% else %}{{ connection.cloud_id|truncatechars:12 }}{% endif %}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                {% if connection.connection_type == "CENTRALIZED" %}
+                  <span class="italic text-gray-400">Centralized</span>
+                {% else %}
+                  {{ connection.policy__name|default:"No Policy" }}
+                {% endif %}
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
                       hx-get="/ConnectionManager/TestConnectivity?test={{ connection.pk }}"
@@ -199,7 +207,7 @@
               </td>
             </tr>
             <tr id="pipelines-{{ connection.pk }}" class="hidden bg-gray-900">
-              <td colspan="6">
+              <td colspan="7">
                 <div class="p-4">
                   <div class="htmx-indicator">
                     <div class="flex justify-center items-center py-4">

@@ -355,8 +355,15 @@ class EnrollmentToken(models.Model):
     )
     
     class Meta:
+        ordering = ['policy', 'name']
         verbose_name = 'Enrollment Token'
         verbose_name_plural = 'Enrollment Tokens'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['policy', 'name'],
+                name='unique_token_name_per_policy'
+            )
+        ]
     
     def __str__(self):
         return f"{self.policy.name} - {self.name}"
