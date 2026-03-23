@@ -8,7 +8,7 @@ from django.template.loader import get_template
 from django.conf import settings
 
 from .forms import ConnectionForm
-from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken
+from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey
 
 from Common.decorators import require_admin_role
 from Common.logstash_utils import get_logstash_pipeline
@@ -23,9 +23,39 @@ import json
 import base64
 import secrets
 import requests
+import os
 
 logger = logging.getLogger(__name__)
 
+
+def load_default_config(filename):
+    """Load default configuration file from the data directory"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(current_dir, 'data', filename)
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        logger.error(f"Default config file not found: {file_path}")
+        return ""
+    except Exception as e:
+        logger.error(f"Error loading default config file {filename}: {str(e)}")
+        return ""
+
+
+def get_default_logstash_yml():
+    """Get default logstash.yml configuration"""
+    return load_default_config('default_logstash.yml')
+
+
+def get_default_jvm_options():
+    """Get default jvm.options configuration"""
+    return load_default_config('default_jvm.options')
+
+
+def get_default_log4j2_properties():
+    """Get default log4j2.properties configuration"""
+    return load_default_config('default_log4j2.properties')
 
 
 
@@ -41,7 +71,7 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name"))
     
     context['connections'] = connections
     context['has_connections'] = len(connections) > 0
@@ -528,9 +558,11 @@ def add_policy(request):
         name = data.get('name', '').strip()
         settings_path = data.get('settings_path', '/etc/logstash/')
         logs_path = data.get('logs_path', '/var/log/logstash')
-        logstash_yml = data.get('logstash_yml', '')
-        jvm_options = data.get('jvm_options', '')
-        log4j2_properties = data.get('log4j2_properties', '')
+        
+        # Use defaults if values are empty or not provided
+        logstash_yml = data.get('logstash_yml') or get_default_logstash_yml()
+        jvm_options = data.get('jvm_options') or get_default_jvm_options()
+        log4j2_properties = data.get('log4j2_properties') or get_default_log4j2_properties()
         
         if not name:
             return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
@@ -747,7 +779,7 @@ def generate_enrollment_token(request):
 def enroll(request):
     """
     Enroll a Logstash Agent using an enrollment token
-    Validates token, checks expiry, and creates connection in database
+    Validates token in database, creates connection, and generates API key
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -755,15 +787,13 @@ def enroll(request):
     try:
         data = json.loads(request.body)
         encoded_token = data.get('enrollment_token')
-        name = data.get('name')
         host = data.get('host')
-        api_key = data.get('api_key')
         
         # Validate required fields
-        if not all([encoded_token, name, host, api_key]):
+        if not encoded_token or not host:
             return JsonResponse({
                 "success": False, 
-                "error": "Missing required fields: enrollment_token, name, host, api_key"
+                "error": "Missing required fields: enrollment_token, host"
             }, status=400)
         
         # Decode the base64 enrollment token
@@ -776,66 +806,46 @@ def enroll(request):
         
         # Extract enrollment token from payload
         enrollment_token = token_payload.get('enrollment_token')
-        policy_name = token_payload.get('policy_name')
-        expires_at_str = token_payload.get('expires_at')
         
         if not enrollment_token:
             return JsonResponse({"success": False, "error": "Invalid token payload"}, status=400)
         
-        # Step 1: Purge expired tokens
-        current_time = datetime.now(timezone.utc)
-        expired_tokens = []
-        for token, token_data in list(ENROLLMENT_TOKENS.items()):
-            if token_data['expires_at'] < current_time:
-                expired_tokens.append(token)
-        
-        for token in expired_tokens:
-            del ENROLLMENT_TOKENS[token]
-            logger.info(f"Purged expired enrollment token")
-        
-        # Step 2: Validate enrollment token exists and is not expired
-        if enrollment_token not in ENROLLMENT_TOKENS:
-            return JsonResponse({
-                "success": False, 
-                "error": "Invalid or expired enrollment token"
-            }, status=401)
-        
-        token_data = ENROLLMENT_TOKENS[enrollment_token]
-        
-        # Verify policy name matches
-        if token_data['policy_name'] != policy_name:
-            return JsonResponse({
-                "success": False, 
-                "error": "Token policy mismatch"
-            }, status=401)
-        
-        # Step 3: Create connection in database
+        # Step 1: Check if enrollment token exists in database
         try:
-            # Get or create the policy
-            policy = None
-            if policy_name and policy_name.lower() != 'default':
-                try:
-                    policy = Policy.objects.get(name=policy_name)
-                except Policy.DoesNotExist:
-                    logger.warning(f"Policy '{policy_name}' not found, using None")
-            
-            # Create the connection
+            enrollment_token_obj = EnrollmentToken.objects.get(token=enrollment_token)
+        except EnrollmentToken.DoesNotExist:
+            return JsonResponse({
+                "success": False, 
+                "error": "Invalid enrollment token"
+            }, status=401)
+        
+        # Step 2: Create connection in database
+        try:
+            # Create the connection with specified fields only
             connection = ConnectionTable.objects.create(
-                name=name,
+                name=host,
                 connection_type='AGENT',
                 host=host,
-                api_key=api_key,
-                policy=policy
+                is_active=True,
+                policy=enrollment_token_obj.policy
             )
             
-            # Remove the used enrollment token (one-time use)
-            del ENROLLMENT_TOKENS[enrollment_token]
+            # Step 3: Generate API Key
+            raw_api_key = secrets.token_urlsafe(32)
             
-            logger.info(f"Agent '{name}' enrolled successfully with host '{host}' and policy '{policy_name}'")
+            # Create ApiKey object (it will be hashed automatically on save)
+            api_key_obj = ApiKey.objects.create(
+                connection=connection,
+                api_key=raw_api_key
+            )
             
+            logger.info(f"Agent enrolled successfully with host '{host}' and policy '{enrollment_token_obj.policy.name}'")
+            
+            # Step 4: Reply with the API Key
             return JsonResponse({
                 "success": True,
-                "message": f"Agent '{name}' enrolled successfully",
+                "api_key": raw_api_key,
+                "policy_id": enrollment_token_obj.policy.id,
                 "connection_id": connection.id
             })
             
