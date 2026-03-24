@@ -199,10 +199,19 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Deploy button
     document.getElementById('deployBtn').addEventListener('click', function() {
-        console.log('Deploying policy...');
+        const policySelect = document.getElementById('policySelect');
+        const selectedOption = policySelect.options[policySelect.selectedIndex];
+        const policyId = selectedOption.dataset.policyId;
+        const policyName = selectedOption.dataset.policyName || selectedOption.textContent;
         
-        // TODO: Implement actual deploy functionality
-        alert('Deploy functionality will be implemented soon');
+        if (!policyId) {
+            showToast('No policy selected', 'error');
+            return;
+        }
+        
+        // Show modal and load diff
+        showDeployDiffModal();
+        loadPolicyDiff(policyId, policyName);
     });
     
     // Policy dropdown change handler
@@ -215,6 +224,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedValue = this.value;
         
         if (selectedValue === 'add_new') {
+            // Reset to default values for new policy
+            document.getElementById('settingsPath').value = '/etc/logstash/';
+            document.getElementById('logsPath').value = '/var/log/logstash';
+            
             // Show popup to add new policy
             const policyName = await ConfirmationModal.prompt(
                 'Enter a name for the new policy:',

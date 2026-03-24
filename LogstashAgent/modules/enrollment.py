@@ -164,19 +164,13 @@ def save_enrollment_config(api_key: str, logstash_ui_url: str, policy_id: int, c
         agent_state.update_state('settings_path', policy_config.get('settings_path'))
         agent_state.update_state('logs_path', policy_config.get('logs_path'))
         
-        # Compute and save hashes of configuration files
-        logstash_yml_hash = compute_hash(policy_config.get('logstash_yml', ''))
-        jvm_options_hash = compute_hash(policy_config.get('jvm_options', ''))
-        log4j2_properties_hash = compute_hash(policy_config.get('log4j2_properties', ''))
-        
-        agent_state.update_state('logstash_yml_hash', logstash_yml_hash)
-        agent_state.update_state('jvm_options_hash', jvm_options_hash)
-        agent_state.update_state('log4j2_properties_hash', log4j2_properties_hash)
+        # Set initial revision number to 0 (agent has no configuration yet)
+        agent_state.update_state('revision_number', 0)
         
         logger.info(f"Enrollment configuration saved to state.json")
         logger.info(f"Settings path: {policy_config.get('settings_path')}")
         logger.info(f"Logs path: {policy_config.get('logs_path')}")
-        logger.info(f"Configuration hashes computed and stored")
+        logger.info(f"Revision number set to 0 (no configuration deployed yet)")
         logger.info(f"Agent is now enrolled and managed by LogstashUI at {logstash_ui_url}")
         
     except Exception as e:

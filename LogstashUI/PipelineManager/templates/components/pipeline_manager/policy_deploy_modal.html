@@ -1,0 +1,85 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% load static %}
+<script src="{% static 'js/policy_deploy_modal.js' %}"></script>
+
+<!-- Policy Deploy Diff Modal -->
+<div id="deployDiffModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="hideDeployDiffModal()"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
+    <!-- Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Deploy Policy: <span id="deployPolicyName"></span></h3>
+        <p class="text-gray-400 text-sm mt-1">
+          <span class="font-semibold">Version:</span> 
+          <span id="currentRevisionNum" class="text-blue-400"></span>
+          <span class="mx-2">→</span>
+          <span id="newRevisionNum" class="text-green-400"></span>
+        </p>
+      </div>
+      <button onclick="hideDeployDiffModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-gray-700 px-4 flex-shrink-0">
+      <button class="deploy-diff-tab active px-4 py-2 text-sm font-medium text-white border-b-2 border-blue-500" data-section="logstash_yml">logstash.yml</button>
+      <button class="deploy-diff-tab px-4 py-2 text-sm font-medium text-gray-400 hover:text-white" data-section="jvm_options">jvm.options</button>
+      <button class="deploy-diff-tab px-4 py-2 text-sm font-medium text-gray-400 hover:text-white" data-section="log4j2_properties">log4j2.properties</button>
+      <button class="deploy-diff-tab px-4 py-2 text-sm font-medium text-gray-400 hover:text-white" data-section="pipelines">Pipelines</button>
+      <button class="deploy-diff-tab px-4 py-2 text-sm font-medium text-gray-400 hover:text-white" data-section="keystore">Keystore</button>
+      <button class="deploy-diff-tab px-4 py-2 text-sm font-medium text-gray-400 hover:text-white" data-section="global_settings">Global Settings</button>
+    </div>
+
+    <!-- Content -->
+    <div class="p-4 flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
+      <!-- Loading state -->
+      <div id="deployDiffLoading" class="flex-1 flex items-center justify-center" style="min-height: 0;">
+        <div class="text-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p class="text-gray-400">Loading diff...</p>
+        </div>
+      </div>
+
+      <!-- Diff containers for each section -->
+      <div id="deployDiffContainer" class="flex-1 overflow-hidden hidden" style="min-height: 0;">
+        <!-- Text file diffs (side-by-side) -->
+        <div id="diff-logstash_yml" class="deploy-diff-section h-full"></div>
+        <div id="diff-jvm_options" class="deploy-diff-section h-full hidden"></div>
+        <div id="diff-log4j2_properties" class="deploy-diff-section h-full hidden"></div>
+        
+        <!-- Pipelines diff -->
+        <div id="diff-pipelines" class="deploy-diff-section h-full hidden overflow-auto"></div>
+        
+        <!-- Keystore diff -->
+        <div id="diff-keystore" class="deploy-diff-section h-full hidden overflow-auto"></div>
+        
+        <!-- Global Settings diff -->
+        <div id="diff-global_settings" class="deploy-diff-section h-full hidden overflow-auto"></div>
+      </div>
+    </div>
+
+    <!-- Footer with actions -->
+    <div class="p-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div class="text-sm text-gray-400">
+        <span id="deployDiffStats"></span>
+      </div>
+      <div class="flex space-x-3">
+        <button onclick="hideDeployDiffModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+          Cancel
+        </button>
+        <button id="confirmDeployBtn" onclick="confirmDeployPolicy()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+          Confirm Deploy
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

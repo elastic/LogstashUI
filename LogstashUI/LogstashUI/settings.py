@@ -194,6 +194,8 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/ConnectionManager/Enroll",
     "/ConnectionManager/CheckIn/",
     "/ConnectionManager/CheckIn",
+    "/ConnectionManager/GetConfigChanges/",
+    "/ConnectionManager/GetConfigChanges"
 ]
 
 # Session Configuration

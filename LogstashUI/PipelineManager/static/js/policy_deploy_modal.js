@@ -1,0 +1,639 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
+let currentPolicyDiffData = null;
+
+// ===== DIFF ALGORITHMS (from diff_modal.js) =====
+
+/**
+ * Compute Longest Common Subsequence using dynamic programming
+ */
+function computeLCS(arr1, arr2) {
+    const m = arr1.length;
+    const n = arr2.length;
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (arr1[i - 1] === arr2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    // Backtrack to find LCS
+    const lcs = [];
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+        if (arr1[i - 1] === arr2[j - 1]) {
+            lcs.unshift(arr1[i - 1]);
+            i--;
+            j--;
+        } else if (dp[i - 1][j] > dp[i][j - 1]) {
+            i--;
+        } else {
+            j--;
+        }
+    }
+
+    return lcs;
+}
+
+/**
+ * Compute line-level diff using LCS algorithm
+ */
+function computeLineDiff(oldLines, newLines) {
+    const changes = [];
+    const lcs = computeLCS(oldLines, newLines);
+
+    let i = 0, j = 0, k = 0;
+
+    while (i < oldLines.length || j < newLines.length) {
+        // Check if we're at a common line
+        if (k < lcs.length && i < oldLines.length && j < newLines.length &&
+            oldLines[i] === lcs[k] && newLines[j] === lcs[k]) {
+            // Equal line
+            const equalLines = [];
+            while (k < lcs.length && i < oldLines.length && j < newLines.length &&
+                oldLines[i] === lcs[k] && newLines[j] === lcs[k]) {
+                equalLines.push(oldLines[i]);
+                i++;
+                j++;
+                k++;
+            }
+            if (equalLines.length > 0) {
+                changes.push({ type: 'equal', lines: equalLines });
+            }
+        } else {
+            // Collect deletions and insertions
+            const deletedLines = [];
+            const insertedLines = [];
+
+            while (i < oldLines.length && (k >= lcs.length || oldLines[i] !== lcs[k])) {
+                deletedLines.push(oldLines[i]);
+                i++;
+            }
+
+            while (j < newLines.length && (k >= lcs.length || newLines[j] !== lcs[k])) {
+                insertedLines.push(newLines[j]);
+                j++;
+            }
+
+            // If we have both deletions and insertions, treat as replacement
+            if (deletedLines.length > 0 && insertedLines.length > 0) {
+                changes.push({ type: 'replace', oldLines: deletedLines, newLines: insertedLines });
+            } else if (deletedLines.length > 0) {
+                changes.push({ type: 'delete', lines: deletedLines });
+            } else if (insertedLines.length > 0) {
+                changes.push({ type: 'insert', lines: insertedLines });
+            }
+        }
+    }
+
+    return changes;
+}
+
+// ===== END DIFF ALGORITHMS =====
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Hide modal
+function hideDeployDiffModal() {
+    document.getElementById('deployDiffModal').classList.add('hidden');
+}
+
+// Show modal
+function showDeployDiffModal() {
+    document.getElementById('deployDiffModal').classList.remove('hidden');
+}
+
+// Setup tab switching
+function setupDeployDiffTabs() {
+    // Remove any existing event listeners by cloning and replacing
+    document.querySelectorAll('.deploy-diff-tab').forEach(tab => {
+        const newTab = tab.cloneNode(true);
+        tab.parentNode.replaceChild(newTab, tab);
+    });
+    
+    // Add fresh event listeners
+    document.querySelectorAll('.deploy-diff-tab').forEach(tab => {
+        tab.addEventListener('click', function(e) {
+            e.preventDefault();
+            const section = this.dataset.section;
+            
+            console.log('Tab clicked:', section); // Debug log
+            
+            // Update active tab
+            document.querySelectorAll('.deploy-diff-tab').forEach(t => {
+                t.classList.remove('active', 'text-white', 'border-b-2', 'border-blue-500');
+                t.classList.add('text-gray-400');
+            });
+            this.classList.add('active', 'text-white', 'border-b-2', 'border-blue-500');
+            this.classList.remove('text-gray-400');
+            
+            // Show corresponding diff section
+            document.querySelectorAll('.deploy-diff-section').forEach(s => {
+                s.classList.add('hidden');
+            });
+            const targetSection = document.getElementById(`diff-${section}`);
+            if (targetSection) {
+                targetSection.classList.remove('hidden');
+                console.log('Showing section:', section); // Debug log
+            } else {
+                console.error('Section not found:', `diff-${section}`); // Debug log
+            }
+        });
+    });
+}
+
+// Render side-by-side text diff
+function renderSideBySideTextDiff(containerId, oldText, newText) {
+    const container = document.getElementById(containerId);
+    const oldLines = oldText.split('\n');
+    const newLines = newText.split('\n');
+    
+    // Use LCS-based diff algorithm
+    const lineDiff = computeLineDiff(oldLines, newLines);
+    
+    let oldHtml = '';
+    let newHtml = '';
+    let oldLineNum = 1;
+    let newLineNum = 1;
+    
+    for (const change of lineDiff) {
+        if (change.type === 'equal') {
+            // Unchanged lines - show on both sides
+            for (let i = 0; i < change.lines.length; i++) {
+                const line = escapeHtml(change.lines[i]);
+                
+                oldHtml += `<div class="flex hover:bg-gray-700/30">
+                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${oldLineNum++}</span>
+                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                </div>`;
+                
+                newHtml += `<div class="flex hover:bg-gray-700/30">
+                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                </div>`;
+            }
+        } else if (change.type === 'delete') {
+            // Deleted lines - show only on left with red background
+            for (let i = 0; i < change.lines.length; i++) {
+                const line = escapeHtml(change.lines[i]);
+                
+                oldHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${oldLineNum++}</span>
+                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                </div>`;
+                
+                // Empty placeholder on right side
+                newHtml += `<div class="flex bg-gray-800/50">
+                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                    <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                </div>`;
+            }
+        } else if (change.type === 'insert') {
+            // Inserted lines - show only on right with green background
+            for (let i = 0; i < change.lines.length; i++) {
+                const line = escapeHtml(change.lines[i]);
+                
+                // Empty placeholder on left side
+                oldHtml += `<div class="flex bg-gray-800/50">
+                    <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                    <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                </div>`;
+                
+                newHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                    <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                    <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                </div>`;
+            }
+        } else if (change.type === 'replace') {
+            // Modified lines
+            const oldLines = change.oldLines;
+            const newLines = change.newLines;
+            const maxLen = Math.max(oldLines.length, newLines.length);
+            
+            for (let i = 0; i < maxLen; i++) {
+                if (i < oldLines.length) {
+                    const oldLine = escapeHtml(oldLines[i]);
+                    oldHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${oldLineNum++}</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;">${oldLine || ' '}</span>
+                    </div>`;
+                } else {
+                    oldHtml += `<div class="flex bg-gray-800/50">
+                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                    </div>`;
+                }
+                
+                if (i < newLines.length) {
+                    const newLine = escapeHtml(newLines[i]);
+                    newHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${newLineNum++}</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;">${newLine || ' '}</span>
+                    </div>`;
+                } else {
+                    newHtml += `<div class="flex bg-gray-800/50">
+                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                    </div>`;
+                }
+            }
+        }
+    }
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; height: 100%; min-height: 0;">
+            <div class="p-4 bg-gray-700 rounded-lg border-l-4 border-yellow-500" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                <div class="mb-2" style="flex-shrink: 0;">
+                    <h4 class="text-lg font-semibold text-white">Previous (Version ${currentPolicyDiffData.last_deployed_revision})</h4>
+                </div>
+                <div class="bg-gray-800 rounded border-2 border-dashed border-gray-600 diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                    <div class="p-2 text-sm text-gray-300 font-mono">${oldHtml}</div>
+                </div>
+            </div>
+            <div class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                <div class="mb-2" style="flex-shrink: 0;">
+                    <h4 class="text-lg font-semibold text-white">New (Version ${currentPolicyDiffData.current_revision + 1})</h4>
+                </div>
+                <div class="bg-gray-800 rounded border-2 border-dashed border-gray-600 diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                    <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Synchronize scrolling between the two panels
+    const panels = container.querySelectorAll('.diff-scroll-panel');
+    const leftPanel = panels[0];
+    const rightPanel = panels[1];
+    
+    if (leftPanel && rightPanel) {
+        let isScrolling = false;
+        
+        leftPanel.addEventListener('scroll', () => {
+            if (!isScrolling) {
+                isScrolling = true;
+                rightPanel.scrollTop = leftPanel.scrollTop;
+                rightPanel.scrollLeft = leftPanel.scrollLeft;
+                setTimeout(() => {
+                    isScrolling = false;
+                }, 10);
+            }
+        });
+        
+        rightPanel.addEventListener('scroll', () => {
+            if (!isScrolling) {
+                isScrolling = true;
+                leftPanel.scrollTop = rightPanel.scrollTop;
+                leftPanel.scrollLeft = rightPanel.scrollLeft;
+                setTimeout(() => {
+                    isScrolling = false;
+                }, 10);
+            }
+        });
+    }
+}
+
+// Render pipelines diff
+function renderPipelinesDiff(oldPipelines, newPipelines) {
+    const container = document.getElementById('diff-pipelines');
+    let html = '';
+    
+    // Create maps for easier comparison
+    const oldMap = new Map(oldPipelines.map(p => [p.name, p]));
+    const newMap = new Map(newPipelines.map(p => [p.name, p]));
+    
+    // Find added pipelines
+    newPipelines.forEach(pipeline => {
+        if (!oldMap.has(pipeline.name)) {
+            html += `
+                <div class="mb-4 p-3 bg-green-900/20 border border-green-600 rounded">
+                    <div class="text-green-400 font-semibold mb-2">+ Added Pipeline: ${escapeHtml(pipeline.name)}</div>
+                    <div class="text-gray-400 text-sm mb-1">Description: ${escapeHtml(pipeline.description || 'N/A')}</div>
+                    <pre class="text-xs text-gray-300 mt-2 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(pipeline.lscl)}</pre>
+                </div>
+            `;
+        }
+    });
+    
+    // Find removed pipelines
+    oldPipelines.forEach(pipeline => {
+        if (!newMap.has(pipeline.name)) {
+            html += `
+                <div class="mb-4 p-3 bg-red-900/20 border border-red-600 rounded">
+                    <div class="text-red-400 font-semibold mb-2">- Removed Pipeline: ${escapeHtml(pipeline.name)}</div>
+                    <div class="text-gray-400 text-sm mb-1">Description: ${escapeHtml(pipeline.description || 'N/A')}</div>
+                    <pre class="text-xs text-gray-300 mt-2 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(pipeline.lscl)}</pre>
+                </div>
+            `;
+        }
+    });
+    
+    // Find modified pipelines
+    newPipelines.forEach(newPipeline => {
+        const oldPipeline = oldMap.get(newPipeline.name);
+        if (oldPipeline && oldPipeline.lscl !== newPipeline.lscl) {
+            html += `
+                <div class="mb-4 p-3 bg-blue-900/20 border border-blue-600 rounded">
+                    <div class="text-blue-400 font-semibold mb-2">~ Modified Pipeline: ${escapeHtml(newPipeline.name)}</div>
+                    <div class="text-gray-400 text-sm mb-1">Description: ${escapeHtml(newPipeline.description || 'N/A')}</div>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                            <div class="text-red-400 text-xs font-semibold mb-1">Old:</div>
+                            <pre class="text-xs text-gray-300 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(oldPipeline.lscl)}</pre>
+                        </div>
+                        <div>
+                            <div class="text-green-400 text-xs font-semibold mb-1">New:</div>
+                            <pre class="text-xs text-gray-300 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(newPipeline.lscl)}</pre>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    if (html === '') {
+        html = '<div class="text-gray-400 text-center py-8">No pipeline changes</div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+// Render keystore diff
+function renderKeystoreDiff(oldKeystore, newKeystore) {
+    const container = document.getElementById('diff-keystore');
+    let html = '';
+    
+    // Create maps for easier comparison
+    const oldMap = new Map(oldKeystore.map(k => [k.key_name, k]));
+    const newMap = new Map(newKeystore.map(k => [k.key_name, k]));
+    
+    // Find added keys
+    newKeystore.forEach(key => {
+        if (!oldMap.has(key.key_name)) {
+            html += `
+                <div class="mb-2 p-2 bg-green-900/20 border-l-4 border-green-600">
+                    <span class="text-green-400 font-semibold">+ Added Key:</span>
+                    <span class="text-gray-300 ml-2">${escapeHtml(key.key_name)}</span>
+                    <span class="text-gray-500 ml-2">(value encrypted)</span>
+                </div>
+            `;
+        }
+    });
+    
+    // Find removed keys
+    oldKeystore.forEach(key => {
+        if (!newMap.has(key.key_name)) {
+            html += `
+                <div class="mb-2 p-2 bg-red-900/20 border-l-4 border-red-600">
+                    <span class="text-red-400 font-semibold">- Removed Key:</span>
+                    <span class="text-gray-300 ml-2">${escapeHtml(key.key_name)}</span>
+                </div>
+            `;
+        }
+    });
+    
+    // Find modified keys (value changed)
+    newKeystore.forEach(newKey => {
+        const oldKey = oldMap.get(newKey.key_name);
+        if (oldKey && oldKey.key_value !== newKey.key_value) {
+            html += `
+                <div class="mb-2 p-2 bg-blue-900/20 border-l-4 border-blue-600">
+                    <span class="text-blue-400 font-semibold">~ Modified Key:</span>
+                    <span class="text-gray-300 ml-2">${escapeHtml(newKey.key_name)}</span>
+                    <span class="text-gray-500 ml-2">(value changed)</span>
+                </div>
+            `;
+        }
+    });
+    
+    if (html === '') {
+        html = '<div class="text-gray-400 text-center py-8">No keystore changes</div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+// Render global settings diff (settings_path and logs_path)
+function renderGlobalSettingsDiff(previousData, currentData) {
+    const container = document.getElementById('diff-global_settings');
+    let html = '<div class="p-4">';
+    
+    const prevSettingsPath = previousData.settings_path || '';
+    const currSettingsPath = currentData.settings_path || '';
+    const prevLogsPath = previousData.logs_path || '';
+    const currLogsPath = currentData.logs_path || '';
+    
+    // Settings Path
+    html += '<div class="mb-6">';
+    html += '<h4 class="text-lg font-semibold text-white mb-3">Logstash Settings Path</h4>';
+    if (prevSettingsPath !== currSettingsPath) {
+        html += `
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-3 bg-red-900/20 border-l-4 border-red-600 rounded">
+                    <div class="text-red-400 text-xs font-semibold mb-1">Previous</div>
+                    <div class="text-gray-300 font-mono text-sm">${escapeHtml(prevSettingsPath) || '<em class="text-gray-500">Not set</em>'}</div>
+                </div>
+                <div class="p-3 bg-green-900/20 border-l-4 border-green-600 rounded">
+                    <div class="text-green-400 text-xs font-semibold mb-1">New</div>
+                    <div class="text-gray-300 font-mono text-sm">${escapeHtml(currSettingsPath) || '<em class="text-gray-500">Not set</em>'}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="p-3 bg-gray-700/50 border-l-4 border-gray-600 rounded">
+                <div class="text-gray-400 text-xs font-semibold mb-1">No changes</div>
+                <div class="text-gray-300 font-mono text-sm">${escapeHtml(currSettingsPath) || '<em class="text-gray-500">Not set</em>'}</div>
+            </div>
+        `;
+    }
+    html += '</div>';
+    
+    // Logs Path
+    html += '<div class="mb-6">';
+    html += '<h4 class="text-lg font-semibold text-white mb-3">Logstash Logs Path</h4>';
+    if (prevLogsPath !== currLogsPath) {
+        html += `
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-3 bg-red-900/20 border-l-4 border-red-600 rounded">
+                    <div class="text-red-400 text-xs font-semibold mb-1">Previous</div>
+                    <div class="text-gray-300 font-mono text-sm">${escapeHtml(prevLogsPath) || '<em class="text-gray-500">Not set</em>'}</div>
+                </div>
+                <div class="p-3 bg-green-900/20 border-l-4 border-green-600 rounded">
+                    <div class="text-green-400 text-xs font-semibold mb-1">New</div>
+                    <div class="text-gray-300 font-mono text-sm">${escapeHtml(currLogsPath) || '<em class="text-gray-500">Not set</em>'}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="p-3 bg-gray-700/50 border-l-4 border-gray-600 rounded">
+                <div class="text-gray-400 text-xs font-semibold mb-1">No changes</div>
+                <div class="text-gray-300 font-mono text-sm">${escapeHtml(currLogsPath) || '<em class="text-gray-500">Not set</em>'}</div>
+            </div>
+        `;
+    }
+    html += '</div>';
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// Load and display policy diff
+async function loadPolicyDiff(policyId, policyName) {
+    try {
+        // Fetch diff data from server
+        const response = await fetch(`/ConnectionManager/GetPolicyDiff/?policy_id=${policyId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load policy diff');
+        }
+        
+        // Store diff data globally (including policy_id for deployment)
+        currentPolicyDiffData = data;
+        currentPolicyDiffData.policy_id = policyId;
+        
+        // Populate modal header
+        document.getElementById('deployPolicyName').textContent = data.policy_name;
+        document.getElementById('currentRevisionNum').textContent = data.last_deployed_revision;
+        document.getElementById('newRevisionNum').textContent = data.current_revision + 1;
+        
+        // Hide loading, show container
+        document.getElementById('deployDiffLoading').classList.add('hidden');
+        document.getElementById('deployDiffContainer').classList.remove('hidden');
+        
+        // Render diffs for each section
+        renderSideBySideTextDiff('diff-logstash_yml', data.previous.logstash_yml || '', data.current.logstash_yml || '');
+        renderSideBySideTextDiff('diff-jvm_options', data.previous.jvm_options || '', data.current.jvm_options || '');
+        renderSideBySideTextDiff('diff-log4j2_properties', data.previous.log4j2_properties || '', data.current.log4j2_properties || '');
+        renderPipelinesDiff(data.previous.pipelines || [], data.current.pipelines || []);
+        renderKeystoreDiff(data.previous.keystore || [], data.current.keystore || []);
+        renderGlobalSettingsDiff(data.previous, data.current);
+        
+        // Setup tab switching
+        setupDeployDiffTabs();
+        
+        // Calculate and display stats
+        const oldLines = (data.previous.logstash_yml || '').split('\n').length;
+        const newLines = (data.current.logstash_yml || '').split('\n').length;
+        document.getElementById('deployDiffStats').textContent = `Logstash.yml: ${oldLines} → ${newLines} lines`;
+        
+    } catch (error) {
+        console.error('Error loading policy diff:', error);
+        document.getElementById('deployDiffLoading').innerHTML = `
+            <div class="text-center">
+                <p class="text-red-400 mb-4">Failed to load policy diff</p>
+                <p class="text-gray-400 text-sm">${error.message}</p>
+                <button onclick="hideDeployDiffModal()" class="mt-4 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+                    Close
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Confirm deploy
+async function confirmDeployPolicy() {
+    if (!currentPolicyDiffData) {
+        console.error('No policy diff data available');
+        return;
+    }
+    
+    const confirmBtn = document.getElementById('confirmDeployBtn');
+    const originalText = confirmBtn.textContent;
+    
+    try {
+        // Disable button and show loading state
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Deploying...';
+        confirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        
+        // Call deploy endpoint
+        const response = await fetch('/ConnectionManager/DeployPolicy/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                policy_id: currentPolicyDiffData.policy_id
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Show success message
+            if (typeof showToast === 'function') {
+                showToast(data.message || 'Policy deployed successfully!', 'success');
+            } else {
+                alert(data.message || 'Policy deployed successfully!');
+            }
+            
+            // Close modal
+            hideDeployDiffModal();
+            
+            // Reload the page or refresh policy data
+            if (typeof loadPolicyData === 'function') {
+                loadPolicyData();
+            } else {
+                // Fallback: reload the page
+                window.location.reload();
+            }
+        } else {
+            throw new Error(data.error || 'Failed to deploy policy');
+        }
+        
+    } catch (error) {
+        console.error('Error deploying policy:', error);
+        
+        if (typeof showToast === 'function') {
+            showToast('Failed to deploy policy: ' + error.message, 'error');
+        } else {
+            alert('Failed to deploy policy: ' + error.message);
+        }
+        
+        // Re-enable button
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = originalText;
+        confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+// Get CSRF token from cookie
+function getCsrfToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}

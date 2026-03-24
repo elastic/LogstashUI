@@ -7,16 +7,17 @@ from django.http import HttpResponse, JsonResponse
 from django.template.loader import get_template
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 
 from .forms import ConnectionForm
-from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey
+from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey, Revision
 
 from Common.decorators import require_admin_role
 from Common.logstash_utils import get_logstash_pipeline
 from Common.elastic_utils import get_elastic_connection, test_elastic_connectivity
 from Common.validators import validate_pipeline_name
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from html import escape
 
 import logging
@@ -919,7 +920,7 @@ def check_in(request):
             return JsonResponse({"success": False, "error": "Invalid API key"}, status=401)
         
         # Update last_check_in timestamp
-        from django.utils import timezone
+
         connection.last_check_in = timezone.now()
         connection.save()
         
@@ -927,13 +928,22 @@ def check_in(request):
         logger.info(f"Agent check-in: connection_id={connection_id}, agent_id={connection.agent_id}")
         logger.debug(f"Check-in data: {data}")
         
-        # TODO: Compare hashes to detect configuration drift
-        # For now, just acknowledge the check-in
+        # Get policy configuration
+        policy = connection.policy
+        if not policy:
+            return JsonResponse({
+                "success": False,
+                "error": "No policy assigned to this connection"
+            }, status=400)
         
+        # Return current revision number and paths from policy
         return JsonResponse({
             "success": True,
             "message": "Check-in successful",
-            "timestamp": connection.last_check_in.isoformat()
+            "timestamp": connection.last_check_in.isoformat(),
+            "current_revision_number": policy.current_revision_number,
+            "settings_path": policy.settings_path,
+            "logs_path": policy.logs_path
         })
         
     except json.JSONDecodeError:
@@ -1074,4 +1084,394 @@ def delete_enrollment_token(request):
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as e:
         logger.error(f"Error deleting enrollment token: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_policy_diff(request):
+    """
+    Get diff between current policy state and last deployed revision.
+    Returns structured diff data for logstash.yml, jvm.options, log4j2.properties, pipelines, and keystore.
+    """
+    if request.method != 'GET':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        policy_id = request.GET.get('policy_id')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Get current policy state
+        current_state = {
+            'logstash_yml': policy.logstash_yml,
+            'jvm_options': policy.jvm_options,
+            'log4j2_properties': policy.log4j2_properties,
+            'settings_path': policy.settings_path,
+            'logs_path': policy.logs_path,
+            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
+            'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
+        }
+        
+        # Get last revision (if any)
+        last_revision = policy.revisions.first()  # Already ordered by -revision_number
+        
+        if last_revision:
+            # Compare with last revision
+            previous_state = last_revision.snapshot_json
+            revision_number = last_revision.revision_number
+        else:
+            # No previous revision - compare with empty state
+            previous_state = {
+                'logstash_yml': '',
+                'jvm_options': '',
+                'log4j2_properties': '',
+                'settings_path': '',
+                'logs_path': '',
+                'pipelines': [],
+                'keystore': []
+            }
+            revision_number = 0
+        
+        # Build diff response
+        diff_data = {
+            'success': True,
+            'policy_name': policy.name,
+            'current_revision': policy.current_revision_number,
+            'last_deployed_revision': revision_number,
+            'has_changes': policy.has_undeployed_changes,
+            'current': current_state,
+            'previous': previous_state
+        }
+        
+        return JsonResponse(diff_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting policy diff: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def deploy_policy(request):
+    """
+    Deploy a policy by:
+    1. Incrementing the revision number in the Policy table
+    2. Creating a new Revision record with a snapshot of the current policy state
+    3. Keeping the current data in the policy (no changes to policy fields)
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        policy_id = data.get('policy_id')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Increment the revision number
+        policy.current_revision_number += 1
+        new_revision_number = policy.current_revision_number
+        
+        # Create snapshot of current policy state
+        snapshot_data = {
+            'logstash_yml': policy.logstash_yml,
+            'jvm_options': policy.jvm_options,
+            'log4j2_properties': policy.log4j2_properties,
+            'settings_path': policy.settings_path,
+            'logs_path': policy.logs_path,
+            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
+            'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
+        }
+        
+        # Create new Revision record
+        revision = Revision.objects.create(
+            policy=policy,
+            revision_number=new_revision_number,
+            snapshot_json=snapshot_data,
+            created_by=request.user.username
+        )
+        
+        # Save the policy with updated revision number
+        policy.save()
+        
+        logger.info(f"Policy '{policy.name}' deployed as revision {new_revision_number} by {request.user.username}")
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Policy deployed successfully as version {new_revision_number}",
+            "revision_number": new_revision_number,
+            "policy_name": policy.name
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error deploying policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@csrf_exempt
+def get_config_changes(request):
+    """
+    Compare agent's current config file hashes and paths with the policy's expected values.
+    Returns which configuration files need to be updated.
+    
+    Expected request data:
+    {
+        "connection_id": int,
+        "logstash_yml_hash": str,
+        "jvm_options_hash": str,
+        "log4j2_properties_hash": str,
+        "settings_path": str,
+        "logs_path": str
+    }
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        # Parse request data first to get connection_id
+        data = json.loads(request.body)
+        connection_id = data.get('connection_id')
+        
+        if not connection_id:
+            return JsonResponse({"success": False, "error": "Connection ID is required"}, status=400)
+        
+        # Authenticate using API key
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('ApiKey '):
+            return JsonResponse({"success": False, "error": "Invalid authorization header"}, status=401)
+        
+        raw_api_key = auth_header.replace('ApiKey ', '').strip()
+        
+        # Get the connection and verify API key
+        try:
+            connection = ConnectionTable.objects.get(id=connection_id, connection_type='AGENT')
+        except ConnectionTable.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Connection not found"}, status=404)
+        
+        # Verify API key belongs to this connection
+        try:
+            api_key_obj = connection.api_keys.first()
+            if not api_key_obj or not api_key_obj.verify_api_key(raw_api_key):
+                return JsonResponse({"success": False, "error": "Invalid API key"}, status=401)
+        except Exception as e:
+            logger.error(f"API key verification error: {e}")
+            return JsonResponse({"success": False, "error": "Authentication failed"}, status=401)
+        agent_logstash_yml_hash = data.get('logstash_yml_hash', '')
+        agent_jvm_options_hash = data.get('jvm_options_hash', '')
+        agent_log4j2_properties_hash = data.get('log4j2_properties_hash', '')
+        agent_settings_path = data.get('settings_path', '')
+        agent_logs_path = data.get('logs_path', '')
+        
+        if not connection.policy:
+            return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
+        
+        policy = connection.policy
+        
+        # Compare hashes and paths, and include new values if changed
+        changes = {}
+        
+        # Check logstash.yml
+        if agent_logstash_yml_hash != policy.logstash_yml_hash:
+            changes['logstash_yml'] = policy.logstash_yml
+            logger.info(f"  logstash.yml: CHANGED")
+        else:
+            changes['logstash_yml'] = False
+            logger.info(f"  logstash.yml: unchanged")
+        
+        # Check jvm.options
+        if agent_jvm_options_hash != policy.jvm_options_hash:
+            changes['jvm_options'] = policy.jvm_options
+            logger.info(f"  jvm.options: CHANGED")
+        else:
+            changes['jvm_options'] = False
+            logger.info(f"  jvm.options: unchanged")
+        
+        # Check log4j2.properties
+        if agent_log4j2_properties_hash != policy.log4j2_properties_hash:
+            changes['log4j2_properties'] = policy.log4j2_properties
+            logger.info(f"  log4j2.properties: CHANGED")
+        else:
+            changes['log4j2_properties'] = False
+            logger.info(f"  log4j2.properties: unchanged")
+        
+        # Check settings_path
+        if agent_settings_path != policy.settings_path:
+            changes['settings_path'] = policy.settings_path
+            logger.info(f"  settings_path: CHANGED")
+        else:
+            changes['settings_path'] = False
+            logger.info(f"  settings_path: unchanged")
+        
+        # Check logs_path
+        if agent_logs_path != policy.logs_path:
+            changes['logs_path'] = policy.logs_path
+            logger.info(f"  logs_path: CHANGED")
+        else:
+            changes['logs_path'] = False
+            logger.info(f"  logs_path: unchanged")
+        
+        logger.info(f"Config change check for connection {connection_id} completed")
+        
+        return JsonResponse({
+            "success": True,
+            "changes": changes,
+            "policy_name": policy.name,
+            "current_revision": policy.current_revision_number
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error checking config changes: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_policy_diff(request):
+    """
+    Get diff between current policy state and last deployed revision.
+    Returns structured diff data for logstash.yml, jvm.options, log4j2.properties, pipelines, and keystore.
+    """
+    if request.method != 'GET':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        policy_id = request.GET.get('policy_id')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Get current policy state
+        current_state = {
+            'logstash_yml': policy.logstash_yml,
+            'jvm_options': policy.jvm_options,
+            'log4j2_properties': policy.log4j2_properties,
+            'settings_path': policy.settings_path,
+            'logs_path': policy.logs_path,
+            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
+            'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
+        }
+        
+        # Get last revision (if any)
+        last_revision = policy.revisions.first()  # Already ordered by -revision_number
+        
+        if last_revision:
+            # Compare with last revision
+            previous_state = last_revision.snapshot_json
+            revision_number = last_revision.revision_number
+        else:
+            # No previous revision - compare with empty state
+            previous_state = {
+                'logstash_yml': '',
+                'jvm_options': '',
+                'log4j2_properties': '',
+                'settings_path': '',
+                'logs_path': '',
+                'pipelines': [],
+                'keystore': []
+            }
+            revision_number = 0
+        
+        # Build diff response
+        diff_data = {
+            'success': True,
+            'policy_name': policy.name,
+            'current_revision': policy.current_revision_number,
+            'last_deployed_revision': revision_number,
+            'has_changes': policy.has_undeployed_changes,
+            'current': current_state,
+            'previous': previous_state
+        }
+        
+        return JsonResponse(diff_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting policy diff: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def deploy_policy(request):
+    """
+    Deploy a policy by:
+    1. Incrementing the revision number in the Policy table
+    2. Creating a new Revision record with a snapshot of the current policy state
+    3. Keeping the current data in the policy (no changes to policy fields)
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        policy_id = data.get('policy_id')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Increment the revision number
+        policy.current_revision_number += 1
+        new_revision_number = policy.current_revision_number
+        
+        # Create snapshot of current policy state
+        snapshot_data = {
+            'logstash_yml': policy.logstash_yml,
+            'jvm_options': policy.jvm_options,
+            'log4j2_properties': policy.log4j2_properties,
+            'settings_path': policy.settings_path,
+            'logs_path': policy.logs_path,
+            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
+            'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
+        }
+        
+        # Create new Revision record
+        revision = Revision.objects.create(
+            policy=policy,
+            revision_number=new_revision_number,
+            snapshot_json=snapshot_data,
+            created_by=request.user.username
+        )
+        
+        # Save the policy with updated revision number
+        policy.save()
+        
+        logger.info(f"Policy '{policy.name}' deployed as revision {new_revision_number} by {request.user.username}")
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Policy deployed successfully as version {new_revision_number}",
+            "revision_number": new_revision_number,
+            "policy_name": policy.name
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error deploying policy: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
