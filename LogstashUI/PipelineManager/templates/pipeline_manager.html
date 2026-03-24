@@ -68,7 +68,11 @@
 
   </div>
   {% else %}
-  <div class="page-header flex justify-end">
+  <div class="page-header flex justify-between items-center mb-2">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Connection Manager</h1>
+      <p class="text-sm text-gray-400 mt-1">Manage pipelines and connections to Elastic and Logstash Agents</p>
+    </div>
     <div class="flex gap-2">
       <a href="{% url 'AgentPolicies' %}" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +144,7 @@
                 {% if connection.connection_type == "CENTRALIZED" %}
                   <img src="{% static 'images/ElasticIcon.png' %}" alt="Centralized" width="52" height="52" class="inline-block">
                 {% else %}
-                  <img src="{% static 'images/LoggyIcon.png' %}" alt="Agent" class="inline-block">
+                  <img src="{% static 'images/LogstashIcon.png' %}" alt="Agent" width="52" height="52" class="inline-block">
                 {% endif %}
               </td>
 

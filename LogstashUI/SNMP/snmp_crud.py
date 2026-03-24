@@ -94,7 +94,7 @@ def AddCredential(request):
                 credential.priv_protocol = request.POST.get('priv_protocol')
                 credential.priv_pass = request.POST.get('priv_pass')
 
-        # Save (this will trigger validation and encryption)
+        # Save (this will trigger validation and encryption.py)
         credential.save()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential created successfully!'}, status=200)
@@ -151,7 +151,7 @@ def UpdateCredential(request, credential_id):
                 if priv_pass:
                     credential.priv_pass = priv_pass
 
-        # Save (this will trigger validation and encryption)
+        # Save (this will trigger validation and encryption.py)
         credential.save()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential updated successfully!'}, status=200)

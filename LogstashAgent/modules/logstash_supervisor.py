@@ -11,8 +11,8 @@ import signal
 import psutil
 import shutil
 from typing import Optional
-from LogstashAgent.modules.logstash_api import LogstashAPI
-from LogstashAgent.modules import slots
+from .logstash_api import LogstashAPI
+from . import slots
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Set to INFO level for supervisor

@@ -6,6 +6,7 @@ from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.template.loader import get_template
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 
 from .forms import ConnectionForm
 from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey
@@ -434,7 +435,6 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
 def DeletePipeline(request):
     if request.method == "POST":
         # Handle both JSON and form data
-        import json
         if request.content_type == 'application/json':
             data = json.loads(request.body)
             es_id = data.get("es_id")
@@ -552,7 +552,6 @@ def add_policy(request):
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
     
     try:
-        import json
         data = json.loads(request.body)
         
         name = data.get('name', '').strip()
@@ -616,7 +615,6 @@ def update_policy(request):
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
     
     try:
-        import json
         data = json.loads(request.body)
         
         policy_name = data.get('policy_name', '').strip()
@@ -692,7 +690,6 @@ def delete_policy(request):
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
     
     try:
-        import json
         data = json.loads(request.body)
         
         policy_name = data.get('policy_name', '').strip()
@@ -737,7 +734,7 @@ def delete_policy(request):
 def generate_enrollment_token(request):
     """
     Generate an enrollment token for Logstash Agent
-    Token contains: policy name, LogstashUI URL, enrollment token, and expiry (30 minutes)
+    Token contains: enrollment token only (LogstashUI URL provided via command-line)
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -748,13 +745,9 @@ def generate_enrollment_token(request):
 
         # Generate a secure random enrollment token
         enrollment_token = secrets.token_urlsafe(32)
-
-        # Get LogstashUI URL from request
-        logstash_ui_url = request.build_absolute_uri('/')[:-1]  # Remove trailing slash
         
-        # Create token payload
+        # Create token payload (only enrollment_token, no URL)
         token_payload = {
-            "logstash_ui_url": logstash_ui_url,
             "enrollment_token": enrollment_token,
         }
         
@@ -776,6 +769,7 @@ def generate_enrollment_token(request):
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
+@csrf_exempt
 def enroll(request):
     """
     Enroll a Logstash Agent using an enrollment token
@@ -788,12 +782,13 @@ def enroll(request):
         data = json.loads(request.body)
         encoded_token = data.get('enrollment_token')
         host = data.get('host')
+        agent_id = data.get('agent_id')
         
         # Validate required fields
-        if not encoded_token or not host:
+        if not encoded_token or not host or not agent_id:
             return JsonResponse({
                 "success": False, 
-                "error": "Missing required fields: enrollment_token, host"
+                "error": "Missing required fields: enrollment_token, host, agent_id"
             }, status=400)
         
         # Decode the base64 enrollment token
@@ -819,18 +814,29 @@ def enroll(request):
                 "error": "Invalid enrollment token"
             }, status=401)
         
-        # Step 2: Create connection in database
+        # Step 2: Check if agent_id already exists (re-enrollment)
+        try:
+            existing_connection = ConnectionTable.objects.filter(agent_id=agent_id).first()
+            if existing_connection:
+                logger.info(f"Agent {agent_id} is re-enrolling. Deleting old connection {existing_connection.id}")
+                # Delete the old connection (cascade will delete associated ApiKeys)
+                existing_connection.delete()
+        except Exception as e:
+            logger.warning(f"Error checking for existing agent_id: {str(e)}")
+        
+        # Step 3: Create connection in database
         try:
             # Create the connection with specified fields only
             connection = ConnectionTable.objects.create(
                 name=host,
                 connection_type='AGENT',
                 host=host,
+                agent_id=agent_id,
                 is_active=True,
                 policy=enrollment_token_obj.policy
             )
             
-            # Step 3: Generate API Key
+            # Step 4: Generate API Key
             raw_api_key = secrets.token_urlsafe(32)
             
             # Create ApiKey object (it will be hashed automatically on save)
@@ -839,14 +845,24 @@ def enroll(request):
                 api_key=raw_api_key
             )
             
-            logger.info(f"Agent enrolled successfully with host '{host}' and policy '{enrollment_token_obj.policy.name}'")
+            logger.info(f"Agent enrolled successfully with host '{host}', agent_id '{agent_id}', and policy '{enrollment_token_obj.policy.name}'")
             
-            # Step 4: Reply with the API Key
+            # Step 5: Get policy configuration
+            policy = enrollment_token_obj.policy
+            
+            # Step 6: Reply with the API Key and policy configuration
             return JsonResponse({
                 "success": True,
                 "api_key": raw_api_key,
-                "policy_id": enrollment_token_obj.policy.id,
-                "connection_id": connection.id
+                "policy_id": policy.id,
+                "connection_id": connection.id,
+                "policy_config": {
+                    "settings_path": policy.settings_path,
+                    "logs_path": policy.logs_path,
+                    "logstash_yml": policy.logstash_yml,
+                    "jvm_options": policy.jvm_options,
+                    "log4j2_properties": policy.log4j2_properties
+                }
             })
             
         except Exception as e:
@@ -857,6 +873,73 @@ def enroll(request):
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as e:
         logger.error(f"Error during enrollment: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@csrf_exempt
+def check_in(request):
+    """
+    Handle agent check-in requests
+    Authenticates via API key and updates last_check_in timestamp
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        # Get API key from Authorization header
+        auth_header = request.headers.get('Authorization', '')
+        
+        if not auth_header.startswith('ApiKey '):
+            return JsonResponse({
+                "success": False,
+                "error": "Missing or invalid Authorization header. Expected: 'Authorization: ApiKey <key>'"
+            }, status=401)
+        
+        raw_api_key = auth_header[7:]  # Remove 'ApiKey ' prefix
+        
+        if not raw_api_key:
+            return JsonResponse({"success": False, "error": "API key is empty"}, status=401)
+        
+        # Parse request body
+        data = json.loads(request.body)
+        connection_id = data.get('connection_id')
+        
+        if not connection_id:
+            return JsonResponse({"success": False, "error": "Missing connection_id"}, status=400)
+        
+        # Find the connection and verify API key
+        try:
+            connection = ConnectionTable.objects.get(id=connection_id)
+        except ConnectionTable.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Invalid connection_id"}, status=401)
+        
+        # Verify API key
+        api_key_obj = connection.api_keys.first()
+        if not api_key_obj or not api_key_obj.verify_api_key(raw_api_key):
+            return JsonResponse({"success": False, "error": "Invalid API key"}, status=401)
+        
+        # Update last_check_in timestamp
+        from django.utils import timezone
+        connection.last_check_in = timezone.now()
+        connection.save()
+        
+        # Log the check-in with configuration hashes
+        logger.info(f"Agent check-in: connection_id={connection_id}, agent_id={connection.agent_id}")
+        logger.debug(f"Check-in data: {data}")
+        
+        # TODO: Compare hashes to detect configuration drift
+        # For now, just acknowledge the check-in
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Check-in successful",
+            "timestamp": connection.last_check_in.isoformat()
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error during check-in: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
@@ -880,15 +963,11 @@ def get_enrollment_tokens(request):
         # Get all enrollment tokens for this policy
         tokens = EnrollmentToken.objects.filter(policy=policy)
         
-        # Get LogstashUI URL from request
-        logstash_ui_url = request.build_absolute_uri('/')[:-1]  # Remove trailing slash
-        
         # Serialize tokens with encoded payload
         tokens_data = []
         for token in tokens:
             # Create token payload (same as generate_enrollment_token)
             token_payload = {
-                "logstash_ui_url": logstash_ui_url,
                 "enrollment_token": token.token
             }
             

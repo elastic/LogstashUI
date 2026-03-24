@@ -190,7 +190,10 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/health/",
     "/ConnectionManager/StreamSimulate/",
     "/ConnectionManager/StreamSimulate",
-    "/PipelineManager/Enroll/",
+    "/ConnectionManager/Enroll/",
+    "/ConnectionManager/Enroll",
+    "/ConnectionManager/CheckIn/",
+    "/ConnectionManager/CheckIn",
 ]
 
 # Session Configuration

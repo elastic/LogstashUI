@@ -10,9 +10,9 @@ from threading import Lock, Thread
 import time
 import yaml
 import os
-import log_analyzer
+from . import log_analyzer
 import logging
-from logstash_api import LogstashAPI, PipelineNotFoundError
+from .logstash_api import LogstashAPI, PipelineNotFoundError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -683,7 +683,7 @@ def _load_config() -> Dict[str, Any]:
     Returns:
         Dictionary with configuration settings
     """
-    config_path = os.path.join(os.path.dirname(__file__), 'logstashagent.yml')
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logstashagent.yml')
 
     if not os.path.exists(config_path):
         logger.warning(f"[Slots] Config file not found at {config_path}, using simulation mode defaults")
