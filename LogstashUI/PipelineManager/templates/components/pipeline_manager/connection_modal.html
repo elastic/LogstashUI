@@ -203,6 +203,12 @@
                 <!-- Linux Installation Commands -->
                 <div id="linuxCommandsSection" class="mb-4 hidden">
                   <label class="form-label mb-2 block">Linux</label>
+                  <!-- Localhost Warning -->
+                  <div id="localhostWarning" class="hidden p-3 mb-3 bg-yellow-900/20 border border-yellow-600 rounded-lg">
+                    <p class="text-yellow-300 text-sm">
+                      ⚠️ It looks like you're hosting LogstashUI on your local machine. Be sure to replace the --logstash-ui-url with the actual hostname or IP address of the host.
+                    </p>
+                  </div>
                   <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 font-mono text-sm">
                     <div class="flex justify-between items-center mb-2">
                       <span class="text-gray-400 text-xs">BASH</span>
@@ -211,7 +217,7 @@
                       </button>
                     </div>
                     <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>pip install logstash-agent
-logstash-agent --enroll {enrollment_token}
+logstash-agent --enroll {enrollment_token} --logstash-ui-url {url}
 systemctl enable logstash-agent
 systemctl start logstash-agent</code></pre>
                   </div>
@@ -596,9 +602,27 @@ systemctl start logstash-agent</code></pre>
   // Function to update Linux commands with enrollment token
   function updateLinuxCommands(encodedToken) {
     const linuxCommandsElement = document.getElementById('linuxCommands');
+    const localhostWarning = document.getElementById('localhostWarning');
+    
     if (linuxCommandsElement) {
+      // Get the current URL from the browser
+      const currentUrl = window.location.origin;
+      
+      // Check if the URL contains localhost or 127.0.0.1
+      const isLocalhost = currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1');
+      
+      // Show or hide the localhost warning
+      if (localhostWarning) {
+        if (isLocalhost) {
+          localhostWarning.classList.remove('hidden');
+        } else {
+          localhostWarning.classList.add('hidden');
+        }
+      }
+      
+      // Update the commands with the enrollment token and URL
       linuxCommandsElement.innerHTML = `<code>pip install logstash-agent
-logstash-agent --enroll ${encodedToken}
+logstash-agent --enroll ${encodedToken} --logstash-ui-url ${currentUrl}
 systemctl enable logstash-agent
 systemctl start logstash-agent</code>`;
     }
@@ -635,9 +659,27 @@ systemctl start logstash-agent</code>`;
   // Function to update enrollment token in installation commands
   function updateEnrollmentToken(token) {
     const linuxCommands = document.getElementById('linuxCommands');
+    const localhostWarning = document.getElementById('localhostWarning');
+    
     if (linuxCommands) {
+      // Get the current URL from the browser
+      const currentUrl = window.location.origin;
+      
+      // Check if the URL contains localhost or 127.0.0.1
+      const isLocalhost = currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1');
+      
+      // Show or hide the localhost warning
+      if (localhostWarning) {
+        if (isLocalhost) {
+          localhostWarning.classList.remove('hidden');
+        } else {
+          localhostWarning.classList.add('hidden');
+        }
+      }
+      
+      // Update the commands with the enrollment token and URL
       linuxCommands.innerHTML = `<code>pip install logstash-agent
-logstash-agent --enroll ${token}
+logstash-agent --enroll ${token} --logstash-ui-url ${currentUrl}
 systemctl enable logstash-agent
 systemctl start logstash-agent</code>`;
     }
