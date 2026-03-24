@@ -1282,6 +1282,11 @@ def get_config_changes(request):
         
         policy = connection.policy
         
+        # Log what we're comparing
+        logger.info(f"Config change check for connection {connection_id}:")
+        logger.info(f"  Agent hashes: logstash_yml={agent_logstash_yml_hash}, jvm={agent_jvm_options_hash}, log4j2={agent_log4j2_properties_hash}")
+        logger.info(f"  Policy hashes: logstash_yml={policy.logstash_yml_hash}, jvm={policy.jvm_options_hash}, log4j2={policy.log4j2_properties_hash}")
+        
         # Compare hashes and paths, and include new values if changed
         changes = {}
         

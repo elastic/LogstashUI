@@ -8,9 +8,140 @@ import requests
 import json
 import hashlib
 import os
+import subprocess
 from . import agent_state
 
 logger = logging.getLogger(__name__)
+
+
+def update_logstash_yml(settings_path, content):
+    """
+    Update logstash.yml file with new content.
+    
+    Args:
+        settings_path: Path to Logstash settings directory
+        content: New content for logstash.yml
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        logstash_yml_path = settings_path + 'logstash.yml'
+        logger.info(f"Updating logstash.yml at {logstash_yml_path}")
+        
+        with open(logstash_yml_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info("Successfully updated logstash.yml")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update logstash.yml: {e}")
+        return False
+
+
+def update_jvm_options(settings_path, content):
+    """
+    Update jvm.options file with new content.
+    
+    Args:
+        settings_path: Path to Logstash settings directory
+        content: New content for jvm.options
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        jvm_options_path = settings_path + 'jvm.options'
+        logger.info(f"Updating jvm.options at {jvm_options_path}")
+        
+        with open(jvm_options_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info("Successfully updated jvm.options")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update jvm.options: {e}")
+        return False
+
+
+def update_log4j2_properties(settings_path, content):
+    """
+    Update log4j2.properties file with new content.
+    
+    Args:
+        settings_path: Path to Logstash settings directory
+        content: New content for log4j2.properties
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        log4j2_properties_path = settings_path + 'log4j2.properties'
+        logger.info(f"Updating log4j2.properties at {log4j2_properties_path}")
+        
+        with open(log4j2_properties_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info("Successfully updated log4j2.properties")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update log4j2.properties: {e}")
+        return False
+
+
+def restart_logstash():
+    """
+    Restart the Logstash service.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        logger.info("Restarting Logstash service...")
+        
+        # Try systemctl first (most common on Linux)
+        try:
+            result = subprocess.run(
+                ['systemctl', 'restart', 'logstash'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                logger.info("Logstash service restarted successfully via systemctl")
+                return True
+            else:
+                logger.warning(f"systemctl restart failed: {result.stderr}")
+        except FileNotFoundError:
+            logger.debug("systemctl not found, trying service command")
+        
+        # Try service command as fallback
+        try:
+            result = subprocess.run(
+                ['service', 'logstash', 'restart'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                logger.info("Logstash service restarted successfully via service command")
+                return True
+            else:
+                logger.warning(f"service restart failed: {result.stderr}")
+        except FileNotFoundError:
+            logger.debug("service command not found")
+        
+        logger.error("Failed to restart Logstash - no suitable service manager found")
+        return False
+        
+    except subprocess.TimeoutExpired:
+        logger.error("Logstash restart timed out after 30 seconds")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to restart Logstash service: {e}")
+        return False
 
 
 def get_config_changes(server_settings_path=None, server_logs_path=None):
@@ -47,12 +178,17 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             logger.error("Missing required data for config change detection")
             return None
         
-        # Read and hash config files
-        config_hashes = {}
-        
         # Ensure settings_path ends with forward slash for consistent concatenation
         if not settings_path.endswith('/'):
             settings_path = settings_path + '/'
+        
+        logger.info(f"Checking for config files at: {settings_path}")
+        
+        # Read and hash config files
+        config_hashes = {}
+        
+        # Track if any files existed initially (to determine if we should restart Logstash)
+        files_existed = False
         
         # Read logstash.yml
         logstash_yml_path = settings_path + 'logstash.yml'
@@ -60,6 +196,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             with open(logstash_yml_path, 'r', encoding='utf-8') as f:
                 logstash_yml_content = f.read()
                 config_hashes['logstash_yml_hash'] = hashlib.sha256(logstash_yml_content.encode('utf-8')).hexdigest()
+                files_existed = True
         except FileNotFoundError:
             logger.warning(f"logstash.yml not found at {logstash_yml_path}")
             config_hashes['logstash_yml_hash'] = ''
@@ -73,6 +210,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             with open(jvm_options_path, 'r', encoding='utf-8') as f:
                 jvm_options_content = f.read()
                 config_hashes['jvm_options_hash'] = hashlib.sha256(jvm_options_content.encode('utf-8')).hexdigest()
+                files_existed = True
         except FileNotFoundError:
             logger.warning(f"jvm.options not found at {jvm_options_path}")
             config_hashes['jvm_options_hash'] = ''
@@ -86,12 +224,21 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             with open(log4j2_properties_path, 'r', encoding='utf-8') as f:
                 log4j2_properties_content = f.read()
                 config_hashes['log4j2_properties_hash'] = hashlib.sha256(log4j2_properties_content.encode('utf-8')).hexdigest()
+                files_existed = True
         except FileNotFoundError:
             logger.warning(f"log4j2.properties not found at {log4j2_properties_path}")
             config_hashes['log4j2_properties_hash'] = ''
         except Exception as e:
             logger.error(f"Error reading log4j2.properties: {e}")
             config_hashes['log4j2_properties_hash'] = ''
+        
+        # If no files existed, error out immediately
+        logger.info(f"files_existed flag: {files_existed}")
+        if not files_existed:
+            logger.error(f"Provided file path of {settings_path} was not found. Do you have Logstash installed and is this the correct settings path?")
+            return None
+        
+        logger.info(f"Files found, proceeding to check with server")
         
         # Prepare request data
         request_data = {
@@ -138,19 +285,51 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
         if result.get('success'):
             changes = result.get('changes', {})
             
-            # Announce which configs need updating
-            if changes.get('logstash_yml_changed'):
-                logger.info("Configuration change found for logstash.yml")
-            if changes.get('jvm_options_changed'):
-                logger.info("Configuration change found for jvm.options")
-            if changes.get('log4j2_properties_changed'):
-                logger.info("Configuration change found for log4j2.properties")
-            if changes.get('settings_path_changed'):
-                logger.info("Configuration change found for settings_path")
-            if changes.get('logs_path_changed'):
-                logger.info("Configuration change found for logs_path")
+            # Debug: Log what server returned
+            logger.debug(f"Server response - changes: {changes}")
+            logger.debug(f"files_existed flag: {files_existed}")
             
-            if not any(changes.values()):
+            # Track if any files were updated
+            files_updated = False
+            
+            # Update logstash.yml if changed
+            logstash_yml_content = changes.get('logstash_yml')
+            if logstash_yml_content and logstash_yml_content != False:
+                logger.info("Configuration change found for logstash.yml")
+                if update_logstash_yml(settings_path, logstash_yml_content):
+                    files_updated = True
+            
+            # Update jvm.options if changed
+            jvm_options_content = changes.get('jvm_options')
+            if jvm_options_content and jvm_options_content != False:
+                logger.info("Configuration change found for jvm.options")
+                if update_jvm_options(settings_path, jvm_options_content):
+                    files_updated = True
+            
+            # Update log4j2.properties if changed
+            log4j2_properties_content = changes.get('log4j2_properties')
+            if log4j2_properties_content and log4j2_properties_content != False:
+                logger.info("Configuration change found for log4j2.properties")
+                if update_log4j2_properties(settings_path, log4j2_properties_content):
+                    files_updated = True
+            
+            # Check for path changes (informational only - can't update these automatically)
+            if changes.get('settings_path') and changes.get('settings_path') != False:
+                logger.info(f"Configuration change found for settings_path: {changes.get('settings_path')}")
+            if changes.get('logs_path') and changes.get('logs_path') != False:
+                logger.info(f"Configuration change found for logs_path: {changes.get('logs_path')}")
+            
+            # If any files were updated, restart Logstash (only if files existed before)
+            if files_updated:
+                if files_existed:
+                    logger.info("Configuration files updated, restarting Logstash service...")
+                    if restart_logstash():
+                        logger.info("Logstash restart completed successfully")
+                    else:
+                        logger.error("Logstash restart failed - manual intervention may be required")
+                else:
+                    logger.info("Configuration files created - Logstash restart skipped (files didn't exist previously)")
+            else:
                 logger.info("No configuration file changes detected")
             
             return result
