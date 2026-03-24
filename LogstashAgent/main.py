@@ -2,6 +2,10 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+import warnings
+# Suppress FastAPI deprecation warnings before importing FastAPI
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
@@ -12,8 +16,8 @@ import json
 import glob
 import logging
 import re
-from LogstashAgent.modules import slots, logstash_supervisor, log_analyzer
-from LogstashAgent.modules.logstash_api import LogstashAPI
+from modules import slots, logstash_supervisor, log_analyzer, enrollment, agent_state, controller
+from modules.logstash_api import LogstashAPI
 import requests
 import time
 import base64
@@ -23,6 +27,9 @@ from collections import deque
 import threading
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
+import sys
+import argparse
+import uvicorn
 
 # Configure logging with file output
 # Create data/logs directory if it doesn't exist
@@ -51,6 +58,9 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger.info(f"LogstashAgent logging initialized - logs directory: {LOGS_DIR}")
+
+# Initialize agent state (generates agent_id on first run)
+AGENT_ID = agent_state.get_or_create_agent_id()
 
 # Load agent configuration
 # Check for config in current directory first (native mode)
@@ -93,9 +103,17 @@ def load_agent_config() -> dict:
                                 agent_config['logstash_binary'] = '/usr/share/logstash/bin/logstash'
                                 agent_config['logstash_settings'] = '/etc/logstash'
                                 agent_config['logstash_log_path'] = '/var/log/logstash'
-                                logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode=embedded (forced Linux paths)")
+                            
+                            # Only log simulation_mode details when in simulation mode
+                            mode = agent_config.get('mode', 'simulation')
+                            if mode == 'simulation':
+                                sim_mode = agent_config.get('simulation_mode', 'embedded')
+                                if sim_mode == 'embedded':
+                                    logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode=embedded (forced Linux paths)")
+                                else:
+                                    logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode={sim_mode}")
                             else:
-                                logger.info(f"Loaded agent config from {logstashui_config_path}: simulation_mode={agent_config.get('simulation_mode', 'embedded')}")
+                                logger.info(f"Loaded agent config from {logstashui_config_path}")
                             return agent_config
             except Exception as e:
                 logger.warning(f"Failed to load config from {logstashui_config_path}: {e}, trying next path")
@@ -104,7 +122,11 @@ def load_agent_config() -> dict:
     try:
         with open(CONFIG_PATH, 'r') as f:
             config = yaml.safe_load(f)
-            logger.info(f"Loaded agent config from {CONFIG_PATH}: simulation_mode={config.get('simulation_mode', 'embedded')}")
+            mode = config.get('mode', 'simulation')
+            if mode == 'simulation':
+                logger.info(f"Loaded agent config from {CONFIG_PATH}: simulation_mode={config.get('simulation_mode', 'embedded')}")
+            else:
+                logger.info(f"Loaded agent config from {CONFIG_PATH}")
             return config
     except FileNotFoundError:
         logger.warning(f"Config file {CONFIG_PATH} not found, using embedded mode defaults")
@@ -1500,3 +1522,118 @@ async def validate_logstash_config(request: Request):
             status_code=500,
             detail=f"Error validating configuration: {str(e)}"
         )
+
+
+def parse_arguments():
+    """
+    Parse command-line arguments for enrollment and other modes
+    """
+    parser = argparse.ArgumentParser(
+        description='LogstashAgent - Control plane agent for LogstashUI',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Enroll agent with LogstashUI
+  python main.py --enroll=eyJlbnJvbGxtZW50X3Rva2VuIjogInN3VGJJODZkYl9tbjBUVE12X2Rfd1hXd0Via3RETU1iUkE2elVaRkF4WXcifQ== --logstash-ui-url=http://localhost:8080
+  
+  # Enroll with HTTPS URL
+  python main.py --enroll=TOKEN --logstash-ui-url=https://logstashui.example.com
+  
+  # Run in normal mode (simulation or agent mode based on config)
+  python main.py
+        """
+    )
+    
+    parser.add_argument(
+        '--enroll',
+        type=str,
+        metavar='TOKEN',
+        help='Enroll this agent with LogstashUI using the provided base64-encoded enrollment token'
+    )
+    
+    parser.add_argument(
+        '--logstash-ui-url',
+        type=str,
+        metavar='URL',
+        help='LogstashUI URL for enrollment (required with --enroll, e.g., http://localhost:8080 or https://logstashui.example.com)'
+    )
+    
+    parser.add_argument(
+        '--run',
+        action='store_true',
+        help='Run the agent controller (for enrolled agents in host mode)'
+    )
+    
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    """
+    Main entry point for LogstashAgent
+    
+    Supports multiple modes:
+    - Enrollment mode: --enroll flag to register with LogstashUI
+    - Agent mode: mode=agent in config, checks in with LogstashUI
+    - Simulation mode: mode=simulation in config, runs as simulation node
+    - Host mode: mode=host in config, manages local Logstash instance
+    """
+    args = parse_arguments()
+    
+    # Check if we're in enrollment mode
+    if args.enroll:
+        logger.info("=" * 60)
+        logger.info("LOGSTASH AGENT ENROLLMENT")
+        logger.info("=" * 60)
+        
+        # Validate that logstash-ui-url is provided
+        if not args.logstash_ui_url:
+            logger.error("--logstash-ui-url is required when using --enroll")
+            logger.error("Example: python main.py --enroll=TOKEN --logstash-ui-url=http://localhost:8080")
+            sys.exit(1)
+        
+        try:
+            enrollment.perform_enrollment(
+                encoded_token=args.enroll,
+                logstash_ui_url=args.logstash_ui_url,
+                agent_id=AGENT_ID
+            )
+            sys.exit(0)
+        except Exception as e:
+            logger.error(f"Enrollment failed: {e}")
+            sys.exit(1)
+    
+    # Check if we're in run mode (controller mode for enrolled agents)
+    if args.run:
+        # Run the agent controller
+        controller.run_controller()
+        sys.exit(0)
+    
+    # Check the mode from config
+    agent_mode = AGENT_CONFIG.get('mode', 'simulation')
+    
+    if agent_mode != 'simulation':
+        logger.info("=" * 60)
+        logger.info("LOGSTASH AGENT MODE")
+        logger.info("=" * 60)
+        logger.info("Agent mode is not yet fully implemented")
+        logger.info("The agent will check in with LogstashUI and receive policies")
+        logger.info("For now, starting in simulation mode...")
+        logger.info("=" * 60)
+        # TODO: Implement agent check-in loop
+        # For now, fall through to start FastAPI server
+    
+    # Start FastAPI server (simulation or host mode)
+
+    
+    # Get host and port from config or use defaults
+    host = AGENT_CONFIG.get('host', '0.0.0.0')
+    port = AGENT_CONFIG.get('port', 9600)
+    
+    logger.info(f"Starting LogstashAgent in {agent_mode} mode on {host}:{port}")
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info"
+    )

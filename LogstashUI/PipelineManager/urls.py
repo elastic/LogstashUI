@@ -38,6 +38,7 @@ urlpatterns = [
     path("AddEnrollmentToken/", manager_views.add_enrollment_token, name="AddEnrollmentToken"),
     path("DeleteEnrollmentToken/", manager_views.delete_enrollment_token, name="DeleteEnrollmentToken"),
     path("Enroll/", manager_views.enroll, name="Enroll"),
+    path("CheckIn/", manager_views.check_in, name="CheckIn"),
 
     path("GetCurrentPipelineCode/", editor_views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", editor_views.GetDiff, name="GetDiff"),

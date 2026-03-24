@@ -6,6 +6,7 @@ from django.db import models
 from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password, check_password
+import hashlib
 
 
 class Policy(models.Model):
@@ -37,6 +38,26 @@ class Policy(models.Model):
         help_text="Content of log4j2.properties configuration file"
     )
     
+    # Configuration file hashes (auto-computed on save)
+    logstash_yml_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        help_text="SHA256 hash of logstash.yml content"
+    )
+    jvm_options_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        help_text="SHA256 hash of jvm.options content"
+    )
+    log4j2_properties_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        help_text="SHA256 hash of log4j2.properties content"
+    )
+    
     # Deployment tracking
     has_undeployed_changes = models.BooleanField(
         default=True,
@@ -55,6 +76,17 @@ class Policy(models.Model):
         ordering = ['name']
         verbose_name = 'Policy'
         verbose_name_plural = 'Policies'
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save to auto-compute hashes of configuration files
+        """
+        # Compute hashes from configuration file contents
+        self.logstash_yml_hash = hashlib.sha256(self.logstash_yml.encode('utf-8')).hexdigest()
+        self.jvm_options_hash = hashlib.sha256(self.jvm_options.encode('utf-8')).hexdigest()
+        self.log4j2_properties_hash = hashlib.sha256(self.log4j2_properties.encode('utf-8')).hexdigest()
+        
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return self.name
@@ -80,6 +112,13 @@ class Connection(models.Model):
     )
 
     # Agent Connection Fields (optional)
+    agent_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Unique agent ID for Agent connections"
+    )
     host = models.CharField(
         max_length=255,
         blank=True,
@@ -142,6 +181,11 @@ class Connection(models.Model):
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_check_in = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time the agent checked in with LogstashUI"
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -159,10 +203,7 @@ class Connection(models.Model):
         if self.connection_type == self.ConnectionType.AGENT:
             if not self.host:
                 raise ValidationError("Host is required for Agent connections")
-            if not (self.ssh_key or (self.username and self.password)):
-                raise ValidationError(
-                    "Either key or username/password is required for Agent connections"
-                )
+            # Note: AGENT connections use ApiKey table (FK reference), so no ssh_key/username/password required here
         else:  # CENTRALIZED
             if not (self.cloud_id or self.host):
                 raise ValidationError(

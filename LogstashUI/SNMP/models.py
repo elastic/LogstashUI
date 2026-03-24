@@ -293,13 +293,13 @@ class Credential(models.Model):
         max_length=20,
         choices=PRIV_PROTOCOL_CHOICES,
         blank=True,
-        help_text="SNMPv3 privacy/encryption protocol"
+        help_text="SNMPv3 privacy/encryption.py protocol"
     )
     
     priv_pass = models.CharField(
         max_length=255,
         blank=True,
-        help_text="SNMPv3 encryption password"
+        help_text="SNMPv3 encryption.py password"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)

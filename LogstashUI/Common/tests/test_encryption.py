@@ -34,7 +34,7 @@ def mock_base_dir(temp_data_dir, monkeypatch):
                 self.parent = temp_data_dir.parent
         return MockPath()
     
-    with patch('Common.encryption.Path') as mock_path:
+    with patch('Common.encryption.py.Path') as mock_path:
         mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
         yield temp_data_dir
 
@@ -47,7 +47,7 @@ class TestGetEncryptionKey:
         valid_key = Fernet.generate_key()
         monkeypatch.setenv('CREDENTIAL_KEY', valid_key.decode())
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_encryption_key()
         
@@ -58,7 +58,7 @@ class TestGetEncryptionKey:
         """Test that invalid CREDENTIAL_KEY raises RuntimeError"""
         monkeypatch.setenv('CREDENTIAL_KEY', 'invalid-key-format')
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             with pytest.raises(RuntimeError, match="Invalid CREDENTIAL_KEY format"):
                 get_encryption_key()
@@ -69,7 +69,7 @@ class TestGetEncryptionKey:
         valid_key = Fernet.generate_key()
         key_file.write_bytes(valid_key)
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_encryption_key()
         
@@ -80,16 +80,16 @@ class TestGetEncryptionKey:
         key_file = temp_data_dir / ".secret_key"
         key_file.write_bytes(b'invalid-key-data')
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
-            with pytest.raises(RuntimeError, match="Invalid encryption key in file"):
+            with pytest.raises(RuntimeError, match="Invalid encryption.py key in file"):
                 get_encryption_key()
 
     def test_generate_new_key_and_persist(self, temp_data_dir):
         """Test generating new key and persisting to file"""
         key_file = temp_data_dir / ".secret_key"
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_encryption_key()
         
@@ -111,10 +111,10 @@ class TestGetEncryptionKey:
         key_file = temp_data_dir / ".secret_key"
         key_file.write_bytes(Fernet.generate_key())
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             with patch('builtins.open', side_effect=PermissionError("Access denied")):
-                with pytest.raises(RuntimeError, match="Cannot read encryption key file: Permission denied"):
+                with pytest.raises(RuntimeError, match="Cannot read encryption.py key file: Permission denied"):
                     get_encryption_key()
 
 
@@ -122,10 +122,10 @@ class TestEncryptDecryptCredential:
     """Test encrypt_credential and decrypt_credential functions"""
 
     def test_encrypt_decrypt_round_trip(self, temp_data_dir):
-        """Test that encryption and decryption work correctly"""
+        """Test that encryption.py and decryption work correctly"""
         plaintext = "my-secret-password"
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             
             encrypted = encrypt_credential(plaintext)
@@ -136,7 +136,7 @@ class TestEncryptDecryptCredential:
             assert decrypted == plaintext
 
     def test_encrypt_empty_string_passthrough(self):
-        """Test that empty string is passed through without encryption"""
+        """Test that empty string is passed through without encryption.py"""
         assert encrypt_credential("") == ""
         assert encrypt_credential(None) is None
 
@@ -163,7 +163,7 @@ class TestEncryptDecryptCredential:
 
     def test_decrypt_invalid_token(self, temp_data_dir):
         """Test that decrypting with invalid token raises ValueError"""
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             
             with pytest.raises(ValueError, match="Cannot decrypt credential: Invalid token"):
@@ -181,7 +181,7 @@ class TestEncryptDecryptCredential:
         key2 = Fernet.generate_key()
         key_file.write_bytes(key2)
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             
             with pytest.raises(ValueError, match="Cannot decrypt credential: Invalid token"):
@@ -191,7 +191,7 @@ class TestEncryptDecryptCredential:
         """Test encrypting and decrypting unicode characters"""
         plaintext = "🔒 Secret with émojis and spëcial çhars 中文"
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             
             encrypted = encrypt_credential(plaintext)
@@ -207,7 +207,7 @@ class TestGetDjangoSecretKey:
         secret_key = "test-secret-key-from-environment-variable-long-enough"
         monkeypatch.setenv('SECRET_KEY', secret_key)
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_django_secret_key()
         
@@ -218,7 +218,7 @@ class TestGetDjangoSecretKey:
         short_key = "short"
         monkeypatch.setenv('SECRET_KEY', short_key)
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_django_secret_key()
         
@@ -231,7 +231,7 @@ class TestGetDjangoSecretKey:
         secret_key = "test-secret-key-from-file-should-be-long-enough-now"
         key_file.write_text(secret_key)
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_django_secret_key()
         
@@ -242,7 +242,7 @@ class TestGetDjangoSecretKey:
         key_file = temp_data_dir / ".django_secret_key"
         key_file.write_text("")
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             with pytest.raises(RuntimeError, match="Django secret key file is empty"):
                 get_django_secret_key()
@@ -251,7 +251,7 @@ class TestGetDjangoSecretKey:
         """Test generating new Django secret key and persisting to file"""
         key_file = temp_data_dir / ".django_secret_key"
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             key = get_django_secret_key()
         
@@ -273,7 +273,7 @@ class TestGetDjangoSecretKey:
         key_file = temp_data_dir / ".django_secret_key"
         key_file.write_text("test-key")
         
-        with patch('Common.encryption.Path') as mock_path:
+        with patch('Common.encryption.py.Path') as mock_path:
             mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
             with patch('builtins.open', side_effect=PermissionError("Access denied")):
                 with pytest.raises(RuntimeError, match="Cannot read Django secret key: Permission denied"):
