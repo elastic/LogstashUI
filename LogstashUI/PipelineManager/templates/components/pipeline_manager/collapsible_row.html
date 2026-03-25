@@ -20,7 +20,44 @@
         <div style="max-width: 500px; flex: 1;">
             <input type="text" id="pipelineSearchInput-{{ es_id }}" placeholder="Search by pipeline name or description..." class="input input-bordered w-full">
         </div>
+        
+        <!-- Policy Info Message (populated by JavaScript) -->
+        <div id="policyInfo-{{ es_id }}" class="hidden flex items-center gap-2 px-4 py-2 bg-blue-900/30 border border-blue-500/40 rounded-lg">
+            <svg class="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="text-sm">
+                <span class="text-blue-300 font-medium">Policy: <span id="policyName-{{ es_id }}"></span></span>
+                <span class="text-gray-400 mx-2">•</span>
+                <span class="text-gray-300">Changes apply to all agents in this policy</span>
+            </div>
+        </div>
     </div>
+    
+    <script>
+        // Extract policy info from parent table row
+        (function() {
+            const esId = '{{ es_id }}';
+            const pipelinesRow = document.getElementById('pipelines-' + esId);
+            if (pipelinesRow) {
+                const parentRow = pipelinesRow.previousElementSibling;
+                if (parentRow) {
+                    // Find the policy cell (5th column)
+                    const policyCells = parentRow.querySelectorAll('td');
+                    if (policyCells.length >= 5) {
+                        const policyCell = policyCells[4];
+                        const policyText = policyCell.textContent.trim();
+                        
+                        // Show policy info if it's not "Centralized" and not empty
+                        if (policyText && policyText !== 'Centralized' && policyText !== 'No Policy') {
+                            document.getElementById('policyName-' + esId).textContent = policyText;
+                            document.getElementById('policyInfo-' + esId).classList.remove('hidden');
+                        }
+                    }
+                }
+            }
+        })();
+    </script>
 
     <!-- No Results State -->
     <div id="pipelineNoResults-{{ es_id }}" class="hidden p-8 text-center bg-gray-900 rounded-lg mb-4">

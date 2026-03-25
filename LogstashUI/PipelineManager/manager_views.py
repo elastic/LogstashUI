@@ -73,7 +73,64 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name"))
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "last_check_in"))
+    
+    # Add is_online flag based on last_check_in time (within 10 minutes)
+    now = timezone.now()
+    for conn in connections:
+        if conn['last_check_in']:
+            time_diff = now - conn['last_check_in']
+            conn['is_online'] = time_diff.total_seconds() < 600  # 10 minutes = 600 seconds
+        else:
+            conn['is_online'] = False
+    
+    # Sort connections: centralized first, then by policy name
+    # This groups agents with the same policy together
+    def sort_key(conn):
+        if conn['connection_type'] == 'CENTRALIZED':
+            return (0, '')  # Centralized first
+        else:
+            return (1, conn['policy__name'] or 'zzz_no_policy')  # Then by policy name
+    
+    connections.sort(key=sort_key)
+    
+    # Add grouping metadata for visual styling
+    # Treat each connection (centralized or agent policy) as its own group
+    prev_policy = None
+    policy_color_index = 0
+    colors = ['blue', 'green', 'purple', 'pink', 'yellow', 'cyan']
+    
+    for i, conn in enumerate(connections):
+        if conn['connection_type'] == 'AGENT':
+            current_policy = conn['policy__name'] or 'No Policy'
+        else:
+            # Each centralized connection is its own unique "policy"
+            current_policy = f"CENTRALIZED_{conn['pk']}"
+        
+        # Check if this is the first row of a policy group
+        if current_policy != prev_policy:
+            conn['is_group_start'] = True
+            # Assign a color to this policy group
+            conn['group_color'] = colors[policy_color_index % len(colors)]
+            policy_color_index += 1
+        else:
+            conn['is_group_start'] = False
+            # Use the same color as the previous connection in the group
+            conn['group_color'] = connections[i-1]['group_color']
+        
+        # Check if this is the last row of a policy group
+        is_last = (i == len(connections) - 1)
+        if not is_last:
+            next_conn = connections[i + 1]
+            if next_conn['connection_type'] == 'AGENT':
+                next_policy = next_conn.get('policy__name') or 'No Policy'
+            else:
+                next_policy = f"CENTRALIZED_{next_conn['pk']}"
+            conn['is_group_end'] = (current_policy != next_policy)
+        else:
+            conn['is_group_end'] = True
+        
+        prev_policy = current_policy
     
     context['connections'] = connections
     context['has_connections'] = len(connections) > 0
