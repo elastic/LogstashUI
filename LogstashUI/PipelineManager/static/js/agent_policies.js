@@ -790,6 +790,9 @@ document.addEventListener('DOMContentLoaded', function() {
             // Initialize CodeMirror if not already done
             if (!editor) {
                 initCodeMirror();
+                // Set the YAML content AFTER initialization
+                editor.setValue(yamlContent);
+                editor.refresh();
             } else {
                 // Load the YAML content we just generated
                 editor.setValue(yamlContent);
