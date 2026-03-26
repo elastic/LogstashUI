@@ -2,6 +2,10 @@
 //or more contributor license agreements. Licensed under the Elastic License;
 //you may not use this file except in compliance with the Elastic License.
 
+// Track original content for change detection
+let originalFileContents = {};
+let changedFiles = new Set();
+
 // Toggle advanced settings sections
 function toggleAdvanced(sectionId) {
     const section = document.getElementById(sectionId);
@@ -57,6 +61,26 @@ function checkConfigNotifications() {
     if (!hasVisibleNotifications) {
         notificationsContainer?.classList.add('hidden');
     }
+    
+    // Collect active notifications for indicator
+    const activeNotifications = [];
+    if (!logsPathMismatchNotification?.classList.contains('hidden')) {
+        activeNotifications.push({
+            type: 'warning',
+            title: 'Logs Path Mismatch',
+            message: 'Global logs path differs from config setting'
+        });
+    }
+    if (!logLevelFormatNotification?.classList.contains('hidden')) {
+        activeNotifications.push({
+            type: 'warning',
+            title: 'Log Level and Format',
+            message: 'LogstashUI needs to manage your log level and format'
+        });
+    }
+    
+    // Update notification indicator
+    updateNotificationIndicator(activeNotifications);
 }
 
 // Fix logs path mismatch by syncing FROM config TO global setting
@@ -610,6 +634,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Make editor globally accessible
         window.policyEditor = editor;
         
+        // Setup change detection after editor is ready
+        setTimeout(() => {
+            setupChangeDetection();
+        }, 500);
+        
         // Set initial content
         editor.setValue(fileContents[currentFile]);
         
@@ -621,8 +650,17 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Update documentation link based on file
     function updateDocsLink(file) {
+        const docsLink = document.getElementById('docsLink');
         const docsLinkUrl = document.getElementById('docsLinkUrl');
-        if (!docsLinkUrl) return;
+        if (!docsLinkUrl || !docsLink) return;
+        
+        // Hide docs link for Pipelines, Keystore, and Enrollment Tokens tabs
+        if (file === 'pipelines' || file === 'keystore' || file === 'enrollment-tokens') {
+            docsLink.classList.add('hidden');
+            return;
+        } else {
+            docsLink.classList.remove('hidden');
+        }
         
         const docsLinks = {
             'logstash.yml': {
@@ -646,14 +684,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const link = docsLinks[file] || docsLinks['logstash.yml'];
         docsLinkUrl.href = link.url;
         docsLinkUrl.textContent = link.text;
-        
-        // Hide docs link for enrollment tokens
-        const docsLink = document.getElementById('docsLink');
-        if (file === 'enrollment-tokens') {
-            docsLink.classList.add('hidden');
-        } else {
-            docsLink.classList.remove('hidden');
-        }
     }
     
     // File tab switching
@@ -665,16 +695,26 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.file-tab').forEach(t => {
                 t.classList.remove('active');
                 const span = t.querySelector('span');
+                const svg = t.querySelector('svg');
                 if (span) {
-                    span.classList.remove('text-white');
-                    span.classList.add('text-gray-400');
+                    span.classList.remove('text-white', 'font-semibold');
+                    span.classList.add('text-gray-500');
+                }
+                if (svg) {
+                    svg.classList.remove('opacity-60');
+                    svg.classList.add('opacity-40');
                 }
             });
             this.classList.add('active');
             const span = this.querySelector('span');
+            const svg = this.querySelector('svg');
             if (span) {
-                span.classList.remove('text-gray-400');
-                span.classList.add('text-white');
+                span.classList.remove('text-gray-500');
+                span.classList.add('text-white', 'font-semibold');
+            }
+            if (svg) {
+                svg.classList.remove('opacity-40');
+                svg.classList.add('opacity-60');
             }
             
             // Update documentation link
@@ -683,11 +723,24 @@ document.addEventListener('DOMContentLoaded', function() {
             // Store current file before switching
             const previousFile = currentFile;
             
-            // Save current editor content BEFORE switching (if in code mode and editor exists)
-            if (editor && previousFile && previousFile !== 'enrollment-tokens' && currentMode === 'code') {
-                const currentContent = editor.getValue();
-                if (currentContent !== undefined && currentContent !== null) {
-                    fileContents[previousFile] = currentContent;
+            // Save current content BEFORE switching
+            if (previousFile && previousFile !== 'enrollment-tokens' && previousFile !== 'pipelines' && previousFile !== 'keystore') {
+                if (currentMode === 'code' && editor) {
+                    // Save code mode content
+                    const currentContent = editor.getValue();
+                    if (currentContent !== undefined && currentContent !== null) {
+                        fileContents[previousFile] = currentContent;
+                    }
+                } else if (currentMode === 'form' && previousFile === 'logstash.yml') {
+                    // Save form mode content by converting form to YAML
+                    try {
+                        const yamlContent = formToYml();
+                        if (yamlContent) {
+                            fileContents[previousFile] = yamlContent;
+                        }
+                    } catch (error) {
+                        console.error('Error saving form data:', error);
+                    }
                 }
             }
             
@@ -697,19 +750,89 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update global currentFile reference
             window.policyCurrentFile = file;
             
+            // Handle pipelines tab
+            if (file === 'pipelines') {
+                const modeToggleContainer = document.getElementById('modeToggleContainer');
+                modeToggleContainer.classList.add('hidden');
+                
+                // Hide notifications container
+                const notificationsContainer = document.getElementById('notificationsContainer');
+                if (notificationsContainer) {
+                    notificationsContainer.classList.add('hidden');
+                }
+                
+                // Hide other views
+                const formModeEditor = document.getElementById('formModeEditor');
+                const codeModeEditor = document.getElementById('codeModeEditor');
+                const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+                const pipelinesView = document.getElementById('pipelinesView');
+                const keystoreView = document.getElementById('keystoreView');
+                
+                if (formModeEditor) formModeEditor.classList.add('hidden');
+                if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
+                if (keystoreView) keystoreView.classList.add('hidden');
+                if (pipelinesView) {
+                    pipelinesView.classList.remove('hidden');
+                    // Load pipelines for current policy
+                    loadPolicyPipelines();
+                }
+                return;
+            }
+            
+            // Handle keystore tab
+            if (file === 'keystore') {
+                const modeToggleContainer = document.getElementById('modeToggleContainer');
+                modeToggleContainer.classList.add('hidden');
+                
+                // Hide notifications container
+                const notificationsContainer = document.getElementById('notificationsContainer');
+                if (notificationsContainer) {
+                    notificationsContainer.classList.add('hidden');
+                }
+                
+                // Hide other views
+                const formModeEditor = document.getElementById('formModeEditor');
+                const codeModeEditor = document.getElementById('codeModeEditor');
+                const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+                const pipelinesView = document.getElementById('pipelinesView');
+                const keystoreView = document.getElementById('keystoreView');
+                
+                if (formModeEditor) formModeEditor.classList.add('hidden');
+                if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
+                if (pipelinesView) pipelinesView.classList.add('hidden');
+                if (keystoreView) {
+                    keystoreView.classList.remove('hidden');
+                    // Load keystore for current policy
+                    loadPolicyKeystore();
+                }
+                return;
+            }
+            
             // Handle enrollment tokens tab
             if (file === 'enrollment-tokens') {
                 // Hide mode toggle for enrollment tokens
                 const modeToggleContainer = document.getElementById('modeToggleContainer');
                 modeToggleContainer.classList.add('hidden');
                 
-                // Hide form and code editors
+                // Hide notifications container
+                const notificationsContainer = document.getElementById('notificationsContainer');
+                if (notificationsContainer) {
+                    notificationsContainer.classList.add('hidden');
+                }
+                
+                // Hide other views
                 const formModeEditor = document.getElementById('formModeEditor');
                 const codeModeEditor = document.getElementById('codeModeEditor');
                 const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+                const pipelinesView = document.getElementById('pipelinesView');
+                const keystoreView = document.getElementById('keystoreView');
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                if (pipelinesView) pipelinesView.classList.add('hidden');
+                if (keystoreView) keystoreView.classList.add('hidden');
                 if (enrollmentTokensView) {
                     enrollmentTokensView.classList.remove('hidden');
                     // Load enrollment tokens for current policy
@@ -721,7 +844,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show/hide mode toggle based on file type (only for logstash.yml)
             const modeToggleContainer = document.getElementById('modeToggleContainer');
             const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+            const pipelinesView = document.getElementById('pipelinesView');
+            const keystoreView = document.getElementById('keystoreView');
+            
             if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
+            if (pipelinesView) pipelinesView.classList.add('hidden');
+            if (keystoreView) keystoreView.classList.add('hidden');
             
             if (file === 'logstash.yml') {
                 modeToggleContainer.classList.remove('hidden');
@@ -734,6 +862,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } else {
                 modeToggleContainer.classList.add('hidden');
+                
+                // Hide notifications container when switching away from logstash.yml
+                const notificationsContainer = document.getElementById('notificationsContainer');
+                if (notificationsContainer) {
+                    notificationsContainer.classList.add('hidden');
+                }
+                
                 // Automatically switch to Code mode for jvm.options and log4j2.properties
                 switchToCodeMode();
                 
@@ -769,9 +904,12 @@ document.addEventListener('DOMContentLoaded', function() {
         codeModeEditor.classList.add('hidden');
         
         // Only parse YAML if we're on logstash.yml tab
-        // Use fileContents instead of editor.getValue() to avoid parsing wrong file
-        if (currentFile === 'logstash.yml' && fileContents['logstash.yml']) {
+        // Use window.policyCurrentFile to get the actual current file, not the closure variable
+        const actualCurrentFile = window.policyCurrentFile || currentFile;
+        if (actualCurrentFile === 'logstash.yml' && fileContents['logstash.yml']) {
             parseYmlToForm(fileContents['logstash.yml']);
+            // Show notifications container in Form mode for logstash.yml
+            checkConfigNotifications();
         }
     }
     
@@ -781,6 +919,12 @@ document.addEventListener('DOMContentLoaded', function() {
         formModeBtn.classList.remove('active');
         codeModeEditor.classList.remove('hidden');
         formModeEditor.classList.add('hidden');
+        
+        // Hide notifications container when switching to Code mode
+        const notificationsContainer = document.getElementById('notificationsContainer');
+        if (notificationsContainer) {
+            notificationsContainer.classList.add('hidden');
+        }
         
         // Convert form to YAML if we're on logstash.yml tab
         if (currentFile === 'logstash.yml') {
@@ -1024,9 +1168,12 @@ async function loadPolicyData(policyValue) {
                 window.policyFileContents['jvm.options'] = policy.jvm_options;
                 window.policyFileContents['log4j2.properties'] = policy.log4j2_properties;
                 
-                // Parse YAML and populate form fields when loading policy
-                if (policy.logstash_yml) {
-                    parseYmlToForm(policy.logstash_yml);
+                // Parse YAML and populate form fields ONLY for logstash.yml and ONLY if we're currently viewing it
+                if (policy.logstash_yml && window.policyCurrentFile === 'logstash.yml') {
+                    const currentMode = document.getElementById('formModeBtn')?.classList.contains('active') ? 'form' : 'code';
+                    if (currentMode === 'form') {
+                        parseYmlToForm(policy.logstash_yml);
+                    }
                 }
                 
                 // Update editor if it's initialized and showing current file
@@ -1034,6 +1181,9 @@ async function loadPolicyData(policyValue) {
                     window.policyEditor.setValue(window.policyFileContents[window.policyCurrentFile] || '');
                     window.policyEditor.refresh();
                 }
+                
+                // Store original content for change detection
+                storeOriginalContent();
             }
         }
     } catch (error) {
@@ -1182,6 +1332,8 @@ async function savePolicyChanges() {
         
         if (data.success) {
             showToast(data.message, 'success');
+            // Reset change tracking after successful save
+            resetChangeTracking();
         } else {
             showToast(data.error || 'Failed to update policy', 'error');
         }
@@ -1265,13 +1417,8 @@ async function loadEnrollmentTokens() {
         const data = await response.json();
         
         const tableBody = document.getElementById('enrollmentTokensTableBody');
-        const noTokensMessage = document.getElementById('noTokensMessage');
         
         if (data.success && data.tokens && data.tokens.length > 0) {
-            // Hide no tokens message, show table
-            noTokensMessage.classList.add('hidden');
-            tableBody.parentElement.parentElement.classList.remove('hidden');
-            
             // Clear existing rows
             tableBody.innerHTML = '';
             
@@ -1284,21 +1431,16 @@ async function loadEnrollmentTokens() {
                         <span class="font-medium">${escapeHtml(token.name)}</span>
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-300">
-                        <div class="flex items-center gap-2">
-                            <button onclick="toggleTokenDisplay(${token.id}, '${escapeHtml(token.raw_token)}', '${escapeHtml(token.encoded_token)}')" class="text-yellow-400 hover:text-yellow-300 text-xs mr-2">
-                                <span id="toggle-btn-${token.id}">Reveal Raw</span>
-                            </button>
-                            <span class="font-mono text-xs break-all" id="token-display-${token.id}">${token.encoded_token}</span>
-                        </div>
+                        <span class="font-mono text-xs break-all">${token.encoded_token}</span>
                     </td>
-                    <td class="px-4 py-3 text-sm text-left">
+                    <td class="px-4 py-3 text-sm text-right">
                         <div class="action-menu relative inline-block">
                             <button class="action-menu-button p-1 hover:bg-gray-700 rounded" onclick="toggleEnrollmentTokenMenu(${token.id})">
                                 <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                                 </svg>
                             </button>
-                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 bottom-full mb-1 z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
                                 <div class="px-1 py-1">
                                     <a href="#" onclick="event.preventDefault(); copyTokenToClipboard('${escapeHtml(token.encoded_token)}'); toggleEnrollmentTokenMenu(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1320,9 +1462,20 @@ async function loadEnrollmentTokens() {
                 tableBody.appendChild(row);
             });
         } else {
-            // Show no tokens message, hide table
-            noTokensMessage.classList.remove('hidden');
-            tableBody.parentElement.parentElement.classList.add('hidden');
+            // Show empty state in table
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="px-4 py-8 text-center text-gray-400">
+                        <div class="flex flex-col items-center gap-2">
+                            <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                            </svg>
+                            <p>No enrollment tokens found</p>
+                            <p class="text-sm">Tokens will be created automatically when you save this policy</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
         }
     } catch (error) {
         console.error('Error loading enrollment tokens:', error);
@@ -1488,6 +1641,10 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 this.classList.remove('field-modified');
             }
+            
+            // Check notifications and detect changes
+            checkConfigNotifications();
+            detectChanges();
         });
         
         // Also handle select changes
@@ -1500,11 +1657,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Check for configuration notifications when fields change
             checkConfigNotifications();
-        });
-        
-        // Check notifications on input as well
-        input.addEventListener('input', function() {
-            checkConfigNotifications();
+            detectChanges();
         });
     });
     
@@ -1513,15 +1666,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const logsPathSettingField = document.getElementById('logsPath');
     
     if (logsPathGlobalField) {
-        logsPathGlobalField.addEventListener('input', checkConfigNotifications);
-        logsPathGlobalField.addEventListener('change', checkConfigNotifications);
+        logsPathGlobalField.addEventListener('input', () => {
+            checkConfigNotifications();
+            detectChanges();
+        });
+        logsPathGlobalField.addEventListener('change', () => {
+            checkConfigNotifications();
+            detectChanges();
+        });
         console.log('Added event listeners to global logs path field');
     }
     
     if (logsPathSettingField) {
-        logsPathSettingField.addEventListener('input', checkConfigNotifications);
-        logsPathSettingField.addEventListener('change', checkConfigNotifications);
+        logsPathSettingField.addEventListener('input', () => {
+            checkConfigNotifications();
+            detectChanges();
+        });
+        logsPathSettingField.addEventListener('change', () => {
+            checkConfigNotifications();
+            detectChanges();
+        });
         console.log('Added event listeners to config logs path field');
+    }
+    
+    // Also monitor settings path for changes
+    const settingsPathField = document.getElementById('settingsPath');
+    if (settingsPathField) {
+        settingsPathField.addEventListener('input', () => {
+            detectChanges();
+        });
+        settingsPathField.addEventListener('change', () => {
+            detectChanges();
+        });
+        console.log('Added event listeners to settings path field');
     }
     
     // Initial check for notifications
@@ -1538,3 +1715,550 @@ document.addEventListener('click', function(event) {
         });
     }
 });
+
+// Update notification indicator in top bar
+function updateNotificationIndicator(notifications) {
+    const indicator = document.getElementById('notificationIndicator');
+    const badge = document.getElementById('notificationBadge');
+    const tooltipContent = document.getElementById('notificationTooltipContent');
+    
+    if (!indicator || !badge || !tooltipContent) return;
+    
+    if (notifications.length > 0) {
+        indicator.classList.remove('hidden');
+        
+        const hasError = notifications.some(n => n.type === 'error');
+        const severity = hasError ? 'error' : 'warning';
+        
+        badge.className = `absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-gray-900 notification-badge-${severity} notification-glow-${severity}`;
+        
+        tooltipContent.innerHTML = notifications.map(n => `
+            <div class="flex items-start gap-2 p-2 bg-gray-700/50 rounded">
+                <svg class="w-4 h-4 flex-shrink-0 mt-0.5 ${n.type === 'error' ? 'text-red-400' : 'text-yellow-400'}" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                    <div class="font-semibold ${n.type === 'error' ? 'text-red-300' : 'text-yellow-300'}">${n.title}</div>
+                    <div class="text-gray-400">${n.message}</div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
+// Notification indicator click handler
+document.addEventListener('DOMContentLoaded', function() {
+    const notificationIndicatorBtn = document.getElementById('notificationIndicatorBtn');
+    if (notificationIndicatorBtn) {
+        notificationIndicatorBtn.addEventListener('click', function() {
+            const logstashTab = document.querySelector('[data-file="logstash.yml"]');
+            if (logstashTab) {
+                logstashTab.click();
+                setTimeout(() => {
+                    const formModeBtn = document.getElementById('formModeBtn');
+                    if (formModeBtn && !formModeBtn.classList.contains('active')) {
+                        formModeBtn.click();
+                    }
+                }, 100);
+            }
+        });
+    }
+});
+
+// Load pipelines for the current policy
+async function loadPolicyPipelines() {
+    if (!currentPolicy) {
+        console.log('No policy selected');
+        return;
+    }
+    
+    try {
+        // Fetch pipelines for this policy from the backend
+        // For now, display a placeholder message
+        const tableBody = document.getElementById('policyPipelineTableBody');
+        if (tableBody) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                        <div class="flex flex-col items-center gap-2">
+                            <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                            </svg>
+                            <p>Pipeline management for policy: <strong>${currentPolicy}</strong></p>
+                            <p class="text-sm">Pipeline integration coming soon...</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading pipelines:', error);
+        showToast('Failed to load pipelines', 'error');
+    }
+}
+
+// Placeholder functions for pipeline pagination
+function previousPolicyPipelinePage() {
+    console.log('Previous page');
+}
+
+function nextPolicyPipelinePage() {
+    console.log('Next page');
+}
+
+function showCreatePipelineModal() {
+    showToast('Pipeline creation will be integrated soon', 'info');
+}
+
+// Load keystore entries for the current policy
+async function loadPolicyKeystore() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect?.options[policySelect.selectedIndex];
+    const policyId = selectedOption?.dataset.policyId;
+    
+    if (!policyId) {
+        console.log('No policy selected');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/ConnectionManager/GetKeystoreEntries/?policy_id=${policyId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        const tableBody = document.getElementById('keystoreTableBody');
+        
+        if (data.success && tableBody) {
+            if (data.entries && data.entries.length > 0) {
+                tableBody.innerHTML = data.entries.map(entry => `
+                    <tr class="hover:bg-gray-800/50">
+                        <td class="px-4 py-3 text-gray-300">${escapeHtml(entry.key_name)}</td>
+                        <td class="px-4 py-3 text-gray-400 font-mono text-sm">••••••••</td>
+                        <td class="px-4 py-3 text-gray-400 text-xs">${new Date(entry.last_updated).toLocaleString()}</td>
+                        <td class="text-right px-4 py-3">
+                            <div class="action-menu relative inline-block">
+                                <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                    </svg>
+                                </button>
+                                <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                                    <div class="px-1 py-1">
+                                        <button onclick="editKeystoreEntry(${entry.id}, '${escapeHtml(entry.key_name)}')" class="w-full group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem" type="button">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                            Edit
+                                        </button>
+                                        <button onclick="deleteKeystoreEntry(${entry.id}, '${escapeHtml(entry.key_name)}')" class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem" type="button">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+                
+                // Setup action menu functionality after rendering
+                setupKeystoreActionMenus();
+            } else {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                            <div class="flex flex-col items-center gap-2">
+                                <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                </svg>
+                                <p>No keystore entries found</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading keystore:', error);
+        showToast('Failed to load keystore entries', 'error');
+    }
+}
+
+// Keystore CRUD operations
+async function showCreateKeystoreModal() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect?.options[policySelect.selectedIndex];
+    const policyId = selectedOption?.dataset.policyId;
+    
+    if (!policyId) {
+        showToast('Please select a policy first', 'error');
+        return;
+    }
+    
+    const result = await KeystoreModal.showCreate();
+    if (!result) return;
+    
+    try {
+        const response = await fetch('/ConnectionManager/CreateKeystoreEntry/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                policy_id: policyId,
+                key_name: result.keyName,
+                key_value: result.keyValue
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadPolicyKeystore(); // Reload the table
+        } else {
+            showToast(data.error || 'Failed to create keystore entry', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating keystore entry:', error);
+        showToast('Failed to create keystore entry', 'error');
+    }
+}
+
+async function editKeystoreEntry(entryId, keyName) {
+    // Close any open action menus
+    document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+    });
+    
+    const newValue = await KeystoreModal.showEdit(keyName);
+    if (!newValue) return;
+    
+    try {
+        const response = await fetch('/ConnectionManager/UpdateKeystoreEntry/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                entry_id: entryId,
+                key_value: newValue
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadPolicyKeystore(); // Reload the table
+        } else {
+            showToast(data.error || 'Failed to update keystore entry', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating keystore entry:', error);
+        showToast('Failed to update keystore entry', 'error');
+    }
+}
+
+async function deleteKeystoreEntry(entryId, keyName) {
+    // Close any open action menus
+    document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+    });
+    
+    const confirmed = await ConfirmationModal.show(
+        `Are you sure you want to delete the keystore entry "${keyName}"?\n\nThis action cannot be undone.`,
+        'Delete Keystore Entry',
+        'Delete',
+        null,
+        false
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+        const response = await fetch('/ConnectionManager/DeleteKeystoreEntry/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                entry_id: entryId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadPolicyKeystore(); // Reload the table
+        } else {
+            showToast(data.error || 'Failed to delete keystore entry', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting keystore entry:', error);
+        showToast('Failed to delete keystore entry', 'error');
+    }
+}
+
+function previousKeystorePage() {
+    console.log('Previous keystore page');
+}
+
+function nextKeystorePage() {
+    console.log('Next keystore page');
+}
+
+// Handle action menu (3-dot icon) functionality for keystore table
+document.addEventListener('click', function(e) {
+    // Close all open action menus when clicking anywhere
+    if (!e.target.closest('.action-menu')) {
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+});
+
+// Setup action menu toggle functionality
+function setupKeystoreActionMenus() {
+    document.querySelectorAll('.action-menu-button').forEach(button => {
+        // Remove existing listeners to avoid duplicates
+        const newButton = button.cloneNode(true);
+        button.parentNode.replaceChild(newButton, button);
+        
+        newButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const menu = this.nextElementSibling;
+            const isHidden = menu.classList.contains('hidden');
+            
+            // Close all other open menus
+            document.querySelectorAll('.action-menu-items').forEach(m => {
+                if (m !== menu) m.classList.add('hidden');
+            });
+            
+            // Position the menu at the cursor
+            if (isHidden) {
+                const rect = this.getBoundingClientRect();
+                menu.style.left = `${e.clientX}px`;
+                menu.style.top = `${e.clientY}px`;
+            }
+            
+            // Toggle current menu
+            menu.classList.toggle('hidden', !isHidden);
+        });
+    });
+}
+
+// Close menu when scrolling
+window.addEventListener('scroll', function() {
+    document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+    });
+}, true);
+
+// Store original content when policy loads
+function storeOriginalContent() {
+    originalFileContents = {};
+    changedFiles.clear();
+    
+    // Store original file contents
+    originalFileContents['logstash.yml'] = window.policyFileContents['logstash.yml'] || '';
+    originalFileContents['jvm.options'] = window.policyFileContents['jvm.options'] || '';
+    originalFileContents['log4j2.properties'] = window.policyFileContents['log4j2.properties'] || '';
+    
+    // Store original settings and logs paths
+    originalFileContents['settingsPath'] = document.getElementById('settingsPath')?.value || '';
+    originalFileContents['logsPath'] = document.getElementById('logsPath')?.value || '';
+    
+    // Reset all visual indicators
+    updateChangeIndicators();
+}
+
+// Get current content for a file
+function getCurrentContent(file) {
+    // Check if this file is currently being edited in the code editor
+    const isCurrentlyEditing = window.policyCurrentFile === file;
+    
+    if (file === 'logstash.yml' && isCurrentlyEditing) {
+        // For logstash.yml, check current mode
+        const currentMode = document.getElementById('formModeBtn')?.classList.contains('active') ? 'form' : 'code';
+        
+        if (currentMode === 'form') {
+            // Convert form to YAML
+            try {
+                return formToYml() || '';
+            } catch (error) {
+                console.error('Error converting form to YAML:', error);
+                return '';
+            }
+        } else {
+            // Get from code editor
+            return window.policyEditor ? window.policyEditor.getValue() : '';
+        }
+    } else if (isCurrentlyEditing && window.policyEditor) {
+        // For other files currently being edited, get from editor
+        return window.policyEditor.getValue();
+    } else {
+        // For files not currently being edited, get from stored contents
+        return window.policyFileContents[file] || '';
+    }
+}
+
+// Check if a file has changes
+function hasFileChanged(file) {
+    const original = originalFileContents[file] || '';
+    const current = getCurrentContent(file);
+    return original !== current;
+}
+
+// Detect changes and update indicators
+function detectChanges() {
+    const files = ['logstash.yml', 'jvm.options', 'log4j2.properties'];
+    changedFiles.clear();
+    
+    files.forEach(file => {
+        if (hasFileChanged(file)) {
+            changedFiles.add(file);
+        }
+    });
+    
+    // Check settings path and logs path changes
+    const currentSettingsPath = document.getElementById('settingsPath')?.value || '';
+    const currentLogsPath = document.getElementById('logsPath')?.value || '';
+    const originalSettingsPath = originalFileContents['settingsPath'] || '';
+    const originalLogsPath = originalFileContents['logsPath'] || '';
+    
+    console.log('Settings path check:', {
+        current: currentSettingsPath,
+        original: originalSettingsPath,
+        changed: currentSettingsPath !== originalSettingsPath
+    });
+    console.log('Logs path check:', {
+        current: currentLogsPath,
+        original: originalLogsPath,
+        changed: currentLogsPath !== originalLogsPath
+    });
+    
+    if (currentSettingsPath !== originalSettingsPath || currentLogsPath !== originalLogsPath) {
+        console.log('Settings/logs path changed - adding to changedFiles');
+        changedFiles.add('settings');
+    }
+    
+    updateChangeIndicators();
+}
+
+// Update all visual indicators
+function updateChangeIndicators() {
+    const hasChanges = changedFiles.size > 0;
+    const saveBtn = document.getElementById('saveBtn');
+    const unsavedIndicator = document.getElementById('unsavedChangesIndicator');
+    const policyConfigIndicator = document.getElementById('policyConfigChangedIndicator');
+    
+    // Update Save button glow
+    if (hasChanges) {
+        saveBtn?.classList.add('save-button-glow');
+        unsavedIndicator?.classList.remove('hidden');
+    } else {
+        saveBtn?.classList.remove('save-button-glow');
+        unsavedIndicator?.classList.add('hidden');
+    }
+    
+    // Update policy config indicator
+    if (changedFiles.has('settings')) {
+        policyConfigIndicator?.classList.remove('hidden');
+    } else {
+        policyConfigIndicator?.classList.add('hidden');
+    }
+    
+    // Update tab indicators
+    updateTabIndicators();
+}
+
+// Update tab change indicators
+function updateTabIndicators() {
+    const tabs = {
+        'logstash.yml': document.querySelector('[data-file="logstash.yml"]'),
+        'jvm.options': document.querySelector('[data-file="jvm.options"]'),
+        'log4j2.properties': document.querySelector('[data-file="log4j2.properties"]')
+    };
+    
+    Object.keys(tabs).forEach(file => {
+        const tab = tabs[file];
+        if (tab) {
+            if (changedFiles.has(file)) {
+                tab.classList.add('tab-changed');
+            } else {
+                tab.classList.remove('tab-changed');
+            }
+        }
+    });
+}
+
+// Hook up change detection to form inputs
+function setupChangeDetection() {
+    // Monitor form inputs for logstash.yml
+    const formInputs = document.querySelectorAll('#formModeEditor input, #formModeEditor select, #formModeEditor textarea');
+    formInputs.forEach(input => {
+        input.addEventListener('input', () => {
+            detectChanges();
+        });
+        input.addEventListener('change', () => {
+            detectChanges();
+        });
+    });
+    
+    // Monitor settings path and logs path changes
+    const settingsPath = document.getElementById('settingsPath');
+    const logsPath = document.getElementById('logsPath');
+    
+    if (settingsPath) {
+        console.log('Added event listeners to settings path field');
+        settingsPath.addEventListener('input', () => {
+            console.log('Settings path input event fired');
+            detectChanges();
+        });
+        settingsPath.addEventListener('change', () => {
+            console.log('Settings path change event fired');
+            detectChanges();
+        });
+    } else {
+        console.warn('Settings path field not found');
+    }
+    
+    if (logsPath) {
+        console.log('Added event listeners to logs path field');
+        logsPath.addEventListener('input', () => {
+            console.log('Logs path input event fired');
+            detectChanges();
+        });
+        logsPath.addEventListener('change', () => {
+            console.log('Logs path change event fired');
+            detectChanges();
+        });
+    } else {
+        console.warn('Logs path field not found');
+    }
+    
+    // Monitor code editor changes
+    if (window.policyEditor) {
+        window.policyEditor.on('change', () => {
+            detectChanges();
+        });
+    }
+}
+
+// Reset change tracking after save
+function resetChangeTracking() {
+    storeOriginalContent();
+}

@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
 from .forms import ConnectionForm
-from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey, Revision
+from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey, Revision, Keystore
 
 from Common.decorators import require_admin_role
 from Common.logstash_utils import get_logstash_pipeline
@@ -1536,4 +1536,175 @@ def deploy_policy(request):
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as e:
         logger.error(f"Error deploying policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_keystore_entries(request):
+    """
+    Get all keystore entries for a specific policy.
+    """
+    try:
+        policy_id = request.GET.get('policy_id')
+
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+        # Get all keystore entries for this policy
+        entries = Keystore.objects.filter(policy=policy)
+
+        # Serialize entries
+        entries_data = []
+        for entry in entries:
+            entries_data.append({
+                "id": entry.id,
+                "key_name": entry.key_name,
+                "key_value": entry.key_value,
+                "last_updated": entry.last_updated.isoformat()
+            })
+
+        return JsonResponse({
+            "success": True,
+            "entries": entries_data
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching keystore entries: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def create_keystore_entry(request):
+    """
+    Create a new keystore entry for a policy.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        policy_id = data.get('policy_id')
+        key_name = data.get('key_name')
+        key_value = data.get('key_value')
+
+        if not policy_id or not key_name or not key_value:
+            return JsonResponse({"success": False, "error": "Policy ID, key name, and key value are required"},
+                                status=400)
+
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+        # Check if key already exists for this policy
+        if Keystore.objects.filter(policy=policy, key_name=key_name).exists():
+            return JsonResponse({"success": False, "error": f"Key '{key_name}' already exists for this policy"},
+                                status=400)
+
+        # Create keystore entry
+        entry = Keystore.objects.create(
+            policy=policy,
+            key_name=key_name,
+            key_value=key_value
+        )
+
+        logger.info(f"User '{request.user.username}' created keystore entry '{key_name}' for policy '{policy.name}'")
+
+        return JsonResponse({
+            "success": True,
+            "message": f"Keystore entry '{key_name}' created successfully",
+            "entry_id": entry.id
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error creating keystore entry: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def update_keystore_entry(request):
+    """
+    Update an existing keystore entry.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        entry_id = data.get('entry_id')
+        key_value = data.get('key_value')
+
+        if not entry_id or not key_value:
+            return JsonResponse({"success": False, "error": "Entry ID and key value are required"}, status=400)
+
+        # Get and update the entry
+        try:
+            entry = Keystore.objects.get(id=entry_id)
+            entry.key_value = key_value
+            entry.save()
+
+            logger.info(
+                f"User '{request.user.username}' updated keystore entry '{entry.key_name}' for policy '{entry.policy.name}'")
+
+            return JsonResponse({
+                "success": True,
+                "message": f"Keystore entry '{entry.key_name}' updated successfully"
+            })
+
+        except Keystore.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Keystore entry not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error updating keystore entry: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def delete_keystore_entry(request):
+    """
+    Delete a keystore entry.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        entry_id = data.get('entry_id')
+
+        if not entry_id:
+            return JsonResponse({"success": False, "error": "Entry ID is required"}, status=400)
+
+        # Get and delete the entry
+        try:
+            entry = Keystore.objects.get(id=entry_id)
+            key_name = entry.key_name
+            policy_name = entry.policy.name
+            entry.delete()
+
+            logger.info(
+                f"User '{request.user.username}' deleted keystore entry '{key_name}' for policy '{policy_name}'")
+
+            return JsonResponse({
+                "success": True,
+                "message": f"Keystore entry '{key_name}' deleted successfully"
+            })
+
+        except Keystore.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Keystore entry not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error deleting keystore entry: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)

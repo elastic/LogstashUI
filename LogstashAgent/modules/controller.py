@@ -10,6 +10,12 @@ import hashlib
 import os
 import subprocess
 from . import agent_state
+from .ls_keystore_utils import LogstashKeystore
+from .ls_keystore_utils.exceptions import (
+    LogstashKeystoreException,
+    IncorrectPassword,
+    LogstashKeystoreModified
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +92,132 @@ def update_log4j2_properties(settings_path, content):
         return True
     except Exception as e:
         logger.error(f"Failed to update log4j2.properties: {e}")
+        return False
+
+
+def update_keystore(settings_path, keystore_changes):
+    """
+    Update the Logstash keystore with set/delete operations.
+    
+    Args:
+        settings_path: Path to Logstash settings directory
+        keystore_changes: Dictionary with 'set' and 'delete' keys
+            - 'set': Dictionary of {key_name: key_value} to add/update
+            - 'delete': List of key names to remove
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        logger.info(f"Updating keystore at {settings_path}")
+        logger.debug(f"Keystore changes: {keystore_changes}")
+        
+        # Get keystore password from agent state
+        state = agent_state.get_state()
+        keystore_password = state.get('keystore_password')
+        
+        if not keystore_password:
+            logger.error("No keystore password found in agent state. Cannot manage keystore.")
+            return False
+        
+        # Normalize path separators
+        if settings_path:
+            settings_path = settings_path.replace('\\', '/')
+        if not settings_path.endswith('/'):
+            settings_path = settings_path + '/'
+        
+        # Extract set and delete operations
+        keys_to_set = keystore_changes.get('set', {})
+        keys_to_delete = keystore_changes.get('delete', [])
+        
+        if not keys_to_set and not keys_to_delete:
+            logger.info("No keystore changes to apply")
+            return False
+        
+        # Load the keystore
+        try:
+            ks = LogstashKeystore.load(
+                path_settings=settings_path,
+                password=keystore_password
+            )
+            logger.info("Successfully loaded keystore")
+        except LogstashKeystoreException as e:
+            logger.error(f"Failed to load keystore: {e}")
+            # Try to create a new keystore if it doesn't exist
+            try:
+                logger.info("Attempting to create new keystore")
+                ks = LogstashKeystore.create(
+                    path_settings=settings_path,
+                    password=keystore_password
+                )
+                logger.info("Successfully created new keystore")
+            except Exception as create_error:
+                logger.error(f"Failed to create keystore: {create_error}")
+                return False
+        except IncorrectPassword:
+            logger.error("Incorrect keystore password")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error loading keystore: {e}")
+            return False
+        
+        # Perform delete operations first
+        if keys_to_delete:
+            logger.info(f"Deleting {len(keys_to_delete)} key(s) from keystore")
+            try:
+                # Filter out keys that don't exist
+                existing_keys = ks.keys
+                keys_to_actually_delete = [k for k in keys_to_delete if k.upper() in existing_keys]
+                
+                if keys_to_actually_delete:
+                    ks.remove_key(keys_to_actually_delete)
+                    logger.info(f"Successfully deleted keys: {keys_to_actually_delete}")
+                else:
+                    logger.info("No keys to delete (all specified keys don't exist)")
+            except LogstashKeystoreModified as e:
+                logger.error(f"Keystore was modified externally: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"Failed to delete keys: {e}")
+                return False
+        
+        # Perform set operations
+        if keys_to_set:
+            logger.info(f"Setting {len(keys_to_set)} key(s) in keystore")
+            try:
+                ks.add_key(keys_to_set)
+                logger.info(f"Successfully set keys: {list(keys_to_set.keys())}")
+            except LogstashKeystoreModified as e:
+                logger.error(f"Keystore was modified externally: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"Failed to set keys: {e}")
+                return False
+        
+        # Update keystore state with hashes
+        new_keystore_state = {}
+        try:
+            all_keys = ks.keys
+            for key_name in all_keys:
+                key_value = ks.get_key(key_name)
+                if key_value is not None:
+                    # Hash the key_name + key_value for change detection
+                    hash_input = f"{key_name}{key_value}"
+                    key_hash = hashlib.sha256(hash_input.encode('utf-8')).hexdigest()
+                    new_keystore_state[key_name] = key_hash
+            
+            # Update agent state with new keystore hashes
+            agent_state.update_state('keystore', new_keystore_state)
+            logger.info(f"Updated keystore state with {len(new_keystore_state)} key(s)")
+        except Exception as e:
+            logger.error(f"Failed to update keystore state: {e}")
+            # Don't return False here - the keystore was updated successfully
+        
+        logger.info("Keystore update completed successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Unexpected error updating keystore: {e}")
         return False
 
 
@@ -240,6 +372,10 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
         
         logger.info(f"Files found, proceeding to check with server")
         
+        # Get keystore state from agent state
+        keystore_state = state.get('keystore', {})
+        logger.debug(f"Current keystore state: {keystore_state}")
+        
         # Prepare request data
         request_data = {
             'connection_id': connection_id,
@@ -247,7 +383,8 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             'jvm_options_hash': config_hashes['jvm_options_hash'],
             'log4j2_properties_hash': config_hashes['log4j2_properties_hash'],
             'settings_path': settings_path,
-            'logs_path': logs_path
+            'logs_path': logs_path,
+            'keystore': keystore_state
         }
         
         # Send request to server
@@ -318,6 +455,13 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
                 logger.info(f"Configuration change found for settings_path: {changes.get('settings_path')}")
             if changes.get('logs_path') and changes.get('logs_path') != False:
                 logger.info(f"Configuration change found for logs_path: {changes.get('logs_path')}")
+            
+            # Handle keystore changes
+            keystore_changes = changes.get('keystore')
+            if keystore_changes and keystore_changes != False:
+                logger.info("Keystore changes detected")
+                if update_keystore(settings_path, keystore_changes):
+                    files_updated = True
             
             # If any files were updated, restart Logstash (only if files existed before)
             if files_updated:

@@ -270,6 +270,11 @@ class Pipeline(models.Model):
         help_text="Hash of the LSCL content for change detection"
     )
     last_updated = models.DateTimeField(auto_now=True)
+
+    revision_number = models.IntegerField(
+        help_text="Revision number for this deployment",
+        default=0
+    )
     
     class Meta:
         ordering = ['policy', 'name']
@@ -305,8 +310,19 @@ class Keystore(models.Model):
         max_length=512,
         help_text="Encrypted key value"
     )
+    kv_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        help_text="SHA256 hash of key_name + key_value for change detection"
+    )
     last_updated = models.DateTimeField(auto_now=True)
-    
+
+    revision_number = models.IntegerField(
+        help_text="Revision number for this deployment",
+        default=0
+    )
+
     class Meta:
         ordering = ['policy', 'key_name']
         verbose_name = 'Keystore Entry'
@@ -318,14 +334,29 @@ class Keystore(models.Model):
             )
         ]
     
+    def save(self, *args, **kwargs):
+        """
+        Override save to encrypt key_value and auto-compute hash of key_name + key_value
+        """
+        # Compute hash from plaintext key_name + key_value BEFORE encryption
+        # This ensures the hash is consistent for the same key-value pair
+        if self.key_value and not self._is_encrypted(self.key_value):
+            # Hash the plaintext value
+            combined = f"{self.key_name}{self.key_value}"
+            self.kv_hash = hashlib.sha256(combined.encode('utf-8')).hexdigest()
+            # Then encrypt
+            self.key_value = encrypt_credential(self.key_value)
+        else:
+            # If already encrypted, we can't recompute the hash from plaintext
+            # Keep existing hash or compute from encrypted value (not ideal but necessary)
+            if not self.kv_hash:
+                combined = f"{self.key_name}{self.key_value}"
+                self.kv_hash = hashlib.sha256(combined.encode('utf-8')).hexdigest()
+        
+        super().save(*args, **kwargs)
+    
     def __str__(self):
         return f"{self.policy.name} - {self.key_name}"
-    
-    def save(self, *args, **kwargs):
-        # Encrypt key_value before saving if not already encrypted
-        if self.key_value and not self._is_encrypted(self.key_value):
-            self.key_value = encrypt_credential(self.key_value)
-        super().save(*args, **kwargs)
     
     def _is_encrypted(self, value):
         """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
