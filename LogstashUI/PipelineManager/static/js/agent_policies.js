@@ -33,8 +33,18 @@ function checkConfigNotifications() {
     const logLevelFormatNotification = document.getElementById('logLevelFormatNotification');
     const notificationsContainer = document.getElementById('notificationsContainer');
     
-    // Check for logs path mismatch
-    if (logsPathGlobal && logsPathSetting && logsPathGlobal !== logsPathSetting) {
+    // Check for logs path mismatch - show notification if:
+    // 1. Policy Config has a value AND it doesn't match the form's path.logs field
+    // This ensures the notification appears when editing either field
+    const hasMismatch = logsPathSetting && logsPathGlobal !== logsPathSetting;
+    
+    console.log('Mismatch check:', {
+        global: logsPathGlobal,
+        setting: logsPathSetting,
+        hasMismatch: hasMismatch
+    });
+    
+    if (hasMismatch) {
         console.log('Mismatch detected - showing notification');
         logsPathMismatchNotification?.classList.remove('hidden');
         notificationsContainer?.classList.remove('hidden');
@@ -1184,6 +1194,12 @@ async function loadPolicyData(policyValue) {
                 
                 // Store original content for change detection
                 storeOriginalContent();
+                
+                // Check for configuration notifications after loading policy data
+                // Use setTimeout to ensure DOM has updated
+                setTimeout(() => {
+                    checkConfigNotifications();
+                }, 100);
             }
         }
     } catch (error) {
@@ -1303,12 +1319,31 @@ async function savePolicyChanges() {
     const settingsPath = document.getElementById('settingsPath').value;
     const logsPath = document.getElementById('logsPath').value;
     
-    // If editor is active, save current editor content to fileContents
-    if (window.policyEditor && window.policyFileContents) {
-        // Get the current file being edited
+    // Update fileContents with current editor/form state
+    if (window.policyFileContents) {
         const currentFile = window.policyCurrentFile || 'logstash.yml';
-        // Save current editor content to fileContents
-        window.policyFileContents[currentFile] = window.policyEditor.getValue();
+        
+        // Special handling for logstash.yml in Form Mode
+        if (currentFile === 'logstash.yml') {
+            const currentMode = document.getElementById('formModeBtn')?.classList.contains('active') ? 'form' : 'code';
+            if (currentMode === 'form') {
+                // Convert form data to YAML
+                try {
+                    const yamlContent = formToYml();
+                    window.policyFileContents['logstash.yml'] = yamlContent;
+                } catch (error) {
+                    console.error('Error converting form to YAML:', error);
+                    showToast('Error converting form to YAML: ' + error.message, 'error');
+                    return;
+                }
+            } else if (window.policyEditor) {
+                // In Code Mode, save editor content
+                window.policyFileContents['logstash.yml'] = window.policyEditor.getValue();
+            }
+        } else if (window.policyEditor) {
+            // For other files, save current editor content
+            window.policyFileContents[currentFile] = window.policyEditor.getValue();
+        }
     }
     
     try {
@@ -2240,10 +2275,12 @@ function setupChangeDetection() {
         console.log('Added event listeners to logs path field');
         logsPath.addEventListener('input', () => {
             console.log('Logs path input event fired');
+            checkConfigNotifications();
             detectChanges();
         });
         logsPath.addEventListener('change', () => {
             console.log('Logs path change event fired');
+            checkConfigNotifications();
             detectChanges();
         });
     } else {

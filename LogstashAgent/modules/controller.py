@@ -473,6 +473,12 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
                         logger.error("Logstash restart failed - manual intervention may be required")
                 else:
                     logger.info("Configuration files created - Logstash restart skipped (files didn't exist previously)")
+                
+                # Update agent's revision number to match server after successful changes
+                server_revision = result.get('current_revision')
+                if server_revision is not None:
+                    agent_state.update_state('revision_number', server_revision)
+                    logger.info(f"Updated agent revision number to {server_revision}")
             else:
                 logger.info("No configuration file changes detected")
             

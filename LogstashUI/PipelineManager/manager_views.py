@@ -1293,7 +1293,8 @@ def get_config_changes(request):
         "jvm_options_hash": str,
         "log4j2_properties_hash": str,
         "settings_path": str,
-        "logs_path": str
+        "logs_path": str,
+        "keystore": dict  # {key_name: hash}
     }
     """
     if request.method != 'POST':
@@ -1386,6 +1387,56 @@ def get_config_changes(request):
         else:
             changes['logs_path'] = False
             logger.info(f"  logs_path: unchanged")
+        
+        # Check keystore
+        agent_keystore = data.get('keystore', {})  # Dict of {key_name: hash}
+        logger.info(f"  Agent keystore: {len(agent_keystore)} keys")
+        
+        # Get policy's keystore entries
+        policy_keystore_entries = policy.keystore_entries.all()
+        logger.info(f"  Policy keystore: {policy_keystore_entries.count()} keys")
+        
+        # Build policy keystore dict: {key_name: (hash, decrypted_value)}
+        policy_keystore = {}
+        for entry in policy_keystore_entries:
+            policy_keystore[entry.key_name] = {
+                'hash': entry.kv_hash,
+                'value': entry.get_key_value()
+            }
+        
+        # Determine keystore changes
+        keystore_changes = {
+            'set': {},
+            'delete': []
+        }
+        
+        # Check each agent key against policy
+        for agent_key_name, agent_hash in agent_keystore.items():
+            if agent_key_name in policy_keystore:
+                # Key exists in both - check if hash matches
+                if agent_hash != policy_keystore[agent_key_name]['hash']:
+                    # Hash differs - send updated value
+                    keystore_changes['set'][agent_key_name] = policy_keystore[agent_key_name]['value']
+                    logger.info(f"  keystore[{agent_key_name}]: CHANGED (hash mismatch)")
+            else:
+                # Key exists on agent but NOT in policy - delete it
+                keystore_changes['delete'].append(agent_key_name)
+                logger.info(f"  keystore[{agent_key_name}]: DELETED (not in policy)")
+        
+        # Check for new keys in policy that agent doesn't have
+        for policy_key_name in policy_keystore.keys():
+            if policy_key_name not in agent_keystore:
+                # New key - send to agent
+                keystore_changes['set'][policy_key_name] = policy_keystore[policy_key_name]['value']
+                logger.info(f"  keystore[{policy_key_name}]: NEW (not on agent)")
+        
+        # Only include keystore changes if there are actual changes
+        if keystore_changes['set'] or keystore_changes['delete']:
+            changes['keystore'] = keystore_changes
+            logger.info(f"  keystore: CHANGED ({len(keystore_changes['set'])} to set, {len(keystore_changes['delete'])} to delete)")
+        else:
+            changes['keystore'] = False
+            logger.info(f"  keystore: unchanged")
         
         logger.info(f"Config change check for connection {connection_id} completed")
         

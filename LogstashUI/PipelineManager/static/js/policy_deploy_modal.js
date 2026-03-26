@@ -5,6 +5,7 @@
  */
 
 let currentPolicyDiffData = null;
+let sectionsWithChanges = new Set();
 
 // ===== DIFF ALGORITHMS (from diff_modal.js) =====
 
@@ -133,13 +134,39 @@ function setupDeployDiffTabs() {
             
             console.log('Tab clicked:', section); // Debug log
             
-            // Update active tab
+            // Update active tab - matching agent_policies.html behavior
             document.querySelectorAll('.deploy-diff-tab').forEach(t => {
-                t.classList.remove('active', 'text-white', 'border-b-2', 'border-blue-500');
-                t.classList.add('text-gray-400');
+                t.classList.remove('active');
+                const span = t.querySelector('span');
+                const svg = t.querySelector('svg');
+                if (span) {
+                    span.classList.remove('text-white', 'font-semibold');
+                    span.classList.add('text-gray-500');
+                }
+                if (svg) {
+                    svg.classList.remove('opacity-60');
+                    svg.classList.add('opacity-40');
+                }
             });
-            this.classList.add('active', 'text-white', 'border-b-2', 'border-blue-500');
-            this.classList.remove('text-gray-400');
+            this.classList.add('active');
+            const span = this.querySelector('span');
+            const svg = this.querySelector('svg');
+            if (span) {
+                span.classList.remove('text-gray-500');
+                span.classList.add('text-white', 'font-semibold');
+            }
+            if (svg) {
+                svg.classList.remove('opacity-40');
+                svg.classList.add('opacity-60');
+            }
+            
+            // Show/hide no changes banner based on whether this section has changes
+            const noChangesBanner = document.getElementById('noChangesBanner');
+            if (sectionsWithChanges.has(section)) {
+                noChangesBanner.classList.add('hidden');
+            } else {
+                noChangesBanner.classList.remove('hidden');
+            }
             
             // Show corresponding diff section
             document.querySelectorAll('.deploy-diff-section').forEach(s => {
@@ -156,11 +183,34 @@ function setupDeployDiffTabs() {
     });
 }
 
+// Update tab indicators to show which sections have changes
+function updateTabChangeIndicators() {
+    document.querySelectorAll('.deploy-diff-tab').forEach(tab => {
+        const section = tab.dataset.section;
+        if (sectionsWithChanges.has(section)) {
+            tab.classList.add('has-changes');
+        } else {
+            tab.classList.remove('has-changes');
+        }
+    });
+}
+
+// Check if text content has changes
+function hasTextChanges(oldText, newText) {
+    return oldText !== newText;
+}
+
 // Render side-by-side text diff
 function renderSideBySideTextDiff(containerId, oldText, newText) {
     const container = document.getElementById(containerId);
     const oldLines = oldText.split('\n');
     const newLines = newText.split('\n');
+    
+    // Track if this section has changes
+    const sectionName = containerId.replace('diff-', '');
+    if (hasTextChanges(oldText, newText)) {
+        sectionsWithChanges.add(sectionName);
+    }
     
     // Use LCS-based diff algorithm
     const lineDiff = computeLineDiff(oldLines, newLines);
@@ -311,6 +361,7 @@ function renderSideBySideTextDiff(containerId, oldText, newText) {
 function renderPipelinesDiff(oldPipelines, newPipelines) {
     const container = document.getElementById('diff-pipelines');
     let html = '';
+    let hasChanges = false;
     
     // Create maps for easier comparison
     const oldMap = new Map(oldPipelines.map(p => [p.name, p]));
@@ -319,6 +370,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
     // Find added pipelines
     newPipelines.forEach(pipeline => {
         if (!oldMap.has(pipeline.name)) {
+            hasChanges = true;
             html += `
                 <div class="mb-4 p-3 bg-green-900/20 border border-green-600 rounded">
                     <div class="text-green-400 font-semibold mb-2">+ Added Pipeline: ${escapeHtml(pipeline.name)}</div>
@@ -332,6 +384,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
     // Find removed pipelines
     oldPipelines.forEach(pipeline => {
         if (!newMap.has(pipeline.name)) {
+            hasChanges = true;
             html += `
                 <div class="mb-4 p-3 bg-red-900/20 border border-red-600 rounded">
                     <div class="text-red-400 font-semibold mb-2">- Removed Pipeline: ${escapeHtml(pipeline.name)}</div>
@@ -346,6 +399,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
     newPipelines.forEach(newPipeline => {
         const oldPipeline = oldMap.get(newPipeline.name);
         if (oldPipeline && oldPipeline.lscl !== newPipeline.lscl) {
+            hasChanges = true;
             html += `
                 <div class="mb-4 p-3 bg-blue-900/20 border border-blue-600 rounded">
                     <div class="text-blue-400 font-semibold mb-2">~ Modified Pipeline: ${escapeHtml(newPipeline.name)}</div>
@@ -369,6 +423,11 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
         html = '<div class="text-gray-400 text-center py-8">No pipeline changes</div>';
     }
     
+    // Track if this section has changes
+    if (hasChanges) {
+        sectionsWithChanges.add('pipelines');
+    }
+    
     container.innerHTML = html;
 }
 
@@ -376,6 +435,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
 function renderKeystoreDiff(oldKeystore, newKeystore) {
     const container = document.getElementById('diff-keystore');
     let html = '';
+    let hasChanges = false;
     
     // Create maps for easier comparison
     const oldMap = new Map(oldKeystore.map(k => [k.key_name, k]));
@@ -384,6 +444,7 @@ function renderKeystoreDiff(oldKeystore, newKeystore) {
     // Find added keys
     newKeystore.forEach(key => {
         if (!oldMap.has(key.key_name)) {
+            hasChanges = true;
             html += `
                 <div class="mb-2 p-2 bg-green-900/20 border-l-4 border-green-600">
                     <span class="text-green-400 font-semibold">+ Added Key:</span>
@@ -397,6 +458,7 @@ function renderKeystoreDiff(oldKeystore, newKeystore) {
     // Find removed keys
     oldKeystore.forEach(key => {
         if (!newMap.has(key.key_name)) {
+            hasChanges = true;
             html += `
                 <div class="mb-2 p-2 bg-red-900/20 border-l-4 border-red-600">
                     <span class="text-red-400 font-semibold">- Removed Key:</span>
@@ -410,6 +472,7 @@ function renderKeystoreDiff(oldKeystore, newKeystore) {
     newKeystore.forEach(newKey => {
         const oldKey = oldMap.get(newKey.key_name);
         if (oldKey && oldKey.key_value !== newKey.key_value) {
+            hasChanges = true;
             html += `
                 <div class="mb-2 p-2 bg-blue-900/20 border-l-4 border-blue-600">
                     <span class="text-blue-400 font-semibold">~ Modified Key:</span>
@@ -424,6 +487,11 @@ function renderKeystoreDiff(oldKeystore, newKeystore) {
         html = '<div class="text-gray-400 text-center py-8">No keystore changes</div>';
     }
     
+    // Track if this section has changes
+    if (hasChanges) {
+        sectionsWithChanges.add('keystore');
+    }
+    
     container.innerHTML = html;
 }
 
@@ -431,6 +499,7 @@ function renderKeystoreDiff(oldKeystore, newKeystore) {
 function renderGlobalSettingsDiff(previousData, currentData) {
     const container = document.getElementById('diff-global_settings');
     let html = '<div class="p-4">';
+    let hasChanges = false;
     
     const prevSettingsPath = previousData.settings_path || '';
     const currSettingsPath = currentData.settings_path || '';
@@ -441,6 +510,7 @@ function renderGlobalSettingsDiff(previousData, currentData) {
     html += '<div class="mb-6">';
     html += '<h4 class="text-lg font-semibold text-white mb-3">Logstash Settings Path</h4>';
     if (prevSettingsPath !== currSettingsPath) {
+        hasChanges = true;
         html += `
             <div class="grid grid-cols-2 gap-4">
                 <div class="p-3 bg-red-900/20 border-l-4 border-red-600 rounded">
@@ -467,6 +537,7 @@ function renderGlobalSettingsDiff(previousData, currentData) {
     html += '<div class="mb-6">';
     html += '<h4 class="text-lg font-semibold text-white mb-3">Logstash Logs Path</h4>';
     if (prevLogsPath !== currLogsPath) {
+        hasChanges = true;
         html += `
             <div class="grid grid-cols-2 gap-4">
                 <div class="p-3 bg-red-900/20 border-l-4 border-red-600 rounded">
@@ -490,6 +561,12 @@ function renderGlobalSettingsDiff(previousData, currentData) {
     html += '</div>';
     
     html += '</div>';
+    
+    // Track if this section has changes
+    if (hasChanges) {
+        sectionsWithChanges.add('global_settings');
+    }
+    
     container.innerHTML = html;
 }
 
@@ -514,6 +591,16 @@ async function loadPolicyDiff(policyId, policyName) {
         currentPolicyDiffData = data;
         currentPolicyDiffData.policy_id = policyId;
         
+        // Debug: Log the data structure
+        console.log('Policy diff data received:', data);
+        console.log('Previous logstash_yml length:', (data.previous.logstash_yml || '').length);
+        console.log('Current logstash_yml length:', (data.current.logstash_yml || '').length);
+        console.log('Previous log4j2_properties length:', (data.previous.log4j2_properties || '').length);
+        console.log('Current log4j2_properties length:', (data.current.log4j2_properties || '').length);
+        
+        // Reset sections with changes tracking
+        sectionsWithChanges.clear();
+        
         // Populate modal header
         document.getElementById('deployPolicyName').textContent = data.policy_name;
         document.getElementById('currentRevisionNum').textContent = data.last_deployed_revision;
@@ -524,8 +611,11 @@ async function loadPolicyDiff(policyId, policyName) {
         document.getElementById('deployDiffContainer').classList.remove('hidden');
         
         // Render diffs for each section
+        console.log('Rendering logstash.yml diff...');
         renderSideBySideTextDiff('diff-logstash_yml', data.previous.logstash_yml || '', data.current.logstash_yml || '');
+        console.log('Rendering jvm.options diff...');
         renderSideBySideTextDiff('diff-jvm_options', data.previous.jvm_options || '', data.current.jvm_options || '');
+        console.log('Rendering log4j2.properties diff...');
         renderSideBySideTextDiff('diff-log4j2_properties', data.previous.log4j2_properties || '', data.current.log4j2_properties || '');
         renderPipelinesDiff(data.previous.pipelines || [], data.current.pipelines || []);
         renderKeystoreDiff(data.previous.keystore || [], data.current.keystore || []);
@@ -533,6 +623,19 @@ async function loadPolicyDiff(policyId, policyName) {
         
         // Setup tab switching
         setupDeployDiffTabs();
+        
+        // Update tab indicators to show which sections have changes
+        updateTabChangeIndicators();
+        
+        // Check if the currently active tab has changes and show/hide banner accordingly
+        const activeTab = document.querySelector('.deploy-diff-tab.active');
+        const activeSection = activeTab?.dataset.section;
+        const noChangesBanner = document.getElementById('noChangesBanner');
+        if (activeSection && !sectionsWithChanges.has(activeSection)) {
+            noChangesBanner.classList.remove('hidden');
+        } else {
+            noChangesBanner.classList.add('hidden');
+        }
         
         // Calculate and display stats
         const oldLines = (data.previous.logstash_yml || '').split('\n').length;
