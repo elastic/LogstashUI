@@ -113,12 +113,17 @@ def update_keystore(settings_path, keystore_changes):
         logger.debug(f"Keystore changes: {keystore_changes}")
         
         # Get keystore password from agent state
+        # For unencrypted keystores, use single space (library bug: empty string is falsy)
         state = agent_state.get_state()
         keystore_password = state.get('keystore_password')
         
+        # If no password or empty, use space character for unencrypted keystore
+        # (library requires truthy password value to initialize self.password attribute)
         if not keystore_password:
-            logger.error("No keystore password found in agent state. Cannot manage keystore.")
-            return False
+            keystore_password = " "
+            logger.info("No keystore password configured - using space character for unencrypted keystore")
+        else:
+            logger.info("Using keystore password from agent state")
         
         # Normalize path separators
         if settings_path:
