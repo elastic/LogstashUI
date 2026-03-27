@@ -109,21 +109,20 @@ def update_keystore(settings_path, keystore_changes):
         bool: True if successful, False otherwise
     """
     try:
-        logger.info(f"Updating keystore at {settings_path}")
-        logger.debug(f"Keystore changes: {keystore_changes}")
+        logger.info(f"Starting keystore update at {settings_path}")
+        logger.debug(f"Keystore changes requested: {keystore_changes}")
         
         # Get keystore password from agent state
-        # For unencrypted keystores, use single space (library bug: empty string is falsy)
+        # Use empty string "" for passwordless keystores (PKCS12 standard)
         state = agent_state.get_state()
-        keystore_password = state.get('keystore_password')
+        keystore_password = state.get('keystore_password', '')
         
-        # If no password or empty, use space character for unencrypted keystore
-        # (library requires truthy password value to initialize self.password attribute)
+        # Log password configuration status
         if not keystore_password:
-            keystore_password = " "
-            logger.info("No keystore password configured - using space character for unencrypted keystore")
+            logger.info("Keystore password: NOT CONFIGURED (using empty string for passwordless keystore)")
+            keystore_password = ""  # PKCS12 standard for passwordless
         else:
-            logger.info("Using keystore password from agent state")
+            logger.info("Keystore password: CONFIGURED (using provided password)")
         
         # Normalize path separators
         if settings_path:
@@ -131,26 +130,36 @@ def update_keystore(settings_path, keystore_changes):
         if not settings_path.endswith('/'):
             settings_path = settings_path + '/'
         
+        logger.debug(f"Normalized settings path: {settings_path}")
+        
         # Extract set and delete operations
         keys_to_set = keystore_changes.get('set', {})
         keys_to_delete = keystore_changes.get('delete', [])
         
+        logger.info(f"Operations summary: {len(keys_to_set)} keys to set, {len(keys_to_delete)} keys to delete")
+        
         if not keys_to_set and not keys_to_delete:
-            logger.info("No keystore changes to apply")
+            logger.info("No keystore changes to apply - skipping keystore operations")
             return False
         
         # Load the keystore
+        logger.info("Attempting to load existing keystore...")
         try:
             ks = LogstashKeystore.load(
                 path_settings=settings_path,
                 password=keystore_password
             )
-            logger.info("Successfully loaded keystore")
+            logger.info("Successfully loaded existing keystore")
+            logger.debug(f"Keystore contains {len(ks.keys)} existing keys")
+        except IncorrectPassword:
+            logger.error("Incorrect keystore password - cannot proceed with keystore operations")
+            logger.error("Please configure the correct keystore password in agent state or delete the existing keystore")
+            return False
         except LogstashKeystoreException as e:
-            logger.error(f"Failed to load keystore: {e}")
+            logger.warning(f"Failed to load keystore: {e}")
             # Try to create a new keystore if it doesn't exist
             try:
-                logger.info("Attempting to create new keystore")
+                logger.info("Keystore does not exist - creating new keystore...")
                 ks = LogstashKeystore.create(
                     path_settings=settings_path,
                     password=keystore_password
@@ -158,51 +167,74 @@ def update_keystore(settings_path, keystore_changes):
                 logger.info("Successfully created new keystore")
             except Exception as create_error:
                 logger.error(f"Failed to create keystore: {create_error}")
+                logger.error("Cannot proceed with keystore operations")
                 return False
-        except IncorrectPassword:
-            logger.error("Incorrect keystore password")
-            return False
         except Exception as e:
             logger.error(f"Unexpected error loading keystore: {e}")
+            logger.error("Cannot proceed with keystore operations")
             return False
         
         # Perform delete operations first
         if keys_to_delete:
-            logger.info(f"Deleting {len(keys_to_delete)} key(s) from keystore")
+            logger.info(f"Processing DELETE operations for {len(keys_to_delete)} key(s): {keys_to_delete}")
             try:
                 # Filter out keys that don't exist
                 existing_keys = ks.keys
+                logger.debug(f"Current keystore keys: {existing_keys}")
                 keys_to_actually_delete = [k for k in keys_to_delete if k.upper() in existing_keys]
                 
                 if keys_to_actually_delete:
+                    logger.info(f"Deleting keys: {keys_to_actually_delete}")
                     ks.remove_key(keys_to_actually_delete)
-                    logger.info(f"Successfully deleted keys: {keys_to_actually_delete}")
+                    logger.info(f"Successfully deleted {len(keys_to_actually_delete)} key(s) from keystore")
+                    for key in keys_to_actually_delete:
+                        logger.debug(f"  - Deleted key: {key}")
                 else:
-                    logger.info("No keys to delete (all specified keys don't exist)")
+                    logger.info("No keys to delete - all specified keys don't exist in keystore")
+                    for key in keys_to_delete:
+                        logger.debug(f"  - Key not found: {key}")
             except LogstashKeystoreModified as e:
-                logger.error(f"Keystore was modified externally: {e}")
+                logger.error(f"Keystore was modified externally during delete operation: {e}")
+                logger.error("Cannot proceed - keystore state has changed")
                 return False
             except Exception as e:
                 logger.error(f"Failed to delete keys: {e}")
+                logger.exception("Delete operation exception details:")
                 return False
         
         # Perform set operations
         if keys_to_set:
-            logger.info(f"Setting {len(keys_to_set)} key(s) in keystore")
+            logger.info(f"Processing SET operations for {len(keys_to_set)} key(s): {list(keys_to_set.keys())}")
             try:
+                # Log each key being set (without values for security)
+                for key_name in keys_to_set.keys():
+                    logger.debug(f"  - Setting key: {key_name}")
+                
                 ks.add_key(keys_to_set)
-                logger.info(f"Successfully set keys: {list(keys_to_set.keys())}")
+                logger.info(f"Successfully set {len(keys_to_set)} key(s) in keystore")
+                
+                # Verify keys were set
+                for key_name in keys_to_set.keys():
+                    if key_name.upper() in ks.keys:
+                        logger.debug(f"  - Verified key exists: {key_name}")
+                    else:
+                        logger.warning(f"  - Key verification failed: {key_name}")
             except LogstashKeystoreModified as e:
-                logger.error(f"Keystore was modified externally: {e}")
+                logger.error(f"Keystore was modified externally during set operation: {e}")
+                logger.error("Cannot proceed - keystore state has changed")
                 return False
             except Exception as e:
                 logger.error(f"Failed to set keys: {e}")
+                logger.exception("Set operation exception details:")
                 return False
         
         # Update keystore state with hashes
+        logger.info("Updating agent state with new keystore hashes...")
         new_keystore_state = {}
         try:
             all_keys = ks.keys
+            logger.debug(f"Reading {len(all_keys)} keys from keystore for state update")
+            
             for key_name in all_keys:
                 key_value = ks.get_key(key_name)
                 if key_value is not None:
@@ -210,19 +242,26 @@ def update_keystore(settings_path, keystore_changes):
                     hash_input = f"{key_name}{key_value}"
                     key_hash = hashlib.sha256(hash_input.encode('utf-8')).hexdigest()
                     new_keystore_state[key_name] = key_hash
+                    logger.debug(f"  - Computed hash for key: {key_name}")
+                else:
+                    logger.warning(f"  - Key {key_name} returned None value")
             
             # Update agent state with new keystore hashes
             agent_state.update_state('keystore', new_keystore_state)
-            logger.info(f"Updated keystore state with {len(new_keystore_state)} key(s)")
+            logger.info(f"Successfully updated agent state with {len(new_keystore_state)} keystore key hash(es)")
         except Exception as e:
             logger.error(f"Failed to update keystore state: {e}")
+            logger.exception("State update exception details:")
+            logger.warning("Keystore was updated successfully, but state update failed")
             # Don't return False here - the keystore was updated successfully
         
         logger.info("Keystore update completed successfully")
+        logger.info(f"Final keystore contains {len(ks.keys)} key(s)")
         return True
         
     except Exception as e:
-        logger.error(f"Unexpected error updating keystore: {e}")
+        logger.error(f"Unexpected error in update_keystore: {e}")
+        logger.exception("Keystore update exception details:")
         return False
 
 
