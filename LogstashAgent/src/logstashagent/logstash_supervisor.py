@@ -476,7 +476,7 @@ class LogstashSupervisor:
         """
         logger.debug("[SLOTS] Getting expected slot pipelines")
         try:
-            import LogstashAgent.modules.slots
+            import LogstashAgent.src.logstashagent.slots
             slot_state = slots.get_slot_state()
             expected_pipelines = set()
             logger.debug(f"[SLOTS] Retrieved {len(slot_state)} slots from state")

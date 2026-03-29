@@ -7,7 +7,6 @@ import logging
 import requests
 import json
 import hashlib
-import os
 import subprocess
 from . import agent_state
 from .ls_keystore_utils import LogstashKeystore

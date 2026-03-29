@@ -16,8 +16,9 @@ import json
 import glob
 import logging
 import re
-from modules import slots, logstash_supervisor, log_analyzer, enrollment, agent_state, controller
-from modules.logstash_api import LogstashAPI
+from LogstashAgent.src.logstashagent import agent_state, enrollment, log_analyzer, logstash_supervisor, controller, \
+    slots
+from LogstashAgent.src.logstashagent.logstash_api import LogstashAPI
 import requests
 import time
 import base64
@@ -57,7 +58,7 @@ logger = logging.getLogger(__name__)
 # Reduce httpx logging noise - only show warnings and errors
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-logger.info(f"LogstashAgent logging initialized - logs directory: {LOGS_DIR}")
+logger.info(f"logstashagent logging initialized - logs directory: {LOGS_DIR}")
 
 # Initialize agent state (generates agent_id on first run)
 AGENT_ID = agent_state.get_or_create_agent_id()
@@ -66,7 +67,7 @@ AGENT_ID = agent_state.get_or_create_agent_id()
 # Check for config in current directory first (native mode)
 def get_config_path() -> str:
     """Get the path to logstashagent.yml - only used for native/host mode"""
-    local_path = os.path.join(os.path.dirname(__file__), "logstashagent.yml")
+    local_path = os.path.join(os.path.dirname(__file__), "config/logstashagent.yml")
     return local_path
 
 CONFIG_PATH = get_config_path()
@@ -143,7 +144,7 @@ def load_agent_config() -> dict:
 # Global config
 AGENT_CONFIG = load_agent_config()
 
-app = FastAPI(title="LogstashAgent API", version="0.0.1")
+app = FastAPI(title="logstashagent API", version="0.0.1")
 
 # Request queue for simulation requests during Logstash restarts
 _simulation_queue: deque = deque(maxlen=100)  # Max 100 queued requests
@@ -433,7 +434,7 @@ def _load_pipeline_metadata(pipeline_id: str) -> Dict[str, Any]:
             "type": "logstash_pipeline",
             "version": 1
         },
-        "username": "LogstashAgent",
+        "username": "logstashagent",
         "pipeline_settings": {
             "pipeline.workers": 1,
             "pipeline.batch.size": 125,
@@ -482,7 +483,7 @@ def _get_pipeline_settings_from_yml(pipeline_id: str) -> Dict[str, Any]:
 async def root():
     """Health check endpoint"""
     return {
-        "name": "LogstashAgent",
+        "name": "logstashagent",
         "version": "0.0.1",
         "status": "running",
         "logstash_version": "9.3.0"
@@ -825,7 +826,7 @@ async def list_pipelines():
                     "type": "logstash_pipeline",
                     "version": 1
                 }),
-                "username": metadata.get('username', 'LogstashAgent'),
+                "username": metadata.get('username', 'logstashagent'),
                 "pipeline": config,
                 "pipeline_settings": pipeline_settings
             }
@@ -861,7 +862,7 @@ async def get_pipeline(pipeline_id: str = FastAPIPath(..., description="Pipeline
                 "type": "logstash_pipeline",
                 "version": 1
             }),
-            "username": metadata.get('username', 'LogstashAgent'),
+            "username": metadata.get('username', 'logstashagent'),
             "pipeline": config,
             "pipeline_settings": pipeline_settings
         }
@@ -941,7 +942,7 @@ async def put_pipeline(pipeline_id: str, body: Dict[str, Any]):
             "type": "logstash_pipeline",
             "version": 1
         }),
-        "username": body.get('username', 'LogstashAgent'),
+        "username": body.get('username', 'logstashagent'),
         "pipeline_settings": pipeline_settings
     }
 
@@ -1137,7 +1138,7 @@ output {{
                 "version": 1,
                 "type": "logstash_pipeline"
             },
-            "username": "LogstashAgent",
+            "username": "logstashagent",
             "pipeline_settings": {
                 "pipeline.workers": 1
             }
@@ -1529,7 +1530,7 @@ def parse_arguments():
     Parse command-line arguments for enrollment and other modes
     """
     parser = argparse.ArgumentParser(
-        description='LogstashAgent - Control plane agent for LogstashUI',
+        description='logstashagent - Control plane agent for LogstashUI',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1569,7 +1570,7 @@ Examples:
 
 if __name__ == "__main__":
     """
-    Main entry point for LogstashAgent
+    Main entry point for logstashagent
     
     Supports multiple modes:
     - Enrollment mode: --enroll flag to register with LogstashUI
@@ -1629,7 +1630,7 @@ if __name__ == "__main__":
     host = AGENT_CONFIG.get('host', '0.0.0.0')
     port = AGENT_CONFIG.get('port', 9600)
     
-    logger.info(f"Starting LogstashAgent in {agent_mode} mode on {host}:{port}")
+    logger.info(f"Starting logstashagent in {agent_mode} mode on {host}:{port}")
     
     uvicorn.run(
         app,

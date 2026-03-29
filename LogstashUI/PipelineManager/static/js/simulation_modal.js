@@ -581,7 +581,7 @@ filePathInputs.forEach(input => {
     return; // Skip if missing data or ignored
   }
 
-  // Prepend the LogstashAgent uploaded directory path
+  // Prepend the logstashagent uploaded directory path
   const fullPath = `/tmp/uploaded/${generatedFilename}`;
 
   // Find the component by ID in the COPY and update its config

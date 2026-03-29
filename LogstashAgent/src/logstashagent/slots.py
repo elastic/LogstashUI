@@ -4,7 +4,7 @@
 
 import hashlib
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from threading import Lock, Thread
 import time
@@ -12,7 +12,7 @@ import yaml
 import os
 from . import log_analyzer
 import logging
-from .logstash_api import LogstashAPI, PipelineNotFoundError
+from .logstash_api import LogstashAPI
 
 # Configure logging
 logger = logging.getLogger(__name__)

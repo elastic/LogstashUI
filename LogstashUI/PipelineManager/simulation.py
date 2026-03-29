@@ -75,7 +75,7 @@ def SimulatePipeline(request):
             run_id = str(uuid.uuid4())
             logger.info(f"Starting simulation with run_id: {run_id}")
 
-        # Get LogstashAgent URL early so we can use it in instrumentation
+        # Get logstashagent URL early so we can use it in instrumentation
         logstash_agent_url = settings.LOGSTASH_AGENT_URL
 
         # Determine LOGSTASH_URL for Ruby code based on simulation mode
@@ -387,7 +387,7 @@ end
         output_config = output_converter.components_to_logstash_config()
 
         # Extract just the content (remove 'filter {' and 'output {' wrappers)
-        # The LogstashAgent will add these wrappers when building the complete pipeline
+        # The logstashagent will add these wrappers when building the complete pipeline
         filter_lines = filter_config.strip().split('\n')
         filter_content = '\n'.join(filter_lines[1:-1]) if len(filter_lines) > 2 else ''
 
@@ -402,7 +402,7 @@ end
             "index": 1
         }
 
-        # Allocate a slot - the LogstashAgent will detect if config changed
+        # Allocate a slot - the logstashagent will detect if config changed
         slot_allocation_body = {
             "pipeline_name": request.GET.get('pipeline', 'simulation'),
             "pipelines": [pipeline_data]
@@ -484,7 +484,7 @@ end
 
         # If log_text is provided, send it through the pipeline
         if log_text:
-            # Send the user's log input via LogstashAgent's simulate endpoint
+            # Send the user's log input via logstashagent's simulate endpoint
             # This proxies the request to the local Logstash HTTP input on port 9449
             simulation_input_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/simulate"
             try:
@@ -500,14 +500,14 @@ end
                 # Add run_id for tracking this specific simulation run
                 log_data["run_id"] = run_id
 
-                # Send simulation to LogstashAgent
-                # LogstashAgent handles retries (3x with 1s, 2s, 3s timeouts)
-                # If all retries fail, LogstashAgent triggers restart and queues the request
+                # Send simulation to logstashagent
+                # logstashagent handles retries (3x with 1s, 2s, 3s timeouts)
+                # If all retries fail, logstashagent triggers restart and queues the request
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
                     verify=False,
-                    timeout=10  # Timeout to allow LogstashAgent's 3 retries to complete (1s+2s+3s=6s)
+                    timeout=10  # Timeout to allow logstashagent's 3 retries to complete (1s+2s+3s=6s)
                 )
                 
                 # Check if request was queued (202 status)
@@ -638,7 +638,7 @@ def GetSimulationResults(request):
 def CheckIfPipelineLoaded(request):
     """
     Check if a pipeline successfully loaded in the Logstash instance.
-    Calls LogstashAgent's is_pipeline_running endpoint to verify pipeline status.
+    Calls logstashagent's is_pipeline_running endpoint to verify pipeline status.
 
     Expected GET parameters:
         - pipeline_name: The name of the pipeline to check
@@ -657,7 +657,7 @@ def CheckIfPipelineLoaded(request):
                 "error": "pipeline_name parameter is required"
             }, status=400)
 
-        # Call LogstashAgent to check pipeline status
+        # Call logstashagent to check pipeline status
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipelines/status"
 
         try:
@@ -677,9 +677,9 @@ def CheckIfPipelineLoaded(request):
             }, status=200)
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to connect to LogstashAgent: {e}")
+            logger.error(f"Failed to connect to logstashagent: {e}")
             return JsonResponse({
-                "error": f"Failed to connect to LogstashAgent: {str(e)}",
+                "error": f"Failed to connect to logstashagent: {str(e)}",
                 "is_running": False,
                 "pipeline_name": pipeline_name
             }, status=500)
@@ -697,7 +697,7 @@ def CheckIfPipelineLoaded(request):
 def GetRelatedLogs(request):
     """
     Get log entries related to a specific slot pipeline.
-    Calls LogstashAgent's pipeline logs endpoint to fetch related logs.
+    Calls logstashagent's pipeline logs endpoint to fetch related logs.
 
     Expected GET parameters:
         - slot_id: The slot ID to get logs for
@@ -724,7 +724,7 @@ def GetRelatedLogs(request):
         # Construct the slot pipeline name
         pipeline_id = f"slot{slot_id}-filter1"
 
-        # Get slot creation timestamp from LogstashAgent
+        # Get slot creation timestamp from logstashagent
         min_timestamp = None
         try:
             slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
@@ -760,7 +760,7 @@ def GetRelatedLogs(request):
             logger.warning(f"Could not retrieve slot creation timestamp: {e}")
             logger.warning(f"Using fallback: filtering logs from last 30 seconds (min_timestamp: {min_timestamp})")
 
-        # Call LogstashAgent to get pipeline logs
+        # Call logstashagent to get pipeline logs
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_id}/logs"
         params = {
             "max_entries": min(max_entries, 500),
@@ -800,9 +800,9 @@ def GetRelatedLogs(request):
             return JsonResponse(data, status=200)
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch logs from LogstashAgent: {e}")
+            logger.error(f"Failed to fetch logs from logstashagent: {e}")
             return JsonResponse({
-                "error": f"Failed to fetch logs from LogstashAgent: {str(e)}",
+                "error": f"Failed to fetch logs from logstashagent: {str(e)}",
                 "pipeline_id": pipeline_id,
                 "log_count": 0,
                 "logs": []
@@ -822,7 +822,7 @@ def GetRelatedLogs(request):
 def UploadFile(request):
     """
     Upload a file for use in simulation.
-    Receives file binary data and transmits it to LogstashAgent for storage.
+    Receives file binary data and transmits it to logstashagent for storage.
     """
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -846,7 +846,7 @@ def UploadFile(request):
         encoded_content = base64.b64encode(file_content).decode('utf-8')
         logger.info(f"Encoded content length: {len(encoded_content)} characters")
 
-        # Send to LogstashAgent
+        # Send to logstashagent
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/write-file"
 
         response = requests.post(
@@ -870,9 +870,9 @@ def UploadFile(request):
         }, status=200)
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error transmitting file to LogstashAgent: {e}")
+        logger.error(f"Error transmitting file to logstashagent: {e}")
         return JsonResponse({
-            "error": f"Failed to upload file to LogstashAgent: {str(e)}"
+            "error": f"Failed to upload file to logstashagent: {str(e)}"
         }, status=500)
     except Exception as e:
         logger.error(f"Error in UploadFile: {e}")
@@ -883,7 +883,7 @@ def UploadFile(request):
 @login_required
 def GetSimulationNodeStatus(request):
     """
-    Check the health status of the LogstashAgent.
+    Check the health status of the logstashagent.
     
     Returns:
         JSON response with:
@@ -907,7 +907,7 @@ def GetSimulationNodeStatus(request):
             }, status=200)
             
         except requests.exceptions.RequestException as e:
-            logger.warning(f"LogstashAgent not responding: {e}")
+            logger.warning(f"logstashagent not responding: {e}")
             return JsonResponse({
                 "status": "not_responding",
                 "message": "Agent Not Responding",
@@ -977,7 +977,7 @@ def GetSimulationNodeHealth(request):
 @require_admin_role
 def ValidateLogstashConfig(request):
     """
-    Validate a Logstash pipeline configuration by sending it to LogstashAgent
+    Validate a Logstash pipeline configuration by sending it to logstashagent
     for validation using logstash --config.test_and_exit.
     
     Expected POST parameters:
@@ -1016,7 +1016,7 @@ def ValidateLogstashConfig(request):
         converter = logstash_config_parse.ComponentToPipeline(components, test=False)
         logstash_config = converter.components_to_logstash_config()
         
-        # Send to LogstashAgent for validation
+        # Send to logstashagent for validation
         logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/validate"
         
         try:
@@ -1037,10 +1037,10 @@ def ValidateLogstashConfig(request):
             return JsonResponse(validation_result, status=200)
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to validate config via LogstashAgent: {e}")
+            logger.error(f"Failed to validate config via logstashagent: {e}")
             return JsonResponse({
                 "status": "ERROR",
-                "error": f"Failed to connect to LogstashAgent: {str(e)}"
+                "error": f"Failed to connect to logstashagent: {str(e)}"
             }, status=500)
     
     except Exception as e:

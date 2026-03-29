@@ -25,7 +25,7 @@ python manage.py runserver 0.0.0.0:8080
 ```
 ### Running the simulation agent
 ```bash
-cd LogstashUI/LogstashAgent
+cd LogstashUI/logstashagent
 docker build --no-cache -t logstashagent:latest . --build-arg LOGSTASH_CONFIG=../logstashui.example.yml
 docker run -p 9600:9600 -p 9449:9449 -p 9500:9500 -e LOGSTASH_URL=http://localhost:8080 logstashagent:latest
 

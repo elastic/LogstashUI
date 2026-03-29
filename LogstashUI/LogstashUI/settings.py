@@ -257,8 +257,8 @@ else:
     SECURE_SSL_REDIRECT = False
     X_FRAME_OPTIONS = 'SAMEORIGIN'
 
-# LogstashAgent Configuration
-# URL for the LogstashAgent API
+# logstashagent Configuration
+# URL for the logstashagent API
 # Can be overridden with LOGSTASH_AGENT_URL environment variable
 # 
 # Routing based on simulation mode:

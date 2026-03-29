@@ -409,11 +409,11 @@ def UpdatePipelineSettings(request):
 @require_admin_role
 def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=None):
     """
-    Create a pipeline in Elasticsearch or LogstashAgent.
+    Create a pipeline in Elasticsearch or logstashagent.
 
     Args:
         request: Django request object
-        simulate: If True, send to LogstashAgent instead of Elasticsearch
+        simulate: If True, send to logstashagent instead of Elasticsearch
         pipeline_name: Pipeline name (used when called directly for simulation)
         pipeline_config: Pipeline config string (used when called directly for simulation)
     """
@@ -457,7 +457,7 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
         }
 
         if simulate:
-            # Send to LogstashAgent
+            # Send to logstashagent
             logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_name}"
 
             try:
@@ -469,10 +469,10 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
                 )
                 response.raise_for_status()
                 logger.info(
-                    f"User '{request.user.username}' created simulation pipeline '{pipeline_name}' in LogstashAgent")
+                    f"User '{request.user.username}' created simulation pipeline '{pipeline_name}' in logstashagent")
                 return HttpResponse("Simulation pipeline created successfully!", status=200)
             except requests.exceptions.RequestException as e:
-                logger.error(f"Failed to create simulation pipeline in LogstashAgent: {e}")
+                logger.error(f"Failed to create simulation pipeline in logstashagent: {e}")
                 return HttpResponse(f"Failed to create simulation pipeline: {str(e)}", status=500)
         else:
             # Send to Elasticsearch

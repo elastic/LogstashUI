@@ -15,11 +15,11 @@ COPY ../requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy FastAPI application
-COPY ../main.py .
-COPY ../modules/slots.py .
-COPY ../modules/log_analyzer.py .
-COPY ../modules/logstash_api.py .
-COPY ../modules/logstash_supervisor.py .
+COPY ../src/logstashagent/main.py .
+COPY ../src/logstashagent/slots.py .
+COPY ../src/logstashagent/log_analyzer.py .
+COPY ../src/logstashagent/logstash_api.py .
+COPY ../src/logstashagent/logstash_supervisor.py .
 # Note: logstashagent.yml is mounted at runtime via docker-compose volumes
 # Config is read from /app/logstashui.yml (preferred) or /app/logstashui.example.yml
 

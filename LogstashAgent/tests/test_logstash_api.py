@@ -24,7 +24,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from logstash_api import (
+from logstashagent.logstash_api import (
     LogstashAPI,
     LogstashAPIError,
     PipelineNotFoundError
@@ -38,7 +38,7 @@ from logstash_api import (
 @pytest.fixture
 def mock_httpx_client():
     """Mock httpx.Client for testing"""
-    with patch('logstash_api.httpx.Client') as mock_client_class:
+    with patch('logstashagent.logstash_api.httpx.Client') as mock_client_class:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
         yield mock_client
@@ -59,7 +59,7 @@ class TestLogstashAPIInitialization:
     
     def test_default_initialization(self):
         """Test initialization with default parameters"""
-        with patch('logstash_api.httpx.Client') as mock_client:
+        with patch('logstashagent.logstash_api.httpx.Client') as mock_client:
             api = LogstashAPI()
             
             assert api.base_url == "http://localhost:9600"
@@ -68,7 +68,7 @@ class TestLogstashAPIInitialization:
     
     def test_custom_initialization(self):
         """Test initialization with custom parameters"""
-        with patch('logstash_api.httpx.Client') as mock_client:
+        with patch('logstashagent.logstash_api.httpx.Client') as mock_client:
             api = LogstashAPI(base_url="http://custom:9700", timeout=10.0)
             
             assert api.base_url == "http://custom:9700"

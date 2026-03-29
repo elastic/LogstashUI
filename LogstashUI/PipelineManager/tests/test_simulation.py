@@ -445,7 +445,7 @@ class TestCheckIfPipelineLoaded:
 
     @patch('PipelineManager.simulation.requests.get')
     def test_check_pipeline_loaded_service_unavailable(self, mock_get, authenticated_client):
-        """Test CheckIfPipelineLoaded when LogstashAgent is unavailable"""
+        """Test CheckIfPipelineLoaded when logstashagent is unavailable"""
         mock_get.side_effect = Exception("Connection refused")
 
         response = authenticated_client.get('/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=slot1-filter1')
@@ -538,7 +538,7 @@ class TestGetRelatedLogs:
 
     @patch('PipelineManager.simulation.requests.get')
     def test_get_related_logs_service_unavailable(self, mock_get, authenticated_client):
-        """Test GetRelatedLogs when LogstashAgent is unavailable"""
+        """Test GetRelatedLogs when logstashagent is unavailable"""
         mock_get.side_effect = Exception("Connection refused")
 
         response = authenticated_client.get('/ConnectionManager/GetRelatedLogs/?slot_id=1')
@@ -634,7 +634,7 @@ class TestUploadFile:
 
     @patch('PipelineManager.simulation.requests.post')
     def test_upload_file_agent_failure(self, mock_post, authenticated_client):
-        """Test UploadFile when LogstashAgent fails"""
+        """Test UploadFile when logstashagent fails"""
         mock_post.side_effect = Exception("Connection refused")
 
         file_content = b'test content'

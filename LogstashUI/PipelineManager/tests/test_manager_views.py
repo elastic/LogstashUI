@@ -683,7 +683,7 @@ class TestCreatePipelineAdditional:
 
     @patch('PipelineManager.manager_views.requests.put')
     def test_simulate_mode_success(self, mock_put, authenticated_client, settings):
-        """CreatePipeline in simulate=True mode sends a PUT to LogstashAgent"""
+        """CreatePipeline in simulate=True mode sends a PUT to logstashagent"""
         settings.LOGSTASH_AGENT_URL = 'http://localhost:8080'
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None

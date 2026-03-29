@@ -22,7 +22,7 @@ else
     echo "- WARNING: log4j2.properties not found!"
 fi
 
-# LogstashAgent will start and supervise Logstash via Python
+# logstashagent will start and supervise Logstash via Python
 echo "Starting FastAPI sidecar (which will supervise Logstash)..."
 echo "=========================================="
 echo "  LogstashAgent starting..."

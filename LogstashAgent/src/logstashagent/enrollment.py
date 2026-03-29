@@ -7,10 +7,8 @@ import json
 import base64
 import logging
 import socket
-import os
 import hashlib
-from pathlib import Path
-from . import agent_state
+from LogstashAgent.src.logstashagent import agent_state
 
 logger = logging.getLogger(__name__)
 

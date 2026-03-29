@@ -1,5 +1,5 @@
 """
-Sync LogstashAgent config from logstashui.yml (or logstashui.example.yml) to LogstashAgent/logstashagent.yml
+Sync logstashagent config from logstashui.yml (or logstashui.example.yml) to logstashagent/logstashagent.yml
 """
 import yaml
 import sys
@@ -21,7 +21,7 @@ try:
     agent_config['simulation_mode'] = 'host'
     
     # Write to agent config file
-    with open('LogstashAgent/logstashagent.yml', 'w') as f:
+    with open('logstashagent/logstashagent.yml', 'w') as f:
         yaml.dump(agent_config, f)
     
     print("Config synced successfully")

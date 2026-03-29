@@ -152,7 +152,7 @@ if [ "$MODE" == "host" ]; then
         exit 1
     fi
     
-    # Setup virtual environment for LogstashAgent
+    # Setup virtual environment for logstashagent
     VENV_PATH="$PROJECT_ROOT/LogstashAgent/.venv"
     if [ ! -d "$VENV_PATH" ]; then
         echo "Creating virtual environment in $VENV_PATH"
@@ -167,9 +167,9 @@ if [ "$MODE" == "host" ]; then
     echo "Activating virtual environment"
     source "$VENV_PATH/bin/activate"
     
-    # Install/update Python dependencies for LogstashAgent
+    # Install/update Python dependencies for logstashagent
     echo "Installing Python dependencies for LogstashAgent"
-    pip install -r LogstashAgent/requirements.txt
+    pip install -r logstashagent/requirements.txt
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to install dependencies!"
         echo "Please check that Python and pip are working correctly."
@@ -180,7 +180,7 @@ if [ "$MODE" == "host" ]; then
     
     echo ""
     echo "Preparing LogstashAgent configuration"
-    # Copy logstash_agent config from logstashui.example.yml to LogstashAgent/logstashagent.yml
+    # Copy logstash_agent config from logstashui.example.yml to logstashagent/logstashagent.yml
     python3 bin/sync_config.py
     if [ $? -ne 0 ]; then
         echo "WARNING: Could not update agent config automatically"
