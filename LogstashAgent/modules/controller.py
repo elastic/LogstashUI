@@ -320,7 +320,7 @@ def restart_logstash():
         return False
 
 
-def get_config_changes(server_settings_path=None, server_logs_path=None):
+def get_config_changes(server_settings_path=None, server_logs_path=None, server_binary_path=None):
     """
     Check for configuration changes by reading local config files and comparing hashes with server.
     Reads logstash.yml, jvm.options, and log4j2.properties from settings_path and computes SHA256 hashes.
@@ -328,6 +328,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
     Args:
         server_settings_path: Optional settings path from server (used if paths changed)
         server_logs_path: Optional logs path from server (used if paths changed)
+        server_binary_path: Optional binary path from server (used if paths changed)
     """
     try:
         # Load agent state
@@ -342,6 +343,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
         # This allows the agent to check new paths even if state hasn't been updated yet
         settings_path = server_settings_path if server_settings_path else state.get('settings_path')
         logs_path = server_logs_path if server_logs_path else state.get('logs_path')
+        binary_path = server_binary_path if server_binary_path else state.get('binary_path')
         
         # Normalize path separators for cross-platform compatibility
         # Convert Windows backslashes to forward slashes (works on both Windows and Linux)
@@ -349,6 +351,8 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             settings_path = settings_path.replace('\\', '/')
         if logs_path:
             logs_path = logs_path.replace('\\', '/')
+        if binary_path:
+            binary_path = binary_path.replace('\\', '/')
         
         if not all([logstash_ui_url, api_key, connection_id, settings_path]):
             logger.error("Missing required data for config change detection")
@@ -428,6 +432,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None):
             'log4j2_properties_hash': config_hashes['log4j2_properties_hash'],
             'settings_path': settings_path,
             'logs_path': logs_path,
+            'binary_path': binary_path,
             'keystore': keystore_state
         }
         
@@ -618,7 +623,8 @@ def check_in():
                 # This ensures agent can check new paths even if state hasn't been updated
                 server_settings_path = result.get('settings_path')
                 server_logs_path = result.get('logs_path')
-                get_config_changes(server_settings_path, server_logs_path)
+                server_binary_path = result.get('binary_path')
+                get_config_changes(server_settings_path, server_logs_path, server_binary_path)
             
             return result
         else:

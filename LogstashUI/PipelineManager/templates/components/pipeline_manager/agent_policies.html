@@ -348,7 +348,7 @@
       </button>
     </div>
     <div id="globalConfigContent" class="mt-3 space-y-3">
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-3 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1">Settings Path:</label>
           <input type="text" id="settingsPath" value="/etc/logstash/" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
@@ -356,6 +356,10 @@
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1">Logs Path:</label>
           <input type="text" id="logsPath" value="/var/log/logstash" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Binary Path:</label>
+          <input type="text" id="binaryPath" value="/usr/share/logstash/bin" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
         </div>
       </div>
     </div>
@@ -469,6 +473,70 @@
             <div class="flex-1">
               <div class="text-sm font-medium text-yellow-300 mb-1">Log Level and Format</div>
               <div class="text-xs text-gray-300">Setting log level to Info and format to JSON allows LogstashUI to keep track of the state of Logstash. Click to resolve.</div>
+            </div>
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Unsafe Shutdown Notification -->
+        <div id="unsafeShutdownNotification" class="p-3 bg-red-900/20 border border-red-500/40 rounded-lg cursor-pointer hover:bg-red-900/30 transition-colors hidden" onclick="fixUnsafeShutdown()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-red-300 mb-1">Unsafe Shutdown Enabled</div>
+              <div class="text-xs text-gray-300">This could result in data loss. Click here to set it back to the default (false).</div>
+            </div>
+            <svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Allow Superuser Notification -->
+        <div id="allowSuperuserNotification" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg cursor-pointer hover:bg-yellow-900/30 transition-colors hidden" onclick="fixAllowSuperuser()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-yellow-300 mb-1">Allow Superuser Enabled</div>
+              <div class="text-xs text-gray-300">We don't recommend using this setting for security purposes. Click to set back to the default (false).</div>
+            </div>
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Config Debug Notification -->
+        <div id="configDebugNotification" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg cursor-pointer hover:bg-yellow-900/30 transition-colors hidden" onclick="fixConfigDebug()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-yellow-300 mb-1">Config Debug Enabled</div>
+              <div class="text-xs text-gray-300">This prints your fully compiled pipeline configuration into the logs as a debug log message. We don't recommend enabling this. Click to set it back to default (false).</div>
+            </div>
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Batch Delay Notification -->
+        <div id="batchDelayNotification" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg cursor-pointer hover:bg-yellow-900/30 transition-colors hidden" onclick="fixBatchDelay()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-yellow-300 mb-1">Batch Delay Modified</div>
+              <div class="text-xs text-gray-300">It's typically not a good idea to change this setting. Click to set it to the default.</div>
             </div>
             <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />

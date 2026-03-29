@@ -28,6 +28,11 @@ class Policy(models.Model):
         default="/var/log/logstash",
         help_text="Path to Logstash logs directory"
     )
+    binary_path = models.CharField(
+        max_length=255,
+        default="/usr/share/logstash/bin",
+        help_text="Path to Logstash binary directory"
+    )
     logstash_yml = models.TextField(
         help_text="Content of logstash.yml configuration file"
     )

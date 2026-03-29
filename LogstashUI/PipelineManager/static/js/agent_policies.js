@@ -26,11 +26,19 @@ function checkConfigNotifications() {
     const logsPathSetting = document.getElementById('logsPath')?.value || '';
     const logLevel = document.querySelector('[name="log.level"]')?.value || '';
     const logFormat = document.querySelector('[name="log.format"]')?.value || '';
+    const unsafeShutdown = document.querySelector('[name="pipeline.unsafe_shutdown"]')?.value || '';
+    const allowSuperuser = document.querySelector('[name="allow_superuser"]')?.value || '';
+    const configDebug = document.querySelector('[name="config.debug"]')?.value || '';
+    const batchDelay = document.querySelector('[name="pipeline.batch.delay"]')?.value || '';
     
     console.log('Checking notifications - Global:', logsPathGlobal, 'Setting:', logsPathSetting);
     
     const logsPathMismatchNotification = document.getElementById('logsPathMismatchNotification');
     const logLevelFormatNotification = document.getElementById('logLevelFormatNotification');
+    const unsafeShutdownNotification = document.getElementById('unsafeShutdownNotification');
+    const allowSuperuserNotification = document.getElementById('allowSuperuserNotification');
+    const configDebugNotification = document.getElementById('configDebugNotification');
+    const batchDelayNotification = document.getElementById('batchDelayNotification');
     const notificationsContainer = document.getElementById('notificationsContainer');
     
     // Check for logs path mismatch - show notification if:
@@ -66,6 +74,54 @@ function checkConfigNotifications() {
         logLevelFormatNotification?.classList.add('hidden');
     }
     
+    // Check for unsafe shutdown - show if set to true
+    const hasUnsafeShutdown = unsafeShutdown === 'true';
+    
+    if (hasUnsafeShutdown) {
+        console.log('Unsafe shutdown enabled - showing notification');
+        unsafeShutdownNotification?.classList.remove('hidden');
+        notificationsContainer?.classList.remove('hidden');
+    } else {
+        console.log('Unsafe shutdown not enabled - hiding notification');
+        unsafeShutdownNotification?.classList.add('hidden');
+    }
+    
+    // Check for allow superuser - show if set to true
+    const hasAllowSuperuser = allowSuperuser === 'true';
+    
+    if (hasAllowSuperuser) {
+        console.log('Allow superuser enabled - showing notification');
+        allowSuperuserNotification?.classList.remove('hidden');
+        notificationsContainer?.classList.remove('hidden');
+    } else {
+        console.log('Allow superuser not enabled - hiding notification');
+        allowSuperuserNotification?.classList.add('hidden');
+    }
+    
+    // Check for config debug - show if set to true
+    const hasConfigDebug = configDebug === 'true';
+    
+    if (hasConfigDebug) {
+        console.log('Config debug enabled - showing notification');
+        configDebugNotification?.classList.remove('hidden');
+        notificationsContainer?.classList.remove('hidden');
+    } else {
+        console.log('Config debug not enabled - hiding notification');
+        configDebugNotification?.classList.add('hidden');
+    }
+    
+    // Check for batch delay - show if value is set (not empty/default)
+    const hasBatchDelay = batchDelay && batchDelay.trim() !== '';
+    
+    if (hasBatchDelay) {
+        console.log('Batch delay modified - showing notification');
+        batchDelayNotification?.classList.remove('hidden');
+        notificationsContainer?.classList.remove('hidden');
+    } else {
+        console.log('Batch delay not modified - hiding notification');
+        batchDelayNotification?.classList.add('hidden');
+    }
+    
     // Hide container if no notifications are visible
     const hasVisibleNotifications = notificationsContainer?.querySelector('.p-3:not(.hidden)');
     if (!hasVisibleNotifications) {
@@ -86,6 +142,34 @@ function checkConfigNotifications() {
             type: 'warning',
             title: 'Log Level and Format',
             message: 'LogstashUI needs to manage your log level and format'
+        });
+    }
+    if (!unsafeShutdownNotification?.classList.contains('hidden')) {
+        activeNotifications.push({
+            type: 'error',
+            title: 'Unsafe Shutdown Enabled',
+            message: 'This could result in data loss'
+        });
+    }
+    if (!allowSuperuserNotification?.classList.contains('hidden')) {
+        activeNotifications.push({
+            type: 'warning',
+            title: 'Allow Superuser Enabled',
+            message: 'Not recommended for security purposes'
+        });
+    }
+    if (!configDebugNotification?.classList.contains('hidden')) {
+        activeNotifications.push({
+            type: 'warning',
+            title: 'Config Debug Enabled',
+            message: 'Prints compiled pipeline config to logs'
+        });
+    }
+    if (!batchDelayNotification?.classList.contains('hidden')) {
+        activeNotifications.push({
+            type: 'warning',
+            title: 'Batch Delay Modified',
+            message: 'Not typically recommended to change'
         });
     }
     
@@ -136,6 +220,74 @@ function fixLogLevelFormat() {
     
     // Show success toast
     showToast('Log level set to Info and format set to JSON', 'success');
+}
+
+// Fix unsafe shutdown by setting it back to default (false)
+function fixUnsafeShutdown() {
+    const unsafeShutdownField = document.querySelector('[name="pipeline.unsafe_shutdown"]');
+    
+    if (unsafeShutdownField) {
+        unsafeShutdownField.value = '';
+        unsafeShutdownField.dispatchEvent(new Event('input', { bubbles: true }));
+        unsafeShutdownField.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    
+    // Recheck notifications
+    checkConfigNotifications();
+    
+    // Show success toast
+    showToast('Unsafe shutdown set to default (false)', 'success');
+}
+
+// Fix allow superuser by setting it back to default (false)
+function fixAllowSuperuser() {
+    const allowSuperuserField = document.querySelector('[name="allow_superuser"]');
+    
+    if (allowSuperuserField) {
+        allowSuperuserField.value = '';
+        allowSuperuserField.dispatchEvent(new Event('input', { bubbles: true }));
+        allowSuperuserField.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    
+    // Recheck notifications
+    checkConfigNotifications();
+    
+    // Show success toast
+    showToast('Allow superuser set to default (false)', 'success');
+}
+
+// Fix config debug by setting it back to default (false)
+function fixConfigDebug() {
+    const configDebugField = document.querySelector('[name="config.debug"]');
+    
+    if (configDebugField) {
+        configDebugField.value = '';
+        configDebugField.dispatchEvent(new Event('input', { bubbles: true }));
+        configDebugField.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    
+    // Recheck notifications
+    checkConfigNotifications();
+    
+    // Show success toast
+    showToast('Config debug set to default (false)', 'success');
+}
+
+// Fix batch delay by clearing it to use the default
+function fixBatchDelay() {
+    const batchDelayField = document.querySelector('[name="pipeline.batch.delay"]');
+    
+    if (batchDelayField) {
+        batchDelayField.value = '';
+        batchDelayField.dispatchEvent(new Event('input', { bubbles: true }));
+        batchDelayField.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    
+    // Recheck notifications
+    checkConfigNotifications();
+    
+    // Show success toast
+    showToast('Batch delay set to default (50ms)', 'success');
 }
 
 // Convert form fields to YAML content
@@ -1010,6 +1162,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Reset to default values for new policy
             document.getElementById('settingsPath').value = '/etc/logstash/';
             document.getElementById('logsPath').value = '/var/log/logstash';
+            document.getElementById('binaryPath').value = '/usr/share/logstash/bin';
             
             // Show popup to add new policy
             const policyName = await ConfirmationModal.prompt(
@@ -1048,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             name: trimmedName,
                             settings_path: document.getElementById('settingsPath').value,
                             logs_path: document.getElementById('logsPath').value,
+                            binary_path: document.getElementById('binaryPath').value,
                             logstash_yml: fileContents['logstash.yml'],
                             jvm_options: fileContents['jvm.options'],
                             log4j2_properties: fileContents['log4j2.properties']
@@ -1060,7 +1214,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         showToast(data.message, 'success');
                         
                         // Reload policies to refresh the UI and show main content
-                        await loadPolicies();
+                        // Pass the newly created policy name so it gets selected
+                        await loadPolicies(trimmedName);
                     } else {
                         showToast(data.error || 'Failed to create policy', 'error');
                         this.value = currentPolicy;
@@ -1095,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const deletePolicyBtn = document.getElementById('deletePolicyBtn');
         const settingsPathInput = document.getElementById('settingsPath');
         const logsPathInput = document.getElementById('logsPath');
+        const binaryPathInput = document.getElementById('binaryPath');
         
         // All policies are now editable (no default policy)
         // Just ensure everything is enabled
@@ -1116,6 +1272,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (logsPathInput) {
             logsPathInput.disabled = false;
             logsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+        
+        if (binaryPathInput) {
+            binaryPathInput.disabled = false;
+            binaryPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
         }
         
         if (editor) {
@@ -1172,6 +1333,7 @@ async function loadPolicyData(policyValue) {
                 // Update form fields
                 document.getElementById('settingsPath').value = policy.settings_path;
                 document.getElementById('logsPath').value = policy.logs_path;
+                document.getElementById('binaryPath').value = policy.binary_path || '/usr/share/logstash/bin';
                 
                 // Update file contents with fresh data from database
                 window.policyFileContents['logstash.yml'] = policy.logstash_yml;
@@ -1209,7 +1371,8 @@ async function loadPolicyData(policyValue) {
 }
 
 // Load all policies from the server
-async function loadPolicies() {
+// If newPolicyName is provided, select that policy after loading
+async function loadPolicies(newPolicyName = null) {
     try {
         const response = await fetch('/ConnectionManager/GetPolicies/', {
             method: 'GET',
@@ -1257,6 +1420,7 @@ async function loadPolicies() {
                 // Store policy data for later use
                 option.dataset.settingsPath = policy.settings_path;
                 option.dataset.logsPath = policy.logs_path;
+                option.dataset.binaryPath = policy.binary_path;
                 option.dataset.logstashYml = policy.logstash_yml;
                 option.dataset.jvmOptions = policy.jvm_options;
                 option.dataset.log4j2Properties = policy.log4j2_properties;
@@ -1271,10 +1435,21 @@ async function loadPolicies() {
                 window.customPolicies.push(policy.name);
             });
             
-            // Auto-select first policy if policies exist
+            // Auto-select the appropriate policy
             if (data.policies.length > 0) {
-                const firstPolicy = data.policies[0];
-                policySelect.value = firstPolicy.name.toLowerCase().replace(/\s+/g, '_');
+                let policyToSelect;
+                
+                // If a new policy name was provided, select it
+                if (newPolicyName) {
+                    policyToSelect = data.policies.find(p => p.name === newPolicyName);
+                }
+                
+                // Fall back to first policy if new policy not found or not specified
+                if (!policyToSelect) {
+                    policyToSelect = data.policies[0];
+                }
+                
+                policySelect.value = policyToSelect.name.toLowerCase().replace(/\s+/g, '_');
                 window.currentPolicy = policySelect.value;
                 
                 // Trigger change event to load the policy data
@@ -1318,6 +1493,7 @@ async function savePolicyChanges() {
     // Get the current editor instance and save current content to fileContents
     const settingsPath = document.getElementById('settingsPath').value;
     const logsPath = document.getElementById('logsPath').value;
+    const binaryPath = document.getElementById('binaryPath').value;
     
     // Update fileContents with current editor/form state
     if (window.policyFileContents) {
@@ -1357,6 +1533,7 @@ async function savePolicyChanges() {
                 policy_name: policyName,
                 settings_path: settingsPath,
                 logs_path: logsPath,
+                binary_path: binaryPath,
                 logstash_yml: window.policyFileContents ? window.policyFileContents['logstash.yml'] : '',
                 jvm_options: window.policyFileContents ? window.policyFileContents['jvm.options'] : '',
                 log4j2_properties: window.policyFileContents ? window.policyFileContents['log4j2.properties'] : ''
