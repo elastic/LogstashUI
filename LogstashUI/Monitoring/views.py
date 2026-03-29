@@ -24,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 def Monitoring(request):
     """Monitoring page showing Logstash metrics and health"""
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+    # Only query CENTRALIZED connections (non-agent) since we're querying Elasticsearch instances
+    connections = list(ConnectionTable.objects.filter(
+        connection_type=ConnectionTable.ConnectionType.CENTRALIZED
+    ).values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
 
     context = {
         "Connections": connections,

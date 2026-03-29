@@ -16,7 +16,11 @@ def test_elastic_connectivity(elastic_connection):
     return json.dumps(dict(elastic_connection.info()), indent=4)
 
 def get_elastic_connections_from_list():
-    es_connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
+    # Only query CENTRALIZED connections (not AGENT connections)
+    # AGENT connections don't have Elasticsearch endpoints to connect to
+    es_connections = list(ConnectionTable.objects.filter(
+        connection_type=ConnectionTable.ConnectionType.CENTRALIZED
+    ).values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk"))
 
     return [{
         "es": get_elastic_connection(es_connection['pk']),

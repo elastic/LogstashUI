@@ -495,6 +495,37 @@ function renderKeystoreDiff(oldKeystore, newKeystore) {
     container.innerHTML = html;
 }
 
+// Show restart warning with agent count
+async function showRestartWarning(policyId) {
+    try {
+        // Fetch the count of agents using this policy
+        const response = await fetch(`/ConnectionManager/GetPolicyAgentCount/?policy_id=${policyId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const agentCount = data.agent_count || 0;
+            document.getElementById('agentCount').textContent = agentCount;
+            document.getElementById('restartWarningBanner').classList.remove('hidden');
+        } else {
+            console.error('Failed to get agent count:', data.error);
+            // Still show the warning but with 0 count
+            document.getElementById('agentCount').textContent = '0';
+            document.getElementById('restartWarningBanner').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error fetching agent count:', error);
+        // Still show the warning but with 0 count
+        document.getElementById('agentCount').textContent = '0';
+        document.getElementById('restartWarningBanner').classList.remove('hidden');
+    }
+}
+
 // Render global settings diff (settings_path and logs_path)
 function renderGlobalSettingsDiff(previousData, currentData) {
     const container = document.getElementById('diff-global_settings');
@@ -635,6 +666,19 @@ async function loadPolicyDiff(policyId, policyName) {
             noChangesBanner.classList.remove('hidden');
         } else {
             noChangesBanner.classList.add('hidden');
+        }
+        
+        // Check if config files have changed (excluding pipelines)
+        const hasConfigChanges = sectionsWithChanges.has('logstash_yml') || 
+                                 sectionsWithChanges.has('jvm_options') || 
+                                 sectionsWithChanges.has('log4j2_properties') || 
+                                 sectionsWithChanges.has('keystore');
+        
+        // Show restart warning if config files changed
+        if (hasConfigChanges) {
+            await showRestartWarning(policyId);
+        } else {
+            document.getElementById('restartWarningBanner').classList.add('hidden');
         }
         
         // Calculate and display stats

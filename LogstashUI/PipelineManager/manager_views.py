@@ -744,6 +744,41 @@ def get_policies(request):
 
 
 @require_admin_role
+def get_policy_agent_count(request):
+    """
+    Get the count of agents (connections) using a specific policy
+    """
+    try:
+        policy_id = request.GET.get('policy_id')
+        
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+        
+        # Count connections using this policy
+        agent_count = ConnectionTable.objects.filter(
+            policy=policy,
+            connection_type=ConnectionTable.ConnectionType.AGENT,
+            is_active=True
+        ).count()
+        
+        return JsonResponse({
+            "success": True,
+            "agent_count": agent_count,
+            "policy_name": policy.name
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting policy agent count: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
 def delete_policy(request):
     """
     Delete a policy
