@@ -2,503 +2,503 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Comprehensive tests for Logstash API SDK
+"""Tests for logstashagent.logstash_api."""
 
-Tests cover:
-- LogstashAPI class initialization and context management
-- Pipeline stats retrieval (all pipelines and specific pipeline)
-- Pipeline state detection (running, idle, failed, not_found)
-- Pipeline listing and existence checks
-- Event count retrieval
-- Error handling and edge cases
-- Reload failure detection
-"""
+from unittest.mock import MagicMock, Mock, patch
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 import httpx
+import pytest
 
-# Import modules to test
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
+from logstashagent import logstash_api
 from logstashagent.logstash_api import (
     LogstashAPI,
     LogstashAPIError,
-    PipelineNotFoundError
+    PipelineNotFoundError,
+    get_running_pipelines,
+    is_pipeline_loaded,
+    wait_for_pipeline,
 )
 
 
-# ============================================================================
-# Fixtures
-# ============================================================================
-
-@pytest.fixture
-def mock_httpx_client():
-    """Mock httpx.Client for testing"""
-    with patch('logstashagent.logstash_api.httpx.Client') as mock_client_class:
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
-        yield mock_client
+@pytest.fixture(autouse=True)
+def reset_shared_http_client():
+    """Avoid cross-test pollution of the module-level pooled client."""
+    logstash_api._shared_client = None
+    yield
+    logstash_api._shared_client = None
 
 
 @pytest.fixture
-def api_instance(mock_httpx_client):
-    """Create a LogstashAPI instance with mocked client"""
-    return LogstashAPI()
+def mock_http():
+    """Patch only ``httpx.Client`` so ``httpx.HTTPError`` in except clauses stays real."""
+    client = MagicMock()
+    with patch("logstashagent.logstash_api.httpx.Client", return_value=client):
+        yield client
 
 
-# ============================================================================
-# LogstashAPI Initialization Tests
-# ============================================================================
+@pytest.fixture
+def api(mock_http):
+    return LogstashAPI(use_shared_client=False, timeout=5.0)
+
+
+def _ok_json(data):
+    r = Mock()
+    r.status_code = 200
+    r.json.return_value = data
+    r.raise_for_status = Mock()
+    return r
+
 
 class TestLogstashAPIInitialization:
-    """Test LogstashAPI initialization and context management"""
-    
-    def test_default_initialization(self):
-        """Test initialization with default parameters"""
-        with patch('logstashagent.logstash_api.httpx.Client') as mock_client:
-            api = LogstashAPI()
-            
-            assert api.base_url == "http://localhost:9600"
-            assert api.timeout == 5.0
-            mock_client.assert_called_once_with(timeout=5.0)
-    
-    def test_custom_initialization(self):
-        """Test initialization with custom parameters"""
-        with patch('logstashagent.logstash_api.httpx.Client') as mock_client:
-            api = LogstashAPI(base_url="http://custom:9700", timeout=10.0)
-            
-            assert api.base_url == "http://custom:9700"
-            assert api.timeout == 10.0
-            mock_client.assert_called_once_with(timeout=10.0)
-    
-    def test_context_manager(self, mock_httpx_client):
-        """Test context manager closes client properly"""
-        with LogstashAPI() as api:
-            assert api is not None
-        
-        mock_httpx_client.close.assert_called_once()
-    
-    def test_manual_close(self, mock_httpx_client):
-        """Test manual close method"""
-        api = LogstashAPI()
-        api.close()
-        
-        mock_httpx_client.close.assert_called_once()
+    def test_default_base_url_and_dedicated_client(self):
+        mock_client = MagicMock()
+        with patch(
+            "logstashagent.logstash_api.httpx.Client", return_value=mock_client
+        ) as ctor:
+            api = LogstashAPI(use_shared_client=False, timeout=5.0)
 
+        assert api.base_url == "http://localhost:9600"
+        assert api.timeout == 5.0
+        assert api._owns_client is True
+        ctor.assert_called_once_with(timeout=5.0)
 
-# ============================================================================
-# Pipeline Stats Retrieval Tests
-# ============================================================================
+    def test_shared_client_uses_connection_limits(self):
+        mock_client = MagicMock()
+        with patch(
+            "logstashagent.logstash_api.httpx.Client", return_value=mock_client
+        ) as ctor:
+            logstash_api._shared_client = None
+            api = LogstashAPI(use_shared_client=True, timeout=7.0)
 
-class TestGetPipelineStats:
-    """Test pipeline statistics retrieval"""
-    
-    def test_get_all_pipeline_stats_success(self, api_instance, mock_httpx_client):
-        """Test successful retrieval of all pipeline stats"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "pipeline1": {"events": {"in": 100}},
-                "pipeline2": {"events": {"in": 200}}
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        result = api_instance.get_all_pipeline_stats()
-        
-        assert "pipelines" in result
-        assert len(result["pipelines"]) == 2
-        mock_httpx_client.get.assert_called_once_with("http://localhost:9600/_node/stats/pipelines")
-    
-    def test_get_all_pipeline_stats_http_error(self, api_instance, mock_httpx_client):
-        """Test handling of HTTP errors when getting all stats"""
-        mock_httpx_client.get.side_effect = httpx.HTTPError("Connection failed")
-        
-        with pytest.raises(LogstashAPIError) as exc_info:
-            api_instance.get_all_pipeline_stats()
-        
-        assert "Failed to get pipeline stats" in str(exc_info.value)
-    
-    def test_get_pipeline_stats_success(self, api_instance, mock_httpx_client):
-        """Test successful retrieval of specific pipeline stats"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 100, "out": 95},
-                    "reloads": {"successes": 1, "failures": 0}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        result = api_instance.get_pipeline_stats("test-pipeline")
-        
-        assert "pipelines" in result
-        assert "test-pipeline" in result["pipelines"]
-        mock_httpx_client.get.assert_called_once_with(
-            "http://localhost:9600/_node/stats/pipelines/test-pipeline"
+        assert api.client is mock_client
+        assert api._owns_client is False
+        ctor.assert_called_with(
+            timeout=7.0,
+            limits=httpx.Limits(
+                max_connections=10, max_keepalive_connections=5
+            ),
         )
-    
-    def test_get_pipeline_stats_not_found(self, api_instance, mock_httpx_client):
-        """Test handling of 404 when pipeline doesn't exist"""
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_httpx_client.get.return_value = mock_response
-        
-        with pytest.raises(PipelineNotFoundError) as exc_info:
-            api_instance.get_pipeline_stats("nonexistent")
-        
-        assert "nonexistent" in str(exc_info.value)
+
+    def test_context_manager_closes_owned_client(self, mock_http):
+        with LogstashAPI(use_shared_client=False) as api:
+            assert api._owns_client is True
+        mock_http.close.assert_called_once()
+
+    def test_close_only_when_owning_client(self, mock_http):
+        api = LogstashAPI(use_shared_client=False)
+        api.close()
+        mock_http.close.assert_called_once()
+
+    def test_close_skipped_for_shared_client(self):
+        shared = MagicMock()
+        with patch("logstashagent.logstash_api.httpx.Client", return_value=shared):
+            logstash_api._shared_client = None
+            api = LogstashAPI(use_shared_client=True)
+            api.close()
+        shared.close.assert_not_called()
 
 
-# ============================================================================
-# Pipeline State Detection Tests
-# ============================================================================
+class TestGetNodeAndHealth:
+    def test_get_node_info(self, api, mock_http):
+        mock_http.get.return_value = _ok_json({"version": "8.x"})
+        assert api.get_node_info() == {"version": "8.x"}
+        mock_http.get.assert_called_with("http://localhost:9600/")
 
-class TestDetectPipelineState:
-    """Test pipeline state detection logic"""
-    
-    def test_detect_running_state(self, api_instance, mock_httpx_client):
-        """Test detection of running pipeline (has processed events)"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 100, "out": 95},
-                    "reloads": {"successes": 1, "failures": 0}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        assert state == "running"
-    
-    def test_detect_idle_state_with_successes(self, api_instance, mock_httpx_client):
-        """Test detection of idle pipeline (loaded but no events yet)"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0},
-                    "reloads": {"successes": 1, "failures": 0}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        assert state == "idle"
-    
-    def test_detect_idle_state_with_historical_failures(self, api_instance, mock_httpx_client):
-        """Test that pipeline with successes is idle even with historical failures"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0},
-                    "reloads": {"successes": 1, "failures": 3}  # Historical failures
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Should be idle because it has at least one success
-        assert state == "idle"
-    
-    def test_detect_failed_state(self, api_instance, mock_httpx_client):
-        """Test detection of failed pipeline (only failures, no successes)"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0},
-                    "reloads": {"successes": 0, "failures": 3}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        assert state == "idle"
-    
-    def test_detect_not_found_state(self, api_instance, mock_httpx_client):
-        """Test detection when pipeline doesn't exist"""
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("nonexistent")
-        
-        assert state == "not_found"
-    
-    def test_detect_idle_state_no_reload_data(self, api_instance, mock_httpx_client):
-        """Test detection of newly created pipeline with no reload data yet"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0},
-                    "reloads": {}  # No reload data yet
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Should be idle (newly created, no failures)
-        assert state == "idle"
-    
-    def test_detect_state_api_error(self, api_instance, mock_httpx_client):
-        """Test handling of API errors during state detection"""
-        mock_httpx_client.get.side_effect = httpx.HTTPError("Connection failed")
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Should return not_found on error
-        assert state == "not_found"
+    def test_get_health_report(self, api, mock_http):
+        mock_http.get.return_value = _ok_json({"status": "green"})
+        assert api.get_health_report() == {"status": "green"}
+        mock_http.get.assert_called_with("http://localhost:9600/_node/health_report")
+
+    def test_get_node_stats(self, api, mock_http):
+        mock_http.get.return_value = _ok_json({"jvm": {}})
+        assert api.get_node_stats() == {"jvm": {}}
+        mock_http.get.assert_called_with("http://localhost:9600/_node/stats")
 
 
-# ============================================================================
-# Pipeline Listing Tests
-# ============================================================================
-
-class TestListPipelines:
-    """Test pipeline listing functionality"""
-    
-    def test_list_pipelines_success(self, api_instance, mock_httpx_client):
-        """Test successful listing of all pipelines"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "pipeline1": {},
-                "pipeline2": {},
-                "pipeline3": {}
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        pipelines = api_instance.list_pipelines()
-        
-        assert len(pipelines) == 3
-        assert "pipeline1" in pipelines
-        assert "pipeline2" in pipelines
-        assert "pipeline3" in pipelines
-    
-    def test_list_pipelines_empty(self, api_instance, mock_httpx_client):
-        """Test listing when no pipelines exist"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"pipelines": {}}
-        mock_httpx_client.get.return_value = mock_response
-        
-        pipelines = api_instance.list_pipelines()
-        
-        assert pipelines == []
-    
-    def test_list_pipelines_error(self, api_instance, mock_httpx_client):
-        """Test handling of errors when listing pipelines"""
-        mock_httpx_client.get.side_effect = httpx.HTTPError("Connection failed")
-        
-        with pytest.raises(LogstashAPIError):
-            api_instance.list_pipelines()
-
-
-# ============================================================================
-# Pipeline Running Check Tests
-# ============================================================================
-
-class TestIsPipelineRunning:
-    """Test pipeline running status checks"""
-    
-    def test_is_running_with_events(self, api_instance, mock_httpx_client):
-        """Test pipeline is running when it has processed events"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 100, "out": 95},
-                    "reloads": {"successes": 1}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        is_running = api_instance.is_pipeline_running("test-pipeline")
-        
-        assert is_running == True
-    
-    def test_is_running_with_reload_data(self, api_instance, mock_httpx_client):
-        """Test pipeline is running when it has reload data (even without events)"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0},
-                    "reloads": {"successes": 1}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        is_running = api_instance.is_pipeline_running("test-pipeline")
-        
-        assert is_running == True
-    
-    def test_is_not_running_when_not_found(self, api_instance, mock_httpx_client):
-        """Test pipeline is not running when it doesn't exist"""
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_httpx_client.get.return_value = mock_response
-        
-        is_running = api_instance.is_pipeline_running("nonexistent")
-        
-        assert is_running == False
-
-
-# ============================================================================
-# Event Counts Tests
-# ============================================================================
-
-class TestGetPipelineEventCounts:
-    """Test event count retrieval"""
-    
-    def test_get_event_counts_success(self, api_instance, mock_httpx_client):
-        """Test successful retrieval of event counts"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {
-                        "in": 1000,
-                        "filtered": 950,
-                        "out": 900,
-                        "duration_in_millis": 5000,
-                        "queue_push_duration_in_millis": 100
+class TestGetRunningPipelinesFromHealth:
+    def test_returns_indicator_keys(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "indicators": {
+                    "pipelines": {
+                        "indicators": {"main": {}, "beats": {}},
                     }
                 }
             }
+        )
+        assert set(api.get_running_pipelines_from_health()) == {"main", "beats"}
+
+    def test_fallback_on_404(self, api, mock_http):
+        err = LogstashAPIError("Failed to get health report: 404 Not Found")
+        with patch.object(api, "get_health_report", side_effect=err):
+            with patch.object(api, "list_pipelines", return_value=["a", "b"]):
+                assert api.get_running_pipelines_from_health() == ["a", "b"]
+
+
+class TestGetPipelineStats:
+    def test_get_all_pipeline_stats_success(self, api, mock_http):
+        body = {
+            "pipelines": {
+                "pipeline1": {"events": {"in": 100}},
+                "pipeline2": {"events": {"in": 200}},
+            }
         }
-        mock_httpx_client.get.return_value = mock_response
-        
-        counts = api_instance.get_pipeline_event_counts("test-pipeline")
-        
+        mock_http.get.return_value = _ok_json(body)
+
+        assert api.get_all_pipeline_stats() == body
+        mock_http.get.assert_called_once_with(
+            "http://localhost:9600/_node/stats/pipelines"
+        )
+
+    def test_get_all_pipeline_stats_http_error(self, api, mock_http):
+        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+
+        with pytest.raises(LogstashAPIError, match="Failed to get pipeline stats"):
+            api.get_all_pipeline_stats()
+
+    def test_get_pipeline_stats_success(self, api, mock_http):
+        body = {
+            "pipelines": {
+                "test-pipeline": {
+                    "events": {"in": 100, "out": 95},
+                    "reloads": {"successes": 1, "failures": 0},
+                }
+            }
+        }
+        mock_http.get.return_value = _ok_json(body)
+
+        assert api.get_pipeline_stats("test-pipeline") == body
+        mock_http.get.assert_called_once_with(
+            "http://localhost:9600/_node/stats/pipelines/test-pipeline"
+        )
+
+    def test_get_pipeline_stats_not_found_status(self, api, mock_http):
+        r = Mock()
+        r.status_code = 404
+        mock_http.get.return_value = r
+
+        with pytest.raises(PipelineNotFoundError, match="nonexistent"):
+            api.get_pipeline_stats("nonexistent")
+
+
+class TestDetectPipelineState:
+    def test_running(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 100, "out": 95},
+                        "reloads": {"successes": 1, "failures": 0},
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "running"
+
+    def test_idle(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": {"successes": 1, "failures": 0},
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "idle"
+
+    def test_idle_with_historical_failures(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": {"successes": 1, "failures": 3},
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "idle"
+
+    def test_idle_only_failures_no_events_in_key_still_idle(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": {"successes": 0, "failures": 3},
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "idle"
+
+    def test_not_found_404(self, api, mock_http):
+        r = Mock()
+        r.status_code = 404
+        mock_http.get.return_value = r
+        assert api.detect_pipeline_state("nonexistent") == "not_found"
+
+    def test_idle_empty_reloads_dict(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": {},
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "idle"
+
+    def test_api_error_returns_not_found(self, api, mock_http):
+        mock_http.get.side_effect = httpx.HTTPError("down")
+        assert api.detect_pipeline_state("test-pipeline") == "not_found"
+
+
+class TestListPipelines:
+    def test_success(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {"pipelines": {"p1": {}, "p2": {}, "p3": {}}}
+        )
+        names = api.list_pipelines()
+        assert len(names) == 3
+        assert set(names) == {"p1", "p2", "p3"}
+
+    def test_empty(self, api, mock_http):
+        mock_http.get.return_value = _ok_json({"pipelines": {}})
+        assert api.list_pipelines() == []
+
+    def test_error(self, api, mock_http):
+        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        with pytest.raises(LogstashAPIError):
+            api.list_pipelines()
+
+
+class TestIsPipelineRunning:
+    def test_true_with_events(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 100, "out": 95},
+                        "reloads": {"successes": 1},
+                    }
+                }
+            }
+        )
+        assert api.is_pipeline_running("test-pipeline") is True
+
+    def test_true_with_reload_only(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": {"successes": 1},
+                    }
+                }
+            }
+        )
+        assert api.is_pipeline_running("test-pipeline") is True
+
+    def test_false_when_not_found(self, api, mock_http):
+        r = Mock()
+        r.status_code = 404
+        mock_http.get.return_value = r
+        assert api.is_pipeline_running("nonexistent") is False
+
+
+class TestGetPipelineEventCounts:
+    def test_success(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {
+                            "in": 1000,
+                            "filtered": 950,
+                            "out": 900,
+                            "duration_in_millis": 5000,
+                            "queue_push_duration_in_millis": 100,
+                        }
+                    }
+                }
+            }
+        )
+        counts = api.get_pipeline_event_counts("test-pipeline")
         assert counts["in"] == 1000
         assert counts["filtered"] == 950
         assert counts["out"] == 900
         assert counts["duration_in_millis"] == 5000
         assert counts["queue_push_duration_in_millis"] == 100
-    
-    def test_get_event_counts_not_found(self, api_instance, mock_httpx_client):
-        """Test event counts when pipeline doesn't exist"""
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_httpx_client.get.return_value = mock_response
-        
+
+    def test_not_found(self, api, mock_http):
+        r = Mock()
+        r.status_code = 404
+        mock_http.get.return_value = r
         with pytest.raises(PipelineNotFoundError):
-            api_instance.get_pipeline_event_counts("nonexistent")
+            api.get_pipeline_event_counts("nonexistent")
 
 
-# ============================================================================
-# Edge Cases and Error Handling Tests
-# ============================================================================
-
-class TestEdgeCasesAndErrors:
-    """Test edge cases and error handling"""
-    
-    def test_empty_pipeline_data(self, api_instance, mock_httpx_client):
-        """Test handling of empty pipeline data in response"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {}
+class TestWaitForPipelineActivity:
+    def test_detects_increase(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "p": {
+                        "events": {"in": 5, "out": 5},
+                    }
+                }
             }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Empty pipeline data means pipeline is still registering/initializing
-        assert state == "not_found"
-    
-    def test_missing_events_field(self, api_instance, mock_httpx_client):
-        """Test handling when events field is missing"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        )
+        assert api.wait_for_pipeline_activity("p", initial_event_count=0, timeout=1.0) is True
+
+    def test_timeout(self, api, mock_http):
+        body = {
             "pipelines": {
-                "test-pipeline": {
-                    "reloads": {"successes": 1, "failures": 0}
+                "p": {
+                    "events": {"in": 1, "out": 1},
                 }
             }
         }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Missing events structure means pipeline hasn't fully initialized yet
-        assert state == "not_found"
-    
-    def test_missing_reloads_field(self, api_instance, mock_httpx_client):
-        """Test handling when reloads field is missing"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0}
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Missing reloads structure means pipeline is still registering
-        assert state == "not_found"
-    
-    def test_null_reloads_field(self, api_instance, mock_httpx_client):
-        """Test handling when reloads field is null"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "pipelines": {
-                "test-pipeline": {
-                    "events": {"in": 0, "out": 0},
-                    "reloads": None
-                }
-            }
-        }
-        mock_httpx_client.get.return_value = mock_response
-        
-        state = api_instance.detect_pipeline_state("test-pipeline")
-        
-        # Null reloads field means pipeline is still registering
-        assert state == "not_found"
+        mock_http.get.return_value = _ok_json(body)
+        with patch("logstashagent.logstash_api.time.time", side_effect=[0.0, 0.005, 0.02]):
+            with patch("logstashagent.logstash_api.time.sleep"):
+                assert (
+                    api.wait_for_pipeline_activity(
+                        "p", initial_event_count=1, timeout=0.01
+                    )
+                    is False
+                )
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+class TestGetPipelineUptime:
+    def test_seconds_from_duration(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "p": {
+                        "events": {"duration_in_millis": 5000},
+                    }
+                }
+            }
+        )
+        assert api.get_pipeline_uptime("p") == 5.0
+
+    def test_none_when_zero(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "p": {
+                        "events": {"duration_in_millis": 0},
+                    }
+                }
+            }
+        )
+        assert api.get_pipeline_uptime("p") is None
+
+
+class TestHasPipelineAttemptedLoad:
+    def test_true_when_counters_nonzero(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "p": {"reloads": {"successes": 0, "failures": 1}},
+                }
+            }
+        )
+        assert api.has_pipeline_attempted_load("p") is True
+
+    def test_false_when_zero(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "p": {"reloads": {"successes": 0, "failures": 0}},
+                }
+            }
+        )
+        assert api.has_pipeline_attempted_load("p") is False
+
+
+class TestEdgeCases:
+    def test_empty_pipeline_data(self, api, mock_http):
+        mock_http.get.return_value = _ok_json({"pipelines": {"test-pipeline": {}}})
+        assert api.detect_pipeline_state("test-pipeline") == "not_found"
+
+    def test_missing_events_field(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {"reloads": {"successes": 1, "failures": 0}},
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "not_found"
+
+    def test_missing_reloads_field(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {"events": {"in": 0, "out": 0}},
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "not_found"
+
+    def test_null_reloads(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": None,
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "not_found"
+
+    def test_reloads_not_dict_returns_failed(self, api, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "events": {"in": 0, "out": 0},
+                        "reloads": "bad",
+                    }
+                }
+            }
+        )
+        assert api.detect_pipeline_state("test-pipeline") == "failed"
+
+
+class TestModuleHelpers:
+    def test_is_pipeline_loaded(self, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "x": {"events": {"in": 1}, "reloads": {}},
+                }
+            }
+        )
+        assert is_pipeline_loaded("x", timeout=3.0) is True
+
+    def test_get_running_pipelines_helper(self, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {"pipelines": {"a": {}, "b": {}}}
+        )
+        assert set(get_running_pipelines(timeout=3.0)) == {"a", "b"}
+
+    def test_wait_for_pipeline_helper(self, mock_http):
+        mock_http.get.return_value = _ok_json(
+            {
+                "pipelines": {
+                    "p": {"events": {"in": 1}, "reloads": {}},
+                }
+            }
+        )
+        with patch("logstashagent.logstash_api.time.time", return_value=0.0):
+            assert wait_for_pipeline("p", max_wait=0.01, timeout=3.0) is True

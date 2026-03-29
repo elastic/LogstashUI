@@ -6,7 +6,7 @@ import json
 import uuid
 from pathlib import Path
 import logging
-from LogstashAgent.src.logstashagent import encryption
+from . import encryption
 
 logger = logging.getLogger(__name__)
 

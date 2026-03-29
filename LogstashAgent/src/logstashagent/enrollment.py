@@ -8,7 +8,7 @@ import base64
 import logging
 import socket
 import hashlib
-from LogstashAgent.src.logstashagent import agent_state
+from . import agent_state
 
 logger = logging.getLogger(__name__)
 
