@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 ENCRYPTED_KEYS = {'api_key'}
 
 # Path to state file
-STATE_DIR = Path(__file__).parent.parent / 'data'
+STATE_DIR = Path(__file__).parent / 'data'
 STATE_FILE = STATE_DIR / 'state.json'
 
 

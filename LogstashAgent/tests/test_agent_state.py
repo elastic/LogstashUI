@@ -13,6 +13,11 @@ import pytest
 from logstashagent import agent_state
 
 
+def test_default_state_dir_is_package_local():
+    expected = Path(agent_state.__file__).resolve().parent / "data"
+    assert agent_state.STATE_DIR.resolve() == expected
+
+
 @pytest.fixture
 def isolated_state(temp_dir):
     """Use a temp directory for STATE_DIR / STATE_FILE instead of package data."""

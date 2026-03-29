@@ -16,9 +16,9 @@ import json
 import glob
 import logging
 import re
-from . import agent_state, enrollment, log_analyzer, logstash_supervisor, controller, \
+from logstashagent import agent_state, enrollment, log_analyzer, logstash_supervisor, controller, \
     slots
-from .logstash_api import LogstashAPI
+from logstashagent.logstash_api import LogstashAPI
 import requests
 import time
 import base64

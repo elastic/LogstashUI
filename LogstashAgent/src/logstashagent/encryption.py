@@ -37,8 +37,8 @@ def get_encryption_key():
                 logger.error(f"Invalid CREDENTIAL_KEY in environment: {e}")
                 raise RuntimeError(f"Invalid CREDENTIAL_KEY format: {e}")
         
-        # Check for key file in data directory
-        base_dir = Path(__file__).resolve().parent.parent
+        # Check for key file in package-local data directory
+        base_dir = Path(__file__).resolve().parent
         key_file = base_dir / 'data' / '.secret_key'
         
         if key_file.exists():
