@@ -30,8 +30,19 @@ function checkConfigNotifications() {
     const allowSuperuser = document.querySelector('[name="allow_superuser"]')?.value || '';
     const configDebug = document.querySelector('[name="config.debug"]')?.value || '';
     const batchDelay = document.querySelector('[name="pipeline.batch.delay"]')?.value || '';
+    const cpmEnabled = document.querySelector('[name="xpack.management.enabled"]')?.value || '';
     
     console.log('Checking notifications - Global:', logsPathGlobal, 'Setting:', logsPathSetting);
+    
+    // Check for CPM enabled - show warning on Pipelines tab if true
+    const cpmPipelineWarning = document.getElementById('cpmPipelineWarning');
+    if (cpmPipelineWarning) {
+        if (cpmEnabled === 'true') {
+            cpmPipelineWarning.classList.remove('hidden');
+        } else {
+            cpmPipelineWarning.classList.add('hidden');
+        }
+    }
     
     const logsPathMismatchNotification = document.getElementById('logsPathMismatchNotification');
     const logLevelFormatNotification = document.getElementById('logLevelFormatNotification');

@@ -203,6 +203,30 @@
                 <!-- Linux Installation Commands -->
                 <div id="linuxCommandsSection" class="mb-4 hidden">
                   <label class="form-label mb-2 block">Linux</label>
+                  
+                  <!-- Install Logstash Checkbox -->
+                  <div class="mb-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" id="installLogstashCheckbox" class="checkbox checkbox-sm">
+                      <span class="text-sm text-gray-300">Install Logstash</span>
+                    </label>
+                  </div>
+                  
+                  <!-- Package Manager Selection (shown when Install Logstash is checked) -->
+                  <div id="packageManagerSection" class="hidden mb-3 ml-6">
+                    <label class="block text-sm text-gray-400 mb-2">Package Manager:</label>
+                    <div class="flex gap-4">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="package_manager" value="apt" class="radio radio-sm" checked>
+                        <span class="text-sm text-gray-300">apt (Debian/Ubuntu)</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="package_manager" value="yum" class="radio radio-sm">
+                        <span class="text-sm text-gray-300">yum (RHEL/CentOS)</span>
+                      </label>
+                    </div>
+                  </div>
+                  
                   <!-- Localhost Warning -->
                   <div id="localhostWarning" class="hidden p-3 mb-3 bg-yellow-900/20 border border-yellow-600 rounded-lg">
                     <p class="text-yellow-300 text-sm">
@@ -603,6 +627,8 @@ systemctl start logstash-agent</code></pre>
   function updateLinuxCommands(encodedToken) {
     const linuxCommandsElement = document.getElementById('linuxCommands');
     const localhostWarning = document.getElementById('localhostWarning');
+    const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
+    const packageManagerRadio = document.querySelector('input[name="package_manager"]:checked');
     
     if (linuxCommandsElement) {
       // Get the current URL from the browser
@@ -620,11 +646,49 @@ systemctl start logstash-agent</code></pre>
         }
       }
       
-      // Update the commands with the enrollment token and URL
-      linuxCommandsElement.innerHTML = `<code>pip install logstash-agent
+      // Build the commands
+      let commands = '';
+      
+      // Add Logstash installation commands if checkbox is checked
+      if (installLogstashCheckbox && installLogstashCheckbox.checked) {
+        const packageManager = packageManagerRadio ? packageManagerRadio.value : 'apt';
+        
+        if (packageManager === 'apt') {
+          commands += `# Install Logstash
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+sudo apt-get install apt-transport-https
+echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-9.x.list
+sudo apt-get update && sudo apt-get install logstash
+sudo systemctl enable logstash
+
+`;
+        } else if (packageManager === 'yum') {
+          commands += `# Install Logstash
+sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch
+echo '[logstash-9.x]
+name=Elastic repository for 9.x packages
+baseurl=https://artifacts.elastic.co/packages/9.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-md' | sudo tee /etc/yum.repos.d/logstash.repo
+sudo yum install logstash
+sudo systemctl enable logstash
+
+`;
+        }
+      }
+      
+      // Add LogstashAgent installation commands
+      commands += `# Install LogstashAgent
+pip install logstash-agent
 logstash-agent --enroll ${encodedToken} --logstash-ui-url ${currentUrl}
 systemctl enable logstash-agent
-systemctl start logstash-agent</code>`;
+systemctl start logstash-agent`;
+      
+      // Update the commands
+      linuxCommandsElement.innerHTML = `<code>${commands}</code>`;
     }
   }
   
@@ -658,31 +722,7 @@ systemctl start logstash-agent</code>`;
   
   // Function to update enrollment token in installation commands
   function updateEnrollmentToken(token) {
-    const linuxCommands = document.getElementById('linuxCommands');
-    const localhostWarning = document.getElementById('localhostWarning');
-    
-    if (linuxCommands) {
-      // Get the current URL from the browser
-      const currentUrl = window.location.origin;
-      
-      // Check if the URL contains localhost or 127.0.0.1
-      const isLocalhost = currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1');
-      
-      // Show or hide the localhost warning
-      if (localhostWarning) {
-        if (isLocalhost) {
-          localhostWarning.classList.remove('hidden');
-        } else {
-          localhostWarning.classList.add('hidden');
-        }
-      }
-      
-      // Update the commands with the enrollment token and URL
-      linuxCommands.innerHTML = `<code>pip install logstash-agent
-logstash-agent --enroll ${token} --logstash-ui-url ${currentUrl}
-systemctl enable logstash-agent
-systemctl start logstash-agent</code>`;
-    }
+    updateLinuxCommands(token);
   }
   
   // Helper function to get CSRF token
@@ -826,5 +866,48 @@ systemctl start logstash-agent</code>`;
       }, 2000);
     });
   }
+
+  // Handle Install Logstash checkbox change
+  const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
+  const packageManagerSection = document.getElementById('packageManagerSection');
+  
+  if (installLogstashCheckbox) {
+    installLogstashCheckbox.addEventListener('change', function() {
+      // Show/hide package manager selection
+      if (packageManagerSection) {
+        if (this.checked) {
+          packageManagerSection.classList.remove('hidden');
+        } else {
+          packageManagerSection.classList.add('hidden');
+        }
+      }
+      
+      // Update commands if enrollment token is already selected
+      const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+      if (enrollmentTokenSelect && enrollmentTokenSelect.value && enrollmentTokenSelect.value !== 'add_new') {
+        const selectedOption = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+        const encodedToken = selectedOption.dataset.encodedToken;
+        if (encodedToken) {
+          updateLinuxCommands(encodedToken);
+        }
+      }
+    });
+  }
+  
+  // Handle package manager radio button changes
+  const packageManagerRadios = document.querySelectorAll('input[name="package_manager"]');
+  packageManagerRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+      // Update commands if enrollment token is already selected
+      const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+      if (enrollmentTokenSelect && enrollmentTokenSelect.value && enrollmentTokenSelect.value !== 'add_new') {
+        const selectedOption = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+        const encodedToken = selectedOption.dataset.encodedToken;
+        if (encodedToken) {
+          updateLinuxCommands(encodedToken);
+        }
+      }
+    });
+  });
 
   </script>
