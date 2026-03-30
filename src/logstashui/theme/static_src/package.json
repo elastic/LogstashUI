@@ -5,9 +5,9 @@
   "scripts": {
     "start": "npm run dev",
     "build": "npm run build:clean && npm run build:tailwind",
-    "build:clean": "node_modules/.bin/rimraf ../static/css/dist",
-    "build:tailwind": "node_modules/.bin/cross-env NODE_ENV=production postcss ./src/styles.css -o ../static/css/dist/styles.css --minify",
-    "dev": "node_modules/.bin/cross-env NODE_ENV=development postcss ./src/styles.css -o ../static/css/dist/styles.css --watch"
+    "build:clean": "npx rimraf ../static/css/dist",
+    "build:tailwind": "npx cross-env NODE_ENV=production postcss ./src/styles.css -o ../static/css/dist/styles.css --minify",
+    "dev": "npx cross-env NODE_ENV=development postcss ./src/styles.css -o ../static/css/dist/styles.css --watch"
   },
   "keywords": [],
   "author": "",
@@ -20,7 +20,7 @@
     "postcss-cli": "^11.0.1",
     "postcss-nested": "^7.0.2",
     "postcss-simple-vars": "^7.0.1",
-    "rimraf": "^6.0.1",
+    "rimraf": "^5.0.5",
     "tailwindcss": "^4.1.11"
   }
 }

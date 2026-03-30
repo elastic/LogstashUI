@@ -60,6 +60,8 @@ urlpatterns = [
     path("CreatePipeline/", manager_views.CreatePipeline, name="CreatePipeline"),
     path("DeletePipeline/", manager_views.DeletePipeline, name="DeletePipeline"),
     path("ClonePipeline/", manager_views.ClonePipeline, name="ClonePipeline"),
+    path("RenamePipeline/", manager_views.RenamePipeline, name="RenamePipeline"),
+    path("UpdatePipelineDescription/", manager_views.UpdatePipelineDescription, name="UpdatePipelineDescription"),
     path("GetPipeline/", manager_views.GetPipeline, name="GetPipeline"),
 
     # Elasticsearch simulation endpoints

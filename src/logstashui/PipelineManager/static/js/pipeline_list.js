@@ -130,7 +130,7 @@ function renderPipelineList(esId) {
                             <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                         </svg>
                     </button>
-                    <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                    <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
                         <div class="px-1 py-1">
                             <button onclick="openCloneModal('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}')"
                                class="w-full group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md"
@@ -141,6 +141,27 @@ function renderPipelineList(esId) {
                                 </svg>
                                 Clone
                             </button>
+                            <hr class="my-1 border-gray-700">
+                            <button onclick="openRenameModal('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}')"
+                               class="w-full group flex items-center px-4 py-2 text-sm text-yellow-400 hover:bg-gray-700 rounded-md"
+                               role="menuitem"
+                               type="button">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Rename
+                            </button>
+                            <hr class="my-1 border-gray-700">
+                            <button onclick="openUpdateDescriptionModal('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}', '${escapeHtml(pipeline.description || '')}')"
+                               class="w-full group flex items-center px-4 py-2 text-sm text-purple-400 hover:bg-gray-700 rounded-md"
+                               role="menuitem"
+                               type="button">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                                </svg>
+                                Update Description
+                            </button>
+                            <hr class="my-1 border-gray-700">
                             <button onclick="deletePipeline('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}', '${escapeHtml(esId)}', ${pipeline.policy_id ? `'${escapeHtml(pipeline.policy_id)}'` : 'null'})"
                                class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
                                role="menuitem"

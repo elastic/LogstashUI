@@ -108,7 +108,7 @@
                                 <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                             </svg>
                         </button>
-                        <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                        <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
                             <div class="px-1 py-1">
                                 <button onclick="openCloneModal('{{ pipeline.es_id }}', '{{ pipeline.name }}')"
                                    class="w-full group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md"
@@ -119,6 +119,27 @@
                                     </svg>
                                     Clone
                                 </button>
+                                <hr class="my-1 border-gray-700">
+                                <button onclick="openRenameModal('{{ pipeline.es_id }}', '{{ pipeline.name }}')"
+                                   class="w-full group flex items-center px-4 py-2 text-sm text-yellow-400 hover:bg-gray-700 rounded-md"
+                                   role="menuitem"
+                                   type="button">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    Rename
+                                </button>
+                                <hr class="my-1 border-gray-700">
+                                <button onclick="openUpdateDescriptionModal('{{ pipeline.es_id }}', '{{ pipeline.name }}', '{{ pipeline.description|default:"" }}')"
+                                   class="w-full group flex items-center px-4 py-2 text-sm text-purple-400 hover:bg-gray-700 rounded-md"
+                                   role="menuitem"
+                                   type="button">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                                    </svg>
+                                    Update Description
+                                </button>
+                                <hr class="my-1 border-gray-700">
                                 <button onclick="deletePipeline('{{ pipeline.es_id }}', '{{ pipeline.name }}', '{{ es_id }}', {% if policy_id %}'{{ policy_id }}'{% else %}null{% endif %})"
                                    class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
                                    role="menuitem"
@@ -290,6 +311,122 @@
     </div>
 </dialog>
 
+<!-- Rename Pipeline Modal -->
+<dialog id="renamePipelineModal" class="modal">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('renamePipelineModal').close()"></div>
+    <div class="modal-box relative z-10">
+        <h3 class="font-bold text-lg mb-4">Rename Pipeline: <span id="renameSourcePipeline"></span></h3>
+        
+        <!-- Error container -->
+        <div id="renamePipelineError" class="mb-4"></div>
+        
+        <form hx-post="/ConnectionManager/RenamePipeline/"
+              hx-swap="none"
+              hx-on::before-request="document.getElementById('renamePipelineError').innerHTML = ''"
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  // Permission denied - close modal (toast will be shown automatically)
+                  document.getElementById('renamePipelineModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  // Success - close modal and clear form (HX-Trigger will handle refresh)
+                  document.getElementById('renamePipelineModal').close();
+                  event.target.reset();
+                }
+              "
+              hx-on::response-error="
+                if (event.detail.xhr.status !== 403) {
+                  const errorDiv = document.getElementById('renamePipelineError');
+                  errorDiv.innerHTML = `
+                    <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
+                      <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while renaming the pipeline'}</p>
+                    </div>
+                  `;
+                }
+              ">
+            {% csrf_token %}
+            <div class="form-control w-full mb-4">
+                <label class="label">
+                    <span class="label-text">New Pipeline Name</span>
+                </label>
+                <input type="text" 
+                       name="new_pipeline" 
+                       class="input input-bordered w-full" 
+                       required
+                       pattern="^[a-zA-Z_][a-zA-Z0-9_\-]*$"
+                       title="Pipeline name must begin with a letter or underscore and can contain only letters, underscores, dashes, and numbers">
+                <label class="label">
+                    <span class="label-text-alt">Enter a new name for the pipeline</span>
+                </label>
+            </div>
+            <input type="hidden" name="es_id" id="renameEsId" value="">
+            <input type="hidden" name="source_pipeline" id="renameSourcePipelineInput" value="">
+            {% if policy_id %}
+            <input type="hidden" name="policy_id" value="{{ policy_id }}">
+            {% endif %}
+            <div class="modal-action">
+                <button type="button" onclick="document.getElementById('renamePipelineModal').close()" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Rename Pipeline</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- Update Description Modal -->
+<dialog id="updateDescriptionModal" class="modal">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('updateDescriptionModal').close()"></div>
+    <div class="modal-box relative z-10">
+        <h3 class="font-bold text-lg mb-4">Update Description: <span id="updateDescriptionPipelineName"></span></h3>
+        
+        <!-- Error container -->
+        <div id="updateDescriptionError" class="mb-4"></div>
+        
+        <form hx-post="/ConnectionManager/UpdatePipelineDescription/"
+              hx-swap="none"
+              hx-on::before-request="document.getElementById('updateDescriptionError').innerHTML = ''"
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  document.getElementById('updateDescriptionModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  document.getElementById('updateDescriptionModal').close();
+                  event.target.reset();
+                }
+              "
+              hx-on::response-error="
+                if (event.detail.xhr.status !== 403) {
+                  const errorDiv = document.getElementById('updateDescriptionError');
+                  errorDiv.innerHTML = `
+                    <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
+                      <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while updating the description'}</p>
+                    </div>
+                  `;
+                }
+              ">
+            {% csrf_token %}
+            <div class="form-control w-full mb-4">
+                <label class="label">
+                    <span class="label-text">Description</span>
+                </label>
+                <textarea name="description" 
+                          id="updateDescriptionTextarea"
+                          class="textarea textarea-bordered w-full h-32" 
+                          placeholder="Enter a description for this pipeline..."></textarea>
+                <label class="label">
+                    <span class="label-text-alt">Update the pipeline description</span>
+                </label>
+            </div>
+            <input type="hidden" name="es_id" id="updateDescriptionEsId" value="">
+            <input type="hidden" name="pipeline_name" id="updateDescriptionPipelineNameInput" value="">
+            {% if policy_id %}
+            <input type="hidden" name="policy_id" value="{{ policy_id }}">
+            {% endif %}
+            <div class="modal-action">
+                <button type="button" onclick="document.getElementById('updateDescriptionModal').close()" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Description</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
 <script>
     document.body.addEventListener('htmx:configRequest', function(event) {
         event.detail.headers['X-CSRFToken'] = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -400,6 +537,33 @@
         });
     }
 
+    // Open rename modal and populate with pipeline info
+    function openRenameModal(esId, pipelineName) {
+        document.getElementById('renameSourcePipeline').textContent = pipelineName;
+        document.getElementById('renameEsId').value = esId;
+        document.getElementById('renameSourcePipelineInput').value = pipelineName;
+        document.getElementById('renamePipelineModal').showModal();
+        
+        // Close any open action menus
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+
+    // Open update description modal and populate with pipeline info
+    function openUpdateDescriptionModal(esId, pipelineName, currentDescription) {
+        document.getElementById('updateDescriptionPipelineName').textContent = pipelineName;
+        document.getElementById('updateDescriptionEsId').value = esId;
+        document.getElementById('updateDescriptionPipelineNameInput').value = pipelineName;
+        document.getElementById('updateDescriptionTextarea').value = currentDescription || '';
+        document.getElementById('updateDescriptionModal').showModal();
+        
+        // Close any open action menus
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+
     // Listen for pipelineCreated event to refresh the list
     document.body.addEventListener('pipelineCreated', function() {
         console.log('Pipeline created event received, refreshing list...');
@@ -417,6 +581,26 @@
     {% if es_id %}
     document.body.addEventListener('pipelineCloned-{{ es_id }}', function() {
         console.log('Pipeline cloned event received for connection {{ es_id }}, refreshing list...');
+        // Refresh the pipeline list using HTMX
+        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
+            target: '#pipelines-{{ es_id }}',
+            swap: 'innerHTML'
+        });
+    });
+    
+    // Listen for pipelineRenamed events to refresh the list (for pipeline_manager.html)
+    document.body.addEventListener('pipelineRenamed-{{ es_id }}', function() {
+        console.log('Pipeline renamed event received for connection {{ es_id }}, refreshing list...');
+        // Refresh the pipeline list using HTMX
+        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
+            target: '#pipelines-{{ es_id }}',
+            swap: 'innerHTML'
+        });
+    });
+    
+    // Listen for pipelineDescriptionUpdated events to refresh the list (for pipeline_manager.html)
+    document.body.addEventListener('pipelineDescriptionUpdated-{{ es_id }}', function() {
+        console.log('Pipeline description updated event received for connection {{ es_id }}, refreshing list...');
         // Refresh the pipeline list using HTMX
         htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
             target: '#pipelines-{{ es_id }}',

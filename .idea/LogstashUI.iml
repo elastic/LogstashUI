@@ -5,8 +5,9 @@
       <sourceFolder url="file://$MODULE_DIR$/src/logstashui" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
+      <excludeFolder url="file://$MODULE_DIR$/LogstashAgent/.venv" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.12 (LogstashUI)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="uv (LogstashUI)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

@@ -786,6 +786,231 @@ def ClonePipeline(request):
             return HttpResponse("Invalid request: neither policy_id nor es_id provided", status=400)
 
 
+@require_admin_role
+def RenamePipeline(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        policy_id = request.POST.get("policy_id")
+        source_pipeline = request.POST.get("source_pipeline")
+        new_pipeline = request.POST.get("new_pipeline")
+
+        # Debug logging
+        logger.info(f"RenamePipeline called with: es_id={es_id}, policy_id={policy_id}, source={source_pipeline}, new={new_pipeline}")
+
+        # Validate source pipeline name
+        is_valid, error_msg = validate_pipeline_name(source_pipeline)
+        if not is_valid:
+            return HttpResponse(f"Invalid source pipeline name: {error_msg}", status=400)
+
+        # Validate new pipeline name
+        is_valid, error_msg = validate_pipeline_name(new_pipeline)
+        if not is_valid:
+            return HttpResponse(error_msg, status=400)
+
+        # Determine context: policy_id means agent policy pipeline, es_id means centralized
+        if policy_id:
+            # Rename within Django Pipeline model for agent policy
+            try:
+                policy = Policy.objects.get(pk=policy_id)
+
+                # Get the source pipeline
+                try:
+                    source = Pipeline.objects.get(policy=policy, name=source_pipeline)
+                except Pipeline.DoesNotExist:
+                    return HttpResponse(f"Source pipeline '{source_pipeline}' not found in this policy.", status=404)
+
+                # Check if new pipeline name already exists
+                if Pipeline.objects.filter(policy=policy, name=new_pipeline).exists():
+                    return HttpResponse("A pipeline already exists with that name", status=400)
+
+                # Create the renamed pipeline (clone)
+                Pipeline.objects.create(
+                    policy=policy,
+                    name=new_pipeline,
+                    description=source.description,
+                    lscl=source.lscl
+                )
+
+                # Delete the original pipeline
+                source.delete()
+
+                # Mark policy as having undeployed changes
+                policy.has_undeployed_changes = True
+                policy.save()
+
+                logger.info(
+                    f"User '{request.user.username}' renamed pipeline '{source_pipeline}' to '{new_pipeline}' in policy '{policy.name}' (ID: {policy_id})")
+
+                # Return success with HX-Trigger to refresh the list
+                # Get the connection ID from the policy to trigger the correct event
+                connection = ConnectionTable.objects.filter(policy=policy).first()
+                connection_id = connection.id if connection else es_id
+                response = HttpResponse("Pipeline renamed successfully!", status=200)
+                response['HX-Trigger'] = f'pipelineRenamed-{connection_id}'
+                return response
+
+            except Policy.DoesNotExist:
+                return HttpResponse(f"Policy with ID {policy_id} not found.", status=404)
+            except Exception as e:
+                logger.error(f"Failed to rename pipeline in policy: {e}")
+                import traceback
+                traceback.print_exc()
+                return HttpResponse(f"Failed to rename pipeline: {str(e)}", status=500)
+
+        elif es_id:
+            # Rename in Elasticsearch for centralized pipeline management
+            try:
+                es = get_elastic_connection(es_id)
+
+                # Get the source pipeline configuration
+                source_config = es.logstash.get_pipeline(id=source_pipeline)
+
+                if source_pipeline not in source_config:
+                    return HttpResponse(f"Source pipeline '{source_pipeline}' not found", status=404)
+
+                source_data = source_config[source_pipeline]
+
+                # Check if new pipeline name already exists
+                existing_pipelines = es.logstash.get_pipeline()
+                if new_pipeline in existing_pipelines:
+                    return HttpResponse("A pipeline already exists with that name", status=400)
+
+                # Create the new pipeline with the same configuration as the source
+                es.logstash.put_pipeline(
+                    id=new_pipeline,
+                    body={
+                        "pipeline": source_data['pipeline'],
+                        "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                        "pipeline_metadata": {
+                            "version": 1,
+                            "type": "logstash_pipeline"
+                        },
+                        "username": "logstashui",
+                        "pipeline_settings": source_data.get('pipeline_settings', {}),
+                        "description": source_data.get('description', '')
+                    }
+                )
+
+                # Delete the original pipeline
+                es.logstash.delete_pipeline(id=source_pipeline)
+
+                logger.info(
+                    f"User '{request.user.username}' renamed pipeline '{source_pipeline}' to '{new_pipeline}' (Connection ID: {es_id})")
+
+                # Return success with HX-Trigger to refresh the list
+                response = HttpResponse("Pipeline renamed successfully!", status=200)
+                response['HX-Trigger'] = f'pipelineRenamed-{es_id}'
+                return response
+
+            except Exception as e:
+                logger.error(f"Error renaming pipeline: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return HttpResponse(f"Error renaming pipeline: {str(e)}", status=500)
+        else:
+            return HttpResponse("Invalid request: neither policy_id nor es_id provided", status=400)
+
+
+@require_admin_role
+def UpdatePipelineDescription(request):
+    if request.method == "POST":
+        es_id = request.POST.get("es_id")
+        policy_id = request.POST.get("policy_id")
+        pipeline_name = request.POST.get("pipeline_name")
+        description = request.POST.get("description", "")
+
+        # Debug logging
+        logger.info(f"UpdatePipelineDescription called with: es_id={es_id}, policy_id={policy_id}, pipeline={pipeline_name}")
+
+        # Validate pipeline name
+        is_valid, error_msg = validate_pipeline_name(pipeline_name)
+        if not is_valid:
+            return HttpResponse(f"Invalid pipeline name: {error_msg}", status=400)
+
+        # Determine context: policy_id means agent policy pipeline, es_id means centralized
+        if policy_id:
+            # Update description in Django Pipeline model for agent policy
+            try:
+                policy = Policy.objects.get(pk=policy_id)
+
+                # Get the pipeline
+                try:
+                    pipeline = Pipeline.objects.get(policy=policy, name=pipeline_name)
+                except Pipeline.DoesNotExist:
+                    return HttpResponse(f"Pipeline '{pipeline_name}' not found in this policy.", status=404)
+
+                # Update the description
+                pipeline.description = description
+                pipeline.save()
+
+                # Mark policy as having undeployed changes
+                policy.has_undeployed_changes = True
+                policy.save()
+
+                logger.info(
+                    f"User '{request.user.username}' updated description for pipeline '{pipeline_name}' in policy '{policy.name}' (ID: {policy_id})")
+
+                # Return success with HX-Trigger to refresh the list
+                connection = ConnectionTable.objects.filter(policy=policy).first()
+                connection_id = connection.id if connection else es_id
+                response = HttpResponse("Pipeline description updated successfully!", status=200)
+                response['HX-Trigger'] = f'pipelineDescriptionUpdated-{connection_id}'
+                return response
+
+            except Policy.DoesNotExist:
+                return HttpResponse(f"Policy with ID {policy_id} not found.", status=404)
+            except Exception as e:
+                logger.error(f"Failed to update pipeline description in policy: {e}")
+                import traceback
+                traceback.print_exc()
+                return HttpResponse(f"Failed to update pipeline description: {str(e)}", status=500)
+
+        elif es_id:
+            # Update description in Elasticsearch for centralized pipeline management
+            try:
+                es = get_elastic_connection(es_id)
+
+                # Get the current pipeline configuration
+                current_config = es.logstash.get_pipeline(id=pipeline_name)
+
+                if pipeline_name not in current_config:
+                    return HttpResponse(f"Pipeline '{pipeline_name}' not found", status=404)
+
+                current_data = current_config[pipeline_name]
+
+                # Update the pipeline with new description
+                es.logstash.put_pipeline(
+                    id=pipeline_name,
+                    body={
+                        "pipeline": current_data['pipeline'],
+                        "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                        "pipeline_metadata": {
+                            "version": current_data['pipeline_metadata'].get('version', 1) + 1,
+                            "type": "logstash_pipeline"
+                        },
+                        "username": "logstashui",
+                        "pipeline_settings": current_data.get('pipeline_settings', {}),
+                        "description": description
+                    }
+                )
+
+                logger.info(
+                    f"User '{request.user.username}' updated description for pipeline '{pipeline_name}' (Connection ID: {es_id})")
+
+                # Return success with HX-Trigger to refresh the list
+                response = HttpResponse("Pipeline description updated successfully!", status=200)
+                response['HX-Trigger'] = f'pipelineDescriptionUpdated-{es_id}'
+                return response
+
+            except Exception as e:
+                logger.error(f"Error updating pipeline description: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return HttpResponse(f"Error updating pipeline description: {str(e)}", status=500)
+        else:
+            return HttpResponse("Invalid request: neither policy_id nor es_id provided", status=400)
+
+
 def GetPipeline(request):
     if request.method == "GET":
         es_id = request.GET.get("es_id")

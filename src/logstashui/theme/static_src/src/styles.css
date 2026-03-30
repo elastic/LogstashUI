@@ -1,7 +1,5 @@
-@import "../node_modules/tailwindcss/dist/lib.d.mts";
+@import "tailwindcss";
 @plugin "daisyui";
-
-@tailwind utilities;
 
 /* Force dark mode by overriding DaisyUI's default light theme */
 @layer base {
