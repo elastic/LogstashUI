@@ -28,6 +28,7 @@ urlpatterns = [
     path("AddConnection", manager_views.AddConnection, name="AddConnection"),
     path("DeleteConnection/<int:connection_id>/", manager_views.DeleteConnection, name="DeleteConnection"),
     path("GetPipelines/<int:connection_id>/", manager_views.GetPipelines, name="GetPipelines"),
+    path("GetPolicyPipelines/", manager_views.GetPolicyPipelines, name="GetPolicyPipelines"),
     
     path("GetPolicies/", manager_views.get_policies, name="GetPolicies"),
     path("AddPolicy/", manager_views.add_policy, name="AddPolicy"),

@@ -1349,77 +1349,7 @@
       
       <!-- Pipelines View -->
       <div id="pipelinesView" class="hidden flex-1 overflow-auto px-4 py-6">
-        <!-- Header with Create Pipeline and Search -->
-        <div class="mb-4 flex gap-4 items-center">
-          <button onclick="showCreatePipelineModal()" class="btn btn-primary btn-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-            </svg>
-            Create Pipeline
-          </button>
-          
-          <!-- Search Bar -->
-          <div style="max-width: 500px; flex: 1;">
-            <input type="text" id="policyPipelineSearch" placeholder="Search by pipeline name or description..." class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
-          </div>
-        </div>
-        
-        <!-- No Results State -->
-        <div id="policyPipelineNoResults" class="hidden p-8 text-center bg-gray-900/50 rounded-lg mb-4">
-          <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-600/20 rounded-full mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <h3 class="text-lg font-bold text-white mb-1">No results found</h3>
-          <p class="text-gray-400 text-sm">Try adjusting your search terms</p>
-        </div>
-
-        <!-- Pipelines Table -->
-        <div id="policyPipelineList" class="overflow-hidden">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-gray-700">
-                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Pipeline Name</th>
-                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Description</th>
-                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Last Updated</th>
-                <th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="policyPipelineTableBody" class="divide-y divide-gray-800">
-              <!-- Pipelines will be loaded here via JavaScript -->
-              <tr>
-                <td colspan="4" class="px-4 py-8 text-center text-gray-400">
-                  <div class="flex flex-col items-center gap-2">
-                    <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                    </svg>
-                    <p>No pipelines found for this policy</p>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination Controls -->
-        <div id="policyPipelinePagination" class="mt-4 flex justify-between items-center">
-          <div class="flex gap-3 items-center">
-            <div class="text-sm text-gray-400 whitespace-nowrap">
-              Showing <span id="policyPipelineShowingStart">0</span> to <span id="policyPipelineShowingEnd">0</span> of <span id="policyPipelineTotalCount">0</span> pipelines
-            </div>
-            <select id="policyPipelinePageSize" class="select select-bordered select-sm bg-gray-700 text-white border-gray-600" style="width: 70px;">
-              <option value="10" selected>10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-            </select>
-          </div>
-          <div class="flex gap-2">
-            <button id="policyPipelinePrevBtn" class="btn btn-sm btn-secondary" onclick="previousPolicyPipelinePage()">Previous</button>
-            <span id="policyPipelinePageInfo" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
-            <button id="policyPipelineNextBtn" class="btn btn-sm btn-secondary" onclick="nextPolicyPipelinePage()">Next</button>
-          </div>
-        </div>
+        {% include 'components/pipeline_manager/pipeline_list_content.html' %}
       </div>
 
       <!-- Keystore View -->
@@ -1554,5 +1484,6 @@
 <script src="{% static 'js/codemirror.min.js' %}"></script>
 <script src="{% static 'js/yaml.js' %}"></script>
 <script src="{% static 'js/simple-comment-mode.js' %}"></script>
+<script src="{% static 'js/pipeline_list.js' %}"></script>
 <script src="{% static 'js/agent_policies.js' %}"></script>
 {% endblock %}
