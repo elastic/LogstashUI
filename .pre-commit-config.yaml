@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: add-license-headers
+        name: Add license headers
+        entry: uv run python scripts/add_license_headers.py
+        language: system
+        pass_filenames: false
