@@ -1,0 +1,152 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<div class="space-y-6">
+  <!-- Description -->
+  <div class="bg-blue-900/20 border border-blue-500/40 rounded-lg p-4">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h4 class="text-blue-300 font-semibold mb-1">About Centralized Pipeline Management</h4>
+        <p class="text-gray-300 text-sm">Configure Logstash to retrieve pipeline configurations from Elasticsearch, enabling centralized management of your pipelines.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Warning -->
+  <div class="bg-orange-900/20 border border-orange-500/40 rounded-lg p-4">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <div>
+        <h4 class="text-orange-300 font-semibold mb-1">Important Notice</h4>
+        <p class="text-gray-300 text-sm">When Centralized Pipeline Management is enabled, pipeline definitions are no longer managed through Agent Policy. Pipelines will be controlled by Centralized Pipeline Management instead. LogstashUI will continue managing logstash.yml, jvm.options, log4j2.properties, and keystore settings for Logstash instances enrolled with LogstashAgent.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuration Form -->
+  <div class="bg-gray-900/50 rounded-lg p-6">
+    <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+      <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+      </svg>
+      X-Pack Management Settings
+    </h3>
+
+    <div class="space-y-4">
+      <!-- Management Enabled -->
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-2">Management Enabled</label>
+        <select id="guideCpmEnabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('xpack.management.enabled', this.value); validateCpmGuide();">
+          <option value="">Default (false)</option>
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+        <p class="text-xs text-gray-300 mt-2">
+          Enabling xpack management tells Logstash to use CPM. 
+          <a href="javascript:void(0)" onclick="setCpmEnabled('true')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to True</a>
+        </p>
+      </div>
+
+      <!-- Pipeline ID -->
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-2">Pipeline IDs</label>
+        <input type="text" id="guideCpmPipelineId" placeholder="main, apache_logs" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.pipeline.id', this.value); validateCpmGuide();">
+        <p class="text-xs text-gray-300 mt-2">
+          CPM requires you to specify which pipelines you want to run. Use an * to pull all pipelines stored in Elastic CPM. 
+          <a href="javascript:void(0)" onclick="setCpmPipelineId('*')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to *</a>
+        </p>
+      </div>
+
+      <!-- Connection Method Toggle -->
+      <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+        <label class="block text-sm font-medium text-gray-300 mb-3">Connection Method</label>
+        <div class="flex gap-3 mb-4">
+          <button type="button" id="btnCloudId" onclick="toggleConnectionMethod('cloud')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded transition-colors">
+            Cloud ID
+          </button>
+          <button type="button" id="btnHostsUrl" onclick="toggleConnectionMethod('hosts')" class="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded transition-colors">
+            Hosts URL
+          </button>
+        </div>
+
+        <!-- Cloud ID Section -->
+        <div id="cloudIdSection" class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Cloud ID</label>
+            <input type="text" id="guideCpmCloudId" placeholder="management_cluster_id:xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.cloud_id', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              This value can be found by clicking "Manage" on your Elastic Cloud Hosted deployment. 
+              <a href="https://cloud.elastic.co" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to go to cloud.elastic.co</a>
+            </p>
+          </div>
+        </div>
+
+        <!-- Hosts URL Section -->
+        <div id="hostsUrlSection" class="hidden space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Elasticsearch Hosts</label>
+            <input type="text" id="guideCpmHosts" placeholder="https://es1:9200, https://es2:9200" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.hosts', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">The URL of one or many Elasticsearch instances</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Authentication Method Toggle -->
+      <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+        <label class="block text-sm font-medium text-gray-300 mb-3">Authentication Method</label>
+        <div class="flex gap-3 mb-4">
+          <button type="button" id="btnApiKey" onclick="toggleAuthMethod('apikey')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded transition-colors">
+            API Key
+          </button>
+          <button type="button" id="btnUserPass" onclick="toggleAuthMethod('userpass')" class="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded transition-colors">
+            Username/Password
+          </button>
+        </div>
+
+        <!-- API Key Section -->
+        <div id="apiKeySection" class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
+            <input type="text" id="guideCpmApiKey" placeholder="id:api_key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.api_key', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              You can create an API key by following 
+              <a href="https://www.elastic.co/docs/deploy-manage/api-keys/elasticsearch-api-keys" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-medium">this documentation</a>
+            </p>
+          </div>
+        </div>
+
+        <!-- Username/Password Section -->
+        <div id="userPassSection" class="hidden space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+            <input type="text" id="guideCpmUsername" placeholder="elastic" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.username', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">Elastic username</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+            <input type="password" id="guideCpmPassword" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.password', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">Elastic password</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Tracker -->
+    <div class="mt-6 pt-4 border-t border-gray-700">
+      <div id="guideCpmStatusTracker" class="flex items-center justify-center gap-2 p-3 rounded-lg transition-all">
+        <svg id="guideCpmStatusIcon" class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span id="guideCpmStatusText" class="text-sm font-medium"></span>
+      </div>
+    </div>
+  </div>
+</div>

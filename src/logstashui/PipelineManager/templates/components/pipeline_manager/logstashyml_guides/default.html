@@ -1,0 +1,85 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<div class="space-y-6">
+  <!-- Description -->
+  <div class="bg-blue-900/20 border border-blue-500/40 rounded-lg p-4">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h4 class="text-blue-300 font-semibold mb-1">About Default Configuration</h4>
+        <p class="text-gray-300 text-sm">This is the minimal configuration you need to run Logstash using LogstashUI and LogstashAgent.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuration Form -->
+  <div class="bg-gray-900/50 rounded-lg p-6">
+    <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+      <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      Essential Settings
+    </h3>
+
+    <div class="space-y-4">
+      <!-- Log Level -->
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-2">Log Level</label>
+        <select id="guideLogLevel" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('log.level', this.value); validateDefaultGuide();">
+          <option value="">Default (info)</option>
+          <option value="fatal">Fatal</option>
+          <option value="error">Error</option>
+          <option value="warn">Warn</option>
+          <option value="info">Info</option>
+          <option value="debug">Debug</option>
+          <option value="trace">Trace</option>
+        </select>
+        <p class="text-xs text-gray-300 mt-2">
+          LogstashAgent needs informational level logs. 
+          <a href="javascript:void(0)" onclick="setGuideLogLevel('info')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to Info</a>
+        </p>
+      </div>
+
+      <!-- Log Format -->
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-2">Log Format</label>
+        <select id="guideLogFormat" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('log.format', this.value); validateDefaultGuide();">
+          <option value="">Default (plain)</option>
+          <option value="plain">Plain</option>
+          <option value="json">JSON</option>
+        </select>
+        <p class="text-xs text-gray-300 mt-2">
+          LogstashAgent needs logs to be in JSON format. 
+          <a href="javascript:void(0)" onclick="setGuideLogFormat('json')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to JSON</a>
+        </p>
+      </div>
+
+      <!-- Logs Path -->
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-2">Logs Path</label>
+        <input type="text" id="guideLogsPath" placeholder="/var/log/logstash" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncGuideToMain('path.logs', this.value); validateDefaultGuide();">
+        <p class="text-xs text-gray-300 mt-2">
+          Log path must match the defined Policy config. 
+          <a href="javascript:void(0)" onclick="setGuideLogsPathFromPolicy()" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set it to that value</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- Status Tracker -->
+    <div class="mt-6 pt-4 border-t border-gray-700">
+      <div id="guideStatusTracker" class="flex items-center justify-center gap-2 p-3 rounded-lg transition-all">
+        <svg id="guideStatusIcon" class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span id="guideStatusText" class="text-sm font-medium"></span>
+      </div>
+    </div>
+  </div>
+</div>

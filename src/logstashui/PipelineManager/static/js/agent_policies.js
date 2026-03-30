@@ -814,7 +814,17 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateDocsLink(file) {
         const docsLink = document.getElementById('docsLink');
         const docsLinkUrl = document.getElementById('docsLinkUrl');
+        const quickSetupRow = document.getElementById('quickSetupRow');
         if (!docsLinkUrl || !docsLink) return;
+        
+        // Show Quick Setup row only for logstash.yml
+        if (quickSetupRow) {
+            if (file === 'logstash.yml') {
+                quickSetupRow.classList.remove('hidden');
+            } else {
+                quickSetupRow.classList.add('hidden');
+            }
+        }
         
         // Hide docs link for Pipelines, Keystore, and Enrollment Tokens tabs
         if (file === 'pipelines' || file === 'keystore' || file === 'enrollment-tokens') {
@@ -2491,3 +2501,5 @@ function setupChangeDetection() {
 function resetChangeTracking() {
     storeOriginalContent();
 }
+
+// Note: All guide-related functions have been moved to logstashyml_guides.js
