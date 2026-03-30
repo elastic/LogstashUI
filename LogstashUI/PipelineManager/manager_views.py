@@ -7,17 +7,16 @@ from django.http import HttpResponse, JsonResponse
 from django.template.loader import get_template
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from django.utils import timezone
 
 from .forms import ConnectionForm
-from PipelineManager.models import Connection as ConnectionTable, Policy, EnrollmentToken, ApiKey, Revision, Keystore
+from PipelineManager.models import Connection as ConnectionTable, Policy, Pipeline, EnrollmentToken, ApiKey, Revision, Keystore
 
 from Common.decorators import require_admin_role
 from Common.logstash_utils import get_logstash_pipeline
 from Common.elastic_utils import get_elastic_connection, test_elastic_connectivity
 from Common.validators import validate_pipeline_name
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from html import escape
 
 import logging
@@ -76,7 +75,7 @@ def PipelineManager(request):
     connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "last_check_in"))
     
     # Add is_online flag based on last_check_in time (within 10 minutes)
-    now = timezone.now()
+    now = datetime.now(timezone.utc)
     for conn in connections:
         if conn['last_check_in']:
             time_diff = now - conn['last_check_in']
@@ -283,8 +282,9 @@ def GetPipelines(request, connection_id):
         )
 
     logstash_pipelines = []
+
     if connection.connection_type == "CENTRALIZED":
-        # --- Gets our pipelines from the connection
+        # Fetch pipelines from Elasticsearch for centralized connections
         try:
             es = get_elastic_connection(connection.id)
             pipelines = es.logstash.get_pipeline()
@@ -317,12 +317,83 @@ def GetPipelines(request, connection_id):
         except Exception as e:
             logger.exception("Couldn't connect to Elastic")
 
+    else:  # AGENT connection type
+        # Fetch pipelines from the associated policy for agent connections
+        if connection.policy:
+            pipelines = Pipeline.objects.filter(policy=connection.policy).values(
+                'id', 'name', 'description', 'last_updated'
+            )
+
+            for p in pipelines:
+                # Format last_updated timestamp
+                formatted_date = ""
+                if p['last_updated']:
+                    try:
+                        day = p['last_updated'].day
+                        suffix = 'th' if 11 <= day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+                        formatted_date = p['last_updated'].strftime(f'%A, %B {day}{suffix} %Y')
+                    except Exception:
+                        formatted_date = p['last_updated'].strftime('%Y-%m-%d %H:%M:%S')
+
+                logstash_pipelines.append({
+                    "es_id": connection.policy.id,  # Use policy ID for compatibility
+                    "es_name": connection.name,
+                    "name": p['name'],
+                    "description": p['description'] or '',
+                    "last_modified": formatted_date,
+                    "policy_id": connection.policy.id  # Add policy_id to each pipeline for delete/clone
+                })
+
+        # Pass policy_id to template for agent connections
+        context['policy_id'] = connection.policy.id if connection.policy else None
+
     context['pipelines'] = logstash_pipelines
     context['es_id'] = connection.id
 
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)
     return HttpResponse(html)
+
+
+@require_admin_role
+def GetPolicyPipelines(request):
+    """
+    Get pipelines for a specific policy (agent policy context).
+    Returns JSON response with pipeline data.
+    """
+    policy_id = request.GET.get('policy_id')
+
+    if not policy_id:
+        return JsonResponse({'success': False, 'error': 'Policy ID is required'}, status=400)
+
+    try:
+        policy = Policy.objects.get(pk=policy_id)
+
+        # Get all pipelines for this policy
+        pipelines = Pipeline.objects.filter(policy=policy).values(
+            'id', 'name', 'description', 'last_updated'
+        )
+
+        pipelines_list = []
+        for p in pipelines:
+            pipelines_list.append({
+                'id': p['id'],
+                'name': p['name'],
+                'description': p['description'] or '',
+                'last_modified': p['last_updated'].strftime('%Y-%m-%d %H:%M:%S') if p['last_updated'] else 'N/A',
+                'es_id': policy_id  # Use policy_id as es_id for compatibility with frontend
+            })
+
+        return JsonResponse({
+            'success': True,
+            'pipelines': pipelines_list
+        })
+
+    except Policy.DoesNotExist:
+        return JsonResponse({'success': False, 'error': f'Policy with ID {policy_id} not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error fetching pipelines for policy {policy_id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @require_admin_role
@@ -409,7 +480,7 @@ def UpdatePipelineSettings(request):
 @require_admin_role
 def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=None):
     """
-    Create a pipeline in Elasticsearch or logstashagent.
+    Create a pipeline in Elasticsearch, LogstashAgent, or Django Pipeline model.
 
     Args:
         request: Django request object
@@ -422,8 +493,12 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
         # Get parameters from POST or function arguments
         if not simulate:
             es_id = request.POST.get("es_id")
+            policy_id = request.POST.get("policy_id")
             pipeline_name = request.POST.get("pipeline")
             pipeline_config = request.POST.get("pipeline_config", "").strip()
+        else:
+            es_id = None
+            policy_id = None
 
         # Validate pipeline name
         is_valid, error_msg = validate_pipeline_name(pipeline_name)
@@ -436,7 +511,48 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
         else:
             pipeline_content = "input {}\nfilter {}\noutput {}"
 
-        # Build the pipeline body
+        # Determine context: policy_id means agent policy pipeline, es_id means centralized
+        if policy_id:
+            # Create pipeline in Django Pipeline model for agent policy
+            try:
+                policy = Policy.objects.get(pk=policy_id)
+
+                # Check if pipeline already exists
+                if Pipeline.objects.filter(policy=policy, name=pipeline_name).exists():
+                    return HttpResponse("A pipeline already exists with that name", status=400)
+
+                # Create the pipeline (hash will be computed automatically by the model's save method)
+                pipeline = Pipeline.objects.create(
+                    policy=policy,
+                    name=pipeline_name,
+                    description="",
+                    lscl=pipeline_content
+                )
+
+                # Mark policy as having undeployed changes
+                policy.has_undeployed_changes = True
+                policy.save()
+
+                logger.info(
+                    f"User '{request.user.username}' created pipeline '{pipeline_name}' in policy '{policy.name}' (ID: {policy_id})")
+
+                # Return success response with HX-Trigger to close modal and refresh list
+                # Use connection-specific event if es_id is provided (for pipeline_manager.html)
+                # Otherwise use generic event (for agent_policies.html)
+                response = HttpResponse("Pipeline created successfully!", status=200)
+                if es_id:
+                    response['HX-Trigger'] = f'pipelineCreated-{es_id}'
+                else:
+                    response['HX-Trigger'] = 'pipelineCreated'
+                return response
+
+            except Policy.DoesNotExist:
+                return HttpResponse(f"Policy with ID {policy_id} not found.", status=404)
+            except Exception as e:
+                logger.error(f"Failed to create pipeline in policy: {e}")
+                return HttpResponse(f"Failed to create pipeline: {str(e)}", status=500)
+
+        # Build the pipeline body for Elasticsearch/LogstashAgent
         pipeline_body = {
             "pipeline": pipeline_content,
             "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
@@ -474,8 +590,8 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to create simulation pipeline in logstashagent: {e}")
                 return HttpResponse(f"Failed to create simulation pipeline: {str(e)}", status=500)
-        else:
-            # Send to Elasticsearch
+        elif es_id:
+            # Send to Elasticsearch (centralized pipeline management)
             es = get_elastic_connection(es_id)
             pipeline_doc = es.logstash.put_pipeline(
                 id=pipeline_name,
@@ -487,6 +603,9 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
             response = HttpResponse("Pipeline created successfully!")
             response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?es_id={es_id}&pipeline={pipeline_name}'
             return response
+        else:
+            # No valid context provided
+            return HttpResponse("Invalid request: neither policy_id nor es_id provided", status=400)
 
 
 @require_admin_role
@@ -497,28 +616,66 @@ def DeletePipeline(request):
             data = json.loads(request.body)
             es_id = data.get("es_id")
             pipeline_name = data.get("pipeline")
+            policy_id = data.get("policy_id")
         else:
             es_id = request.POST.get("es_id")
             pipeline_name = request.POST.get("pipeline")
+            policy_id = request.POST.get("policy_id")
 
         # Validate pipeline name
         is_valid, error_msg = validate_pipeline_name(pipeline_name)
         if not is_valid:
             return HttpResponse(error_msg, status=400)
 
-        es = get_elastic_connection(es_id)
-        es.logstash.delete_pipeline(id=pipeline_name)
+        # Determine context: policy_id means agent policy pipeline, es_id means centralized
+        if policy_id:
+            # Delete from Django Pipeline model for agent policy
+            try:
+                policy = Policy.objects.get(pk=policy_id)
+                pipeline = Pipeline.objects.get(policy=policy, name=pipeline_name)
+                pipeline.delete()
 
-        logger.warning(f"User '{request.user.username}' deleted pipeline '{pipeline_name}' (Connection ID: {es_id})")
-        return HttpResponse(status=204)  # No content - prevents text from being inserted into page
+                # Mark policy as having undeployed changes
+                policy.has_undeployed_changes = True
+                policy.save()
+
+                logger.warning(
+                    f"User '{request.user.username}' deleted pipeline '{pipeline_name}' from policy '{policy.name}' (ID: {policy_id})")
+                return HttpResponse(status=204)
+
+            except Policy.DoesNotExist:
+                return HttpResponse(f"Policy with ID {policy_id} not found.", status=404)
+            except Pipeline.DoesNotExist:
+                return HttpResponse(f"Pipeline '{pipeline_name}' not found in this policy.", status=404)
+            except Exception as e:
+                logger.error(f"Failed to delete pipeline from policy: {e}")
+                return HttpResponse(f"Failed to delete pipeline: {str(e)}", status=500)
+
+        elif es_id:
+            # Delete from Elasticsearch for centralized pipeline management
+            try:
+                es = get_elastic_connection(es_id)
+                es.logstash.delete_pipeline(id=pipeline_name)
+
+                logger.warning(f"User '{request.user.username}' deleted pipeline '{pipeline_name}' (Connection ID: {es_id})")
+                return HttpResponse(status=204)
+            except Exception as e:
+                logger.error(f"Failed to delete pipeline from Elasticsearch: {e}")
+                return HttpResponse(f"Failed to delete pipeline: {str(e)}", status=500)
+        else:
+            return HttpResponse("Invalid request: neither policy_id nor es_id provided", status=400)
 
 
 @require_admin_role
 def ClonePipeline(request):
     if request.method == "POST":
         es_id = request.POST.get("es_id")
+        policy_id = request.POST.get("policy_id")
         source_pipeline = request.POST.get("source_pipeline")
         new_pipeline = request.POST.get("new_pipeline")
+
+        # Debug logging
+        logger.info(f"ClonePipeline called with: es_id={es_id}, policy_id={policy_id}, source={source_pipeline}, new={new_pipeline}")
 
         # Validate source pipeline name
         is_valid, error_msg = validate_pipeline_name(source_pipeline)
@@ -530,55 +687,103 @@ def ClonePipeline(request):
         if not is_valid:
             return HttpResponse(error_msg, status=400)
 
-        try:
-            es = get_elastic_connection(es_id)
+        # Determine context: policy_id means agent policy pipeline, es_id means centralized
+        if policy_id:
+            # Clone within Django Pipeline model for agent policy
+            try:
+                policy = Policy.objects.get(pk=policy_id)
 
-            # Get the source pipeline configuration
-            source_config = es.logstash.get_pipeline(id=source_pipeline)
+                # Get the source pipeline
+                try:
+                    source = Pipeline.objects.get(policy=policy, name=source_pipeline)
+                except Pipeline.DoesNotExist:
+                    return HttpResponse(f"Source pipeline '{source_pipeline}' not found in this policy.", status=404)
 
-            if source_pipeline not in source_config:
-                return HttpResponse(f"Source pipeline '{source_pipeline}' not found", status=404)
+                # Check if new pipeline name already exists
+                if Pipeline.objects.filter(policy=policy, name=new_pipeline).exists():
+                    # Return 400 status so HTMX triggers response-error event
+                    return HttpResponse("A pipeline already exists with that name", status=400)
 
-            source_data = source_config[source_pipeline]
+                # Create the cloned pipeline
+                Pipeline.objects.create(
+                    policy=policy,
+                    name=new_pipeline,
+                    description=f"Cloned from {source_pipeline}",
+                    lscl=source.lscl
+                )
 
-            # Check if new pipeline name already exists
-            existing_pipelines = es.logstash.get_pipeline()
-            if new_pipeline in existing_pipelines:
-                return HttpResponse(f"Pipeline '{new_pipeline}' already exists. Please choose a different name.",
-                                    status=400)
+                # Mark policy as having undeployed changes
+                policy.has_undeployed_changes = True
+                policy.save()
 
-            # Create the new pipeline with the same configuration as the source
-            es.logstash.put_pipeline(
-                id=new_pipeline,
-                body={
-                    "pipeline": source_data['pipeline'],
-                    "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                    "pipeline_metadata": {
-                        "version": 1,
-                        "type": "logstash_pipeline"
-                    },
-                    "username": "LogstashUI",
-                    "pipeline_settings": source_data.get('pipeline_settings', {}),
-                    "description": source_data.get('description', f"Cloned from {source_pipeline}")
-                }
-            )
+                logger.info(
+                    f"User '{request.user.username}' cloned pipeline '{source_pipeline}' to '{new_pipeline}' in policy '{policy.name}' (ID: {policy_id})")
 
-            logger.info(
-                f"User '{request.user.username}' cloned pipeline '{source_pipeline}' to '{new_pipeline}' (Connection ID: {es_id})")
+                # Return success with HX-Trigger to refresh the list
+                # Get the connection ID from the policy to trigger the correct event
+                connection = ConnectionTable.objects.filter(policy=policy).first()
+                connection_id = connection.id if connection else es_id
+                response = HttpResponse("Pipeline cloned successfully!", status=200)
+                response['HX-Trigger'] = f'pipelineCloned-{connection_id}'
+                return response
 
-            # Close the modal and refresh the pipeline list
-            response = HttpResponse("""
-                <script>
-                    document.getElementById('clonePipelineModal').close();
-                    htmx.ajax('GET', '/ConnectionManager/GetPipelines/""" + escape(str(es_id)) + """/', 
-                              {target: '#pipelines-""" + escape(str(es_id)) + """', swap: 'innerHTML'});
-                </script>
-            """)
-            return response
+            except Policy.DoesNotExist:
+                return HttpResponse(f"Policy with ID {policy_id} not found.", status=404)
+            except Exception as e:
+                logger.error(f"Failed to clone pipeline in policy: {e}")
+                import traceback
+                traceback.print_exc()
+                return HttpResponse(f"Failed to clone pipeline: {str(e)}", status=500)
 
-        except Exception as e:
-            logger.error(f"Error cloning pipeline: {str(e)}")
-            return HttpResponse(f"Error cloning pipeline: {str(e)}", status=500)
+        elif es_id:
+            # Clone in Elasticsearch for centralized pipeline management
+            try:
+                es = get_elastic_connection(es_id)
+
+                # Get the source pipeline configuration
+                source_config = es.logstash.get_pipeline(id=source_pipeline)
+
+                if source_pipeline not in source_config:
+                    return HttpResponse(f"Source pipeline '{source_pipeline}' not found", status=404)
+
+                source_data = source_config[source_pipeline]
+
+                # Check if new pipeline name already exists
+                existing_pipelines = es.logstash.get_pipeline()
+                if new_pipeline in existing_pipelines:
+                    return HttpResponse("A pipeline already exists with that name", status=400)
+
+                # Create the new pipeline with the same configuration as the source
+                es.logstash.put_pipeline(
+                    id=new_pipeline,
+                    body={
+                        "pipeline": source_data['pipeline'],
+                        "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                        "pipeline_metadata": {
+                            "version": 1,
+                            "type": "logstash_pipeline"
+                        },
+                        "username": "LogstashUI",
+                        "pipeline_settings": source_data.get('pipeline_settings', {}),
+                        "description": source_data.get('description', f"Cloned from {source_pipeline}")
+                    }
+                )
+
+                logger.info(
+                    f"User '{request.user.username}' cloned pipeline '{source_pipeline}' to '{new_pipeline}' (Connection ID: {es_id})")
+
+                # Return success with HX-Trigger to refresh the list
+                response = HttpResponse("Pipeline cloned successfully!", status=200)
+                response['HX-Trigger'] = f'pipelineCloned-{es_id}'
+                return response
+
+            except Exception as e:
+                logger.error(f"Error cloning pipeline: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return HttpResponse(f"Error cloning pipeline: {str(e)}", status=500)
+        else:
+            return HttpResponse("Invalid request: neither policy_id nor es_id provided", status=400)
 
 
 def GetPipeline(request):
@@ -616,7 +821,7 @@ def add_policy(request):
         settings_path = data.get('settings_path', '/etc/logstash/')
         logs_path = data.get('logs_path', '/var/log/logstash')
         binary_path = data.get('binary_path', '/usr/share/logstash/bin')
-        
+
         # Use defaults if values are empty or not provided
         logstash_yml = data.get('logstash_yml') or get_default_logstash_yml()
         jvm_options = data.get('jvm_options') or get_default_jvm_options()
@@ -750,29 +955,29 @@ def get_policy_agent_count(request):
     """
     try:
         policy_id = request.GET.get('policy_id')
-        
+
         if not policy_id:
             return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
-        
+
         # Get the policy
         try:
             policy = Policy.objects.get(id=policy_id)
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
-        
+
         # Count connections using this policy
         agent_count = ConnectionTable.objects.filter(
             policy=policy,
             connection_type=ConnectionTable.ConnectionType.AGENT,
             is_active=True
         ).count()
-        
+
         return JsonResponse({
             "success": True,
             "agent_count": agent_count,
             "policy_name": policy.name
         })
-        
+
     except Exception as e:
         logger.error(f"Error getting policy agent count: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
@@ -1018,7 +1223,7 @@ def check_in(request):
         
         # Update last_check_in timestamp
 
-        connection.last_check_in = timezone.now()
+        connection.last_check_in = datetime.now(timezone.utc)
         connection.save()
         
         # Log the check-in with configuration hashes
@@ -1378,7 +1583,7 @@ def get_config_changes(request):
         agent_settings_path = data.get('settings_path', '')
         agent_logs_path = data.get('logs_path', '')
         agent_binary_path = data.get('binary_path', '')
-        
+
         if not connection.policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
         
@@ -1439,7 +1644,7 @@ def get_config_changes(request):
         else:
             changes['binary_path'] = False
             logger.info(f"  binary_path: unchanged")
-        
+
         # Check keystore
         agent_keystore = data.get('keystore', {})  # Dict of {key_name: hash}
         logger.info(f"  Agent keystore: {len(agent_keystore)} keys")

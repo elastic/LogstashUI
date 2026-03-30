@@ -1986,42 +1986,57 @@ async function loadPolicyPipelines() {
         return;
     }
     
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect?.options[policySelect.selectedIndex];
+    const policyId = selectedOption?.dataset.policyId;
+    
+    if (!policyId) {
+        console.log('No policy ID found');
+        return;
+    }
+    
     try {
         // Fetch pipelines for this policy from the backend
-        // For now, display a placeholder message
-        const tableBody = document.getElementById('policyPipelineTableBody');
-        if (tableBody) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="4" class="px-4 py-8 text-center text-gray-400">
-                        <div class="flex flex-col items-center gap-2">
-                            <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                            </svg>
-                            <p>Pipeline management for policy: <strong>${currentPolicy}</strong></p>
-                            <p class="text-sm">Pipeline integration coming soon...</p>
-                        </div>
-                    </td>
-                </tr>
-            `;
+        const response = await fetch(`/ConnectionManager/GetPolicyPipelines/?policy_id=${policyId}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.pipelines) {
+            // Initialize the pipeline list with the fetched data
+            // Use 'policy' as the identifier since we're using default IDs in the template
+            if (typeof initPipelineList === 'function') {
+                initPipelineList('policy', data.pipelines);
+            }
+            
+            // Store the policy_id globally so the create modal can use it
+            window.currentPolicyId = policyId;
+        } else {
+            // Show empty state
+            const tableBody = document.getElementById('pipelineTableBody-policy');
+            if (tableBody) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                            <div class="flex flex-col items-center gap-2">
+                                <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                </svg>
+                                <p>No pipelines found for this policy</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
         }
     } catch (error) {
         console.error('Error loading pipelines:', error);
-        showToast('Failed to load pipelines', 'error');
+        showToast('Failed to load pipelines: ' + error.message, 'error');
     }
-}
-
-// Placeholder functions for pipeline pagination
-function previousPolicyPipelinePage() {
-    console.log('Previous page');
-}
-
-function nextPolicyPipelinePage() {
-    console.log('Next page');
-}
-
-function showCreatePipelineModal() {
-    showToast('Pipeline creation will be integrated soon', 'info');
 }
 
 // Load keystore entries for the current policy

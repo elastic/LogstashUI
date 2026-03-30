@@ -141,7 +141,7 @@ function renderPipelineList(esId) {
                                 </svg>
                                 Clone
                             </button>
-                            <button onclick="deletePipeline('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}', '${escapeHtml(esId)}')"
+                            <button onclick="deletePipeline('${escapeHtml(pipeline.es_id)}', '${escapeHtml(pipeline.name)}', '${escapeHtml(esId)}', ${pipeline.policy_id ? `'${escapeHtml(pipeline.policy_id)}'` : 'null'})"
                                class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
                                role="menuitem"
                                type="button">
@@ -160,6 +160,11 @@ function renderPipelineList(esId) {
     
     // Update pagination controls
     updatePipelinePaginationControls(esId, totalPipelines, startIndex, endIndex, totalPages);
+    
+    // Initialize action menu event listeners after rendering
+    if (typeof initActionMenus === 'function') {
+        initActionMenus();
+    }
 }
 
 // Update pagination controls
