@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================
-# LogstashUI Shutdown Script
+# logstashui Shutdown Script
 # ========================================
 
 # Note: We don't use 'set -e' here because we want to attempt all cleanup steps

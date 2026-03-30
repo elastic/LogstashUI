@@ -79,7 +79,7 @@ Instead of editing configuration files manually, pipelines can be authored visua
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd LogstashUI/bin
+cd logstashui/bin
 ````
 
 ### Run LogstashUI
@@ -125,7 +125,7 @@ To update LogstashUI to the latest version:
 
 #### Linux
 ```bash
-cd LogstashUI/bin
+cd logstashui/bin
 ./start_logstashui.sh --update
 ```
 

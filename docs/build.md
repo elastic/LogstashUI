@@ -14,18 +14,18 @@ docker compose up -d
 
 #### Linux
 ```bash
-cd LogstashUI/LogstashUI
+cd logstashui/logstashui
 LOGSTASH_CONFIG=../logstashui.example.yml python manage.py runserver 0.0.0.0:8080
 ```
 #### Windows
 ```bash
-cd LogstashUI/LogstashUI
+cd logstashui/logstashui
 $env:LOGSTASH_CONFIG="../logstashui.yml"
 python manage.py runserver 0.0.0.0:8080
 ```
 ### Running the simulation agent
 ```bash
-cd LogstashUI/logstashagent
+cd logstashui/logstashagent
 docker build --no-cache -t logstashagent:latest . --build-arg LOGSTASH_CONFIG=../logstashui.example.yml
 docker run -p 9600:9600 -p 9449:9449 -p 9500:9500 -e LOGSTASH_URL=http://localhost:8080 logstashagent:latest
 

@@ -127,7 +127,7 @@ class TestEnrollAgent:
                 "post",
                 side_effect=requests.exceptions.ConnectionError("refused"),
             ):
-                with pytest.raises(Exception, match="Failed to connect to LogstashUI"):
+                with pytest.raises(Exception, match="Failed to connect to logstashui"):
                     enrollment.enroll_agent(encoded, "http://down", "aid")
 
 

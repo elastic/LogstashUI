@@ -1,6 +1,6 @@
 
 # Mode determines if the agent is used for simulating
-# in LogstashUI, or for controlling an actual Logstash host
+# in logstashui, or for controlling an actual Logstash host
 mode: host # simulation | host
 
 # Only applies if mode 'mode' is set to simulation

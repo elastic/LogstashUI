@@ -84,7 +84,7 @@ python3 --version
 
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd LogstashUI
+cd logstashui
 ```
 
 ---
@@ -142,7 +142,7 @@ start_logstashui.bat
 ### Linux
 
 ```bash
-cd LogstashUI/bin
+cd logstashui/bin
 ./start_logstashui.sh
 ```
 

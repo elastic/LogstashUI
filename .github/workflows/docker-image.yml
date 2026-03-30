@@ -38,12 +38,12 @@ jobs:
           echo "app_tags=$APP_IMAGE:$VERSION,$APP_IMAGE:latest" >> $GITHUB_OUTPUT
           echo "sim_tags=$SIM_IMAGE:$VERSION,$SIM_IMAGE:latest" >> $GITHUB_OUTPUT
 
-      # ---- Image 1: Django app (LogstashUI)
-      - name: Build and push (LogstashUI)
+      # ---- Image 1: Django app (logstashui)
+      - name: Build and push (logstashui)
         uses: docker/build-push-action@v6
         with:
-          context: ./LogstashUI
-          file: ./LogstashUI/Dockerfile
+          context: ./logstashui
+          file: ./logstashui/Dockerfile
           push: true
           tags: ${{ steps.vars.outputs.app_tags }}
 

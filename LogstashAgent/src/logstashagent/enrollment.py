@@ -49,11 +49,11 @@ def decode_enrollment_token(encoded_token: str) -> dict:
 
 def enroll_agent(encoded_token: str, logstash_ui_url: str, agent_id: str) -> dict:
     """
-    Enroll the agent with LogstashUI
+    Enroll the agent with logstashui
     
     Args:
         encoded_token: Base64-encoded enrollment token
-        logstash_ui_url: LogstashUI URL (from --logstash-ui-url)
+        logstash_ui_url: logstashui URL (from --logstash-ui-url)
         agent_id: Unique agent ID for this instance
         
     Returns:
@@ -71,7 +71,7 @@ def enroll_agent(encoded_token: str, logstash_ui_url: str, agent_id: str) -> dic
     # Get hostname
     hostname = get_hostname()
     
-    logger.info(f"Enrolling agent with LogstashUI at {ui_url}")
+    logger.info(f"Enrolling agent with logstashui at {ui_url}")
     logger.info(f"Hostname: {hostname}")
     logger.info(f"Agent ID: {agent_id}")
     
@@ -122,8 +122,8 @@ def enroll_agent(encoded_token: str, logstash_ui_url: str, agent_id: str) -> dic
         return result
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to connect to LogstashUI: {e}")
-        raise Exception(f"Failed to connect to LogstashUI at {ui_url}: {str(e)}")
+        logger.error(f"Failed to connect to logstashui: {e}")
+        raise Exception(f"Failed to connect to logstashui at {ui_url}: {str(e)}")
 
 
 def compute_hash(content: str) -> str:
@@ -145,7 +145,7 @@ def save_enrollment_config(api_key: str, logstash_ui_url: str, policy_id: int, c
     
     Args:
         api_key: API key returned from enrollment
-        logstash_ui_url: LogstashUI URL
+        logstash_ui_url: logstashui URL
         policy_id: Policy ID assigned to this agent
         connection_id: Connection ID created for this agent
         policy_config: Policy configuration containing paths and config files
@@ -169,7 +169,7 @@ def save_enrollment_config(api_key: str, logstash_ui_url: str, policy_id: int, c
         logger.info(f"Settings path: {policy_config.get('settings_path')}")
         logger.info(f"Logs path: {policy_config.get('logs_path')}")
         logger.info(f"Revision number set to 0 (no configuration deployed yet)")
-        logger.info(f"Agent is now enrolled and managed by LogstashUI at {logstash_ui_url}")
+        logger.info(f"Agent is now enrolled and managed by logstashui at {logstash_ui_url}")
         
     except Exception as e:
         logger.error(f"Failed to save enrollment configuration: {e}")
@@ -182,7 +182,7 @@ def perform_enrollment(encoded_token: str, logstash_ui_url: str, agent_id: str):
     
     Args:
         encoded_token: Base64-encoded enrollment token
-        logstash_ui_url: LogstashUI URL (required)
+        logstash_ui_url: logstashui URL (required)
         agent_id: Unique agent ID for this instance
     """
     try:
@@ -204,7 +204,7 @@ def perform_enrollment(encoded_token: str, logstash_ui_url: str, agent_id: str):
         logger.info("=" * 60)
         logger.info("ENROLLMENT SUCCESSFUL!")
         logger.info("=" * 60)
-        logger.info(f"LogstashUI URL: {ui_url}")
+        logger.info(f"logstashui URL: {ui_url}")
         logger.info(f"Connection ID: {result['connection_id']}")
         logger.info(f"Policy ID: {result['policy_id']}")
         logger.info(f"API Key: {result['api_key'][:10]}...")

@@ -536,7 +536,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             return result
             
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to check config changes with LogstashUI: {e}")
+        logger.error(f"Failed to check config changes with logstashui: {e}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error during config changes check: {e}")
@@ -545,10 +545,10 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
 
 def check_in():
     """
-    Send check-in to LogstashUI with current agent state
+    Send check-in to logstashui with current agent state
     
     Returns:
-        dict: Response from LogstashUI or None if check-in fails
+        dict: Response from logstashui or None if check-in fails
     """
     try:
         # Load agent state
@@ -631,7 +631,7 @@ def check_in():
             return result
             
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to check in with LogstashUI: {e}")
+        logger.error(f"Failed to check in with logstashui: {e}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error during check-in: {e}")
@@ -657,7 +657,7 @@ def run_controller():
     
     logger.info(f"Agent ID: {state.get('agent_id')}")
     logger.info(f"Connection ID: {state.get('connection_id')}")
-    logger.info(f"LogstashUI URL: {state.get('logstash_ui_url')}")
+    logger.info(f"logstashui URL: {state.get('logstash_ui_url')}")
     logger.info(f"Policy ID: {state.get('policy_id')}")
     logger.info("=" * 60)
     logger.info("Starting check-in loop (every 60 seconds)")

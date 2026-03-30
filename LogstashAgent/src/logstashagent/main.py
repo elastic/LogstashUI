@@ -629,7 +629,7 @@ async def logstash_health():
 async def simulate_log(request: Request):
     """
     Proxy endpoint for simulation log input.
-    Accepts HTTPS requests from LogstashUI and forwards them to the local HTTP port 9449.
+    Accepts HTTPS requests from logstashui and forwards them to the local HTTP port 9449.
     
     Queues requests when Logstash is unhealthy and processes them when it recovers.
     """
@@ -1530,11 +1530,11 @@ def parse_arguments():
     Parse command-line arguments for enrollment and other modes
     """
     parser = argparse.ArgumentParser(
-        description='logstashagent - Control plane agent for LogstashUI',
+        description='logstashagent - Control plane agent for logstashui',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Enroll agent with LogstashUI
+  # Enroll agent with logstashui
   python main.py --enroll=eyJlbnJvbGxtZW50X3Rva2VuIjogInN3VGJJODZkYl9tbjBUVE12X2Rfd1hXd0Via3RETU1iUkE2elVaRkF4WXcifQ== --logstash-ui-url=http://localhost:8080
   
   # Enroll with HTTPS URL
@@ -1549,14 +1549,14 @@ Examples:
         '--enroll',
         type=str,
         metavar='TOKEN',
-        help='Enroll this agent with LogstashUI using the provided base64-encoded enrollment token'
+        help='Enroll this agent with logstashui using the provided base64-encoded enrollment token'
     )
     
     parser.add_argument(
         '--logstash-ui-url',
         type=str,
         metavar='URL',
-        help='LogstashUI URL for enrollment (required with --enroll, e.g., http://localhost:8080 or https://logstashui.example.com)'
+        help='logstashui URL for enrollment (required with --enroll, e.g., http://localhost:8080 or https://logstashui.example.com)'
     )
     
     parser.add_argument(
@@ -1573,8 +1573,8 @@ if __name__ == "__main__":
     Main entry point for logstashagent
     
     Supports multiple modes:
-    - Enrollment mode: --enroll flag to register with LogstashUI
-    - Agent mode: mode=agent in config, checks in with LogstashUI
+    - Enrollment mode: --enroll flag to register with logstashui
+    - Agent mode: mode=agent in config, checks in with logstashui
     - Simulation mode: mode=simulation in config, runs as simulation node
     - Host mode: mode=host in config, manages local Logstash instance
     """
@@ -1617,7 +1617,7 @@ if __name__ == "__main__":
         logger.info("LOGSTASH AGENT MODE")
         logger.info("=" * 60)
         logger.info("Agent mode is not yet fully implemented")
-        logger.info("The agent will check in with LogstashUI and receive policies")
+        logger.info("The agent will check in with logstashui and receive policies")
         logger.info("For now, starting in simulation mode...")
         logger.info("=" * 60)
         # TODO: Implement agent check-in loop

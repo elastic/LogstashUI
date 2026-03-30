@@ -1,5 +1,5 @@
 #!/bin/bash
-# LogstashUI Startup Script
+# logstashui Startup Script
 # Detects mode from logstashui.example.yml and starts accordingly
 # - Host mode: Starts native Python agent on Linux, then containers (without agent container)
 # - Embedded mode: Starts all containers including agent

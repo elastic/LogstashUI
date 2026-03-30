@@ -58,10 +58,10 @@ cover/
 # Django stuff:
 *.log
 local_settings.py
-LogstashUI/data/db.sqlite3
+src/logstashui/data/db.sqlite3
 db.sqlite3-journal
-LogstashUI/LogstashUI/data/
-!LogstashUI/SNMP/data/
+src/logstashui/LogstashUI/data/
+!src/logstashui/SNMP/data/
 
 # logstashagent data directory (logs, etc.)
 LogstashAgent/src/logstashagent/data/
@@ -219,10 +219,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-/LogstashUI/staticfiles/admin/
-/LogstashUI/staticfiles/css/
-/LogstashUI/staticfiles/django-browser-reload/
-/LogstashUI/staticfiles/django_htmx/
-/LogstashUI/staticfiles/images/
-/LogstashUI/staticfiles/js/
+
+# LogstashUI
+/src/logstashui/staticfiles/
+/src/logstashui/data/
 /.plans/
