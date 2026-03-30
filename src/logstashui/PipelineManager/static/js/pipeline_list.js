@@ -21,6 +21,12 @@ function initPipelineList(esId, pipelines) {
         pipelineStates[esId].allPipelines = pipelines;
     }
     
+    // Restore search input value from state (in case the HTML was refreshed)
+    const searchInput = document.getElementById(`pipelineSearchInput-${esId}`);
+    if (searchInput && pipelineStates[esId].searchQuery) {
+        searchInput.value = pipelineStates[esId].searchQuery;
+    }
+    
     // Set up event listeners
     setupPipelineListeners(esId);
     
