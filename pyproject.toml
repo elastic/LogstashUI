@@ -24,5 +24,13 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-django>=4.10.0",
 ]
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "LogstashUI.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+pythonpath = "."
+testpaths = ["*/tests/"]
+addopts = "--import-mode=importlib"
