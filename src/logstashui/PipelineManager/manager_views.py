@@ -1821,69 +1821,50 @@ def get_config_changes(request):
         
         policy = connection.policy
         
-        # Log what we're comparing
-        logger.info(f"Config change check for connection {connection_id}:")
-        logger.info(f"  Agent hashes: logstash_yml={agent_logstash_yml_hash}, jvm={agent_jvm_options_hash}, log4j2={agent_log4j2_properties_hash}")
-        logger.info(f"  Policy hashes: logstash_yml={policy.logstash_yml_hash}, jvm={policy.jvm_options_hash}, log4j2={policy.log4j2_properties_hash}")
-        
         # Compare hashes and paths, and include new values if changed
         changes = {}
-        
+
         # Check logstash.yml
         if agent_logstash_yml_hash != policy.logstash_yml_hash:
             changes['logstash_yml'] = policy.logstash_yml
-            logger.info(f"  logstash.yml: CHANGED")
         else:
             changes['logstash_yml'] = False
-            logger.info(f"  logstash.yml: unchanged")
-        
+
         # Check jvm.options
         if agent_jvm_options_hash != policy.jvm_options_hash:
             changes['jvm_options'] = policy.jvm_options
-            logger.info(f"  jvm.options: CHANGED")
         else:
             changes['jvm_options'] = False
-            logger.info(f"  jvm.options: unchanged")
-        
+
         # Check log4j2.properties
         if agent_log4j2_properties_hash != policy.log4j2_properties_hash:
             changes['log4j2_properties'] = policy.log4j2_properties
-            logger.info(f"  log4j2.properties: CHANGED")
         else:
             changes['log4j2_properties'] = False
-            logger.info(f"  log4j2.properties: unchanged")
-        
+
         # Check settings_path
         if agent_settings_path != policy.settings_path:
             changes['settings_path'] = policy.settings_path
-            logger.info(f"  settings_path: CHANGED")
         else:
             changes['settings_path'] = False
-            logger.info(f"  settings_path: unchanged")
-        
+
         # Check logs_path
         if agent_logs_path != policy.logs_path:
             changes['logs_path'] = policy.logs_path
-            logger.info(f"  logs_path: CHANGED")
         else:
             changes['logs_path'] = False
-            logger.info(f"  logs_path: unchanged")
-        
+
         # Check binary_path
         if agent_binary_path != policy.binary_path:
             changes['binary_path'] = policy.binary_path
-            logger.info(f"  binary_path: CHANGED")
         else:
             changes['binary_path'] = False
-            logger.info(f"  binary_path: unchanged")
 
         # Check keystore
         agent_keystore = data.get('keystore', {})  # Dict of {key_name: hash}
-        logger.info(f"  Agent keystore: {len(agent_keystore)} keys")
-        
+
         # Get policy's keystore entries
         policy_keystore_entries = policy.keystore_entries.all()
-        logger.info(f"  Policy keystore: {policy_keystore_entries.count()} keys")
         
         # Build policy keystore dict: {key_name: (hash, decrypted_value)}
         policy_keystore = {}
@@ -1909,11 +1890,9 @@ def get_config_changes(request):
                     # Encrypt with agent's API key: first layer is the value, second layer uses API key as seed
                     encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
                     keystore_changes['set'][agent_key_name] = encrypted_value
-                    logger.info(f"  keystore[{agent_key_name}]: CHANGED (hash mismatch)")
             else:
                 # Key exists on agent but NOT in policy - delete it
                 keystore_changes['delete'].append(agent_key_name)
-                logger.info(f"  keystore[{agent_key_name}]: DELETED (not in policy)")
         
         # Check for new keys in policy that agent doesn't have
         for policy_key_name in policy_keystore.keys():
@@ -1923,18 +1902,31 @@ def get_config_changes(request):
                 # Encrypt with agent's API key: first layer is the value, second layer uses API key as seed
                 encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
                 keystore_changes['set'][policy_key_name] = encrypted_value
-                logger.info(f"  keystore[{policy_key_name}]: NEW (not on agent)")
-        
+
         # Only include keystore changes if there are actual changes
         if keystore_changes['set'] or keystore_changes['delete']:
             changes['keystore'] = keystore_changes
-            logger.info(f"  keystore: CHANGED ({len(keystore_changes['set'])} to set, {len(keystore_changes['delete'])} to delete)")
         else:
             changes['keystore'] = False
-            logger.info(f"  keystore: unchanged")
-        
-        logger.info(f"Config change check for connection {connection_id} completed")
-        
+
+        config_statuses = ", ".join([
+            f"logstash_yml={'CHANGED' if changes.get('logstash_yml') else 'unchanged'}",
+            f"jvm={'CHANGED' if changes.get('jvm_options') else 'unchanged'}",
+            f"log4j2={'CHANGED' if changes.get('log4j2_properties') else 'unchanged'}",
+            f"settings_path={'CHANGED' if changes.get('settings_path') else 'unchanged'}",
+            f"logs_path={'CHANGED' if changes.get('logs_path') else 'unchanged'}",
+            f"binary_path={'CHANGED' if changes.get('binary_path') else 'unchanged'}",
+        ])
+        ks = changes.get('keystore')
+        if ks:
+            ks_summary = f"CHANGED (set={list(ks['set'].keys())}, delete={ks['delete']})"
+        else:
+            ks_summary = "unchanged"
+        logger.info(
+            f"Config change check conn={connection_id}: [{config_statuses}] "
+            f"keystore(agent={len(agent_keystore)}, policy={policy_keystore_entries.count()}, {ks_summary})"
+        )
+
         return JsonResponse({
             "success": True,
             "changes": changes,
