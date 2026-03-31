@@ -397,6 +397,13 @@ function handleAddIdsChange() {
 async function prepareDiffModal() {
     currentDiffMode = 'save';
 
+    // Show agent policy notice if editing via ls_id
+    const lsId = new URLSearchParams(window.location.search).get('ls_id');
+    const notice = document.getElementById('agentPolicyNotice');
+    if (notice) {
+        notice.classList.toggle('hidden', !lsId);
+    }
+
     // Update UI for save mode
     document.getElementById('diffModalTitle').textContent = 'Review Pipeline Changes';
     document.getElementById('diffDescription').innerHTML = `
@@ -469,6 +476,7 @@ async function loadDiffContent() {
     try {
         // Get the current pipeline from the server
         const esId = new URLSearchParams(window.location.search).get('es_id');
+        const lsId = new URLSearchParams(window.location.search).get('ls_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
 
         // If in Text mode, get the raw text from CodeMirror editor
@@ -479,7 +487,8 @@ async function loadDiffContent() {
 
         // Fetch diff from the server
         const formData = new FormData();
-        formData.append('es_id', esId);
+        if (esId) formData.append('es_id', esId);
+        if (lsId) formData.append('ls_id', lsId);
         formData.append('pipeline', pipelineName);
 
         // If in Text mode, send the raw text; otherwise send components
@@ -909,12 +918,14 @@ async function confirmSavePipeline() {
 
     try {
         const esId = new URLSearchParams(window.location.search).get('es_id');
+        const lsId = new URLSearchParams(window.location.search).get('ls_id');
         const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
         const isTextMode = typeof currentEditorMode !== 'undefined' && currentEditorMode === 'text';
 
         const formData = new FormData();
         formData.append('save_pipeline', 'true');
-        formData.append('es_id', esId);
+        if (esId) formData.append('es_id', esId);
+        if (lsId) formData.append('ls_id', lsId);
         formData.append('pipeline', pipelineName);
 
         // If in Text mode, use the stored pipeline text directly

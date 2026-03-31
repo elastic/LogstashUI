@@ -871,7 +871,7 @@
                             hx-include="#pipelineForm"
                             hx-trigger="none"
                             hx-target="#saveStatus"
-                            hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
+                            hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "ls_id": new URLSearchParams(window.location.search).get("ls_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
                             onclick="prepareDiffModal()">
                         Save Pipeline
                     </button>

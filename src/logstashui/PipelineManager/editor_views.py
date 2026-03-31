@@ -42,21 +42,33 @@ def PipelineEditor(request):
     }
 
     if request.method == "GET":
+        ls_id = request.GET.get("ls_id")
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")
 
         # Validate required parameters
-        if not es_id or not pipeline_name:
-            return HttpResponseBadRequest("Missing required parameters: es_id and pipeline")
+        if not (ls_id or es_id) or not pipeline_name:
+            return HttpResponseBadRequest("Missing required parameters: (es_id or ls_id) and pipeline")
 
-        pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
-        
-        # Handle case where pipeline couldn't be fetched
-        if not pipeline_config:
-            return HttpResponseBadRequest(f"Could not fetch pipeline '{pipeline_name}' from connection {es_id}")
+        if ls_id:
+            from PipelineManager.models import Pipeline as PipelineModel
+            try:
+                pipeline_obj = PipelineModel.objects.get(policy_id=ls_id, name=pipeline_name)
+            except PipelineModel.DoesNotExist:
+                return HttpResponseBadRequest(f"Could not find pipeline '{pipeline_name}' in policy {ls_id}")
+            pipeline_config = {
+                'pipeline': pipeline_obj.lscl,
+                'pipeline_settings': {},
+                'description': pipeline_obj.description or '',
+            }
+            context['ls_id'] = ls_id
+        else:
+            pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+            if not pipeline_config:
+                return HttpResponseBadRequest(f"Could not fetch pipeline '{pipeline_name}' from connection {es_id}")
 
         context['pipeline_text'] = pipeline_config['pipeline']
-        
+
         # Flatten pipeline settings with defaults for template access
         settings = pipeline_config.get('pipeline_settings', {})
         context['pipeline_settings'] = {
@@ -153,9 +165,21 @@ def SavePipeline(request):
                     status=400
                 )
 
+        ls_id = request.POST.get("ls_id") or None
+        if ls_id == "null": ls_id = None
+
+        if ls_id:
+            from PipelineManager.models import Pipeline as PipelineModel, Policy
+            policy = Policy.objects.get(pk=ls_id)
+            PipelineModel.objects.filter(policy=policy, name=pipeline_name).update(lscl=config)
+            policy.has_undeployed_changes = True
+            policy.save(update_fields=['has_undeployed_changes'])
+            logger.info(f"User '{request.user.username}' saved pipeline '{pipeline_name}' to policy {ls_id}")
+            return HttpResponse("Pipeline saved successfully!")
+
         es = get_elastic_connection(request.POST.get("es_id"))
         current_pipeline_config = es.logstash.get_pipeline(id=pipeline_name)
-        
+
         pipeline_data = current_pipeline_config.get(pipeline_name, {})
 
         es.logstash.put_pipeline(id=pipeline_name, body={
@@ -222,19 +246,29 @@ def ConfigToComponents(request):
 def GetDiff(request):
     """Generate a unified diff between current and new pipeline configurations"""
     if request.method == "POST":
-        es_id = request.POST.get("es_id")
+        ls_id = request.POST.get("ls_id") or None
+        if ls_id == "null": ls_id = None
+        es_id = request.POST.get("es_id") or None
+        if es_id == "null": es_id = None
         pipeline_name = request.POST.get("pipeline")
         pipeline_text = request.POST.get("pipeline_text")  # Raw text from Text mode
         components_json = request.POST.get("components")
         add_ids = request.POST.get("add_ids", "false").lower() == "true"
 
-        # Need either pipeline_text or components
-        if not es_id or not pipeline_name or (not pipeline_text and not components_json):
+        # Need either pipeline_text or components, and either ls_id or es_id
+        if not (ls_id or es_id) or not pipeline_name or (not pipeline_text and not components_json):
             return JsonResponse({"error": "Missing required parameters"}, status=400)
 
         try:
-            # Get the current pipeline from Elasticsearch
-            current_pipeline = get_logstash_pipeline(es_id, pipeline_name)['pipeline']
+            # Get the current pipeline — from DB for ls_id, or from Elasticsearch for es_id
+            if ls_id:
+                from PipelineManager.models import Pipeline as PipelineModel
+                try:
+                    current_pipeline = PipelineModel.objects.get(policy_id=ls_id, name=pipeline_name).lscl
+                except PipelineModel.DoesNotExist:
+                    return JsonResponse({"error": f"Pipeline '{pipeline_name}' not found in policy {ls_id}"}, status=404)
+            else:
+                current_pipeline = get_logstash_pipeline(es_id, pipeline_name)['pipeline']
 
             # Generate the new pipeline - either from raw text or from components
             if pipeline_text:

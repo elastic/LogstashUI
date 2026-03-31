@@ -345,11 +345,10 @@ def GetPipelines(request, connection_id):
                     "policy_id": connection.policy.id  # Add policy_id to each pipeline for delete/clone
                 })
 
-        # Pass policy_id to template for agent connections
-        context['policy_id'] = connection.policy.id if connection.policy else None
-
     context['pipelines'] = logstash_pipelines
     context['es_id'] = connection.id
+    context['policy_id'] = connection.policy.id if connection.policy else None
+    context['editor_id_param'] = 'ls_id' if connection.policy else 'es_id'
 
     logstash_template = get_template("components/pipeline_manager/collapsible_row.html")
     html = logstash_template.render(context)

@@ -85,7 +85,7 @@
             {% for pipeline in pipelines %}
             <tr>
                 <td class="px-4 py-2">
-                    <a href="/ConnectionManager/Pipelines/Editor/?es_id={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
+                    <a href="/ConnectionManager/Pipelines/Editor/?{{ editor_id_param }}={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
                 </td>
                 <td class="px-4 py-2 text-gray-300">
                     {% if pipeline.description %}
