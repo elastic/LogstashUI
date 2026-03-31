@@ -1250,11 +1250,17 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             // Regular policy selection
             currentPolicy = selectedValue;
-            
+
+            // Always return to the logstash.yml tab when switching policies
+            const logstashTab = document.querySelector('[data-file="logstash.yml"]');
+            if (logstashTab) {
+                logstashTab.click();
+            }
+
             // Update UI based on whether it's the default policy
             const isDefaultPolicy = selectedValue === 'default';
             updatePolicyUI(isDefaultPolicy);
-            
+
             // Load policy data into form if it's a custom policy
             if (!isDefaultPolicy) {
                 // Fetch fresh policy data from database
