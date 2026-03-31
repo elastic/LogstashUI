@@ -12,11 +12,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os, platform
+from importlib.metadata import version, PackageNotFoundError
 from Common.encryption import get_django_secret_key
 from .config import CONFIG
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Project root is 2 levels up from BASE_DIR (src/logstashui/)
+PROJECT_ROOT = BASE_DIR.parent.parent
 
 # logstashui Runtime Configuration
 # Loaded from YAML file specified in LOGSTASHUI_CONFIG environment variable
@@ -39,7 +43,24 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-__VERSION__ = "0.3.5"
+def _get_version():
+    """Get version from installed package metadata or pyproject.toml"""
+    try:
+        return version("LogstashUI")
+    except PackageNotFoundError:
+        try:
+            import tomllib
+            pyproject_path = PROJECT_ROOT / "pyproject.toml"
+            if pyproject_path.exists():
+                with open(pyproject_path, "rb") as f:
+                    pyproject_data = tomllib.load(f)
+                    return pyproject_data.get("project", {}).get("version", "0.0.0+unknown")
+        except Exception:
+            pass
+        return "0.0.0+unknown"
+
+__VERSION__ = _get_version()
+
 # Application definition
 
 INSTALLED_APPS = [
