@@ -25,6 +25,7 @@ import base64
 import secrets
 import requests
 import os
+from Common.encryption import encrypt_credential
 
 logger = logging.getLogger(__name__)
 
@@ -1897,8 +1898,11 @@ def get_config_changes(request):
             if agent_key_name in policy_keystore:
                 # Key exists in both - check if hash matches
                 if agent_hash != policy_keystore[agent_key_name]['hash']:
-                    # Hash differs - send updated value
-                    keystore_changes['set'][agent_key_name] = policy_keystore[agent_key_name]['value']
+                    # Hash differs - encrypt using API key and send updated value
+                    plaintext_value = policy_keystore[agent_key_name]['value']
+                    # Encrypt with agent's API key: first layer is the value, second layer uses API key as seed
+                    encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
+                    keystore_changes['set'][agent_key_name] = encrypted_value
                     logger.info(f"  keystore[{agent_key_name}]: CHANGED (hash mismatch)")
             else:
                 # Key exists on agent but NOT in policy - delete it
@@ -1908,8 +1912,11 @@ def get_config_changes(request):
         # Check for new keys in policy that agent doesn't have
         for policy_key_name in policy_keystore.keys():
             if policy_key_name not in agent_keystore:
-                # New key - send to agent
-                keystore_changes['set'][policy_key_name] = policy_keystore[policy_key_name]['value']
+                # New key - encrypt using API key and send to agent
+                plaintext_value = policy_keystore[policy_key_name]['value']
+                # Encrypt with agent's API key: first layer is the value, second layer uses API key as seed
+                encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
+                keystore_changes['set'][policy_key_name] = encrypted_value
                 logger.info(f"  keystore[{policy_key_name}]: NEW (not on agent)")
         
         # Only include keystore changes if there are actual changes

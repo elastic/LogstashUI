@@ -9,6 +9,7 @@ import json
 import hashlib
 import subprocess
 from . import agent_state
+from . import encryption
 from .ls_keystore_utils import LogstashKeystore
 from .ls_keystore_utils.exceptions import (
     LogstashKeystoreException,
@@ -204,6 +205,45 @@ def update_keystore(settings_path, keystore_changes):
         # Perform set operations
         if keys_to_set:
             logger.info(f"Processing SET operations for {len(keys_to_set)} key(s): {list(keys_to_set.keys())}")
+            
+            # Decrypt keystore values using API key from agent state
+            state = agent_state.get_state()
+            api_key_decrypted = state.get('api_key')
+            
+            if not api_key_decrypted:
+                logger.error("No API key found in agent state - cannot decrypt keystore values")
+                return False
+            
+            try:
+                # Decrypt all keystore values using the API key
+                decrypted_keys = {}
+                for key_name, encrypted_value in keys_to_set.items():
+                    try:
+                        # Decrypt the value (format: "api_key:actual_value")
+                        decrypted_combined = encryption.decrypt_credential(encrypted_value)
+                        
+                        # Verify API key prefix and extract actual value
+                        if not decrypted_combined.startswith(f"{api_key_decrypted}:"):
+                            logger.error(f"API key mismatch for keystore value {key_name} - this value was encrypted for a different agent")
+                            return False
+                        
+                        # Extract the actual keystore value after the API key prefix
+                        actual_value = decrypted_combined[len(api_key_decrypted) + 1:]
+                        decrypted_keys[key_name] = actual_value
+                        logger.debug(f"  - Decrypted key: {key_name}")
+                    except Exception as e:
+                        logger.error(f"Failed to decrypt keystore value for {key_name}: {e}")
+                        return False
+                
+                # Use decrypted keys instead of encrypted ones
+                keys_to_set = decrypted_keys
+                logger.info(f"Successfully decrypted {len(keys_to_set)} keystore value(s)")
+                
+            except Exception as e:
+                logger.error(f"Failed to decrypt keystore values: {e}")
+                logger.exception("Decryption exception details:")
+                return False
+            
             try:
                 # Log each key being set (without values for security)
                 for key_name in keys_to_set.keys():
