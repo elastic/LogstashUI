@@ -161,6 +161,7 @@ def save_enrollment_config(api_key: str, logstash_ui_url: str, policy_id: int, c
         # Save paths
         agent_state.update_state('settings_path', policy_config.get('settings_path'))
         agent_state.update_state('logs_path', policy_config.get('logs_path'))
+        agent_state.update_state('binary_path', policy_config.get('binary_path'))
         
         # Set initial revision number to 0 (agent has no configuration yet)
         agent_state.update_state('revision_number', 0)
@@ -168,6 +169,7 @@ def save_enrollment_config(api_key: str, logstash_ui_url: str, policy_id: int, c
         logger.info(f"Enrollment configuration saved to state.json")
         logger.info(f"Settings path: {policy_config.get('settings_path')}")
         logger.info(f"Logs path: {policy_config.get('logs_path')}")
+        logger.info(f"Binary path: {policy_config.get('binary_path')}")
         logger.info(f"Revision number set to 0 (no configuration deployed yet)")
         logger.info(f"Agent is now enrolled and managed by logstashui at {logstash_ui_url}")
         
