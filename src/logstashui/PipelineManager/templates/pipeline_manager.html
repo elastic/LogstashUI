@@ -291,7 +291,9 @@
                       {% if connection.status_blob %}
                       <div class="status-tooltip text-xs">
                         <div class="font-semibold text-white mb-1">{{ connection.last_check_in|timesince }} ago</div>
-                        <div class="space-y-0.5">
+                        
+                        {# Path Status #}
+                        <div class="space-y-0.5 mb-2">
                           <div class="flex items-center gap-1.5">
                             {% if connection.status_blob.settings_path_found %}
                               <svg class="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
@@ -332,6 +334,88 @@
                             {% endif %}
                           </div>
                         </div>
+                        
+                        {# Config Files Status #}
+                        {% if connection.status_blob.config_files %}
+                        <div class="mt-2 pt-2 border-t border-gray-600">
+                          <div class="font-semibold text-blue-400 mb-1">Config Files:</div>
+                          <div class="space-y-0.5 ml-2">
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.config_files.logstash_yml %}
+                                <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              {% else %}
+                                <svg class="w-2.5 h-2.5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                              {% endif %}
+                              <span class="text-xs text-gray-300">logstash.yml</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.config_files.jvm_options %}
+                                <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              {% else %}
+                                <svg class="w-2.5 h-2.5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                              {% endif %}
+                              <span class="text-xs text-gray-300">jvm.options</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.config_files.log4j2_properties %}
+                                <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              {% else %}
+                                <svg class="w-2.5 h-2.5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                              {% endif %}
+                              <span class="text-xs text-gray-300">log4j2.properties</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.config_files.logstash_keystore %}
+                                <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              {% else %}
+                                <svg class="w-2.5 h-2.5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                              {% endif %}
+                              <span class="text-xs text-gray-300">logstash.keystore</span>
+                            </div>
+                          </div>
+                        </div>
+                        {% endif %}
+                        
+                        {# Binaries Status #}
+                        {% if connection.status_blob.binaries %}
+                        <div class="mt-2 pt-2 border-t border-gray-600">
+                          <div class="font-semibold text-purple-400 mb-1">Binaries:</div>
+                          <div class="space-y-0.5 ml-2">
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.binaries.logstash %}
+                                <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              {% else %}
+                                <svg class="w-2.5 h-2.5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                              {% endif %}
+                              <span class="text-xs text-gray-300">logstash</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.binaries.logstash_keystore %}
+                                <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              {% else %}
+                                <svg class="w-2.5 h-2.5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                              {% endif %}
+                              <span class="text-xs text-gray-300">logstash-keystore</span>
+                            </div>
+                          </div>
+                        </div>
+                        {% endif %}
+                        
+                        {# Log File Status #}
+                        {% if connection.status_blob.log_file %}
+                        <div class="mt-2 pt-2 border-t border-gray-600">
+                          <div class="font-semibold text-cyan-400 mb-1">Log File:</div>
+                          <div class="ml-2 space-y-0.5">
+                            <div class="flex items-center gap-1.5">
+                              <svg class="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                              <span class="text-xs text-gray-300">logstash-json.log</span>
+                            </div>
+                            <div class="text-xs text-gray-400 ml-4">Last modified: {{ connection.status_blob.log_file.last_modified|slice:":19" }}</div>
+                          </div>
+                        </div>
+                        {% endif %}
+                        
+                        {# Problems Section #}
                         {% if connection.status_blob.problems %}
                         <div class="mt-2 pt-2 border-t border-gray-600">
                           <div class="font-semibold text-yellow-400 mb-1">Problems Detected:</div>

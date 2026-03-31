@@ -623,6 +623,7 @@ def check_in():
         
         # Check if paths exist and capture detailed error information
         import os
+        from datetime import datetime
         problems = []
         
         def check_path(path, path_name):
@@ -651,10 +652,97 @@ def check_in():
             
             return True
         
+        def check_file_exists(directory, filename):
+            """Check if a specific file exists in a directory"""
+            if not directory or not os.path.exists(directory):
+                return False
+            file_path = os.path.join(directory, filename)
+            return os.path.isfile(file_path)
+        
+        def check_executable_exists(directory, executable_name):
+            """Check if an executable exists in a directory (with or without bin/ subdirectory)"""
+            if not directory or not os.path.exists(directory):
+                return False
+            
+            # Check in bin/ subdirectory first
+            bin_path = os.path.join(directory, 'bin', executable_name)
+            if os.path.isfile(bin_path):
+                return True
+            
+            # Check directly in the directory
+            direct_path = os.path.join(directory, executable_name)
+            return os.path.isfile(direct_path)
+        
+        def get_log_file_info(logs_path, log_filename):
+            """Get information about a log file including last modified time"""
+            if not logs_path or not os.path.exists(logs_path):
+                return None
+            
+            log_file_path = os.path.join(logs_path, log_filename)
+            if not os.path.isfile(log_file_path):
+                return None
+            
+            try:
+                stat_info = os.stat(log_file_path)
+                last_modified = datetime.fromtimestamp(stat_info.st_mtime)
+                return {
+                    'exists': True,
+                    'last_modified': last_modified.isoformat(),
+                    'size_bytes': stat_info.st_size
+                }
+            except Exception as e:
+                problems.append(f"Error reading log file {log_filename}: {str(e)}")
+                return None
+        
+        # Basic path validation
+        settings_path_valid = check_path(settings_path, 'Settings path')
+        logs_path_valid = check_path(logs_path, 'Logs path')
+        binary_path_valid = check_path(binary_path, 'Binary path')
+        
+        # Check for specific config files in settings_path
+        config_files = {
+            'logstash_yml': check_file_exists(settings_path, 'logstash.yml'),
+            'jvm_options': check_file_exists(settings_path, 'jvm.options'),
+            'log4j2_properties': check_file_exists(settings_path, 'log4j2.properties'),
+            'logstash_keystore': check_file_exists(settings_path, 'logstash.keystore')
+        }
+        
+        # Add problems for missing config files
+        if settings_path_valid:
+            if not config_files['logstash_yml']:
+                problems.append(f"logstash.yml not found in {settings_path}")
+            if not config_files['jvm_options']:
+                problems.append(f"jvm.options not found in {settings_path}")
+            if not config_files['log4j2_properties']:
+                problems.append(f"log4j2.properties not found in {settings_path}")
+            if not config_files['logstash_keystore']:
+                problems.append(f"logstash.keystore not found in {settings_path}")
+        
+        # Check for binaries in binary_path
+        binaries = {
+            'logstash': check_executable_exists(binary_path, 'logstash'),
+            'logstash_keystore': check_executable_exists(binary_path, 'logstash-keystore')
+        }
+        
+        # Add problems for missing binaries
+        if binary_path_valid:
+            if not binaries['logstash']:
+                problems.append(f"logstash binary not found in {binary_path} or {binary_path}/bin")
+            if not binaries['logstash_keystore']:
+                problems.append(f"logstash-keystore binary not found in {binary_path} or {binary_path}/bin")
+        
+        # Check for log file
+        log_info = get_log_file_info(logs_path, 'logstash-json.log')
+        if logs_path_valid and not log_info:
+            problems.append(f"logstash-json.log not found in {logs_path}")
+        
         status_blob = {
-            'settings_path_found': check_path(settings_path, 'Settings path'),
-            'logs_path_found': check_path(logs_path, 'Logs path'),
-            'binary_path_found': check_path(binary_path, 'Binary path'),
+            'settings_path_found': settings_path_valid,
+            'logs_path_found': logs_path_valid,
+            'binary_path_found': binary_path_valid,
+            'config_files': config_files,
+            'binaries': binaries,
+            'log_file': log_info,
             'problems': '\n'.join(problems) if problems else None
         }
         
