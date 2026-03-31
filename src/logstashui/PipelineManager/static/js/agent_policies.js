@@ -1220,12 +1220,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         },
                         body: JSON.stringify({
                             name: trimmedName,
-                            settings_path: document.getElementById('settingsPath').value,
-                            logs_path: document.getElementById('logsPath').value,
-                            binary_path: document.getElementById('binaryPath').value,
-                            logstash_yml: fileContents['logstash.yml'],
-                            jvm_options: fileContents['jvm.options'],
-                            log4j2_properties: fileContents['log4j2.properties']
+                            settings_path: '/etc/logstash/',
+                            logs_path: '/var/log/logstash',
+                            binary_path: '/usr/share/logstash/bin'
                         })
                     });
                     

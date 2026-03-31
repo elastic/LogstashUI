@@ -85,6 +85,27 @@ function syncMainToGuide() {
     if (logsPath && guideLogsPath) {
         guideLogsPath.value = logsPath.value;
     }
+
+    // API Enabled
+    const apiEnabled = document.querySelector('[name="api.enabled"]');
+    const guideApiEnabled = document.getElementById('guideApiEnabled');
+    if (apiEnabled && guideApiEnabled) {
+        guideApiEnabled.value = apiEnabled.value;
+    }
+
+    // API Host
+    const apiHost = document.querySelector('[name="api.http.host"]');
+    const guideApiHost = document.getElementById('guideApiHost');
+    if (apiHost && guideApiHost) {
+        guideApiHost.value = apiHost.value;
+    }
+
+    // API Port
+    const apiPort = document.querySelector('[name="api.http.port"]');
+    const guideApiPort = document.getElementById('guideApiPort');
+    if (apiPort && guideApiPort) {
+        guideApiPort.value = apiPort.value;
+    }
 }
 
 // Validate Default guide fields and apply red/green highlighting
@@ -136,14 +157,56 @@ function validateDefaultGuide() {
             redCount++;
         }
     }
-    
+
+    // Validate API Enabled (should be 'true' or '' which defaults to true)
+    const guideApiEnabled = document.getElementById('guideApiEnabled');
+    if (guideApiEnabled) {
+        if (guideApiEnabled.value !== 'false') {
+            guideApiEnabled.classList.remove('border-red-500', 'border-red-600');
+            guideApiEnabled.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideApiEnabled.classList.remove('border-green-500', 'border-green-600');
+            guideApiEnabled.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate API Host (should be non-empty)
+    const guideApiHost = document.getElementById('guideApiHost');
+    if (guideApiHost) {
+        if (guideApiHost.value && guideApiHost.value.trim() !== '') {
+            guideApiHost.classList.remove('border-red-500', 'border-red-600');
+            guideApiHost.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideApiHost.classList.remove('border-green-500', 'border-green-600');
+            guideApiHost.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate API Port (should be non-empty)
+    const guideApiPort = document.getElementById('guideApiPort');
+    if (guideApiPort) {
+        if (guideApiPort.value && guideApiPort.value.trim() !== '') {
+            guideApiPort.classList.remove('border-red-500', 'border-red-600');
+            guideApiPort.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideApiPort.classList.remove('border-green-500', 'border-green-600');
+            guideApiPort.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
     // Update status tracker
     const statusTracker = document.getElementById('guideStatusTracker');
     const statusIcon = document.getElementById('guideStatusIcon');
     const statusText = document.getElementById('guideStatusText');
-    
+
     if (statusTracker && statusIcon && statusText) {
-        if (redCount === 0 && greenCount === 3) {
+        if (redCount === 0 && greenCount === 6) {
             // All green - success state
             statusTracker.classList.remove('bg-orange-900/20', 'border', 'border-orange-500/40');
             statusTracker.classList.add('bg-green-900/20', 'border', 'border-green-500/40');
@@ -228,6 +291,54 @@ function setGuideLogsPathFromPolicy() {
     }
 }
 
+function setGuideApiEnabled(value) {
+    const guideApiEnabled = document.getElementById('guideApiEnabled');
+    const mainApiEnabled = document.querySelector('[name="api.enabled"]');
+
+    if (guideApiEnabled) {
+        guideApiEnabled.value = value;
+    }
+    if (mainApiEnabled) {
+        mainApiEnabled.value = value;
+    }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateDefaultGuide();
+}
+
+function setGuideApiHost(value) {
+    const guideApiHost = document.getElementById('guideApiHost');
+    const mainApiHost = document.querySelector('[name="api.http.host"]');
+
+    if (guideApiHost) {
+        guideApiHost.value = value;
+    }
+    if (mainApiHost) {
+        mainApiHost.value = value;
+    }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateDefaultGuide();
+}
+
+function setGuideApiPort(value) {
+    const guideApiPort = document.getElementById('guideApiPort');
+    const mainApiPort = document.querySelector('[name="api.http.port"]');
+
+    if (guideApiPort) {
+        guideApiPort.value = value;
+    }
+    if (mainApiPort) {
+        mainApiPort.value = value;
+    }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateDefaultGuide();
+}
+
 // ===========================
 // Centralized Pipeline Management Guide Functions
 // ===========================
@@ -243,6 +354,48 @@ function syncCpmGuideToMain(fieldName, value) {
 }
 
 function syncMainToCpmGuide() {
+    // Log Level
+    const logLevel = document.querySelector('[name="log.level"]');
+    const guideCpmLogLevel = document.getElementById('guideCpmLogLevel');
+    if (logLevel && guideCpmLogLevel) {
+        guideCpmLogLevel.value = logLevel.value;
+    }
+
+    // Log Format
+    const logFormat = document.querySelector('[name="log.format"]');
+    const guideCpmLogFormat = document.getElementById('guideCpmLogFormat');
+    if (logFormat && guideCpmLogFormat) {
+        guideCpmLogFormat.value = logFormat.value;
+    }
+
+    // Logs Path
+    const logsPath = document.querySelector('[name="path.logs"]');
+    const guideCpmLogsPath = document.getElementById('guideCpmLogsPath');
+    if (logsPath && guideCpmLogsPath) {
+        guideCpmLogsPath.value = logsPath.value;
+    }
+
+    // API Enabled
+    const apiEnabled = document.querySelector('[name="api.enabled"]');
+    const guideCpmApiEnabled = document.getElementById('guideCpmApiEnabled');
+    if (apiEnabled && guideCpmApiEnabled) {
+        guideCpmApiEnabled.value = apiEnabled.value;
+    }
+
+    // API Host
+    const apiHost = document.querySelector('[name="api.http.host"]');
+    const guideCpmApiHost = document.getElementById('guideCpmApiHost');
+    if (apiHost && guideCpmApiHost) {
+        guideCpmApiHost.value = apiHost.value;
+    }
+
+    // API Port
+    const apiPort = document.querySelector('[name="api.http.port"]');
+    const guideCpmApiPort = document.getElementById('guideCpmApiPort');
+    if (apiPort && guideCpmApiPort) {
+        guideCpmApiPort.value = apiPort.value;
+    }
+
     // Management Enabled
     const enabled = document.querySelector('[name="xpack.management.enabled"]');
     const guideEnabled = document.getElementById('guideCpmEnabled');
@@ -432,7 +585,98 @@ function validateCpmGuide() {
     let redCount = 0;
     let greenCount = 0;
     let totalFields = 0;
-    
+
+    // Validate Log Level (should be 'info')
+    const guideCpmLogLevel = document.getElementById('guideCpmLogLevel');
+    if (guideCpmLogLevel) {
+        totalFields++;
+        if (guideCpmLogLevel.value === 'info') {
+            guideCpmLogLevel.classList.remove('border-red-500', 'border-red-600');
+            guideCpmLogLevel.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmLogLevel.classList.remove('border-green-500', 'border-green-600');
+            guideCpmLogLevel.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate Log Format (should be 'json')
+    const guideCpmLogFormat = document.getElementById('guideCpmLogFormat');
+    if (guideCpmLogFormat) {
+        totalFields++;
+        if (guideCpmLogFormat.value === 'json') {
+            guideCpmLogFormat.classList.remove('border-red-500', 'border-red-600');
+            guideCpmLogFormat.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmLogFormat.classList.remove('border-green-500', 'border-green-600');
+            guideCpmLogFormat.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate Logs Path (should match policy config)
+    const guideCpmLogsPath = document.getElementById('guideCpmLogsPath');
+    const policyLogsPath = document.getElementById('logsPath');
+    if (guideCpmLogsPath && policyLogsPath) {
+        totalFields++;
+        if (guideCpmLogsPath.value && guideCpmLogsPath.value === policyLogsPath.value) {
+            guideCpmLogsPath.classList.remove('border-red-500', 'border-red-600');
+            guideCpmLogsPath.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmLogsPath.classList.remove('border-green-500', 'border-green-600');
+            guideCpmLogsPath.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate API Enabled (should not be 'false')
+    const guideCpmApiEnabled = document.getElementById('guideCpmApiEnabled');
+    if (guideCpmApiEnabled) {
+        totalFields++;
+        if (guideCpmApiEnabled.value !== 'false') {
+            guideCpmApiEnabled.classList.remove('border-red-500', 'border-red-600');
+            guideCpmApiEnabled.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmApiEnabled.classList.remove('border-green-500', 'border-green-600');
+            guideCpmApiEnabled.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate API Host (should be non-empty)
+    const guideCpmApiHost = document.getElementById('guideCpmApiHost');
+    if (guideCpmApiHost) {
+        totalFields++;
+        if (guideCpmApiHost.value && guideCpmApiHost.value.trim() !== '') {
+            guideCpmApiHost.classList.remove('border-red-500', 'border-red-600');
+            guideCpmApiHost.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmApiHost.classList.remove('border-green-500', 'border-green-600');
+            guideCpmApiHost.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate API Port (should be non-empty)
+    const guideCpmApiPort = document.getElementById('guideCpmApiPort');
+    if (guideCpmApiPort) {
+        totalFields++;
+        if (guideCpmApiPort.value && guideCpmApiPort.value.trim() !== '') {
+            guideCpmApiPort.classList.remove('border-red-500', 'border-red-600');
+            guideCpmApiPort.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmApiPort.classList.remove('border-green-500', 'border-green-600');
+            guideCpmApiPort.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
     // Validate Management Enabled (should be 'true')
     if (guideCpmEnabled) {
         totalFields++;
@@ -587,15 +831,90 @@ function setCpmEnabled(value) {
 function setCpmPipelineId(value) {
     const guideCpmPipelineId = document.getElementById('guideCpmPipelineId');
     const mainCpmPipelineId = document.querySelector('[name="xpack.management.pipeline.id"]');
-    
+
     if (guideCpmPipelineId) {
         guideCpmPipelineId.value = value;
     }
     if (mainCpmPipelineId) {
         mainCpmPipelineId.value = value;
     }
-    
-    // Trigger change detection and validation
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmLogLevel(value) {
+    const guideCpmLogLevel = document.getElementById('guideCpmLogLevel');
+    const mainLogLevel = document.querySelector('[name="log.level"]');
+
+    if (guideCpmLogLevel) { guideCpmLogLevel.value = value; }
+    if (mainLogLevel) { mainLogLevel.value = value; }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmLogFormat(value) {
+    const guideCpmLogFormat = document.getElementById('guideCpmLogFormat');
+    const mainLogFormat = document.querySelector('[name="log.format"]');
+
+    if (guideCpmLogFormat) { guideCpmLogFormat.value = value; }
+    if (mainLogFormat) { mainLogFormat.value = value; }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmLogsPathFromPolicy() {
+    const policyLogsPath = document.getElementById('logsPath');
+    const guideCpmLogsPath = document.getElementById('guideCpmLogsPath');
+    const mainLogsPath = document.querySelector('[name="path.logs"]');
+
+    if (policyLogsPath && policyLogsPath.value) {
+        const policyValue = policyLogsPath.value;
+        if (guideCpmLogsPath) { guideCpmLogsPath.value = policyValue; }
+        if (mainLogsPath) { mainLogsPath.value = policyValue; }
+
+        detectChanges();
+        checkConfigNotifications();
+        validateCpmGuide();
+    }
+}
+
+function setCpmApiEnabled(value) {
+    const guideCpmApiEnabled = document.getElementById('guideCpmApiEnabled');
+    const mainApiEnabled = document.querySelector('[name="api.enabled"]');
+
+    if (guideCpmApiEnabled) { guideCpmApiEnabled.value = value; }
+    if (mainApiEnabled) { mainApiEnabled.value = value; }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmApiHost(value) {
+    const guideCpmApiHost = document.getElementById('guideCpmApiHost');
+    const mainApiHost = document.querySelector('[name="api.http.host"]');
+
+    if (guideCpmApiHost) { guideCpmApiHost.value = value; }
+    if (mainApiHost) { mainApiHost.value = value; }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmApiPort(value) {
+    const guideCpmApiPort = document.getElementById('guideCpmApiPort');
+    const mainApiPort = document.querySelector('[name="api.http.port"]');
+
+    if (guideCpmApiPort) { guideCpmApiPort.value = value; }
+    if (mainApiPort) { mainApiPort.value = value; }
+
     detectChanges();
     checkConfigNotifications();
     validateCpmGuide();

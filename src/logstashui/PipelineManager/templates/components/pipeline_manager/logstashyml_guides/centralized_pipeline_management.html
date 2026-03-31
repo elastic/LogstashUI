@@ -35,108 +35,215 @@
   <div class="bg-gray-900/50 rounded-lg p-6">
     <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
       <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
-      X-Pack Management Settings
+      Essential Settings
     </h3>
 
-    <div class="space-y-4">
-      <!-- Management Enabled -->
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Management Enabled</label>
-        <select id="guideCpmEnabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('xpack.management.enabled', this.value); validateCpmGuide();">
-          <option value="">Default (false)</option>
-          <option value="true">True</option>
-          <option value="false">False</option>
-        </select>
-        <p class="text-xs text-gray-300 mt-2">
-          Enabling xpack management tells Logstash to use CPM. 
-          <a href="javascript:void(0)" onclick="setCpmEnabled('true')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to True</a>
-        </p>
-      </div>
+    <div class="space-y-6">
 
-      <!-- Pipeline ID -->
+      <!-- X-Pack Management Settings -->
       <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Pipeline IDs</label>
-        <input type="text" id="guideCpmPipelineId" placeholder="main, apache_logs" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.pipeline.id', this.value); validateCpmGuide();">
-        <p class="text-xs text-gray-300 mt-2">
-          CPM requires you to specify which pipelines you want to run. Use an * to pull all pipelines stored in Elastic CPM. 
-          <a href="javascript:void(0)" onclick="setCpmPipelineId('*')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to *</a>
-        </p>
-      </div>
-
-      <!-- Connection Method Toggle -->
-      <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-        <label class="block text-sm font-medium text-gray-300 mb-3">Connection Method</label>
-        <div class="flex gap-3 mb-4">
-          <button type="button" id="btnCloudId" onclick="toggleConnectionMethod('cloud')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded transition-colors">
-            Cloud ID
-          </button>
-          <button type="button" id="btnHostsUrl" onclick="toggleConnectionMethod('hosts')" class="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded transition-colors">
-            Hosts URL
-          </button>
+        <div class="border-t border-gray-700 pt-4">
+          <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">X-Pack Management Settings</h4>
         </div>
 
-        <!-- Cloud ID Section -->
-        <div id="cloudIdSection" class="space-y-3">
+        <!-- Management Enabled + Pipeline IDs on same row -->
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <!-- Management Enabled -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Cloud ID</label>
-            <input type="text" id="guideCpmCloudId" placeholder="management_cluster_id:xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.cloud_id', this.value); validateCpmGuide();">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Management Enabled</label>
+            <select id="guideCpmEnabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('xpack.management.enabled', this.value); validateCpmGuide();">
+              <option value="">Default (false)</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
             <p class="text-xs text-gray-300 mt-2">
-              This value can be found by clicking "Manage" on your Elastic Cloud Hosted deployment. 
-              <a href="https://cloud.elastic.co" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to go to cloud.elastic.co</a>
+              Enabling xpack management tells Logstash to use CPM.
+              <a href="javascript:void(0)" onclick="setCpmEnabled('true')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to True</a>
+            </p>
+          </div>
+
+          <!-- Pipeline IDs -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Pipeline IDs</label>
+            <input type="text" id="guideCpmPipelineId" placeholder="main, apache_logs" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.pipeline.id', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              CPM requires you to specify which pipelines you want to run. Use an * to pull all pipelines stored in Elastic CPM.
+              <a href="javascript:void(0)" onclick="setCpmPipelineId('*')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to *</a>
             </p>
           </div>
         </div>
 
-        <!-- Hosts URL Section -->
-        <div id="hostsUrlSection" class="hidden space-y-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Elasticsearch Hosts</label>
-            <input type="text" id="guideCpmHosts" placeholder="https://es1:9200, https://es2:9200" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.hosts', this.value); validateCpmGuide();">
-            <p class="text-xs text-gray-300 mt-2">The URL of one or many Elasticsearch instances</p>
+        <!-- Connection Method + Authentication Method on same row -->
+        <div class="grid grid-cols-2 gap-4">
+          <!-- Connection Method -->
+          <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+            <label class="block text-sm font-medium text-gray-300 mb-3">Connection Method</label>
+            <div class="flex gap-3 mb-4">
+              <button type="button" id="btnCloudId" onclick="toggleConnectionMethod('cloud')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded transition-colors">
+                Cloud ID
+              </button>
+              <button type="button" id="btnHostsUrl" onclick="toggleConnectionMethod('hosts')" class="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded transition-colors">
+                Hosts URL
+              </button>
+            </div>
+
+            <!-- Cloud ID Section -->
+            <div id="cloudIdSection" class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Cloud ID</label>
+                <input type="text" id="guideCpmCloudId" placeholder="management_cluster_id:xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.cloud_id', this.value); validateCpmGuide();">
+                <p class="text-xs text-gray-300 mt-2">
+                  This value can be found by clicking "Manage" on your Elastic Cloud Hosted deployment.
+                  <a href="https://cloud.elastic.co" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to go to cloud.elastic.co</a>
+                </p>
+              </div>
+            </div>
+
+            <!-- Hosts URL Section -->
+            <div id="hostsUrlSection" class="hidden space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Elasticsearch Hosts</label>
+                <input type="text" id="guideCpmHosts" placeholder="https://es1:9200, https://es2:9200" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.hosts', this.value); validateCpmGuide();">
+                <p class="text-xs text-gray-300 mt-2">The URL of one or many Elasticsearch instances</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Authentication Method -->
+          <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+            <label class="block text-sm font-medium text-gray-300 mb-3">Authentication Method</label>
+            <div class="flex gap-3 mb-4">
+              <button type="button" id="btnApiKey" onclick="toggleAuthMethod('apikey')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded transition-colors">
+                API Key
+              </button>
+              <button type="button" id="btnUserPass" onclick="toggleAuthMethod('userpass')" class="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded transition-colors">
+                Username/Password
+              </button>
+            </div>
+
+            <!-- API Key Section -->
+            <div id="apiKeySection" class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
+                <input type="text" id="guideCpmApiKey" placeholder="id:api_key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.api_key', this.value); validateCpmGuide();">
+                <p class="text-xs text-gray-300 mt-2">
+                  You can create an API key by following
+                  <a href="https://www.elastic.co/docs/deploy-manage/api-keys/elasticsearch-api-keys" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-medium">this documentation</a>
+                </p>
+              </div>
+            </div>
+
+            <!-- Username/Password Section -->
+            <div id="userPassSection" class="hidden space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+                <input type="text" id="guideCpmUsername" placeholder="elastic" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.username', this.value); validateCpmGuide();">
+                <p class="text-xs text-gray-300 mt-2">Elastic username</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                <input type="password" id="guideCpmPassword" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.password', this.value); validateCpmGuide();">
+                <p class="text-xs text-gray-300 mt-2">Elastic password</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Authentication Method Toggle -->
-      <div class="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-        <label class="block text-sm font-medium text-gray-300 mb-3">Authentication Method</label>
-        <div class="flex gap-3 mb-4">
-          <button type="button" id="btnApiKey" onclick="toggleAuthMethod('apikey')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded transition-colors">
-            API Key
-          </button>
-          <button type="button" id="btnUserPass" onclick="toggleAuthMethod('userpass')" class="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded transition-colors">
-            Username/Password
-          </button>
+      <!-- Log Settings -->
+      <div>
+        <div class="border-t border-gray-700 pt-4">
+          <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Log Settings</h4>
         </div>
-
-        <!-- API Key Section -->
-        <div id="apiKeySection" class="space-y-3">
+        <div class="grid grid-cols-3 gap-4">
+          <!-- Log Level -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
-            <input type="text" id="guideCpmApiKey" placeholder="id:api_key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.api_key', this.value); validateCpmGuide();">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Log Level</label>
+            <select id="guideCpmLogLevel" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('log.level', this.value); validateCpmGuide();">
+              <option value="">Default (info)</option>
+              <option value="fatal">Fatal</option>
+              <option value="error">Error</option>
+              <option value="warn">Warn</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+              <option value="trace">Trace</option>
+            </select>
             <p class="text-xs text-gray-300 mt-2">
-              You can create an API key by following 
-              <a href="https://www.elastic.co/docs/deploy-manage/api-keys/elasticsearch-api-keys" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-medium">this documentation</a>
+              LogstashAgent needs informational level logs.
+              <a href="javascript:void(0)" onclick="setCpmLogLevel('info')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to Info</a>
+            </p>
+          </div>
+
+          <!-- Log Format -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Log Format</label>
+            <select id="guideCpmLogFormat" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('log.format', this.value); validateCpmGuide();">
+              <option value="">Default (plain)</option>
+              <option value="plain">Plain</option>
+              <option value="json">JSON</option>
+            </select>
+            <p class="text-xs text-gray-300 mt-2">
+              LogstashAgent needs logs to be in JSON format.
+              <a href="javascript:void(0)" onclick="setCpmLogFormat('json')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to JSON</a>
+            </p>
+          </div>
+
+          <!-- Logs Path -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Logs Path</label>
+            <input type="text" id="guideCpmLogsPath" placeholder="/var/log/logstash" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('path.logs', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              Log path must match the defined Policy config.
+              <a href="javascript:void(0)" onclick="setCpmLogsPathFromPolicy()" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set it to that value</a>
             </p>
           </div>
         </div>
+      </div>
 
-        <!-- Username/Password Section -->
-        <div id="userPassSection" class="hidden space-y-3">
+      <!-- API Settings -->
+      <div>
+        <div class="border-t border-gray-700 pt-4">
+          <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">API Settings</h4>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <!-- API Enabled -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
-            <input type="text" id="guideCpmUsername" placeholder="elastic" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.username', this.value); validateCpmGuide();">
-            <p class="text-xs text-gray-300 mt-2">Elastic username</p>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Enabled</label>
+            <select id="guideCpmApiEnabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('api.enabled', this.value); validateCpmGuide();">
+              <option value="">Default (true)</option>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+            <p class="text-xs text-gray-300 mt-2">
+              LogstashAgent needs to be able to communicate with the Logstash API.
+              <a href="javascript:void(0)" onclick="setCpmApiEnabled('true')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to True</a>
+            </p>
           </div>
+
+          <!-- API Host -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
-            <input type="password" id="guideCpmPassword" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('xpack.management.elasticsearch.password', this.value); validateCpmGuide();">
-            <p class="text-xs text-gray-300 mt-2">Elastic password</p>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Host</label>
+            <input type="text" id="guideCpmApiHost" placeholder="127.0.0.1" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('api.http.host', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              <a href="javascript:void(0)" onclick="setCpmApiHost('127.0.0.1')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 127.0.0.1</a> so that only applications local to the Logstash instance can communicate with it.
+              <a href="javascript:void(0)" onclick="setCpmApiHost('0.0.0.0')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 0.0.0.0</a> so that external sources can communicate with Logstash's API.
+            </p>
+          </div>
+
+          <!-- API Port -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Port</label>
+            <input type="text" id="guideCpmApiPort" placeholder="9600" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('api.http.port', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              <a href="javascript:void(0)" onclick="setCpmApiPort('9600')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 9600</a>
+            </p>
           </div>
         </div>
       </div>
+
     </div>
 
     <!-- Status Tracker -->

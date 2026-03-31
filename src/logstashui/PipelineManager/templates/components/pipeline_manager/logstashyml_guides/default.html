@@ -28,47 +28,96 @@
       Essential Settings
     </h3>
 
-    <div class="space-y-4">
-      <!-- Log Level -->
+    <div class="space-y-6">
+      <!-- Log Settings -->
       <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Log Level</label>
-        <select id="guideLogLevel" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('log.level', this.value); validateDefaultGuide();">
-          <option value="">Default (info)</option>
-          <option value="fatal">Fatal</option>
-          <option value="error">Error</option>
-          <option value="warn">Warn</option>
-          <option value="info">Info</option>
-          <option value="debug">Debug</option>
-          <option value="trace">Trace</option>
-        </select>
-        <p class="text-xs text-gray-300 mt-2">
-          LogstashAgent needs informational level logs. 
-          <a href="javascript:void(0)" onclick="setGuideLogLevel('info')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to Info</a>
-        </p>
+        <div class="border-t border-gray-700 pt-4">
+          <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Log Settings</h4>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <!-- Log Level -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Log Level</label>
+            <select id="guideLogLevel" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('log.level', this.value); validateDefaultGuide();">
+              <option value="">Default (info)</option>
+              <option value="fatal">Fatal</option>
+              <option value="error">Error</option>
+              <option value="warn">Warn</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+              <option value="trace">Trace</option>
+            </select>
+            <p class="text-xs text-gray-300 mt-2">
+              LogstashAgent needs informational level logs.
+              <a href="javascript:void(0)" onclick="setGuideLogLevel('info')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to Info</a>
+            </p>
+          </div>
+
+          <!-- Log Format -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Log Format</label>
+            <select id="guideLogFormat" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('log.format', this.value); validateDefaultGuide();">
+              <option value="">Default (plain)</option>
+              <option value="plain">Plain</option>
+              <option value="json">JSON</option>
+            </select>
+            <p class="text-xs text-gray-300 mt-2">
+              LogstashAgent needs logs to be in JSON format.
+              <a href="javascript:void(0)" onclick="setGuideLogFormat('json')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to JSON</a>
+            </p>
+          </div>
+
+          <!-- Logs Path -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Logs Path</label>
+            <input type="text" id="guideLogsPath" placeholder="/var/log/logstash" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncGuideToMain('path.logs', this.value); validateDefaultGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              Log path must match the defined Policy config.
+              <a href="javascript:void(0)" onclick="setGuideLogsPathFromPolicy()" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set it to that value</a>
+            </p>
+          </div>
+        </div>
       </div>
 
-      <!-- Log Format -->
+      <!-- API Settings -->
       <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Log Format</label>
-        <select id="guideLogFormat" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('log.format', this.value); validateDefaultGuide();">
-          <option value="">Default (plain)</option>
-          <option value="plain">Plain</option>
-          <option value="json">JSON</option>
-        </select>
-        <p class="text-xs text-gray-300 mt-2">
-          LogstashAgent needs logs to be in JSON format. 
-          <a href="javascript:void(0)" onclick="setGuideLogFormat('json')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to JSON</a>
-        </p>
-      </div>
+        <div class="border-t border-gray-700 pt-4">
+          <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">API Settings</h4>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <!-- API Enabled -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Enabled</label>
+            <select id="guideApiEnabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncGuideToMain('api.enabled', this.value); validateDefaultGuide();">
+              <option value="">Default (true)</option>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+            <p class="text-xs text-gray-300 mt-2">
+              LogstashAgent needs to be able to communicate with the Logstash API.
+              <a href="javascript:void(0)" onclick="setGuideApiEnabled('true')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to True</a>
+            </p>
+          </div>
 
-      <!-- Logs Path -->
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Logs Path</label>
-        <input type="text" id="guideLogsPath" placeholder="/var/log/logstash" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncGuideToMain('path.logs', this.value); validateDefaultGuide();">
-        <p class="text-xs text-gray-300 mt-2">
-          Log path must match the defined Policy config. 
-          <a href="javascript:void(0)" onclick="setGuideLogsPathFromPolicy()" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set it to that value</a>
-        </p>
+          <!-- API Host -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Host</label>
+            <input type="text" id="guideApiHost" placeholder="127.0.0.1" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncGuideToMain('api.http.host', this.value); validateDefaultGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              <a href="javascript:void(0)" onclick="setGuideApiHost('127.0.0.1')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 127.0.0.1</a> so that only applications local to the Logstash instance can communicate with it.
+              <a href="javascript:void(0)" onclick="setGuideApiHost('0.0.0.0')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 0.0.0.0</a> so that external sources can communicate with Logstash's API.
+            </p>
+          </div>
+
+          <!-- API Port -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">API Port</label>
+            <input type="text" id="guideApiPort" placeholder="9600" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncGuideToMain('api.http.port', this.value); validateDefaultGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              <a href="javascript:void(0)" onclick="setGuideApiPort('9600')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 9600</a>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
