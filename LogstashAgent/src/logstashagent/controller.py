@@ -8,6 +8,7 @@ import requests
 import json
 import hashlib
 import subprocess
+from datetime import datetime, timezone
 from . import agent_state
 from . import encryption
 from .ls_keystore_utils import LogstashKeystore
@@ -514,43 +515,52 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             logger.debug(f"Server response - changes: {changes}")
             logger.debug(f"files_existed flag: {files_existed}")
             
-            # Track if any files were updated
+            # Track if any files were updated and which operations failed
             files_updated = False
-            
+            failed_operations = []
+
             # Update logstash.yml if changed
             logstash_yml_content = changes.get('logstash_yml')
             if logstash_yml_content and logstash_yml_content != False:
                 logger.info("Configuration change found for logstash.yml")
                 if update_logstash_yml(settings_path, logstash_yml_content):
                     files_updated = True
-            
+                else:
+                    failed_operations.append('logstash.yml write failed')
+
             # Update jvm.options if changed
             jvm_options_content = changes.get('jvm_options')
             if jvm_options_content and jvm_options_content != False:
                 logger.info("Configuration change found for jvm.options")
                 if update_jvm_options(settings_path, jvm_options_content):
                     files_updated = True
-            
+                else:
+                    failed_operations.append('jvm.options write failed')
+
             # Update log4j2.properties if changed
             log4j2_properties_content = changes.get('log4j2_properties')
             if log4j2_properties_content and log4j2_properties_content != False:
                 logger.info("Configuration change found for log4j2.properties")
                 if update_log4j2_properties(settings_path, log4j2_properties_content):
                     files_updated = True
-            
+                else:
+                    failed_operations.append('log4j2.properties write failed')
+
             # Check for path changes (informational only - can't update these automatically)
             if changes.get('settings_path') and changes.get('settings_path') != False:
                 logger.info(f"Configuration change found for settings_path: {changes.get('settings_path')}")
             if changes.get('logs_path') and changes.get('logs_path') != False:
                 logger.info(f"Configuration change found for logs_path: {changes.get('logs_path')}")
-            
+
             # Handle keystore changes
             keystore_changes = changes.get('keystore')
             if keystore_changes and keystore_changes != False:
                 logger.info("Keystore changes detected")
                 if update_keystore(settings_path, keystore_changes):
                     files_updated = True
-            
+                else:
+                    failed_operations.append('keystore update failed')
+
             # If any files were updated, restart Logstash (only if files existed before)
             if files_updated:
                 if files_existed:
@@ -559,9 +569,10 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                         logger.info("Logstash restart completed successfully")
                     else:
                         logger.error("Logstash restart failed - manual intervention may be required")
+                        failed_operations.append('logstash restart failed')
                 else:
                     logger.info("Configuration files created - Logstash restart skipped (files didn't exist previously)")
-                
+
                 # Update agent's revision number to match server after successful changes
                 server_revision = result.get('current_revision')
                 if server_revision is not None:
@@ -569,7 +580,18 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                     logger.info(f"Updated agent revision number to {server_revision}")
             else:
                 logger.info("No configuration file changes detected")
-            
+
+            # Persist policy apply result to state (fires regardless of whether files changed)
+            server_revision = result.get('current_revision')
+            apply_success = len(failed_operations) == 0
+            agent_state.update_state('last_policy_apply', {
+                'success': apply_success,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'revision': server_revision,
+                'failed_operations': failed_operations,
+            })
+            logger.info(f"Saved last_policy_apply: success={apply_success}, failed={failed_operations}")
+
             return result
         else:
             logger.warning(f"Config changes check returned success=false: {result.get('message', 'Unknown error')}")
@@ -581,6 +603,36 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
     except Exception as e:
         logger.error(f"Unexpected error during config changes check: {e}")
         return None
+
+
+def get_logstash_api_status(api_port=9600):
+    """
+    Query the Logstash node info API at http://localhost:{api_port}/.
+
+    Returns:
+        dict with keys: accessible, status, version, host, error
+    """
+    from .logstash_api import LogstashAPI
+    base_url = f"http://localhost:{api_port}"
+    try:
+        api = LogstashAPI(base_url=base_url)
+        data = api.get_node_info()
+        return {
+            'accessible': True,
+            'status': data.get('status', 'unknown'),
+            'version': data.get('version'),
+            'host': data.get('host'),
+            'error': None,
+        }
+    except Exception as e:
+        logger.warning(f"Logstash API not accessible at {base_url}: {e}")
+        return {
+            'accessible': False,
+            'status': 'unknown',
+            'version': None,
+            'host': None,
+            'error': str(e)[:200],
+        }
 
 
 def check_in():
@@ -746,7 +798,11 @@ def check_in():
             'problems': '\n'.join(problems) if problems else None,
             'agent_version': state.get('agent_version', '0.0.0+unknown')
         }
-        
+
+        api_port = state.get('api_port', 9600)
+        status_blob['logstash_api'] = get_logstash_api_status(api_port)
+        status_blob['last_policy_apply'] = state.get('last_policy_apply')
+
         logger.debug(f"Path validation status: {status_blob}")
         
         # Prepare check-in data

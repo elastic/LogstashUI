@@ -264,7 +264,7 @@
                   {% if connection.last_check_in %}
                     <div class="status-container relative inline-flex items-center justify-center mx-auto">
                       {% if connection.status_blob %}
-                        {% if connection.status_blob.settings_path_found == False or connection.status_blob.logs_path_found == False or connection.status_blob.binary_path_found == False %}
+                        {% if connection.status_blob.settings_path_found == False or connection.status_blob.logs_path_found == False or connection.status_blob.binary_path_found == False or connection.status_blob.logstash_api.accessible == False or connection.status_blob.logstash_api.status == 'red' %}
                           {# Yellow pulsing pill if any path is not found #}
                           <span class="pulse-badge pulse-yellow inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                             Unhealthy
@@ -422,6 +422,79 @@
                         </div>
                         {% endif %}
                         
+                        {# Logstash Status Section #}
+                        {% if connection.status_blob.logstash_api %}
+                        <div class="mt-2 pt-2 border-t border-gray-600">
+                          <div class="font-semibold text-indigo-400 mb-1">Logstash Status:</div>
+                          <div class="space-y-0.5 ml-2">
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.logstash_api.accessible %}
+                                <svg class="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                </svg>
+                                <span class="text-green-400">API accessible</span>
+                              {% else %}
+                                <svg class="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                </svg>
+                                <span class="text-red-400">API not accessible</span>
+                              {% endif %}
+                            </div>
+                            {% if connection.status_blob.logstash_api.accessible %}
+                            <div class="flex items-center gap-1.5 ml-1">
+                              {% if connection.status_blob.logstash_api.status == 'green' %}
+                                <span class="text-xs font-medium text-green-400">Status: {{ connection.status_blob.logstash_api.status }}</span>
+                              {% elif connection.status_blob.logstash_api.status == 'yellow' %}
+                                <span class="text-xs font-medium text-yellow-400">Status: {{ connection.status_blob.logstash_api.status }}</span>
+                              {% elif connection.status_blob.logstash_api.status == 'red' %}
+                                <span class="text-xs font-medium text-red-400">Status: {{ connection.status_blob.logstash_api.status }}</span>
+                              {% else %}
+                                <span class="text-xs text-gray-400">Status: {{ connection.status_blob.logstash_api.status }}</span>
+                              {% endif %}
+                            </div>
+                            {% if connection.status_blob.logstash_api.version %}
+                            <div class="text-xs text-gray-400 ml-1">Version: {{ connection.status_blob.logstash_api.version }}</div>
+                            {% endif %}
+                            {% endif %}
+                          </div>
+                        </div>
+                        {% endif %}
+
+                        {# Last Policy Apply Section #}
+                        {% if connection.status_blob.last_policy_apply %}
+                        <div class="mt-2 pt-2 border-t border-gray-600">
+                          <div class="font-semibold text-orange-400 mb-1">Last Policy Apply:</div>
+                          <div class="space-y-0.5 ml-2">
+                            <div class="flex items-center gap-1.5">
+                              {% if connection.status_blob.last_policy_apply.success %}
+                                <svg class="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                </svg>
+                                <span class="text-green-400">Applied successfully</span>
+                              {% else %}
+                                <svg class="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                </svg>
+                                <span class="text-red-400">Apply failed</span>
+                              {% endif %}
+                            </div>
+                            {% if connection.status_blob.last_policy_apply.revision %}
+                            <div class="text-xs text-gray-400 ml-1">Revision: {{ connection.status_blob.last_policy_apply.revision }}</div>
+                            {% endif %}
+                            {% if connection.status_blob.last_policy_apply.timestamp %}
+                            <div class="text-xs text-gray-400 ml-1">At: {{ connection.status_blob.last_policy_apply.timestamp|slice:":19" }}</div>
+                            {% endif %}
+                            {% if connection.status_blob.last_policy_apply.failed_operations %}
+                            <div class="text-xs text-red-400 ml-1 mt-0.5">
+                              {% for op in connection.status_blob.last_policy_apply.failed_operations %}
+                                <div>- {{ op }}</div>
+                              {% endfor %}
+                            </div>
+                            {% endif %}
+                          </div>
+                        </div>
+                        {% endif %}
+
                         {# Problems Section #}
                         {% if connection.status_blob.problems %}
                         <div class="mt-2 pt-2 border-t border-gray-600">

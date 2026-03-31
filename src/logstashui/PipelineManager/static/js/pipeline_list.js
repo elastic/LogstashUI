@@ -121,7 +121,7 @@ function renderPipelineList(esId) {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td class="px-4 py-2">
-                <a href="/ConnectionManager/Pipelines/Editor/?es_id=${escapeHtml(pipeline.es_id)}&pipeline=${escapeHtml(pipeline.name)}" class="text-blue-500 hover:underline">${escapeHtml(pipeline.name)}</a>
+                <a href="/ConnectionManager/Pipelines/Editor/?${pipeline.policy_id ? 'ls_id=' + escapeHtml(pipeline.policy_id) : 'es_id=' + escapeHtml(pipeline.es_id)}&pipeline=${escapeHtml(pipeline.name)}" class="text-blue-500 hover:underline">${escapeHtml(pipeline.name)}</a>
             </td>
             <td class="px-4 py-2 text-gray-300">
                 ${pipeline.description ? escapeHtml(pipeline.description).substring(0, 80) + (pipeline.description.length > 80 ? '...' : '') : '<span class="text-gray-500 italic">No description</span>'}
