@@ -20,7 +20,7 @@ import pytest
 class TestPipelineEditorView:
     """Test PipelineEditor view"""
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
     def test_pipeline_editor_success(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test successful pipeline editor load"""
         mock_get_pipeline.return_value = {
@@ -44,22 +44,22 @@ class TestPipelineEditorView:
         assert b'test_pipeline' in response.content
         assert b'Test pipeline' in response.content
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
     def test_pipeline_editor_missing_es_id(self, mock_get_pipeline, authenticated_client):
         """Test PipelineEditor with missing es_id parameter"""
         response = authenticated_client.get('/ConnectionManager/Pipelines/Editor/?pipeline=test_pipeline')
         assert response.status_code == 400
         assert b'Missing required parameters' in response.content
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
     def test_pipeline_editor_missing_pipeline_param(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test PipelineEditor with missing pipeline parameter"""
         response = authenticated_client.get(f'/ConnectionManager/Pipelines/Editor/?es_id={test_connection.id}')
         assert response.status_code == 400
         assert b'Missing required parameters' in response.content
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
-    @patch('PipelineManager.views.logstash_config_parse.logstash_config_to_components')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.logstash_config_parse.logstash_config_to_components')
     def test_pipeline_editor_with_parsing_error(self, mock_parse, mock_get_pipeline, authenticated_client, test_connection):
         """Test pipeline editor when parsing fails"""
         mock_get_pipeline.return_value = {
@@ -86,7 +86,7 @@ class TestPipelineEditorView:
 class TestGetPipeline:
     """Test GetPipeline view"""
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.manager_views.get_logstash_pipeline')
     def test_get_pipeline_success(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test successful pipeline retrieval"""
         pipeline_config = 'input { stdin {} }\nfilter { mutate { add_field => { "test" => "value" } } }\noutput { stdout {} }'
@@ -170,7 +170,7 @@ class TestComponentsConfigConversion:
         assert response.status_code == 500
         assert b'Error' in response.content
 
-    @patch('PipelineManager.views.logstash_config_parse.logstash_config_to_components')
+    @patch('PipelineManager.editor_views.logstash_config_parse.logstash_config_to_components')
     def test_config_to_components_success(self, mock_parse, authenticated_client):
         """Test successful config to components conversion"""
         config_text = 'input { stdin {} }\nfilter {}\noutput { stdout {} }'
@@ -202,7 +202,7 @@ class TestComponentsConfigConversion:
         assert 'error' in data
         assert 'No config text provided' in data['error']
 
-    @patch('PipelineManager.views.logstash_config_parse.logstash_config_to_components')
+    @patch('PipelineManager.editor_views.logstash_config_parse.logstash_config_to_components')
     def test_config_to_components_parse_error(self, mock_parse, authenticated_client):
         """Test ConfigToComponents with parsing error"""
         mock_parse.side_effect = Exception("Invalid syntax")
@@ -274,7 +274,7 @@ class TestComponentsConfigConversion:
 class TestGetDiff:
     """Test GetDiff view"""
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
     def test_get_diff_with_matching_configs(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test GetDiff when configs are identical"""
         current_config = 'input {}\nfilter {}\noutput {}'
@@ -302,7 +302,7 @@ class TestGetDiff:
         assert 'filter' in data['current'] and 'filter' in data['new']
         assert 'output' in data['current'] and 'output' in data['new']
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
     def test_get_diff_with_different_configs(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test GetDiff when configs differ"""
         current_config = 'input {}\nfilter {}\noutput {}'
@@ -334,7 +334,7 @@ class TestGetDiff:
         # Should show addition of stdin input
         assert 'stdin' in data['new']
 
-    @patch('PipelineManager.views.get_logstash_pipeline')
+    @patch('PipelineManager.editor_views.get_logstash_pipeline')
     def test_get_diff_with_text_mode(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test GetDiff using raw pipeline text instead of components"""
         current_config = 'input {}\nfilter {}\noutput {}'
@@ -441,7 +441,7 @@ class TestGetCurrentPipelineCode:
 class TestClonePipeline:
     """Test ClonePipeline view"""
 
-    @patch('PipelineManager.views.get_elastic_connection')
+    @patch('PipelineManager.manager_views.get_elastic_connection')
     def test_clone_pipeline_success(self, mock_get_es, authenticated_client, test_connection):
         """Test successful pipeline cloning"""
         mock_es = MagicMock()
@@ -470,10 +470,11 @@ class TestClonePipeline:
         })
 
         assert response.status_code == 200
-        # Should contain script to close modal and refresh
-        assert b'clonePipelineModal' in response.content or b'script' in response.content
+        assert b'Pipeline cloned successfully!' in response.content
+        # Should have HX-Trigger header for HTMX
+        assert 'HX-Trigger' in response
 
-    @patch('PipelineManager.views.get_elastic_connection')
+    @patch('PipelineManager.manager_views.get_elastic_connection')
     def test_clone_pipeline_duplicate_name(self, mock_get_es, authenticated_client, test_connection):
         """Test cloning with duplicate pipeline name"""
         mock_es = MagicMock()
@@ -528,7 +529,7 @@ class TestClonePipeline:
         assert response.status_code == 400
         assert b'Pipeline' in response.content and (b'invalid' in response.content.lower() or b'error' in response.content.lower())
 
-    @patch('PipelineManager.views.get_elastic_connection')
+    @patch('PipelineManager.manager_views.get_elastic_connection')
     def test_clone_pipeline_source_not_found(self, mock_get_es, authenticated_client, test_connection):
         """Test cloning when source pipeline doesn't exist"""
         mock_es = MagicMock()

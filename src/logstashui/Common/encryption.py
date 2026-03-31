@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def get_encryption_key():
     """
-    Get or generate the encryption.py key for credential storage.
+    Get or generate the encryption key for credential storage.
     
     Priority:
     1. Environment variable CREDENTIAL_KEY
@@ -20,7 +20,7 @@ def get_encryption_key():
     3. Generate new key and save to data/.secret_key
     
     Returns:
-        bytes: The encryption.py key
+        bytes: The encryption key
         
     Raises:
         RuntimeError: If key cannot be loaded or generated
@@ -49,11 +49,11 @@ def get_encryption_key():
                 Fernet(key)
                 return key
             except PermissionError:
-                logger.error(f"Permission denied reading encryption.py key file: {key_file}")
-                raise RuntimeError(f"Cannot read encryption.py key file: Permission denied")
+                logger.error(f"Permission denied reading encryption key file: {key_file}")
+                raise RuntimeError(f"Cannot read encryption key file: Permission denied")
             except Exception as e:
-                logger.error(f"Error reading or validating encryption.py key from {key_file}: {e}")
-                raise RuntimeError(f"Invalid encryption.py key in file: {e}")
+                logger.error(f"Error reading or validating encryption key from {key_file}: {e}")
+                raise RuntimeError(f"Invalid encryption key in file: {e}")
         
         # Generate new key
         key = Fernet.generate_key()
@@ -73,29 +73,29 @@ def get_encryption_key():
             key_file.touch(mode=0o600, exist_ok=True)
         except PermissionError:
             logger.error(f"Permission denied creating key file: {key_file}")
-            raise RuntimeError(f"Cannot create encryption.py key file: Permission denied")
+            raise RuntimeError(f"Cannot create encryption key file: Permission denied")
         except Exception as e:
             logger.error(f"Error creating key file: {e}")
-            raise RuntimeError(f"Cannot create encryption.py key file: {e}")
+            raise RuntimeError(f"Cannot create encryption key file: {e}")
 
         # Save key to file
         try:
             with open(key_file, 'wb') as f:
                 f.write(key)
-            logger.info(f"Generated new encryption.py key and saved to {key_file}")
+            logger.info(f"Generated new encryption key and saved to {key_file}")
         except PermissionError:
             logger.error(f"Permission denied writing to key file: {key_file}")
-            raise RuntimeError(f"Cannot write encryption.py key: Permission denied")
+            raise RuntimeError(f"Cannot write encryption key: Permission denied")
         except Exception as e:
-            logger.error(f"Error writing encryption.py key: {e}")
-            raise RuntimeError(f"Cannot write encryption.py key: {e}")
+            logger.error(f"Error writing encryption key: {e}")
+            raise RuntimeError(f"Cannot write encryption key: {e}")
         
         return key
     except RuntimeError:
         raise
     except Exception as e:
         logger.error(f"Unexpected error in get_encryption_key: {e}")
-        raise RuntimeError(f"Failed to get encryption.py key: {e}")
+        raise RuntimeError(f"Failed to get encryption key: {e}")
 
 
 def encrypt_credential(plaintext):
@@ -106,11 +106,11 @@ def encrypt_credential(plaintext):
         plaintext (str): The plaintext credential to encrypt
         
     Returns:
-        str: Base64-encoded encrypted credential, or None if encryption.py fails
+        str: Base64-encoded encrypted credential, or None if encryption fails
         
     Raises:
         ValueError: If plaintext is not a string
-        RuntimeError: If encryption.py fails
+        RuntimeError: If encryption fails
     """
     if not plaintext:
         return plaintext
@@ -157,8 +157,8 @@ def decrypt_credential(encrypted_text):
         decrypted = fernet.decrypt(encrypted_text.encode())
         return decrypted.decode()
     except InvalidToken:
-        logger.error("Failed to decrypt credential: Invalid token or wrong encryption.py key")
-        raise ValueError("Cannot decrypt credential: Invalid token or wrong encryption.py key")
+        logger.error("Failed to decrypt credential: Invalid token or wrong encryption key")
+        raise ValueError("Cannot decrypt credential: Invalid token or wrong encryption key")
     except RuntimeError:
         # Re-raise key loading errors
         raise
@@ -171,7 +171,7 @@ def get_django_secret_key():
     """
     Get or generate Django's SECRET_KEY.
     
-    Uses the same persistence pattern as credential encryption.py key:
+    Uses the same persistence pattern as credential encryption key:
     1. Environment variable SECRET_KEY
     2. Key file in data/.django_secret_key
     3. Generate new key and save to data/.django_secret_key

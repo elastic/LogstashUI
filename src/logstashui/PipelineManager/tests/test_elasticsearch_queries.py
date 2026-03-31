@@ -19,7 +19,7 @@ import pytest
 class TestGetElasticsearchConnections:
     """Test GetElasticsearchConnections view"""
 
-    @patch('PipelineManager.views.get_elastic_connections_from_list')
+    @patch('PipelineManager.editor_views.get_elastic_connections_from_list')
     def test_get_elasticsearch_connections_success(self, mock_get_connections, authenticated_client):
         """Test successful retrieval of Elasticsearch connections"""
         mock_get_connections.return_value = [
@@ -39,7 +39,7 @@ class TestGetElasticsearchConnections:
         # Should only return id and name, not es_client
         assert 'es_client' not in data['connections'][0]
 
-    @patch('PipelineManager.views.get_elastic_connections_from_list')
+    @patch('PipelineManager.editor_views.get_elastic_connections_from_list')
     def test_get_elasticsearch_connections_empty(self, mock_get_connections, authenticated_client):
         """Test GetElasticsearchConnections when no connections exist"""
         mock_get_connections.return_value = []
@@ -50,7 +50,7 @@ class TestGetElasticsearchConnections:
         data = json.loads(response.content)
         assert data['connections'] == []
 
-    @patch('PipelineManager.views.get_elastic_connections_from_list')
+    @patch('PipelineManager.editor_views.get_elastic_connections_from_list')
     def test_get_elasticsearch_connections_error(self, mock_get_connections, authenticated_client):
         """Test GetElasticsearchConnections when an error occurs"""
         mock_get_connections.side_effect = Exception("Database connection failed")
@@ -70,7 +70,7 @@ class TestGetElasticsearchConnections:
 class TestGetElasticsearchIndices:
     """Test GetElasticsearchIndices view"""
 
-    @patch('PipelineManager.views.get_elasticsearch_indices')
+    @patch('PipelineManager.editor_views.get_elasticsearch_indices')
     def test_get_elasticsearch_indices_success(self, mock_get_indices, authenticated_client, test_connection):
         """Test successful retrieval of Elasticsearch indices"""
         mock_get_indices.return_value = [
@@ -90,7 +90,7 @@ class TestGetElasticsearchIndices:
         assert len(data['indices']) == 4
         assert 'logs-2024.01.01' in data['indices']
 
-    @patch('PipelineManager.views.get_elasticsearch_indices')
+    @patch('PipelineManager.editor_views.get_elasticsearch_indices')
     def test_get_elasticsearch_indices_with_pattern(self, mock_get_indices, authenticated_client, test_connection):
         """Test GetElasticsearchIndices with specific pattern"""
         mock_get_indices.return_value = [
@@ -118,7 +118,7 @@ class TestGetElasticsearchIndices:
 
     def test_get_elasticsearch_indices_missing_pattern(self, authenticated_client, test_connection):
         """Test GetElasticsearchIndices without pattern parameter (should use default)"""
-        with patch('PipelineManager.views.get_elasticsearch_indices') as mock_get_indices:
+        with patch('PipelineManager.editor_views.get_elasticsearch_indices') as mock_get_indices:
             mock_get_indices.return_value = ['index1', 'index2']
 
             response = authenticated_client.get(
@@ -129,7 +129,7 @@ class TestGetElasticsearchIndices:
             # Should use default pattern '*'
             mock_get_indices.assert_called_once_with(str(test_connection.id), '*')
 
-    @patch('PipelineManager.views.get_elasticsearch_indices')
+    @patch('PipelineManager.editor_views.get_elasticsearch_indices')
     def test_get_elasticsearch_indices_missing_pattern(self, mock_get_indices, authenticated_client, test_connection):
         """Test GetElasticsearchIndices with missing pattern (should default to '*')"""
         mock_get_indices.return_value = ['index1', 'index2']
@@ -142,7 +142,7 @@ class TestGetElasticsearchIndices:
         # Should use default pattern '*' - connection_id comes as string from GET params
         mock_get_indices.assert_called_once_with(str(test_connection.id), '*')
 
-    @patch('PipelineManager.views.get_elasticsearch_indices')
+    @patch('PipelineManager.editor_views.get_elasticsearch_indices')
     def test_get_elasticsearch_indices_error(self, mock_get_indices, authenticated_client, test_connection):
         """Test GetElasticsearchIndices when an error occurs"""
         mock_get_indices.side_effect = Exception("Connection timeout")
@@ -155,7 +155,7 @@ class TestGetElasticsearchIndices:
         data = json.loads(response.content)
         assert 'error' in data
 
-    @patch('PipelineManager.views.get_elasticsearch_indices')
+    @patch('PipelineManager.editor_views.get_elasticsearch_indices')
     def test_get_elasticsearch_indices_typeahead_support(self, mock_get_indices, authenticated_client, test_connection):
         """Test GetElasticsearchIndices supports typeahead functionality"""
         # Simulate typeahead search for 'log'
@@ -182,7 +182,7 @@ class TestGetElasticsearchIndices:
 class TestGetElasticsearchFields:
     """Test GetElasticsearchFields view"""
 
-    @patch('PipelineManager.views.get_elasticsearch_field_mappings')
+    @patch('PipelineManager.editor_views.get_elasticsearch_field_mappings')
     def test_get_elasticsearch_fields_success(self, mock_get_fields, authenticated_client, test_connection):
         """Test successful retrieval of Elasticsearch field mappings"""
         mock_get_fields.return_value = [
@@ -225,7 +225,7 @@ class TestGetElasticsearchFields:
         assert 'error' in data
         assert 'index' in data['error']
 
-    @patch('PipelineManager.views.get_elasticsearch_field_mappings')
+    @patch('PipelineManager.editor_views.get_elasticsearch_field_mappings')
     def test_get_elasticsearch_fields_error(self, mock_get_fields, authenticated_client, test_connection):
         """Test GetElasticsearchFields when an error occurs"""
         mock_get_fields.side_effect = Exception("Index not found")
@@ -238,7 +238,7 @@ class TestGetElasticsearchFields:
         data = json.loads(response.content)
         assert 'error' in data
 
-    @patch('PipelineManager.views.get_elasticsearch_field_mappings')
+    @patch('PipelineManager.editor_views.get_elasticsearch_field_mappings')
     def test_get_elasticsearch_fields_nested_fields(self, mock_get_fields, authenticated_client, test_connection):
         """Test GetElasticsearchFields with nested field names"""
         mock_get_fields.return_value = [
@@ -267,7 +267,7 @@ class TestGetElasticsearchFields:
 class TestQueryElasticsearchDocuments:
     """Test QueryElasticsearchDocuments view"""
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_field_method(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with field method"""
         mock_query.return_value = [
@@ -290,7 +290,7 @@ class TestQueryElasticsearchDocuments:
         assert 'documents' in data
         assert len(data['documents']) == 3
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_entire_method(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with entire document method"""
         mock_query.return_value = [
@@ -316,7 +316,7 @@ class TestQueryElasticsearchDocuments:
         assert '@timestamp' in data['documents'][0]
         assert 'message' in data['documents'][0]
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_docid_method(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with document ID method"""
         mock_query.return_value = [
@@ -375,7 +375,7 @@ class TestQueryElasticsearchDocuments:
         assert 'error' in data
         assert 'field is required' in data['error']
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_query_injection_attempt(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with potential query injection"""
         # Attempt Lucene query injection
@@ -399,7 +399,7 @@ class TestQueryElasticsearchDocuments:
         # Verify the malicious query was passed but will be handled by ES query parser
         assert malicious_query in str(call_args)
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_size_validation(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with various size values"""
         mock_query.return_value = []
@@ -421,7 +421,7 @@ class TestQueryElasticsearchDocuments:
         })
         assert response.status_code == 200
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_error_handling(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments error handling"""
         mock_query.side_effect = Exception("Elasticsearch cluster unavailable")
@@ -437,7 +437,7 @@ class TestQueryElasticsearchDocuments:
         data = json.loads(response.content)
         assert 'error' in data
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_empty_results(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with no matching documents"""
         mock_query.return_value = []
@@ -455,7 +455,7 @@ class TestQueryElasticsearchDocuments:
         data = json.loads(response.content)
         assert data['documents'] == []
 
-    @patch('PipelineManager.views.query_elasticsearch_documents')
+    @patch('PipelineManager.editor_views.query_elasticsearch_documents')
     def test_query_elasticsearch_documents_docid_multiline(self, mock_query, authenticated_client, test_connection):
         """Test QueryElasticsearchDocuments with multiple document IDs"""
         mock_query.return_value = [
