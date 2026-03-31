@@ -31,6 +31,7 @@ from logging.handlers import RotatingFileHandler
 import sys
 import argparse
 import uvicorn
+from importlib.metadata import version, PackageNotFoundError
 
 # Configure logging with file output
 # Create data/logs directory if it doesn't exist
@@ -60,8 +61,33 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger.info(f"logstashagent logging initialized - logs directory: {LOGS_DIR}")
 
+# Get agent version from pyproject.toml
+def _get_version():
+    """Get version from installed package metadata or pyproject.toml"""
+    try:
+        return version("LogstashAgent")
+    except PackageNotFoundError:
+        try:
+            import tomllib
+            # Navigate to LogstashAgent root directory (2 levels up from main.py)
+            agent_root = Path(__file__).resolve().parent.parent.parent
+            pyproject_path = agent_root / "pyproject.toml"
+            if pyproject_path.exists():
+                with open(pyproject_path, "rb") as f:
+                    pyproject_data = tomllib.load(f)
+                    return pyproject_data.get("project", {}).get("version", "0.0.0+unknown")
+        except Exception:
+            pass
+        return "0.0.0+unknown"
+
+AGENT_VERSION = _get_version()
+
 # Initialize agent state (generates agent_id on first run)
 AGENT_ID = agent_state.get_or_create_agent_id()
+
+# Save version to agent state
+agent_state.update_state('agent_version', AGENT_VERSION)
+logger.info(f"LogstashAgent version: {AGENT_VERSION}")
 
 # Load agent configuration
 # Check for config in current directory first (native mode)
@@ -484,7 +510,7 @@ async def root():
     """Health check endpoint"""
     return {
         "name": "logstashagent",
-        "version": "0.0.1",
+        "version": AGENT_VERSION,
         "status": "running",
         "logstash_version": "9.3.0"
     }

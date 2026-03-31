@@ -743,7 +743,8 @@ def check_in():
             'config_files': config_files,
             'binaries': binaries,
             'log_file': log_info,
-            'problems': '\n'.join(problems) if problems else None
+            'problems': '\n'.join(problems) if problems else None,
+            'agent_version': state.get('agent_version', '0.0.0+unknown')
         }
         
         logger.debug(f"Path validation status: {status_blob}")
