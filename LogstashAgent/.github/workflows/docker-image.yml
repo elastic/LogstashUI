@@ -1,4 +1,4 @@
-name: Build & Push LogstashUI Docker Image
+name: Build & Push LogstashAgent Docker Image
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
         id: vars
         run: |
           USER="${{ secrets.DOCKERHUB_USERNAME }}"
-          IMAGE="$USER/logstashui"
+          IMAGE="$USER/logstashagent"
 
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
@@ -35,7 +35,7 @@ jobs:
 
           echo "tags=$IMAGE:$VERSION,$IMAGE:latest" >> $GITHUB_OUTPUT
 
-      - name: Build and push LogstashUI
+      - name: Build and push LogstashAgent
         uses: docker/build-push-action@v6
         with:
           context: .
