@@ -608,10 +608,34 @@ def check_in():
             logger.error("Missing required enrollment data. Please re-enroll the agent.")
             return None
         
+        # Get paths from state
+        settings_path = state.get('settings_path', '')
+        logs_path = state.get('logs_path', '')
+        binary_path = state.get('binary_path', '')
+        
+        # Normalize path separators for cross-platform compatibility
+        if settings_path:
+            settings_path = settings_path.replace('\\', '/')
+        if logs_path:
+            logs_path = logs_path.replace('\\', '/')
+        if binary_path:
+            binary_path = binary_path.replace('\\', '/')
+        
+        # Check if paths exist
+        import os
+        status_blob = {
+            'settings_path_found': os.path.exists(settings_path) if settings_path else False,
+            'logs_path_found': os.path.exists(logs_path) if logs_path else False,
+            'binary_path_found': os.path.exists(binary_path) if binary_path else False
+        }
+        
+        logger.debug(f"Path validation status: {status_blob}")
+        
         # Prepare check-in data
         check_in_data = {
             'connection_id': connection_id,
-            'revision_number': state.get('revision_number', 0)
+            'revision_number': state.get('revision_number', 0),
+            'status_blob': status_blob
         }
         
         # Send check-in request

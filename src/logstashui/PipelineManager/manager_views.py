@@ -1447,9 +1447,15 @@ def check_in(request):
         if not api_key_obj or not api_key_obj.verify_api_key(raw_api_key):
             return JsonResponse({"success": False, "error": "Invalid API key"}, status=401)
         
-        # Update last_check_in timestamp
-
+        # Update last_check_in timestamp and status_blob
         connection.last_check_in = datetime.now(timezone.utc)
+        
+        # Extract and store status_blob if provided
+        status_blob = data.get('status_blob')
+        if status_blob:
+            connection.status_blob = status_blob
+            logger.debug(f"Updated status_blob: {status_blob}")
+        
         connection.save()
         
         # Log the check-in with configuration hashes

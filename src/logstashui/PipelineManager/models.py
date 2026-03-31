@@ -191,6 +191,11 @@ class Connection(models.Model):
         blank=True,
         help_text="Last time the agent checked in with logstashui"
     )
+    status_blob = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="JSON blob containing agent health status information"
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
