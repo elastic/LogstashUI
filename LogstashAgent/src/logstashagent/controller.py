@@ -621,12 +621,41 @@ def check_in():
         if binary_path:
             binary_path = binary_path.replace('\\', '/')
         
-        # Check if paths exist
+        # Check if paths exist and capture detailed error information
         import os
+        problems = []
+        
+        def check_path(path, path_name):
+            """Check if path exists and is accessible, return status and capture problems"""
+            if not path:
+                problems.append(f"{path_name} is not configured")
+                return False
+            
+            if not os.path.exists(path):
+                problems.append(f"{path_name} does not exist: {path}")
+                return False
+            
+            # Check if we can read the path
+            try:
+                if os.path.isdir(path):
+                    os.listdir(path)
+                else:
+                    with open(path, 'r') as f:
+                        pass
+            except PermissionError:
+                problems.append(f"{path_name} exists but permission denied: {path}")
+                return False
+            except Exception as e:
+                problems.append(f"{path_name} exists but error accessing: {path} ({str(e)})")
+                return False
+            
+            return True
+        
         status_blob = {
-            'settings_path_found': os.path.exists(settings_path) if settings_path else False,
-            'logs_path_found': os.path.exists(logs_path) if logs_path else False,
-            'binary_path_found': os.path.exists(binary_path) if binary_path else False
+            'settings_path_found': check_path(settings_path, 'Settings path'),
+            'logs_path_found': check_path(logs_path, 'Logs path'),
+            'binary_path_found': check_path(binary_path, 'Binary path'),
+            'problems': '\n'.join(problems) if problems else None
         }
         
         logger.debug(f"Path validation status: {status_blob}")

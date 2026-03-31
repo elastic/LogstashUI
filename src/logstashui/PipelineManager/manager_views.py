@@ -73,7 +73,7 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "last_check_in"))
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "last_check_in", "status_blob"))
     
     # Add is_online flag based on last_check_in time (within 10 minutes)
     now = datetime.now(timezone.utc)
