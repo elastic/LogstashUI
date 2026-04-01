@@ -381,7 +381,8 @@ def GetPolicyPipelines(request):
                 'name': p['name'],
                 'description': p['description'] or '',
                 'last_modified': p['last_updated'].strftime('%Y-%m-%d %H:%M:%S') if p['last_updated'] else 'N/A',
-                'es_id': policy_id  # Use policy_id as es_id for compatibility with frontend
+                'es_id': policy_id,  # Use policy_id as es_id for compatibility with frontend
+                'policy_id': policy_id  # Tells pipeline_list.js to use ls_id= in the editor URL
             })
 
         return JsonResponse({
@@ -568,14 +569,9 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
                 logger.info(
                     f"User '{request.user.username}' created pipeline '{pipeline_name}' in policy '{policy.name}' (ID: {policy_id})")
 
-                # Return success response with HX-Trigger to close modal and refresh list
-                # Use connection-specific event if es_id is provided (for pipeline_manager.html)
-                # Otherwise use generic event (for agent_policies.html)
+                # Return success response - redirect to pipeline editor (same as centralized)
                 response = HttpResponse("Pipeline created successfully!", status=200)
-                if es_id:
-                    response['HX-Trigger'] = f'pipelineCreated-{es_id}'
-                else:
-                    response['HX-Trigger'] = 'pipelineCreated'
+                response['HX-Redirect'] = f'/ConnectionManager/Pipelines/Editor/?ls_id={policy_id}&pipeline={pipeline_name}'
                 return response
 
             except Policy.DoesNotExist:

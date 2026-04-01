@@ -183,32 +183,30 @@
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('createPipelineModal').close()"></div>
     <div class="modal-box relative z-10">
         <h3 class="font-bold text-lg mb-4">Create New Pipeline</h3>
-        
-        <!-- Error container -->
-        <div id="createPipelineError" class="mb-4"></div>
-        
+
         <form hx-post="/ConnectionManager/CreatePipeline/"
               hx-swap="none"
-              hx-on::before-request="document.getElementById('createPipelineError').innerHTML = ''"
-              hx-on::after-request="
-                if (event.detail.xhr.status === 403) {
-                  // Permission denied - close modal (toast will be shown automatically)
+              hx-on::before-request="
+                const pipelineName = event.target.querySelector('[name=pipeline]').value;
+                const stateKey = '{{ es_id|default:'policy' }}';
+                const state = pipelineStates[stateKey];
+                if (state && state.allPipelines.some(p => p.name === pipelineName)) {
+                  event.preventDefault();
                   document.getElementById('createPipelineModal').close();
-                } else if (event.detail.xhr.status === 200) {
-                  // Success - close modal
-                  document.getElementById('createPipelineModal').close();
-                  // Clear form
                   event.target.reset();
+                  showToast('A pipeline with that name already exists', 'error');
                 }
               "
-              hx-on::response-error="
-                if (event.detail.xhr.status !== 403) {
-                  const errorDiv = document.getElementById('createPipelineError');
-                  errorDiv.innerHTML = `
-                    <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
-                      <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while creating the pipeline'}</p>
-                    </div>
-                  `;
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  document.getElementById('createPipelineModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  document.getElementById('createPipelineModal').close();
+                  event.target.reset();
+                } else {
+                  document.getElementById('createPipelineModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while creating the pipeline', 'error');
                 }
               ">
             {% csrf_token %}
@@ -256,31 +254,19 @@
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('clonePipelineModal').close()"></div>
     <div class="modal-box relative z-10">
         <h3 class="font-bold text-lg mb-4">Clone Pipeline: <span id="cloneSourcePipeline"></span></h3>
-        
-        <!-- Error container -->
-        <div id="clonePipelineError" class="mb-4"></div>
-        
+
         <form hx-post="/ConnectionManager/ClonePipeline/"
               hx-swap="none"
-              hx-on::before-request="document.getElementById('clonePipelineError').innerHTML = ''"
               hx-on::after-request="
                 if (event.detail.xhr.status === 403) {
-                  // Permission denied - close modal (toast will be shown automatically)
                   document.getElementById('clonePipelineModal').close();
                 } else if (event.detail.xhr.status === 200) {
-                  // Success - close modal and clear form (HX-Trigger will handle refresh)
                   document.getElementById('clonePipelineModal').close();
                   event.target.reset();
-                }
-              "
-              hx-on::response-error="
-                if (event.detail.xhr.status !== 403) {
-                  const errorDiv = document.getElementById('clonePipelineError');
-                  errorDiv.innerHTML = `
-                    <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
-                      <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while cloning the pipeline'}</p>
-                    </div>
-                  `;
+                } else {
+                  document.getElementById('clonePipelineModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while cloning the pipeline', 'error');
                 }
               ">
             {% csrf_token %}
@@ -316,31 +302,19 @@
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('renamePipelineModal').close()"></div>
     <div class="modal-box relative z-10">
         <h3 class="font-bold text-lg mb-4">Rename Pipeline: <span id="renameSourcePipeline"></span></h3>
-        
-        <!-- Error container -->
-        <div id="renamePipelineError" class="mb-4"></div>
-        
+
         <form hx-post="/ConnectionManager/RenamePipeline/"
               hx-swap="none"
-              hx-on::before-request="document.getElementById('renamePipelineError').innerHTML = ''"
               hx-on::after-request="
                 if (event.detail.xhr.status === 403) {
-                  // Permission denied - close modal (toast will be shown automatically)
                   document.getElementById('renamePipelineModal').close();
                 } else if (event.detail.xhr.status === 200) {
-                  // Success - close modal and clear form (HX-Trigger will handle refresh)
                   document.getElementById('renamePipelineModal').close();
                   event.target.reset();
-                }
-              "
-              hx-on::response-error="
-                if (event.detail.xhr.status !== 403) {
-                  const errorDiv = document.getElementById('renamePipelineError');
-                  errorDiv.innerHTML = `
-                    <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
-                      <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while renaming the pipeline'}</p>
-                    </div>
-                  `;
+                } else {
+                  document.getElementById('renamePipelineModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while renaming the pipeline', 'error');
                 }
               ">
             {% csrf_token %}
@@ -376,29 +350,19 @@
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('updateDescriptionModal').close()"></div>
     <div class="modal-box relative z-10">
         <h3 class="font-bold text-lg mb-4">Update Description: <span id="updateDescriptionPipelineName"></span></h3>
-        
-        <!-- Error container -->
-        <div id="updateDescriptionError" class="mb-4"></div>
-        
+
         <form hx-post="/ConnectionManager/UpdatePipelineDescription/"
               hx-swap="none"
-              hx-on::before-request="document.getElementById('updateDescriptionError').innerHTML = ''"
               hx-on::after-request="
                 if (event.detail.xhr.status === 403) {
                   document.getElementById('updateDescriptionModal').close();
                 } else if (event.detail.xhr.status === 200) {
                   document.getElementById('updateDescriptionModal').close();
                   event.target.reset();
-                }
-              "
-              hx-on::response-error="
-                if (event.detail.xhr.status !== 403) {
-                  const errorDiv = document.getElementById('updateDescriptionError');
-                  errorDiv.innerHTML = `
-                    <div class='p-4 bg-red-900/20 border border-red-600 rounded-lg'>
-                      <p class='text-red-400 text-sm'>${event.detail.xhr.responseText || 'An error occurred while updating the description'}</p>
-                    </div>
-                  `;
+                } else {
+                  document.getElementById('updateDescriptionModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while updating the description', 'error');
                 }
               ">
             {% csrf_token %}
