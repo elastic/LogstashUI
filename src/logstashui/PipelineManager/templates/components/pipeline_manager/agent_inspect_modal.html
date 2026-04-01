@@ -1,0 +1,40 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- Agent Inspect Flyout -->
+<div id="agentInspectFlyout" class="hidden fixed inset-0 overflow-hidden" style="z-index: 80;">
+
+  <!-- Backdrop -->
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeAgentInspect()"></div>
+
+  <!-- Panel -->
+  <div class="absolute inset-y-0 right-0 flex max-w-full pointer-events-none">
+    <div class="pointer-events-auto w-screen max-w-lg flex flex-col h-full bg-gray-900 border-l border-gray-700/60 shadow-2xl">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800/80 flex-shrink-0">
+        <div>
+          <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">Agent Inspector</p>
+          <p id="agentInspectSubtitle" class="text-sm font-medium text-gray-300 mt-0.5"></p>
+        </div>
+        <button onclick="closeAgentInspect()"
+                class="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800 transition-colors flex-shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Scrollable Body -->
+      <div class="flex-1 overflow-y-auto">
+        <div id="agentInspectContent" class="p-5 space-y-3">
+          <!-- Content injected by openAgentInspect() -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
