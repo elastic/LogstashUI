@@ -22,7 +22,7 @@
                 <h1 class="text-5xl font-bold text-white">Welcome to LogstashUI</h1>
             </div>
             <p class="text-xl text-gray-300 max-w-3xl mx-auto mb-8">
-                A modern web-based interface for managing and monitoring your Logstash pipelines.
+                A modern web-based interface for managing and monitoring your Logstash instances and pipelines
             </p>
             <div class="flex justify-center gap-4">
                 <a href="/ConnectionManager/" class="btn btn-primary btn-lg gap-2">
@@ -31,28 +31,22 @@
                     </svg>
                     Get Started
                 </a>
-                <a href="/Monitoring" class="btn btn-outline btn-lg gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    View Monitoring
-                </a>
             </div>
         </div>
 
         <!-- Features Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-            <div class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 hover:border-blue-500 transition-colors">
+            <a href="/ConnectionManager/" class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 hover:border-blue-500 transition-colors block">
                 <div class="w-12 h-12 bg-blue-600/20 rounded-lg flex items-center justify-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                 </div>
-                <h3 class="text-xl font-semibold text-white mb-2">Pipeline Management</h3>
-                <p class="text-gray-400">Visually manage your Logstash pipeline configurations with an intuitive drag-and-drop interface.</p>
-            </div>
+                <h3 class="text-xl font-semibold text-white mb-2">Logstash Management</h3>
+                <p class="text-gray-400">Manage your Logstash instances using Logstash Agent or Centralized Pipeline Management, build or edit pipelines using various UI modes</p>
+            </a>
 
-            <div class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 hover:border-green-500 transition-colors">
+            <a href="/Monitoring" class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 hover:border-green-500 transition-colors block">
                 <div class="w-12 h-12 bg-green-600/20 rounded-lg flex items-center justify-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -60,39 +54,23 @@
                 </div>
                 <h3 class="text-xl font-semibold text-white mb-2">Real-time Monitoring</h3>
                 <p class="text-gray-400">Monitor pipeline metrics, performance, and health in real-time across all your Logstash instances.</p>
-            </div>
+            </a>
 
-            <div class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition-colors">
+            <a href="/SNMP/Devices" class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-6 border border-gray-700 hover:border-purple-500 transition-colors block">
                 <div class="w-12 h-12 bg-purple-600/20 rounded-lg flex items-center justify-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
-                <h3 class="text-xl font-semibold text-white mb-2">Centralized Control</h3>
-                <p class="text-gray-400">Manage multiple Logstash instances and Elasticsearch connections from a single, unified interface.</p>
-            </div>
+                <h3 class="text-xl font-semibold text-white mb-2">Simple Network Management Protocol (SNMP)</h3>
+                <p class="text-gray-400">Set up devices and profiles to have your Logstash instances perform polling, discovery, and trap collection</p>
+            </a>
         </div>
 
         <!-- Quick Links Section -->
         <div class="bg-gray-800/50 backdrop-blur-sm rounded-lg p-8 border border-gray-700 mb-16">
             <h2 class="text-2xl font-bold text-white mb-6">Useful Resources</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <a href="https://www.elastic.co/guide/en/logstash/current/index.html" target="_blank" rel="noopener noreferrer" 
-                   class="flex items-center gap-4 p-4 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors group">
-                    <div class="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="text-white font-semibold">Logstash Documentation</h3>
-                        <p class="text-gray-400 text-sm">Official Elastic Logstash documentation and guides</p>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 group-hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                </a>
-
                 <a href="https://github.com/elastic/LogstashUI" target="_blank" rel="noopener noreferrer"
                    class="flex items-center gap-4 p-4 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors group">
                     <div class="w-10 h-10 bg-gray-600/20 rounded-lg flex items-center justify-center group-hover:bg-gray-600/30 transition-colors">
@@ -119,6 +97,22 @@
                     <div class="flex-1">
                         <h3 class="text-white font-semibold">Report an Issue</h3>
                         <p class="text-gray-400 text-sm">Found a bug? Let us know on GitHub</p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 group-hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                </a>
+
+                <a href="https://www.elastic.co/guide/en/logstash/current/index.html" target="_blank" rel="noopener noreferrer"
+                   class="flex items-center gap-4 p-4 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors group">
+                    <div class="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-white font-semibold">Logstash Documentation</h3>
+                        <p class="text-gray-400 text-sm">Official Elastic Logstash documentation and guides</p>
                     </div>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 group-hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
