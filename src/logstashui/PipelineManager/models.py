@@ -279,6 +279,12 @@ class Pipeline(models.Model):
         null=True,
         help_text="Hash of the LSCL content for change detection"
     )
+    pipeline_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        help_text="SHA256 hash of pipeline name + lscl + all settings, for agent change detection"
+    )
     last_updated = models.DateTimeField(auto_now=True)
 
     revision_number = models.IntegerField(
@@ -324,7 +330,16 @@ class Pipeline(models.Model):
                 name='unique_pipeline_per_policy'
             )
         ]
-    
+
+    def save(self, *args, **kwargs):
+        hash_input = (
+            f"{self.name}{self.lscl}{self.pipeline_workers}{self.pipeline_batch_size}"
+            f"{self.pipeline_batch_delay}{self.queue_type}{self.queue_max_bytes}"
+            f"{self.queue_checkpoint_writes}"
+        )
+        self.pipeline_hash = hashlib.sha256(hash_input.encode('utf-8')).hexdigest()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.policy.name} - {self.name}"
 

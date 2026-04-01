@@ -1792,7 +1792,7 @@ def get_config_changes(request):
     """
     Compare agent's current config file hashes and paths with the policy's expected values.
     Returns which configuration files need to be updated.
-    
+
     Expected request data:
     {
         "connection_id": int,
@@ -1801,7 +1801,8 @@ def get_config_changes(request):
         "log4j2_properties_hash": str,
         "settings_path": str,
         "logs_path": str,
-        "keystore": dict  # {key_name: hash}
+        "keystore": dict,   # {key_name: hash}
+        "pipelines": dict   # {pipeline_name: {config_hash: str, settings: {...}}}
     }
     """
     if request.method != 'POST':
@@ -1936,6 +1937,40 @@ def get_config_changes(request):
         else:
             changes['keystore'] = False
 
+        # Check pipelines
+        agent_pipelines = data.get('pipelines', {})  # {name: {config_hash, settings}}
+        policy_pipelines_qs = policy.pipelines.all()
+
+        pipeline_changes = {'set': {}, 'delete': []}
+
+        # Agent pipelines not in policy → delete
+        for agent_pipeline_name in agent_pipelines:
+            if not policy_pipelines_qs.filter(name=agent_pipeline_name).exists():
+                pipeline_changes['delete'].append(agent_pipeline_name)
+
+        # Policy pipelines — send if missing on agent or hash differs
+        for p in policy_pipelines_qs:
+            agent_entry = agent_pipelines.get(p.name)
+            needs_update = (
+                agent_entry is None or
+                agent_entry.get('config_hash') != p.pipeline_hash
+            )
+            if needs_update:
+                pipeline_changes['set'][p.name] = {
+                    'lscl': p.lscl,
+                    'pipeline_hash': p.pipeline_hash,
+                    'settings': {
+                        'pipeline_workers': p.pipeline_workers,
+                        'pipeline_batch_size': p.pipeline_batch_size,
+                        'pipeline_batch_delay': p.pipeline_batch_delay,
+                        'queue_type': p.queue_type,
+                        'queue_max_bytes': p.queue_max_bytes,
+                        'queue_checkpoint_writes': p.queue_checkpoint_writes,
+                    }
+                }
+
+        changes['pipelines'] = pipeline_changes if (pipeline_changes['set'] or pipeline_changes['delete']) else False
+
         config_statuses = ", ".join([
             f"logstash_yml={'CHANGED' if changes.get('logstash_yml') else 'unchanged'}",
             f"jvm={'CHANGED' if changes.get('jvm_options') else 'unchanged'}",
@@ -1949,9 +1984,15 @@ def get_config_changes(request):
             ks_summary = f"CHANGED (set={list(ks['set'].keys())}, delete={ks['delete']})"
         else:
             ks_summary = "unchanged"
+        pl = changes.get('pipelines')
+        if pl:
+            pl_summary = f"CHANGED (set={list(pl['set'].keys())}, delete={pl['delete']})"
+        else:
+            pl_summary = "unchanged"
         logger.info(
             f"Config change check conn={connection_id}: [{config_statuses}] "
-            f"keystore(agent={len(agent_keystore)}, policy={policy_keystore_entries.count()}, {ks_summary})"
+            f"keystore(agent={len(agent_keystore)}, policy={policy_keystore_entries.count()}, {ks_summary}) "
+            f"pipelines(agent={len(agent_pipelines)}, policy={policy_pipelines_qs.count()}, {pl_summary})"
         )
 
         return JsonResponse({

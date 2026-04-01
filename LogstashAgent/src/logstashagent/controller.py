@@ -305,6 +305,226 @@ def update_keystore(settings_path, keystore_changes):
         return False
 
 
+def build_pipelines_state(settings_path):
+    """
+    Scans {settings_path}/conf.d/*.conf and {settings_path}/pipelines.yml to build
+    the current pipelines state dict from agent state (stored pipeline_hash values).
+
+    Returns:
+        dict: {pipeline_name: {config_hash: str, settings: {...}}}
+              config_hash is the server's pipeline_hash stored after the last apply.
+    """
+    try:
+        import os
+        import yaml
+
+        if settings_path:
+            settings_path = settings_path.replace('\\', '/')
+        if not settings_path.endswith('/'):
+            settings_path = settings_path + '/'
+
+        conf_d_path = settings_path + 'conf.d/'
+
+        # Start from persisted state so config_hash values are the server's pipeline_hash
+        state = agent_state.get_state()
+        persisted_pipelines = state.get('pipelines', {})
+
+        if not os.path.isdir(conf_d_path):
+            logger.debug(f"conf.d directory not found at {conf_d_path}, returning empty pipelines state")
+            return {}
+
+        conf_files = [f for f in os.listdir(conf_d_path) if f.endswith('.conf')]
+        if not conf_files:
+            logger.debug("No .conf files found in conf.d")
+            return {}
+
+        # Parse pipelines.yml for per-pipeline settings
+        pipelines_yml_path = settings_path + 'pipelines.yml'
+        pipeline_settings_map = {}
+        try:
+            with open(pipelines_yml_path, 'r', encoding='utf-8') as f:
+                pipeline_list = yaml.safe_load(f)
+            if isinstance(pipeline_list, list):
+                for entry in pipeline_list:
+                    pid = entry.get('pipeline.id')
+                    if pid:
+                        pipeline_settings_map[pid] = {
+                            'pipeline_workers': entry.get('pipeline.workers', 1),
+                            'pipeline_batch_size': entry.get('pipeline.batch.size', 128),
+                            'pipeline_batch_delay': entry.get('pipeline.batch.delay', 50),
+                            'queue_type': entry.get('queue.type', 'memory'),
+                            'queue_max_bytes': entry.get('queue.max_bytes', '1gb'),
+                            'queue_checkpoint_writes': entry.get('queue.checkpoint.writes', 1024),
+                        }
+        except FileNotFoundError:
+            logger.debug(f"pipelines.yml not found at {pipelines_yml_path}")
+        except Exception as e:
+            logger.warning(f"Failed to parse pipelines.yml: {e}")
+
+        pipelines_state = {}
+        for conf_file in conf_files:
+            pipeline_name = conf_file[:-5]  # strip .conf
+            # Use the stored server pipeline_hash as config_hash for stable comparison
+            stored = persisted_pipelines.get(pipeline_name, {})
+            config_hash = stored.get('config_hash', '')
+            settings = pipeline_settings_map.get(pipeline_name, stored.get('settings', {}))
+            pipelines_state[pipeline_name] = {
+                'config_hash': config_hash,
+                'settings': settings,
+            }
+
+        logger.debug(f"Built pipelines state: {list(pipelines_state.keys())}")
+        return pipelines_state
+
+    except Exception as e:
+        logger.error(f"Failed to build pipelines state: {e}")
+        return {}
+
+
+def update_pipelines(settings_path, pipeline_changes):
+    """
+    Apply pipeline set/delete directives from the server.
+
+    - Writes {settings_path}/conf.d/{name}.conf for each entry in 'set'
+    - Deletes {settings_path}/conf.d/{name}.conf for each entry in 'delete'
+    - Rewrites {settings_path}/pipelines.yml from current conf.d state
+    - Updates agent state with new pipelines dict (using server pipeline_hash values)
+
+    Args:
+        settings_path: Path to Logstash settings directory
+        pipeline_changes: {'set': {name: {lscl, pipeline_hash, settings}}, 'delete': [name, ...]}
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        import os
+        import yaml
+
+        if settings_path:
+            settings_path = settings_path.replace('\\', '/')
+        if not settings_path.endswith('/'):
+            settings_path = settings_path + '/'
+
+        conf_d_path = settings_path + 'conf.d/'
+        pipelines_yml_path = settings_path + 'pipelines.yml'
+
+        pipelines_to_set = pipeline_changes.get('set', {})
+        pipelines_to_delete = pipeline_changes.get('delete', [])
+
+        logger.info(f"Pipeline update: {len(pipelines_to_set)} to set, {len(pipelines_to_delete)} to delete")
+
+        if not pipelines_to_set and not pipelines_to_delete:
+            logger.info("No pipeline changes to apply")
+            return False
+
+        # Ensure conf.d directory exists
+        os.makedirs(conf_d_path, exist_ok=True)
+
+        # Process deletes
+        for pipeline_name in pipelines_to_delete:
+            conf_path = conf_d_path + pipeline_name + '.conf'
+            try:
+                if os.path.isfile(conf_path):
+                    os.remove(conf_path)
+                    logger.info(f"Deleted pipeline config: {conf_path}")
+                else:
+                    logger.debug(f"Pipeline config not found (already gone): {conf_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete pipeline config {conf_path}: {e}")
+                return False
+
+        # Process sets
+        for pipeline_name, pipeline_data in pipelines_to_set.items():
+            lscl_content = pipeline_data.get('lscl', '')
+            conf_path = conf_d_path + pipeline_name + '.conf'
+            try:
+                with open(conf_path, 'w', encoding='utf-8') as f:
+                    f.write(lscl_content)
+                logger.info(f"Wrote pipeline config: {conf_path}")
+            except Exception as e:
+                logger.error(f"Failed to write pipeline config {conf_path}: {e}")
+                return False
+
+        # Build current state from conf.d (all .conf files now present)
+        try:
+            conf_files = [f for f in os.listdir(conf_d_path) if f.endswith('.conf')]
+        except Exception as e:
+            logger.error(f"Failed to list conf.d directory: {e}")
+            return False
+
+        # Load existing agent state for settings of pipelines we didn't just receive
+        existing_state = agent_state.get_state()
+        existing_pipelines = existing_state.get('pipelines', {})
+
+        # Build pipelines.yml entries and new agent state
+        yml_entries = []
+        new_pipelines_state = {}
+
+        for conf_file in sorted(conf_files):
+            pipeline_name = conf_file[:-5]  # strip .conf
+
+            # Get settings: prefer freshly received, fall back to existing state
+            if pipeline_name in pipelines_to_set:
+                settings = pipelines_to_set[pipeline_name].get('settings', {})
+                config_hash = pipelines_to_set[pipeline_name].get('pipeline_hash', '')
+            else:
+                existing = existing_pipelines.get(pipeline_name, {})
+                settings = existing.get('settings', {})
+                config_hash = existing.get('config_hash', '')
+
+            workers = settings.get('pipeline_workers', 1)
+            batch_size = settings.get('pipeline_batch_size', 128)
+            batch_delay = settings.get('pipeline_batch_delay', 50)
+            queue_type = settings.get('queue_type', 'memory')
+            queue_max_bytes = settings.get('queue_max_bytes', '1gb')
+            checkpoint_writes = settings.get('queue_checkpoint_writes', 1024)
+
+            yml_entry = {
+                'pipeline.id': pipeline_name,
+                'path.config': f"{conf_d_path}{pipeline_name}.conf",
+                'pipeline.workers': workers,
+                'pipeline.batch.size': batch_size,
+                'pipeline.batch.delay': batch_delay,
+                'queue.type': queue_type,
+                'queue.max_bytes': queue_max_bytes,
+                'queue.checkpoint.writes': checkpoint_writes,
+            }
+            yml_entries.append(yml_entry)
+
+            new_pipelines_state[pipeline_name] = {
+                'config_hash': config_hash,
+                'settings': {
+                    'pipeline_workers': workers,
+                    'pipeline_batch_size': batch_size,
+                    'pipeline_batch_delay': batch_delay,
+                    'queue_type': queue_type,
+                    'queue_max_bytes': queue_max_bytes,
+                    'queue_checkpoint_writes': checkpoint_writes,
+                }
+            }
+
+        # Write pipelines.yml
+        try:
+            with open(pipelines_yml_path, 'w', encoding='utf-8') as f:
+                yaml.dump(yml_entries, f, default_flow_style=False, allow_unicode=True)
+            logger.info(f"Rewrote pipelines.yml with {len(yml_entries)} pipeline(s)")
+        except Exception as e:
+            logger.error(f"Failed to write pipelines.yml: {e}")
+            return False
+
+        # Update agent state
+        agent_state.update_state('pipelines', new_pipelines_state)
+        logger.info(f"Updated agent pipelines state with {len(new_pipelines_state)} pipeline(s)")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Unexpected error in update_pipelines: {e}")
+        logger.exception("update_pipelines exception details:")
+        return False
+
+
 def restart_logstash():
     """
     Restart the Logstash service.
@@ -463,7 +683,11 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
         # Get keystore state from agent state
         keystore_state = state.get('keystore', {})
         logger.debug(f"Current keystore state: {keystore_state}")
-        
+
+        # Get pipelines state
+        pipelines_state = build_pipelines_state(settings_path)
+        logger.debug(f"Current pipelines state: {list(pipelines_state.keys())}")
+
         # Prepare request data
         request_data = {
             'connection_id': connection_id,
@@ -473,7 +697,8 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             'settings_path': settings_path,
             'logs_path': logs_path,
             'binary_path': binary_path,
-            'keystore': keystore_state
+            'keystore': keystore_state,
+            'pipelines': pipelines_state,
         }
         
         # Send request to server
@@ -560,6 +785,15 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                     files_updated = True
                 else:
                     failed_operations.append('keystore update failed')
+
+            # Handle pipeline changes
+            pipeline_changes = changes.get('pipelines')
+            if pipeline_changes and pipeline_changes != False:
+                logger.info("Pipeline changes detected")
+                if update_pipelines(settings_path, pipeline_changes):
+                    files_updated = True
+                else:
+                    failed_operations.append('pipelines update failed')
 
             # If any files were updated, restart Logstash (only if files existed before)
             if files_updated:
