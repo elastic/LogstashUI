@@ -84,17 +84,7 @@
         <div class="border-t border-gray-700 pt-4">
           <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Pipeline Configuration Settings</h4>
         </div>
-        <div class="grid grid-cols-3 gap-4">
-          <!-- Config Path -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">Config Path</label>
-            <input type="text" id="guideConfigPath" placeholder="/etc/logstash/pipelines.yml" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncGuideToMain('path.config', this.value); validateDefaultGuide();">
-            <p class="text-xs text-gray-300 mt-2">
-              Config path must match where your pipelines.yml is located.
-              <a href="javascript:void(0)" onclick="setGuideConfigPathFromPolicy()" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set it from your Policy settings path</a>
-            </p>
-          </div>
-
+        <div class="grid grid-cols-2 gap-4">
           <!-- Config Reload Automatic -->
           <div>
             <label class="block text-sm font-medium text-gray-300 mb-2">Config Reload Automatic</label>

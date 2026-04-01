@@ -6,6 +6,12 @@ import warnings
 # Suppress FastAPI deprecation warnings before importing FastAPI
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+import sys
+
+# Check early whether we're in a non-simulation mode (--run or --enroll).
+# slots starts background threads on import, so we skip it in these modes.
+_SKIP_SIMULATION_IMPORTS = '--run' in sys.argv or '--enroll' in sys.argv
+
 from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
@@ -16,8 +22,9 @@ import json
 import glob
 import logging
 import re
-from logstashagent import agent_state, enrollment, log_analyzer, logstash_supervisor, controller, \
-    slots
+from logstashagent import agent_state, enrollment, log_analyzer, logstash_supervisor, controller
+if not _SKIP_SIMULATION_IMPORTS:
+    from logstashagent import slots
 from logstashagent.logstash_api import LogstashAPI
 import requests
 import time
@@ -28,7 +35,6 @@ from collections import deque
 import threading
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
-import sys
 import argparse
 import uvicorn
 from importlib.metadata import version, PackageNotFoundError

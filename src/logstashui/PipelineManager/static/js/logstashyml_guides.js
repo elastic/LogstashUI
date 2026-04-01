@@ -107,13 +107,6 @@ function syncMainToGuide() {
         guideApiPort.value = apiPort.value;
     }
 
-    // Config Path
-    const configPath = document.querySelector('[name="path.config"]');
-    const guideConfigPath = document.getElementById('guideConfigPath');
-    if (configPath && guideConfigPath) {
-        guideConfigPath.value = configPath.value;
-    }
-
     // Config Reload Automatic
     const configReloadAutomatic = document.querySelector('[name="config.reload.automatic"]');
     const guideConfigReloadAutomatic = document.getElementById('guideConfigReloadAutomatic');
@@ -221,20 +214,6 @@ function validateDefaultGuide() {
         }
     }
 
-    // Validate Config Path (should be non-empty)
-    const guideConfigPath = document.getElementById('guideConfigPath');
-    if (guideConfigPath) {
-        if (guideConfigPath.value && guideConfigPath.value.trim() !== '') {
-            guideConfigPath.classList.remove('border-red-500', 'border-red-600');
-            guideConfigPath.classList.add('border-green-500', 'border-green-600');
-            greenCount++;
-        } else {
-            guideConfigPath.classList.remove('border-green-500', 'border-green-600');
-            guideConfigPath.classList.add('border-red-500', 'border-red-600');
-            redCount++;
-        }
-    }
-
     // Validate Config Reload Automatic (should be 'true')
     const guideConfigReloadAutomatic = document.getElementById('guideConfigReloadAutomatic');
     if (guideConfigReloadAutomatic) {
@@ -269,7 +248,7 @@ function validateDefaultGuide() {
     const statusText = document.getElementById('guideStatusText');
 
     if (statusTracker && statusIcon && statusText) {
-        if (redCount === 0 && greenCount === 9) {
+        if (redCount === 0 && greenCount === 8) {
             // All green - success state
             statusTracker.classList.remove('bg-orange-900/20', 'border', 'border-orange-500/40');
             statusTracker.classList.add('bg-green-900/20', 'border', 'border-green-500/40');
@@ -400,28 +379,6 @@ function setGuideApiPort(value) {
     detectChanges();
     checkConfigNotifications();
     validateDefaultGuide();
-}
-
-function setGuideConfigPathFromPolicy() {
-    const settingsPath = document.getElementById('settingsPath');
-    const guideConfigPath = document.getElementById('guideConfigPath');
-    const mainConfigPath = document.querySelector('[name="path.config"]');
-
-    if (settingsPath && settingsPath.value) {
-        const base = settingsPath.value;
-        const value = base.endsWith('/') ? base + 'pipelines.yml' : base + '/pipelines.yml';
-
-        if (guideConfigPath) {
-            guideConfigPath.value = value;
-        }
-        if (mainConfigPath) {
-            mainConfigPath.value = value;
-        }
-
-        detectChanges();
-        checkConfigNotifications();
-        validateDefaultGuide();
-    }
 }
 
 function setGuideConfigReloadAutomatic(value) {
