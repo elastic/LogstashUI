@@ -401,22 +401,20 @@ def UpdatePipelineSettings(request):
     if request.method == "POST":
         try:
             es_id = request.POST.get("es_id")
+            ls_id = request.POST.get("ls_id")
             pipeline_name = request.POST.get("pipeline")
 
-            # Validate required fields
-            if not es_id or not pipeline_name:
+            # Validate required fields - need either es_id or ls_id
+            if not (es_id or ls_id) or not pipeline_name:
                 return HttpResponse(
-                    '<div class="text-red-400 text-sm">Error: Missing pipeline ID or connection ID</div>',
+                    'Error: Missing pipeline ID or connection ID',
                     status=400
                 )
 
             # Validate pipeline name
             is_valid, error_msg = validate_pipeline_name(pipeline_name)
             if not is_valid:
-                return HttpResponse(
-                    f'<div class="text-red-400 text-sm">{error_msg}</div>',
-                    status=400
-                )
+                return HttpResponse(error_msg, status=400)
 
             # Get form values
             description = request.POST.get("description", "")
@@ -428,46 +426,80 @@ def UpdatePipelineSettings(request):
             queue_max_bytes_unit = request.POST.get("queue_max_bytes_unit")
             queue_checkpoint_writes = request.POST.get("queue_checkpoint_writes")
 
-            # Build settings body - only include non-empty values
-            current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
-            settings_body = {
-                "pipeline": current_pipeline_config['pipeline'],
-                "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
-                "pipeline_metadata": {
-                    "version": current_pipeline_config['pipeline_metadata']['version'] + 1,
-                    "type": "logstash_pipeline"
-                },
-                "username": "logstashui",
-                "pipeline_settings": {},
+            # Handle ls_id (agent pipeline) vs es_id (centralized pipeline)
+            if ls_id:
+                # Update Pipeline model for agent policy
+                try:
+                    pipeline_obj = Pipeline.objects.get(policy_id=ls_id, name=pipeline_name)
+                    
+                    # Update fields
+                    if description is not None:
+                        pipeline_obj.description = description
+                    if pipeline_workers:
+                        pipeline_obj.pipeline_workers = int(pipeline_workers)
+                    if pipeline_batch_size:
+                        pipeline_obj.pipeline_batch_size = int(pipeline_batch_size)
+                    if pipeline_batch_delay:
+                        pipeline_obj.pipeline_batch_delay = int(pipeline_batch_delay)
+                    if queue_type:
+                        pipeline_obj.queue_type = queue_type
+                    if queue_max_bytes is not None and queue_max_bytes != '' and queue_max_bytes_unit:
+                        pipeline_obj.queue_max_bytes = f"{queue_max_bytes}{queue_max_bytes_unit}"
+                    if queue_checkpoint_writes:
+                        pipeline_obj.queue_checkpoint_writes = int(queue_checkpoint_writes)
+                    
+                    pipeline_obj.save()
+                    
+                    # Mark policy as having undeployed changes
+                    policy = Policy.objects.get(pk=ls_id)
+                    policy.has_undeployed_changes = True
+                    policy.save(update_fields=['has_undeployed_changes'])
+                    
+                    logger.info(
+                        f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' in policy {ls_id}")
+                    return HttpResponse('', status=200)
+                    
+                except Pipeline.DoesNotExist:
+                    return HttpResponse(f"Pipeline '{pipeline_name}' not found in policy {ls_id}", status=404)
+            else:
+                # Update centralized pipeline via Elasticsearch
+                current_pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
+                settings_body = {
+                    "pipeline": current_pipeline_config['pipeline'],
+                    "last_modified": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+                    "pipeline_metadata": {
+                        "version": current_pipeline_config['pipeline_metadata']['version'] + 1,
+                        "type": "logstash_pipeline"
+                    },
+                    "username": "logstashui",
+                    "pipeline_settings": {},
+                }
 
-            }
+                if 'description' in current_pipeline_config:
+                    settings_body['description'] = current_pipeline_config['description']
 
-            if 'description' in current_pipeline_config:
-                settings_body['description'] = current_pipeline_config['description']
+                if description:
+                    settings_body["description"] = description
+                if pipeline_workers:
+                    settings_body['pipeline_settings']["pipeline.workers"] = int(pipeline_workers)
+                if pipeline_batch_size:
+                    settings_body['pipeline_settings']["pipeline.batch.size"] = int(pipeline_batch_size)
+                if pipeline_batch_delay:
+                    settings_body['pipeline_settings']["pipeline.batch.delay"] = int(pipeline_batch_delay)
+                if queue_type:
+                    settings_body['pipeline_settings']["queue.type"] = queue_type
+                if queue_max_bytes is not None and queue_max_bytes != '' and queue_max_bytes_unit:
+                    settings_body['pipeline_settings']["queue.max_bytes"] = f"{queue_max_bytes}{queue_max_bytes_unit}"
+                if queue_checkpoint_writes:
+                    settings_body['pipeline_settings']["queue.checkpoint.writes"] = int(queue_checkpoint_writes)
 
-            if description:
-                settings_body["description"] = description
-            if pipeline_workers:
-                settings_body['pipeline_settings']["pipeline.workers"] = int(pipeline_workers)
-            if pipeline_batch_size:
-                settings_body['pipeline_settings']["pipeline.batch.size"] = int(pipeline_batch_size)
-            if pipeline_batch_delay:
-                settings_body['pipeline_settings']["pipeline.batch.delay"] = int(pipeline_batch_delay)
-            if queue_type:
-                settings_body['pipeline_settings']["queue.type"] = queue_type
-            if queue_max_bytes:
-                settings_body['pipeline_settings']["queue.max_bytes"] = f"{queue_max_bytes}{queue_max_bytes_unit}"
-            if queue_checkpoint_writes:
-                settings_body['pipeline_settings']["queue.checkpoint.writes"] = int(queue_checkpoint_writes)
+                # Get Elasticsearch connection and update pipeline settings
+                es = get_elastic_connection(es_id)
+                es.logstash.put_pipeline(id=pipeline_name, body=settings_body)
 
-            # Get Elasticsearch connection and update pipeline settings
-            es = get_elastic_connection(es_id)
-            es.logstash.put_pipeline(id=pipeline_name, body=settings_body)
-
-            logger.info(
-                f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' (Connection ID: {es_id})")
-            # Return empty response - toast notification handled by JavaScript
-            return HttpResponse('', status=200)
+                logger.info(
+                    f"User '{request.user.username}' updated settings for pipeline '{pipeline_name}' (Connection ID: {es_id})")
+                return HttpResponse('', status=200)
 
         except Exception as e:
             # Return simple error message - toast notification handled by JavaScript

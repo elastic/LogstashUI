@@ -36,55 +36,6 @@ function togglePipelineSettings() {
     }
 }
 
-/**
- * Show a temporary notification that settings were saved
- */
-function showSettingsSavedNotification(message = 'Pipeline settings saved successfully') {
-    const notification = document.createElement('div');
-    notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center';
-    notification.innerHTML = `
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        ${message}
-    `;
-
-    document.body.appendChild(notification);
-
-    // Remove notification after 3 seconds
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        notification.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => {
-            document.body.removeChild(notification);
-        }, 300);
-    }, 3000);
-}
-
-/**
- * Show a temporary error notification
- */
-function showSettingsErrorNotification(message = 'Failed to save pipeline settings') {
-    const notification = document.createElement('div');
-    notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center';
-    notification.innerHTML = `
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-        ${message}
-    `;
-
-    document.body.appendChild(notification);
-
-    // Remove notification after 5 seconds
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        notification.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => {
-            document.body.removeChild(notification);
-        }, 300);
-    }, 5000);
-}
 
 /**
  * Get current pipeline settings (for use when saving the entire pipeline)
@@ -99,10 +50,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const urlParams = new URLSearchParams(window.location.search);
     const pipelineId = urlParams.get('pipeline');
     const esId = urlParams.get('es_id');
+    const lsId = urlParams.get('ls_id');
 
-    if (pipelineId && esId) {
-        document.getElementById('hiddenEsId').value = esId;
+    if (pipelineId) {
         document.getElementById('hiddenPipelineName').value = pipelineId;
+    }
+    if (esId) {
+        document.getElementById('hiddenEsId').value = esId;
+    }
+    if (lsId) {
+        document.getElementById('hiddenLsId').value = lsId;
     }
 
     // Handle form submission with regular fetch (no HTMX)
@@ -143,11 +100,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 // Check response status
                 if (response.ok) {
-                    showSettingsSavedNotification();
+                    showToast('Pipeline settings saved successfully', 'success');
                 } else {
                     // Get error message from response
                     const errorText = await response.text();
-                    showSettingsErrorNotification(errorText || 'Failed to save pipeline settings');
+                    showToast(errorText || 'Failed to save pipeline settings', 'error');
                 }
             } catch (error) {
                 // Reset button state
@@ -157,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 // Show error notification
-                showSettingsErrorNotification('Network error: ' + error.message);
+                showToast('Network error: ' + error.message, 'error');
             }
         });
     }

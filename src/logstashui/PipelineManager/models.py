@@ -286,6 +286,34 @@ class Pipeline(models.Model):
         default=0
     )
     
+    # Pipeline Settings
+    pipeline_workers = models.IntegerField(
+        default=1,
+        help_text="Number of worker threads for pipeline execution"
+    )
+    pipeline_batch_size = models.IntegerField(
+        default=128,
+        help_text="Maximum number of events per batch"
+    )
+    pipeline_batch_delay = models.IntegerField(
+        default=50,
+        help_text="Batch delay in milliseconds"
+    )
+    queue_type = models.CharField(
+        max_length=20,
+        default='memory',
+        help_text="Queue type (memory or persisted)"
+    )
+    queue_max_bytes = models.CharField(
+        max_length=20,
+        default='1gb',
+        help_text="Maximum queue size (e.g., 1gb, 512mb)"
+    )
+    queue_checkpoint_writes = models.IntegerField(
+        default=1024,
+        help_text="Number of writes before checkpoint (for persisted queue)"
+    )
+    
     class Meta:
         ordering = ['policy', 'name']
         verbose_name = 'Pipeline'

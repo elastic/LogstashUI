@@ -33,6 +33,26 @@ def _load_plugin_data():
     return data
 
 
+def _parse_queue_max_bytes(queue_max_bytes_str):
+    """
+    Parse queue_max_bytes string like '1gb' into value and unit.
+    Returns tuple of (value, unit).
+    """
+    import re
+    if not queue_max_bytes_str:
+        return (1, 'gb')
+    
+    # Match number followed by optional unit (case insensitive)
+    match = re.match(r'^(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$', str(queue_max_bytes_str).strip())
+    if match:
+        value = match.group(1)
+        unit = match.group(2).lower() if match.group(2) else 'gb'
+        return (value, unit)
+    
+    # Default fallback
+    return (1, 'gb')
+
+
 def PipelineEditor(request):
     from django.conf import settings
     
@@ -58,7 +78,14 @@ def PipelineEditor(request):
                 return HttpResponseBadRequest(f"Could not find pipeline '{pipeline_name}' in policy {ls_id}")
             pipeline_config = {
                 'pipeline': pipeline_obj.lscl,
-                'pipeline_settings': {},
+                'pipeline_settings': {
+                    'pipeline.workers': pipeline_obj.pipeline_workers,
+                    'pipeline.batch.size': pipeline_obj.pipeline_batch_size,
+                    'pipeline.batch.delay': pipeline_obj.pipeline_batch_delay,
+                    'queue.type': pipeline_obj.queue_type,
+                    'queue.max_bytes': pipeline_obj.queue_max_bytes,
+                    'queue.checkpoint.writes': pipeline_obj.queue_checkpoint_writes,
+                },
                 'description': pipeline_obj.description or '',
             }
             context['ls_id'] = ls_id
@@ -71,13 +98,20 @@ def PipelineEditor(request):
 
         # Flatten pipeline settings with defaults for template access
         settings = pipeline_config.get('pipeline_settings', {})
+        
+        # Parse queue_max_bytes into value and unit
+        queue_max_bytes_str = settings.get('queue.max_bytes', '1gb')
+        queue_value, queue_unit = _parse_queue_max_bytes(queue_max_bytes_str)
+        
         context['pipeline_settings'] = {
             'description': pipeline_config.get('description', ''),
             'pipeline_workers': settings.get('pipeline.workers', 1),
             'pipeline_batch_size': settings.get('pipeline.batch.size', 128),
             'pipeline_batch_delay': settings.get('pipeline.batch.delay', 50),
             'queue_type': settings.get('queue.type', 'memory'),
-            'queue_max_bytes': settings.get('queue.max_bytes', '1gb'),
+            'queue_max_bytes': queue_max_bytes_str,
+            'queue_max_bytes_value': queue_value,
+            'queue_max_bytes_unit': queue_unit,
             'queue_checkpoint_writes': settings.get('queue.checkpoint.writes', 1024),
         }
         context['pipeline_name'] = pipeline_name

@@ -911,6 +911,7 @@
                 <form id="pipelineSettingsForm" class="p-6 space-y-6">
                     {% csrf_token %}
                     <input type="hidden" name="es_id" id="hiddenEsId" value="">
+                    <input type="hidden" name="ls_id" id="hiddenLsId" value="">
                     <input type="hidden" name="pipeline" id="hiddenPipelineName" value="">
                     <!-- Description -->
                     <div>
@@ -1001,17 +1002,17 @@
                                         min="0"
                                         class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         placeholder="Max bytes"
-                                        value="{{ pipeline_settings.queue_max_bytes|slice:':-2'|default:1 }}">
+                                        value="{{ pipeline_settings.queue_max_bytes_value|default:1 }}">
                                 <select
                                         id="queueMaxBytesUnit"
                                         name="queue_max_bytes_unit"
                                         class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                    <option value="b">Bytes</option>
-                                    <option value="kb">KB</option>
-                                    <option value="mb">MB</option>
-                                    <option value="gb" selected>GB</option>
-                                    <option value="tb">TB</option>
-                                    <option value="pb">PB</option>
+                                    <option value="b" {% if pipeline_settings.queue_max_bytes_unit == 'b' %}selected{% endif %}>Bytes</option>
+                                    <option value="kb" {% if pipeline_settings.queue_max_bytes_unit == 'kb' %}selected{% endif %}>KB</option>
+                                    <option value="mb" {% if pipeline_settings.queue_max_bytes_unit == 'mb' %}selected{% endif %}>MB</option>
+                                    <option value="gb" {% if pipeline_settings.queue_max_bytes_unit == 'gb' %}selected{% endif %}>GB</option>
+                                    <option value="tb" {% if pipeline_settings.queue_max_bytes_unit == 'tb' %}selected{% endif %}>TB</option>
+                                    <option value="pb" {% if pipeline_settings.queue_max_bytes_unit == 'pb' %}selected{% endif %}>PB</option>
                                 </select>
                             </div>
                         </div>
