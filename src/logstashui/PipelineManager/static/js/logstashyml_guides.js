@@ -106,6 +106,27 @@ function syncMainToGuide() {
     if (apiPort && guideApiPort) {
         guideApiPort.value = apiPort.value;
     }
+
+    // Config Path
+    const configPath = document.querySelector('[name="path.config"]');
+    const guideConfigPath = document.getElementById('guideConfigPath');
+    if (configPath && guideConfigPath) {
+        guideConfigPath.value = configPath.value;
+    }
+
+    // Config Reload Automatic
+    const configReloadAutomatic = document.querySelector('[name="config.reload.automatic"]');
+    const guideConfigReloadAutomatic = document.getElementById('guideConfigReloadAutomatic');
+    if (configReloadAutomatic && guideConfigReloadAutomatic) {
+        guideConfigReloadAutomatic.value = configReloadAutomatic.value;
+    }
+
+    // Config Reload Interval
+    const configReloadInterval = document.querySelector('[name="config.reload.interval"]');
+    const guideConfigReloadInterval = document.getElementById('guideConfigReloadInterval');
+    if (configReloadInterval && guideConfigReloadInterval) {
+        guideConfigReloadInterval.value = configReloadInterval.value;
+    }
 }
 
 // Validate Default guide fields and apply red/green highlighting
@@ -200,13 +221,55 @@ function validateDefaultGuide() {
         }
     }
 
+    // Validate Config Path (should be non-empty)
+    const guideConfigPath = document.getElementById('guideConfigPath');
+    if (guideConfigPath) {
+        if (guideConfigPath.value && guideConfigPath.value.trim() !== '') {
+            guideConfigPath.classList.remove('border-red-500', 'border-red-600');
+            guideConfigPath.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideConfigPath.classList.remove('border-green-500', 'border-green-600');
+            guideConfigPath.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate Config Reload Automatic (should be 'true')
+    const guideConfigReloadAutomatic = document.getElementById('guideConfigReloadAutomatic');
+    if (guideConfigReloadAutomatic) {
+        if (guideConfigReloadAutomatic.value === 'true') {
+            guideConfigReloadAutomatic.classList.remove('border-red-500', 'border-red-600');
+            guideConfigReloadAutomatic.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideConfigReloadAutomatic.classList.remove('border-green-500', 'border-green-600');
+            guideConfigReloadAutomatic.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate Config Reload Interval (should be non-empty)
+    const guideConfigReloadInterval = document.getElementById('guideConfigReloadInterval');
+    if (guideConfigReloadInterval) {
+        if (guideConfigReloadInterval.value && guideConfigReloadInterval.value.trim() !== '') {
+            guideConfigReloadInterval.classList.remove('border-red-500', 'border-red-600');
+            guideConfigReloadInterval.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideConfigReloadInterval.classList.remove('border-green-500', 'border-green-600');
+            guideConfigReloadInterval.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
     // Update status tracker
     const statusTracker = document.getElementById('guideStatusTracker');
     const statusIcon = document.getElementById('guideStatusIcon');
     const statusText = document.getElementById('guideStatusText');
 
     if (statusTracker && statusIcon && statusText) {
-        if (redCount === 0 && greenCount === 6) {
+        if (redCount === 0 && greenCount === 9) {
             // All green - success state
             statusTracker.classList.remove('bg-orange-900/20', 'border', 'border-orange-500/40');
             statusTracker.classList.add('bg-green-900/20', 'border', 'border-green-500/40');
@@ -332,6 +395,60 @@ function setGuideApiPort(value) {
     }
     if (mainApiPort) {
         mainApiPort.value = value;
+    }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateDefaultGuide();
+}
+
+function setGuideConfigPathFromPolicy() {
+    const settingsPath = document.getElementById('settingsPath');
+    const guideConfigPath = document.getElementById('guideConfigPath');
+    const mainConfigPath = document.querySelector('[name="path.config"]');
+
+    if (settingsPath && settingsPath.value) {
+        const base = settingsPath.value;
+        const value = base.endsWith('/') ? base + 'pipelines.yml' : base + '/pipelines.yml';
+
+        if (guideConfigPath) {
+            guideConfigPath.value = value;
+        }
+        if (mainConfigPath) {
+            mainConfigPath.value = value;
+        }
+
+        detectChanges();
+        checkConfigNotifications();
+        validateDefaultGuide();
+    }
+}
+
+function setGuideConfigReloadAutomatic(value) {
+    const guideConfigReloadAutomatic = document.getElementById('guideConfigReloadAutomatic');
+    const mainConfigReloadAutomatic = document.querySelector('[name="config.reload.automatic"]');
+
+    if (guideConfigReloadAutomatic) {
+        guideConfigReloadAutomatic.value = value;
+    }
+    if (mainConfigReloadAutomatic) {
+        mainConfigReloadAutomatic.value = value;
+    }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateDefaultGuide();
+}
+
+function setGuideConfigReloadInterval(value) {
+    const guideConfigReloadInterval = document.getElementById('guideConfigReloadInterval');
+    const mainConfigReloadInterval = document.querySelector('[name="config.reload.interval"]');
+
+    if (guideConfigReloadInterval) {
+        guideConfigReloadInterval.value = value;
+    }
+    if (mainConfigReloadInterval) {
+        mainConfigReloadInterval.value = value;
     }
 
     detectChanges();

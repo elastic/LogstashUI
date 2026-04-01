@@ -1011,18 +1011,6 @@
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">Config Reload Automatic</label>
-                <select name="config.reload.automatic" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
-                  <option value="">Default (false)</option>
-                  <option value="true">True</option>
-                  <option value="false">False</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">Config Reload Interval</label>
-                <input type="text" name="config.reload.interval" placeholder="3s" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
-              </div>
-              <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Config Debug</label>
                 <select name="config.debug" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
                   <option value="">Default (false)</option>
@@ -1162,16 +1150,8 @@
                 <input type="password" name="xpack.monitoring.elasticsearch.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">Cloud ID</label>
-                <input type="text" name="xpack.monitoring.elasticsearch.cloud_id" placeholder="monitoring_cluster_id:xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
-              </div>
-              <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Cloud Auth</label>
                 <input type="text" name="xpack.monitoring.elasticsearch.cloud_auth" placeholder="logstash_system:password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
-              </div>
-              <div class="col-span-2">
-                <label class="block text-sm font-medium text-gray-300 mb-1">API Key</label>
-                <input type="text" name="xpack.monitoring.elasticsearch.api_key" placeholder="id:api_key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
               </div>
               <div class="col-span-2">
                 <label class="block text-sm font-medium text-gray-300 mb-1">Proxy (comma-separated)</label>
