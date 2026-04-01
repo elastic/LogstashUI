@@ -388,7 +388,7 @@ function generatePluginConfig(plugin, indentLevel) {
     
     if (plugin.config) {
         Object.entries(plugin.config).forEach(([key, value]) => {
-            config += `${indent}  ${key} => ${formatConfigValue(value)}\n`;
+            config += `${indent}  ${key} => ${formatConfigValueForTextEditor(value)}\n`;
         });
     }
     
@@ -399,7 +399,7 @@ function generatePluginConfig(plugin, indentLevel) {
 /**
  * Format a configuration value for Logstash syntax
  */
-function formatConfigValue(value) {
+function formatConfigValueForTextEditor(value) {
     if (typeof value === 'string') {
         // Check if it's already quoted or a special value
         if (value.startsWith('"') || value.startsWith("'") || 
@@ -411,9 +411,9 @@ function formatConfigValue(value) {
     } else if (typeof value === 'number' || typeof value === 'boolean') {
         return value;
     } else if (Array.isArray(value)) {
-        return `[${value.map(v => formatConfigValue(v)).join(', ')}]`;
+        return `[${value.map(v => formatConfigValueForTextEditor(v)).join(', ')}]`;
     } else if (typeof value === 'object') {
-        const entries = Object.entries(value).map(([k, v]) => `"${k}" => ${formatConfigValue(v)}`);
+        const entries = Object.entries(value).map(([k, v]) => `"${k}" => ${formatConfigValueForTextEditor(v)}`);
         return `{ ${entries.join(', ')} }`;
     }
     return String(value);

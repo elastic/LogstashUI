@@ -132,6 +132,49 @@ function countTotalConditions(components) {
 }
 
 /**
+ * Count password-type fields across all plugins that have plaintext (non-keystore) values
+ * @param {Object} components - The components object with input, filter, output arrays
+ * @returns {number} - Count of plaintext password fields
+ */
+function countPlaintextPasswords(components) {
+    const pluginDataSource = window.pluginData;
+    if (!pluginDataSource) return 0;
+    let count = 0;
+
+    function checkComponent(component) {
+        if (component.plugin === 'comment') return;
+        if (component.plugin === 'if') {
+            (component.config?.plugins || []).forEach(checkComponent);
+            (component.config?.else_ifs || []).forEach(ei => (ei.plugins || []).forEach(checkComponent));
+            (component.config?.else?.plugins || []).forEach(checkComponent);
+        } else {
+            const pluginInfo = pluginDataSource[component.type]?.[component.plugin];
+            if (!pluginInfo?.options) return;
+            Object.entries(pluginInfo.options).forEach(([key, option]) => {
+                // Check if this is a sensitive field type (password, api_key, secret, token, etc.)
+                const inputType = (option.input_type || '').toLowerCase();
+                const isSensitiveType = inputType === 'password' || 
+                                       inputType === 'api_key' || 
+                                       inputType === 'apikey' ||
+                                       inputType === 'token' ||
+                                       inputType === 'secret';
+                if (isSensitiveType) {
+                    const val = component.config?.[key];
+                    if (val && !String(val).startsWith('${')) {
+                        count++;
+                    }
+                }
+            });
+        }
+    }
+
+    ['input', 'filter', 'output'].forEach(type => {
+        (components[type] || []).forEach(checkComponent);
+    });
+    return count;
+}
+
+/**
  * Update the stats strip with current pipeline statistics
  */
 function updateStatsStrip() {
@@ -155,6 +198,16 @@ function updateStatsStrip() {
     const totalConditionsElement = document.getElementById('totalConditionsCount');
     if (totalConditionsElement) {
         totalConditionsElement.textContent = totalConditions;
+    }
+
+    // Count plaintext passwords
+    const plaintextPasswords = countPlaintextPasswords(components);
+    const plaintextEl = document.getElementById('plaintextPasswordsCount');
+    if (plaintextEl) plaintextEl.textContent = plaintextPasswords;
+    const plaintextIndicator = document.getElementById('plaintextPasswordsIndicator');
+    if (plaintextIndicator) {
+        // Always show the indicator, even when count is 0
+        plaintextIndicator.classList.remove('hidden');
     }
 }
 
