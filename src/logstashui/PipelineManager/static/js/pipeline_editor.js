@@ -932,6 +932,13 @@ function validateRequiredFields(component) {
     return result;
 }
 
+// Helper function to escape HTML to prevent injection and template literal evaluation
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
 // Helper function to format config values for display
 function formatConfigValue(value, key) {
     // Helper to clean up string values
@@ -1067,7 +1074,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
                     const escapedActualValue = actualValue.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     configItems.push(`
                         <span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                            ${key}: <span class="sensitive-value" data-actual="${escapedActualValue}">${displayValue}</span>
+                            ${key}: <span class="sensitive-value" data-actual="${escapedActualValue}">${escapeHtml(displayValue)}</span>
                             <button type="button"
                                     class="text-gray-400 hover:text-gray-200 inline-flex items-center"
                                     onclick="toggleSensitiveValue(this, event)"
@@ -1079,7 +1086,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
                         </span>
                     `);
                 } else {
-                    configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${displayValue}</span>`);
+                    configItems.push(`<span class="text-xs bg-gray-800/50 px-2 py-0.5 rounded">${key}: ${escapeHtml(displayValue)}</span>`);
                 }
             }
         }
