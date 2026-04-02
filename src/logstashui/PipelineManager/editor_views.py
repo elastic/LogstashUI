@@ -205,7 +205,9 @@ def SavePipeline(request):
         if ls_id:
             from PipelineManager.models import Pipeline as PipelineModel, Policy
             policy = Policy.objects.get(pk=ls_id)
-            PipelineModel.objects.filter(policy=policy, name=pipeline_name).update(lscl=config)
+            pipeline_obj = PipelineModel.objects.get(policy=policy, name=pipeline_name)
+            pipeline_obj.lscl = config
+            pipeline_obj.save()  # triggers pipeline_hash recomputation via model save() override
             policy.has_undeployed_changes = True
             policy.save(update_fields=['has_undeployed_changes'])
             logger.info(f"User '{request.user.username}' saved pipeline '{pipeline_name}' to policy {ls_id}")

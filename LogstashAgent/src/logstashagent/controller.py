@@ -741,7 +741,11 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             logger.debug(f"files_existed flag: {files_existed}")
             
             # Track if any files were updated and which operations failed
+            # requires_restart is only set for changes that need a full Logstash restart
+            # (logstash.yml, jvm.options, log4j2.properties, keystore)
+            # Pipeline changes are applied dynamically and do not require a restart
             files_updated = False
+            requires_restart = False
             failed_operations = []
 
             # Update logstash.yml if changed
@@ -750,6 +754,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 logger.info("Configuration change found for logstash.yml")
                 if update_logstash_yml(settings_path, logstash_yml_content):
                     files_updated = True
+                    requires_restart = True
                 else:
                     failed_operations.append('logstash.yml write failed')
 
@@ -759,6 +764,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 logger.info("Configuration change found for jvm.options")
                 if update_jvm_options(settings_path, jvm_options_content):
                     files_updated = True
+                    requires_restart = True
                 else:
                     failed_operations.append('jvm.options write failed')
 
@@ -768,6 +774,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 logger.info("Configuration change found for log4j2.properties")
                 if update_log4j2_properties(settings_path, log4j2_properties_content):
                     files_updated = True
+                    requires_restart = True
                 else:
                     failed_operations.append('log4j2.properties write failed')
 
@@ -783,10 +790,11 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 logger.info("Keystore changes detected")
                 if update_keystore(settings_path, keystore_changes):
                     files_updated = True
+                    requires_restart = True
                 else:
                     failed_operations.append('keystore update failed')
 
-            # Handle pipeline changes
+            # Handle pipeline changes (no restart needed — Logstash reloads pipelines dynamically)
             pipeline_changes = changes.get('pipelines')
             if pipeline_changes and pipeline_changes != False:
                 logger.info("Pipeline changes detected")
@@ -795,17 +803,20 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 else:
                     failed_operations.append('pipelines update failed')
 
-            # If any files were updated, restart Logstash (only if files existed before)
+            # Restart Logstash only if a restart-requiring config changed (not for pipeline-only changes)
             if files_updated:
-                if files_existed:
-                    logger.info("Configuration files updated, restarting Logstash service...")
-                    if restart_logstash():
-                        logger.info("Logstash restart completed successfully")
+                if requires_restart:
+                    if files_existed:
+                        logger.info("Configuration files updated, restarting Logstash service...")
+                        if restart_logstash():
+                            logger.info("Logstash restart completed successfully")
+                        else:
+                            logger.error("Logstash restart failed - manual intervention may be required")
+                            failed_operations.append('logstash restart failed')
                     else:
-                        logger.error("Logstash restart failed - manual intervention may be required")
-                        failed_operations.append('logstash restart failed')
+                        logger.info("Configuration files created - Logstash restart skipped (files didn't exist previously)")
                 else:
-                    logger.info("Configuration files created - Logstash restart skipped (files didn't exist previously)")
+                    logger.info("Pipeline-only changes applied - Logstash restart not required")
 
                 # Update agent's revision number to match server after successful changes
                 server_revision = result.get('current_revision')

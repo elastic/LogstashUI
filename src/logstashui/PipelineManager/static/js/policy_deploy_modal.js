@@ -360,75 +360,265 @@ function renderSideBySideTextDiff(containerId, oldText, newText) {
 // Render pipelines diff
 function renderPipelinesDiff(oldPipelines, newPipelines) {
     const container = document.getElementById('diff-pipelines');
-    let html = '';
+    let cardsHtml = '';
     let hasChanges = false;
-    
+    let addedCount = 0;
+    let modifiedCount = 0;
+    let removedCount = 0;
+
     // Create maps for easier comparison
     const oldMap = new Map(oldPipelines.map(p => [p.name, p]));
     const newMap = new Map(newPipelines.map(p => [p.name, p]));
-    
-    // Find added pipelines
+
+    // Helper: build line-numbered html for a single side of the diff
+    function buildDiffHtml(lineDiff, action) {
+        let leftHtml = '';
+        let rightHtml = '';
+        let leftNum = 1;
+        let rightNum = 1;
+
+        if (action === 'added') {
+            // All lines are new — left is empty placeholders, right is green
+            for (const change of lineDiff) {
+                const chunk = change.lines || [];
+                for (const l of chunk) {
+                    const line = escapeHtml(l);
+                    leftHtml += `<div class="flex bg-gray-800/50">
+                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                        <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                    </div>`;
+                    rightHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${rightNum++}</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                    </div>`;
+                }
+            }
+        } else if (action === 'removed') {
+            // All lines are old — left is red, right is empty placeholders
+            for (const change of lineDiff) {
+                const chunk = change.oldLines || change.lines || [];
+                for (const l of chunk) {
+                    const line = escapeHtml(l);
+                    leftHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                        <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${leftNum++}</span>
+                        <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                    </div>`;
+                    rightHtml += `<div class="flex bg-gray-800/50">
+                        <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                        <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                    </div>`;
+                }
+            }
+        } else {
+            // Modified — standard LCS diff rendering
+            for (const change of lineDiff) {
+                if (change.type === 'equal') {
+                    for (const l of change.lines) {
+                        const line = escapeHtml(l);
+                        leftHtml += `<div class="flex hover:bg-gray-700/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${leftNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                        rightHtml += `<div class="flex hover:bg-gray-700/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${rightNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                    }
+                } else if (change.type === 'delete') {
+                    for (const l of change.lines) {
+                        const line = escapeHtml(l);
+                        leftHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${leftNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                        rightHtml += `<div class="flex bg-gray-800/50">
+                            <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                            <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                        </div>`;
+                    }
+                } else if (change.type === 'insert') {
+                    for (const l of change.lines) {
+                        const line = escapeHtml(l);
+                        leftHtml += `<div class="flex bg-gray-800/50">
+                            <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                            <span style="white-space: pre; padding-left: 0.5rem; color: #555;"></span>
+                        </div>`;
+                        rightHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                            <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${rightNum++}</span>
+                            <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                        </div>`;
+                    }
+                } else if (change.type === 'replace') {
+                    const maxLen = Math.max(change.oldLines.length, change.newLines.length);
+                    for (let i = 0; i < maxLen; i++) {
+                        if (i < change.oldLines.length) {
+                            const line = escapeHtml(change.oldLines[i]);
+                            leftHtml += `<div class="flex bg-red-900/20 hover:bg-red-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${leftNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                        } else {
+                            leftHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                            </div>`;
+                        }
+                        if (i < change.newLines.length) {
+                            const line = escapeHtml(change.newLines[i]);
+                            rightHtml += `<div class="flex bg-green-900/20 hover:bg-green-900/30">
+                                <span class="inline-block w-12 text-gray-500 text-right pr-3 select-none flex-shrink-0">${rightNum++}</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;">${line || ' '}</span>
+                            </div>`;
+                        } else {
+                            rightHtml += `<div class="flex bg-gray-800/50">
+                                <span class="inline-block w-12 text-gray-600 text-right pr-3 select-none flex-shrink-0">-</span>
+                                <span style="white-space: pre; padding-left: 0.5rem;"></span>
+                            </div>`;
+                        }
+                    }
+                }
+            }
+        }
+
+        return { leftHtml, rightHtml };
+    }
+
+    // Helper: build a pipeline card
+    function buildPipelineCard(name, description, action, leftHtml, rightHtml) {
+        const badge = action === 'added'
+            ? '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>'
+            : action === 'removed'
+                ? '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETED</span>'
+                : '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>';
+
+        const leftTitle = action === 'added' ? 'No Existing Pipeline' : 'Current Pipeline';
+        const rightTitle = action === 'removed' ? 'Pipeline Will Be Deleted' : 'New Pipeline (After Deploy)';
+
+        return `
+            <div class="pipeline-diff-card border border-gray-600 rounded-lg overflow-hidden mb-4">
+                <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
+                    <h4 class="text-white font-semibold">${escapeHtml(name)}${badge}</h4>
+                    <p class="text-sm text-gray-400">Description: ${escapeHtml(description || 'N/A')}</p>
+                </div>
+                <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
+                    <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                        <div class="mb-2" style="flex-shrink: 0;">
+                            <h5 class="text-sm font-semibold text-white">${leftTitle}</h5>
+                        </div>
+                        <div class="bg-gray-800 rounded border border-gray-600 pipeline-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                            <div class="p-2 text-sm text-gray-300 font-mono">${leftHtml}</div>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
+                        <div class="mb-2" style="flex-shrink: 0;">
+                            <h5 class="text-sm font-semibold text-white">${rightTitle}</h5>
+                        </div>
+                        <div class="bg-gray-800 rounded border border-gray-600 pipeline-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
+                            <div class="p-2 text-sm text-gray-300 font-mono">${rightHtml}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Added pipelines
     newPipelines.forEach(pipeline => {
         if (!oldMap.has(pipeline.name)) {
             hasChanges = true;
-            html += `
-                <div class="mb-4 p-3 bg-green-900/20 border border-green-600 rounded">
-                    <div class="text-green-400 font-semibold mb-2">+ Added Pipeline: ${escapeHtml(pipeline.name)}</div>
-                    <div class="text-gray-400 text-sm mb-1">Description: ${escapeHtml(pipeline.description || 'N/A')}</div>
-                    <pre class="text-xs text-gray-300 mt-2 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(pipeline.lscl)}</pre>
-                </div>
-            `;
+            addedCount++;
+            const lines = (pipeline.lscl || '').split('\n');
+            const lineDiff = [{ type: 'insert', lines }];
+            const { leftHtml, rightHtml } = buildDiffHtml(lineDiff, 'added');
+            cardsHtml += buildPipelineCard(pipeline.name, pipeline.description, 'added', leftHtml, rightHtml);
         }
     });
-    
-    // Find removed pipelines
+
+    // Removed pipelines
     oldPipelines.forEach(pipeline => {
         if (!newMap.has(pipeline.name)) {
             hasChanges = true;
-            html += `
-                <div class="mb-4 p-3 bg-red-900/20 border border-red-600 rounded">
-                    <div class="text-red-400 font-semibold mb-2">- Removed Pipeline: ${escapeHtml(pipeline.name)}</div>
-                    <div class="text-gray-400 text-sm mb-1">Description: ${escapeHtml(pipeline.description || 'N/A')}</div>
-                    <pre class="text-xs text-gray-300 mt-2 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(pipeline.lscl)}</pre>
-                </div>
-            `;
+            removedCount++;
+            const lines = (pipeline.lscl || '').split('\n');
+            const lineDiff = [{ type: 'delete', lines }];
+            const { leftHtml, rightHtml } = buildDiffHtml(lineDiff, 'removed');
+            cardsHtml += buildPipelineCard(pipeline.name, pipeline.description, 'removed', leftHtml, rightHtml);
         }
     });
-    
-    // Find modified pipelines
+
+    // Modified pipelines
     newPipelines.forEach(newPipeline => {
         const oldPipeline = oldMap.get(newPipeline.name);
         if (oldPipeline && oldPipeline.lscl !== newPipeline.lscl) {
             hasChanges = true;
-            html += `
-                <div class="mb-4 p-3 bg-blue-900/20 border border-blue-600 rounded">
-                    <div class="text-blue-400 font-semibold mb-2">~ Modified Pipeline: ${escapeHtml(newPipeline.name)}</div>
-                    <div class="text-gray-400 text-sm mb-1">Description: ${escapeHtml(newPipeline.description || 'N/A')}</div>
-                    <div class="grid grid-cols-2 gap-2 mt-2">
-                        <div>
-                            <div class="text-red-400 text-xs font-semibold mb-1">Old:</div>
-                            <pre class="text-xs text-gray-300 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(oldPipeline.lscl)}</pre>
-                        </div>
-                        <div>
-                            <div class="text-green-400 text-xs font-semibold mb-1">New:</div>
-                            <pre class="text-xs text-gray-300 overflow-auto max-h-40 bg-gray-800 p-2 rounded">${escapeHtml(newPipeline.lscl)}</pre>
-                        </div>
-                    </div>
-                </div>
-            `;
+            modifiedCount++;
+            const oldLines = (oldPipeline.lscl || '').split('\n');
+            const newLines = (newPipeline.lscl || '').split('\n');
+            const lineDiff = computeLineDiff(oldLines, newLines);
+            const { leftHtml, rightHtml } = buildDiffHtml(lineDiff, 'modified');
+            cardsHtml += buildPipelineCard(newPipeline.name, newPipeline.description, 'modified', leftHtml, rightHtml);
         }
     });
-    
-    if (html === '') {
-        html = '<div class="text-gray-400 text-center py-8">No pipeline changes</div>';
+
+    if (!hasChanges) {
+        container.innerHTML = '<div class="text-gray-400 text-center py-8">No pipeline changes</div>';
+        return;
     }
-    
+
+    // Build changes summary
+    let summaryHtml = '<div class="mb-4 p-4 bg-gray-700 rounded-lg border border-gray-600">';
+    summaryHtml += '<h3 class="text-white font-semibold mb-2">Changes Summary</h3>';
+    summaryHtml += '<div class="flex gap-4 text-sm">';
+    if (addedCount > 0) {
+        summaryHtml += `<div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>
+            <span class="text-gray-300">${addedCount} new pipeline${addedCount !== 1 ? 's' : ''}</span>
+        </div>`;
+    }
+    if (modifiedCount > 0) {
+        summaryHtml += `<div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>
+            <span class="text-gray-300">${modifiedCount} modified pipeline${modifiedCount !== 1 ? 's' : ''}</span>
+        </div>`;
+    }
+    if (removedCount > 0) {
+        summaryHtml += `<div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETED</span>
+            <span class="text-gray-300">${removedCount} deleted pipeline${removedCount !== 1 ? 's' : ''}</span>
+        </div>`;
+    }
+    summaryHtml += '</div></div>';
+
+    container.innerHTML = summaryHtml + cardsHtml;
+
+    // Synchronize scrolling for each pipeline card
+    container.querySelectorAll('.pipeline-diff-card').forEach(card => {
+        const panels = card.querySelectorAll('.pipeline-diff-scroll-panel');
+        const leftPanel = panels[0];
+        const rightPanel = panels[1];
+        if (leftPanel && rightPanel) {
+            let isScrolling = false;
+            leftPanel.addEventListener('scroll', () => {
+                if (!isScrolling) {
+                    isScrolling = true;
+                    rightPanel.scrollTop = leftPanel.scrollTop;
+                    rightPanel.scrollLeft = leftPanel.scrollLeft;
+                    setTimeout(() => { isScrolling = false; }, 10);
+                }
+            });
+            rightPanel.addEventListener('scroll', () => {
+                if (!isScrolling) {
+                    isScrolling = true;
+                    leftPanel.scrollTop = rightPanel.scrollTop;
+                    leftPanel.scrollLeft = rightPanel.scrollLeft;
+                    setTimeout(() => { isScrolling = false; }, 10);
+                }
+            });
+        }
+    });
+
     // Track if this section has changes
-    if (hasChanges) {
-        sectionsWithChanges.add('pipelines');
-    }
-    
-    container.innerHTML = html;
+    sectionsWithChanges.add('pipelines');
 }
 
 // Render keystore diff
