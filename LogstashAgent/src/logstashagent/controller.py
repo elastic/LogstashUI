@@ -903,24 +903,49 @@ def get_logstash_health_report(api_port=9600):
     """
     Query the Logstash /_health_report endpoint.
 
+    The raw Logstash response is stripped down to only the fields the UI needs
+    (status, symptom, diagnosis, nested indicators) before being sent to
+    LogstashUI. This avoids shipping large/unpredictable sub-objects (impacts,
+    details, flow metrics) that could contain non-JSON-serializable values and
+    silently break the check-in POST.
+
+    All interpretation of the indicator tree stays on the LogstashUI side.
+
     Returns:
         dict with keys: accessible, status, symptom, indicators, error
-
-        indicators is a list of dicts, each with:
-            name, status, symptom, diagnosis (list of {cause, action}),
-            and optionally indicators (same structure, one level deep)
     """
     from .logstash_api import LogstashAPI
     base_url = f"http://localhost:{api_port}"
 
+    def strip_indicators(indicators_dict):
+        """
+        Recursively keep only the fields the UI renders:
+        status, symptom, diagnosis (cause + action only), and nested indicators.
+        Everything else (impacts, details, flow, help_url, ids, …) is dropped.
+        """
+        result = {}
+        for name, ind in (indicators_dict or {}).items():
+            result[name] = {
+                'status': ind.get('status'),
+                'symptom': ind.get('symptom'),
+                'diagnosis': [
+                    {'cause': d.get('cause'), 'action': d.get('action')}
+                    for d in ind.get('diagnosis', [])
+                ],
+                'indicators': strip_indicators(ind.get('indicators', {})),
+            }
+        return result
+
     try:
         api = LogstashAPI(base_url=base_url)
         data = api.get_instance_health()
+        indicators = strip_indicators(data.get('indicators', {}))
+        logger.debug(f"Health report: status={data.get('status')}, indicators={list(indicators.keys())}")
         return {
             'accessible': True,
             'status': data.get('status', 'unknown'),
             'symptom': data.get('symptom'),
-            'indicators': data.get('indicators', {}),
+            'indicators': indicators,
             'error': None,
         }
     except Exception as e:
