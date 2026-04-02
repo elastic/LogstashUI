@@ -809,9 +809,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             if not rollout_aborted:
                 keystore_password_response = changes.get('keystore_password')
                 if keystore_password_response and keystore_password_response != False:
-                    logger.info("Keystore password change detected - will always recreate keystore")
-                    actual_password = None
-                    new_hash = ''
+                    logger.info("Keystore password change detected - recreating keystore")
                     try:
                         decrypted_combined = encryption.decrypt_credential(keystore_password_response)
                         if not decrypted_combined.startswith(f"{api_key}:"):
@@ -819,38 +817,37 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                         actual_password = decrypted_combined[len(api_key) + 1:]
                         new_hash = hashlib.sha256(actual_password.encode('utf-8')).hexdigest()
                         logger.info("Successfully decrypted new keystore password")
+
+                        # Delete the keystore file directly — no need to load/decrypt the old one
+                        from pathlib import Path
+                        keystore_file = Path(settings_path) / 'logstash.keystore'
+                        try:
+                            keystore_file.unlink(missing_ok=True)
+                            logger.info("Deleted existing keystore file")
+                        except Exception as del_e:
+                            logger.warning(f"Could not delete keystore file: {del_e}")
+
+                        try:
+                            LogstashKeystore.create(path_settings=settings_path, password=actual_password)
+                            logger.info("Created new keystore with updated password")
+                            agent_state.update_state('keystore_password', actual_password)
+                            agent_state.update_state('keystore_password_hash', new_hash)
+                            state = agent_state.get_state()
+                            files_updated = True
+                            requires_restart = True
+                        except Exception as create_error:
+                            logger.error(f"Failed to create keystore: {create_error}")
+                            logger.exception("Keystore creation exception details:")
+                            failed_operations.append(f'keystore creation failed: {create_error}')
+                            rollout_aborted = True
+
                     except Exception as decrypt_error:
-                        # Non-fatal: log and record the failure but continue the rollout.
-                        # The server will keep detecting the hash mismatch and retry on
-                        # every subsequent sync until the encryption key issue resolves.
+                        # Decrypt failed — leave the existing keystore untouched and record
+                        # the failure. The server will keep detecting the hash mismatch and
+                        # retry on every sync until the encryption key issue resolves.
                         logger.error(f"Failed to decrypt keystore password from server: {decrypt_error}")
-                        logger.warning("Proceeding with keystore recreation using empty password - will self-correct on next sync")
+                        logger.warning("Leaving existing keystore intact - will retry on next sync")
                         failed_operations.append(f'keystore_password decrypt failed: {decrypt_error}')
-
-                    # Always delete and recreate the keystore regardless of whether
-                    # decryption succeeded. Uses the decrypted password if available,
-                    # otherwise an empty password so key deltas can still be applied.
-                    from pathlib import Path
-                    keystore_file = Path(settings_path) / 'logstash.keystore'
-                    try:
-                        keystore_file.unlink(missing_ok=True)
-                        logger.info("Deleted existing keystore file")
-                    except Exception as del_e:
-                        logger.warning(f"Could not delete keystore file: {del_e}")
-
-                    try:
-                        LogstashKeystore.create(path_settings=settings_path, password=actual_password)
-                        logger.info("Created new keystore%s", " with updated password" if actual_password else " with empty password (decrypt failed)")
-                        agent_state.update_state('keystore_password', actual_password or '')
-                        agent_state.update_state('keystore_password_hash', new_hash)
-                        state = agent_state.get_state()
-                        files_updated = True
-                        requires_restart = True
-                    except Exception as create_error:
-                        logger.error(f"Failed to create keystore: {create_error}")
-                        logger.exception("Keystore creation exception details:")
-                        failed_operations.append(f'keystore creation failed: {create_error}')
-                        rollout_aborted = True
 
             # Handle keystore changes
             if not rollout_aborted:
