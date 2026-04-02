@@ -740,13 +740,15 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             logger.debug(f"Server response - changes: {changes}")
             logger.debug(f"files_existed flag: {files_existed}")
             
-            # Track if any files were updated and which operations failed
+            # Fail-fast rollout: each step must succeed before proceeding.
+            # On any failure, stop immediately — no restart, no revision increment.
             # requires_restart is only set for changes that need a full Logstash restart
-            # (logstash.yml, jvm.options, log4j2.properties, keystore)
-            # Pipeline changes are applied dynamically and do not require a restart
+            # (logstash.yml, jvm.options, log4j2.properties, keystore).
+            # Pipeline changes are applied dynamically and do not require a restart.
             files_updated = False
             requires_restart = False
             failed_operations = []
+            rollout_aborted = False
 
             # Update logstash.yml if changed
             logstash_yml_content = changes.get('logstash_yml')
@@ -756,27 +758,35 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                     files_updated = True
                     requires_restart = True
                 else:
+                    logger.error("Failed to update logstash.yml - aborting rollout")
                     failed_operations.append('logstash.yml write failed')
+                    rollout_aborted = True
 
             # Update jvm.options if changed
-            jvm_options_content = changes.get('jvm_options')
-            if jvm_options_content and jvm_options_content != False:
-                logger.info("Configuration change found for jvm.options")
-                if update_jvm_options(settings_path, jvm_options_content):
-                    files_updated = True
-                    requires_restart = True
-                else:
-                    failed_operations.append('jvm.options write failed')
+            if not rollout_aborted:
+                jvm_options_content = changes.get('jvm_options')
+                if jvm_options_content and jvm_options_content != False:
+                    logger.info("Configuration change found for jvm.options")
+                    if update_jvm_options(settings_path, jvm_options_content):
+                        files_updated = True
+                        requires_restart = True
+                    else:
+                        logger.error("Failed to update jvm.options - aborting rollout")
+                        failed_operations.append('jvm.options write failed')
+                        rollout_aborted = True
 
             # Update log4j2.properties if changed
-            log4j2_properties_content = changes.get('log4j2_properties')
-            if log4j2_properties_content and log4j2_properties_content != False:
-                logger.info("Configuration change found for log4j2.properties")
-                if update_log4j2_properties(settings_path, log4j2_properties_content):
-                    files_updated = True
-                    requires_restart = True
-                else:
-                    failed_operations.append('log4j2.properties write failed')
+            if not rollout_aborted:
+                log4j2_properties_content = changes.get('log4j2_properties')
+                if log4j2_properties_content and log4j2_properties_content != False:
+                    logger.info("Configuration change found for log4j2.properties")
+                    if update_log4j2_properties(settings_path, log4j2_properties_content):
+                        files_updated = True
+                        requires_restart = True
+                    else:
+                        logger.error("Failed to update log4j2.properties - aborting rollout")
+                        failed_operations.append('log4j2.properties write failed')
+                        rollout_aborted = True
 
             # Check for path changes (informational only - can't update these automatically)
             if changes.get('settings_path') and changes.get('settings_path') != False:
@@ -785,26 +795,34 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 logger.info(f"Configuration change found for logs_path: {changes.get('logs_path')}")
 
             # Handle keystore changes
-            keystore_changes = changes.get('keystore')
-            if keystore_changes and keystore_changes != False:
-                logger.info("Keystore changes detected")
-                if update_keystore(settings_path, keystore_changes):
-                    files_updated = True
-                    requires_restart = True
-                else:
-                    failed_operations.append('keystore update failed')
+            if not rollout_aborted:
+                keystore_changes = changes.get('keystore')
+                if keystore_changes and keystore_changes != False:
+                    logger.info("Keystore changes detected")
+                    if update_keystore(settings_path, keystore_changes):
+                        files_updated = True
+                        requires_restart = True
+                    else:
+                        logger.error("Failed to update keystore - aborting rollout")
+                        failed_operations.append('keystore update failed')
+                        rollout_aborted = True
 
             # Handle pipeline changes (no restart needed — Logstash reloads pipelines dynamically)
-            pipeline_changes = changes.get('pipelines')
-            if pipeline_changes and pipeline_changes != False:
-                logger.info("Pipeline changes detected")
-                if update_pipelines(settings_path, pipeline_changes):
-                    files_updated = True
-                else:
-                    failed_operations.append('pipelines update failed')
+            if not rollout_aborted:
+                pipeline_changes = changes.get('pipelines')
+                if pipeline_changes and pipeline_changes != False:
+                    logger.info("Pipeline changes detected")
+                    if update_pipelines(settings_path, pipeline_changes):
+                        files_updated = True
+                    else:
+                        logger.error("Failed to update pipelines - aborting rollout")
+                        failed_operations.append('pipelines update failed')
+                        rollout_aborted = True
 
-            # Restart Logstash only if a restart-requiring config changed (not for pipeline-only changes)
-            if files_updated:
+            if rollout_aborted:
+                logger.error(f"Rollout aborted due to failures: {failed_operations}")
+            elif files_updated:
+                # All updates succeeded — restart if needed and increment revision
                 if requires_restart:
                     if files_existed:
                         logger.info("Configuration files updated, restarting Logstash service...")
@@ -819,10 +837,11 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                     logger.info("Pipeline-only changes applied - Logstash restart not required")
 
                 # Update agent's revision number to match server after successful changes
-                server_revision = result.get('current_revision')
-                if server_revision is not None:
-                    agent_state.update_state('revision_number', server_revision)
-                    logger.info(f"Updated agent revision number to {server_revision}")
+                if not failed_operations:
+                    server_revision = result.get('current_revision')
+                    if server_revision is not None:
+                        agent_state.update_state('revision_number', server_revision)
+                        logger.info(f"Updated agent revision number to {server_revision}")
             else:
                 logger.info("No configuration file changes detected")
 
