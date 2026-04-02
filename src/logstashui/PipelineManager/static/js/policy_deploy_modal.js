@@ -111,6 +111,10 @@ function escapeHtml(text) {
 // Hide modal
 function hideDeployDiffModal() {
     document.getElementById('deployDiffModal').classList.add('hidden');
+    const confirmBtn = document.getElementById('confirmDeployBtn');
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Confirm Deploy';
+    confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
 }
 
 // Show modal
@@ -875,7 +879,17 @@ async function loadPolicyDiff(policyId, policyName) {
         const oldLines = (data.previous.logstash_yml || '').split('\n').length;
         const newLines = (data.current.logstash_yml || '').split('\n').length;
         document.getElementById('deployDiffStats').textContent = `Logstash.yml: ${oldLines} → ${newLines} lines`;
-        
+
+        // Disable confirm button if there are no pending changes
+        const confirmBtn = document.getElementById('confirmDeployBtn');
+        if (sectionsWithChanges.size === 0) {
+            confirmBtn.disabled = true;
+            confirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            confirmBtn.disabled = false;
+            confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
     } catch (error) {
         console.error('Error loading policy diff:', error);
         document.getElementById('deployDiffLoading').innerHTML = `

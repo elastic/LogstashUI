@@ -143,7 +143,7 @@ def update_keystore(settings_path, keystore_changes):
             logger.info("No keystore changes to apply - skipping keystore operations")
             return False
         
-        # Load the keystore
+        # Load the keystore, recreating it if the password is wrong or it doesn't exist
         logger.info("Attempting to load existing keystore...")
         try:
             ks = LogstashKeystore.load(
@@ -153,12 +153,25 @@ def update_keystore(settings_path, keystore_changes):
             logger.info("Successfully loaded existing keystore")
             logger.debug(f"Keystore contains {len(ks.keys)} existing keys")
         except IncorrectPassword:
-            logger.error("Incorrect keystore password - cannot proceed with keystore operations")
-            logger.error("Please configure the correct keystore password in agent state or delete the existing keystore")
-            return False
+            logger.warning("Incorrect keystore password - deleting incompatible keystore and recreating")
+            from pathlib import Path
+            keystore_file = Path(settings_path) / 'logstash.keystore'
+            try:
+                keystore_file.unlink(missing_ok=True)
+                logger.info("Deleted incompatible keystore file")
+            except Exception as del_e:
+                logger.warning(f"Could not delete keystore file: {del_e}")
+            try:
+                ks = LogstashKeystore.create(
+                    path_settings=settings_path,
+                    password=keystore_password
+                )
+                logger.info("Recreated keystore with current stored password")
+            except Exception as create_error:
+                logger.error(f"Failed to recreate keystore: {create_error}")
+                return False
         except LogstashKeystoreException as e:
             logger.warning(f"Failed to load keystore: {e}")
-            # Try to create a new keystore if it doesn't exist
             try:
                 logger.info("Keystore does not exist - creating new keystore...")
                 ks = LogstashKeystore.create(
@@ -168,11 +181,9 @@ def update_keystore(settings_path, keystore_changes):
                 logger.info("Successfully created new keystore")
             except Exception as create_error:
                 logger.error(f"Failed to create keystore: {create_error}")
-                logger.error("Cannot proceed with keystore operations")
                 return False
         except Exception as e:
             logger.error(f"Unexpected error loading keystore: {e}")
-            logger.error("Cannot proceed with keystore operations")
             return False
         
         # Perform delete operations first
@@ -799,50 +810,41 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             if not rollout_aborted:
                 keystore_password_response = changes.get('keystore_password')
                 if keystore_password_response and keystore_password_response != False:
-                    logger.info("Keystore password change detected - destroying and recreating keystore")
+                    logger.info("Keystore password change detected - will always recreate keystore")
                     try:
                         decrypted_combined = encryption.decrypt_credential(keystore_password_response)
-                        if decrypted_combined.startswith(f"{api_key}:"):
-                            actual_password = decrypted_combined[len(api_key) + 1:]
-                            new_hash = hashlib.sha256(actual_password.encode('utf-8')).hexdigest()
+                        if not decrypted_combined.startswith(f"{api_key}:"):
+                            raise ValueError("API key prefix mismatch in decrypted keystore password")
+                        actual_password = decrypted_combined[len(api_key) + 1:]
+                        new_hash = hashlib.sha256(actual_password.encode('utf-8')).hexdigest()
+                    except Exception as decrypt_error:
+                        logger.error(f"Failed to decrypt keystore password from server: {decrypt_error}")
+                        failed_operations.append(f'keystore_password decrypt failed: {decrypt_error}')
+                        rollout_aborted = True
 
-                            # Destroy old keystore (safe even if it doesn't exist yet)
-                            old_password = state.get('keystore_password', '')
-                            try:
-                                old_ks = LogstashKeystore.load(
-                                    path_settings=settings_path,
-                                    password=old_password
-                                )
-                                old_ks.delete_keystore()
-                                logger.info("Deleted existing keystore")
-                            except Exception as e:
-                                logger.warning(f"Could not delete existing keystore (may not exist yet): {e}")
+                    if not rollout_aborted:
+                        # Delete the keystore file directly — no need to load/decrypt the old one
+                        from pathlib import Path
+                        keystore_file = Path(settings_path) / 'logstash.keystore'
+                        try:
+                            keystore_file.unlink(missing_ok=True)
+                            logger.info("Deleted existing keystore file")
+                        except Exception as del_e:
+                            logger.warning(f"Could not delete keystore file: {del_e}")
 
-                            # Create new keystore with the new password
-                            LogstashKeystore.create(
-                                path_settings=settings_path,
-                                password=actual_password
-                            )
+                        try:
+                            LogstashKeystore.create(path_settings=settings_path, password=actual_password)
                             logger.info("Created new keystore with updated password")
-
-                            # Persist new password and hash so update_keystore() uses the right password
                             agent_state.update_state('keystore_password', actual_password)
                             agent_state.update_state('keystore_password_hash', new_hash)
-                            # Refresh state so update_keystore reads the new password
                             state = agent_state.get_state()
-
                             files_updated = True
                             requires_restart = True
-                            logger.info("Keystore password updated successfully")
-                        else:
-                            logger.error("API key mismatch in keystore_password response - cannot apply password change")
-                            failed_operations.append('keystore password decryption failed')
+                        except Exception as create_error:
+                            logger.error(f"Failed to create keystore: {create_error}")
+                            logger.exception("Keystore creation exception details:")
+                            failed_operations.append(f'keystore creation failed: {create_error}')
                             rollout_aborted = True
-                    except Exception as e:
-                        logger.error(f"Failed to handle keystore password change: {e}")
-                        logger.exception("Keystore password change exception details:")
-                        failed_operations.append('keystore password change failed')
-                        rollout_aborted = True
 
             # Handle keystore changes
             if not rollout_aborted:
