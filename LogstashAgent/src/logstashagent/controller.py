@@ -114,16 +114,15 @@ def update_keystore(settings_path, keystore_changes):
         logger.debug(f"Keystore changes requested: {keystore_changes}")
         
         # Get keystore password from agent state
-        # Use empty string "" for passwordless keystores (PKCS12 standard)
+        # Pass None (not empty string) for passwordless keystores — LogstashKeystore
+        # requires None when no password is set; an empty string leaves self.password unset.
         state = agent_state.get_state()
-        keystore_password = state.get('keystore_password', '')
-        
-        # Log password configuration status
-        if not keystore_password:
-            logger.info("Keystore password: NOT CONFIGURED (using empty string for passwordless keystore)")
-            keystore_password = ""  # PKCS12 standard for passwordless
-        else:
+        keystore_password = state.get('keystore_password') or None
+
+        if keystore_password:
             logger.info("Keystore password: CONFIGURED (using provided password)")
+        else:
+            logger.info("Keystore password: NOT CONFIGURED (passwordless keystore)")
         
         # Normalize path separators
         if settings_path:
@@ -811,7 +810,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 keystore_password_response = changes.get('keystore_password')
                 if keystore_password_response and keystore_password_response != False:
                     logger.info("Keystore password change detected - will always recreate keystore")
-                    actual_password = ''
+                    actual_password = None
                     new_hash = ''
                     try:
                         decrypted_combined = encryption.decrypt_credential(keystore_password_response)
@@ -842,7 +841,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                     try:
                         LogstashKeystore.create(path_settings=settings_path, password=actual_password)
                         logger.info("Created new keystore%s", " with updated password" if actual_password else " with empty password (decrypt failed)")
-                        agent_state.update_state('keystore_password', actual_password)
+                        agent_state.update_state('keystore_password', actual_password or '')
                         agent_state.update_state('keystore_password_hash', new_hash)
                         state = agent_state.get_state()
                         files_updated = True
