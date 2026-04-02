@@ -904,10 +904,15 @@ def get_logstash_health_report(api_port=9600):
     Query the Logstash /_health_report endpoint.
 
     Returns:
-        dict with keys: accessible, status, symptom, error
+        dict with keys: accessible, status, symptom, indicators, error
+
+        indicators is a list of dicts, each with:
+            name, status, symptom, diagnosis (list of {cause, action}),
+            and optionally indicators (same structure, one level deep)
     """
     from .logstash_api import LogstashAPI
     base_url = f"http://localhost:{api_port}"
+
     try:
         api = LogstashAPI(base_url=base_url)
         data = api.get_instance_health()
@@ -915,6 +920,7 @@ def get_logstash_health_report(api_port=9600):
             'accessible': True,
             'status': data.get('status', 'unknown'),
             'symptom': data.get('symptom'),
+            'indicators': data.get('indicators', {}),
             'error': None,
         }
     except Exception as e:
@@ -923,6 +929,7 @@ def get_logstash_health_report(api_port=9600):
             'accessible': False,
             'status': 'unknown',
             'symptom': None,
+            'indicators': {},
             'error': str(e)[:200],
         }
 
