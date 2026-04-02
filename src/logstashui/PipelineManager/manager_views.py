@@ -22,10 +22,22 @@ from html import escape
 import logging
 import json
 import base64
+import hashlib
 import secrets
 import requests
 import os
 from Common.encryption import encrypt_credential
+from cryptography.fernet import Fernet
+
+
+def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
+    """
+    Encrypt a plaintext value for transport to a specific agent.
+    Uses the agent's raw API key (SHA-256 → base64) as the Fernet key so that
+    only that agent — which holds the same API key — can decrypt it.
+    """
+    key = base64.urlsafe_b64encode(hashlib.sha256(raw_api_key.encode('utf-8')).digest())
+    return Fernet(key).encrypt(plaintext.encode('utf-8')).decode('utf-8')
 
 logger = logging.getLogger(__name__)
 
@@ -1916,8 +1928,7 @@ def get_config_changes(request):
                 if agent_hash != policy_keystore[agent_key_name]['hash']:
                     # Hash differs - encrypt using API key and send updated value
                     plaintext_value = policy_keystore[agent_key_name]['value']
-                    # Encrypt with agent's API key: first layer is the value, second layer uses API key as seed
-                    encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
+                    encrypted_value = _encrypt_for_agent(raw_api_key, plaintext_value)
                     keystore_changes['set'][agent_key_name] = encrypted_value
             else:
                 # Key exists on agent but NOT in policy - delete it
@@ -1928,19 +1939,18 @@ def get_config_changes(request):
             if policy_key_name not in agent_keystore:
                 # New key - encrypt using API key and send to agent
                 plaintext_value = policy_keystore[policy_key_name]['value']
-                # Encrypt with agent's API key: first layer is the value, second layer uses API key as seed
-                encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
+                encrypted_value = _encrypt_for_agent(raw_api_key, plaintext_value)
                 keystore_changes['set'][policy_key_name] = encrypted_value
 
         # Check keystore_password and determine final keystore changes
         if policy.keystore_password and (agent_keystore_password_hash != policy.keystore_password_hash):
             # Password changed (or agent doesn't have it yet) - send encrypted password to agent
             plaintext_password = policy.get_keystore_password()
-            changes['keystore_password'] = encrypt_credential(f"{raw_api_key}:{plaintext_password}")
+            changes['keystore_password'] = _encrypt_for_agent(raw_api_key, plaintext_password)
             # Force ALL policy keystore keys to be sent - keystore will be destroyed/recreated on agent
             forced_set = {}
             for policy_key_name, policy_key_data in policy_keystore.items():
-                forced_set[policy_key_name] = encrypt_credential(f"{raw_api_key}:{policy_key_data['value']}")
+                forced_set[policy_key_name] = _encrypt_for_agent(raw_api_key, policy_key_data['value'])
             if forced_set or keystore_changes.get('delete'):
                 changes['keystore'] = {'set': forced_set, 'delete': keystore_changes.get('delete', [])}
             else:

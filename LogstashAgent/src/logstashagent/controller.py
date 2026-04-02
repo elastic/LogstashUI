@@ -7,8 +7,10 @@ import logging
 import requests
 import json
 import hashlib
+import base64
 import subprocess
 from datetime import datetime, timezone
+from cryptography.fernet import Fernet
 from . import agent_state
 from . import encryption
 from .ls_keystore_utils import LogstashKeystore
@@ -17,6 +19,15 @@ from .ls_keystore_utils.exceptions import (
     IncorrectPassword,
     LogstashKeystoreModified
 )
+
+
+def _decrypt_from_server(raw_api_key: str, encrypted: str) -> str:
+    """
+    Decrypt a value that was encrypted by the server specifically for this agent.
+    The server derives a Fernet key from SHA-256(api_key); we do the same here.
+    """
+    key = base64.urlsafe_b64encode(hashlib.sha256(raw_api_key.encode('utf-8')).digest())
+    return Fernet(key).decrypt(encrypted.encode('utf-8')).decode('utf-8')
 
 logger = logging.getLogger(__name__)
 
@@ -230,16 +241,7 @@ def update_keystore(settings_path, keystore_changes):
                 decrypted_keys = {}
                 for key_name, encrypted_value in keys_to_set.items():
                     try:
-                        # Decrypt the value (format: "api_key:actual_value")
-                        decrypted_combined = encryption.decrypt_credential(encrypted_value)
-                        
-                        # Verify API key prefix and extract actual value
-                        if not decrypted_combined.startswith(f"{api_key_decrypted}:"):
-                            logger.error(f"API key mismatch for keystore value {key_name} - this value was encrypted for a different agent")
-                            return False
-                        
-                        # Extract the actual keystore value after the API key prefix
-                        actual_value = decrypted_combined[len(api_key_decrypted) + 1:]
+                        actual_value = _decrypt_from_server(api_key_decrypted, encrypted_value)
                         decrypted_keys[key_name] = actual_value
                         logger.debug(f"  - Decrypted key: {key_name}")
                     except Exception as e:
@@ -811,10 +813,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 if keystore_password_response and keystore_password_response != False:
                     logger.info("Keystore password change detected - recreating keystore")
                     try:
-                        decrypted_combined = encryption.decrypt_credential(keystore_password_response)
-                        if not decrypted_combined.startswith(f"{api_key}:"):
-                            raise ValueError("API key prefix mismatch in decrypted keystore password")
-                        actual_password = decrypted_combined[len(api_key) + 1:]
+                        actual_password = _decrypt_from_server(api_key, keystore_password_response)
                         new_hash = hashlib.sha256(actual_password.encode('utf-8')).hexdigest()
                         logger.info("Successfully decrypted new keystore password")
 

@@ -18,6 +18,9 @@ DEFAULT_CONFIG = {
             "logstash_settings": "/etc/logstash",
             "logstash_log_path": "/var/log/logstash"
         }
+    },
+    "no_auth": {
+        "enabled": False
     }
 }
 
