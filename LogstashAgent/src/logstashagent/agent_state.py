@@ -11,7 +11,7 @@ from . import encryption
 logger = logging.getLogger(__name__)
 
 # Keys that should be encrypted when stored
-ENCRYPTED_KEYS = {'api_key'}
+ENCRYPTED_KEYS = {'api_key', 'keystore_password'}
 
 # Path to state file
 STATE_DIR = Path(__file__).parent / 'data'
