@@ -842,25 +842,36 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                             rollout_aborted = True
 
                     except Exception as decrypt_error:
-                        # Decrypt failed — leave the existing keystore untouched and record
-                        # the failure. The server will keep detecting the hash mismatch and
-                        # retry on every sync until the encryption key issue resolves.
+                        # Decrypt failed — delete the keystore file so we're in a clean
+                        # state for the next sync. Skip key changes this cycle since the
+                        # values are encrypted with the same key and will also fail.
                         logger.error(f"Failed to decrypt keystore password from server: {decrypt_error}")
-                        logger.warning("Leaving existing keystore intact - will retry on next sync")
                         failed_operations.append(f'keystore_password decrypt failed: {decrypt_error}')
+                        from pathlib import Path
+                        keystore_file = Path(settings_path) / 'logstash.keystore'
+                        try:
+                            keystore_file.unlink(missing_ok=True)
+                            logger.warning("Deleted keystore file - will recreate with correct password on next successful sync")
+                        except Exception as del_e:
+                            logger.warning(f"Could not delete keystore file: {del_e}")
 
-            # Handle keystore changes
+            # Handle keystore changes — skip if keystore password is not yet in state
+            # (e.g. decrypt failed this cycle; will be retried next sync)
             if not rollout_aborted:
                 keystore_changes = changes.get('keystore')
                 if keystore_changes and keystore_changes != False:
-                    logger.info("Keystore changes detected")
-                    if update_keystore(settings_path, keystore_changes):
-                        files_updated = True
-                        requires_restart = True
+                    if not state.get('keystore_password'):
+                        logger.warning("Skipping keystore key changes - no keystore password in agent state yet")
+                        failed_operations.append('keystore changes skipped - no password in state')
                     else:
-                        logger.error("Failed to update keystore - aborting rollout")
-                        failed_operations.append('keystore update failed')
-                        rollout_aborted = True
+                        logger.info("Keystore changes detected")
+                        if update_keystore(settings_path, keystore_changes):
+                            files_updated = True
+                            requires_restart = True
+                        else:
+                            logger.error("Failed to update keystore - aborting rollout")
+                            failed_operations.append('keystore update failed')
+                            rollout_aborted = True
 
             # Handle pipeline changes (no restart needed — Logstash reloads pipelines dynamically)
             if not rollout_aborted:
