@@ -899,6 +899,92 @@ def get_logstash_api_status(api_port=9600):
         }
 
 
+def get_logstash_health_report(api_port=9600):
+    """
+    Query the Logstash /_health_report endpoint.
+
+    Returns:
+        dict with keys: accessible, status, symptom, error
+    """
+    from .logstash_api import LogstashAPI
+    base_url = f"http://localhost:{api_port}"
+    try:
+        api = LogstashAPI(base_url=base_url)
+        data = api.get_instance_health()
+        return {
+            'accessible': True,
+            'status': data.get('status', 'unknown'),
+            'symptom': data.get('symptom'),
+            'error': None,
+        }
+    except Exception as e:
+        logger.warning(f"Logstash health report not accessible at {base_url}: {e}")
+        return {
+            'accessible': False,
+            'status': 'unknown',
+            'symptom': None,
+            'error': str(e)[:200],
+        }
+
+
+def get_logstash_node_stats(api_port=9600):
+    """
+    Query the Logstash /_node/stats endpoint and return condensed node-level
+    statistics. Pipeline-level detail is intentionally excluded.
+
+    Returns:
+        dict with keys: accessible, jvm, process, events, pipeline, reloads, error
+    """
+    from .logstash_api import LogstashAPI
+    base_url = f"http://localhost:{api_port}"
+    try:
+        api = LogstashAPI(base_url=base_url)
+        data = api.get_node_stats()
+
+        jvm      = data.get('jvm', {})
+        mem      = jvm.get('mem', {})
+        gc       = jvm.get('gc', {}).get('collectors', {})
+        process  = data.get('process', {})
+        cpu      = process.get('cpu', {})
+        events   = data.get('events', {})
+        pipeline = data.get('pipeline', {})
+        reloads  = data.get('reloads', {})
+
+        return {
+            'accessible': True,
+            'jvm': {
+                'heap_used_percent':        mem.get('heap_used_percent'),
+                'uptime_in_millis':         jvm.get('uptime_in_millis'),
+                'gc_old_collection_count':  gc.get('old', {}).get('collection_count'),
+                'gc_young_collection_count': gc.get('young', {}).get('collection_count'),
+            },
+            'process': {
+                'cpu_percent':           cpu.get('percent'),
+                'open_file_descriptors': process.get('open_file_descriptors'),
+            },
+            'events': {
+                'in':       events.get('in', 0),
+                'filtered': events.get('filtered', 0),
+                'out':      events.get('out', 0),
+            },
+            'pipeline': {
+                'workers':    pipeline.get('workers'),
+                'batch_size': pipeline.get('batch_size'),
+            },
+            'reloads': {
+                'successes': reloads.get('successes', 0),
+                'failures':  reloads.get('failures', 0),
+            },
+            'error': None,
+        }
+    except Exception as e:
+        logger.warning(f"Logstash node stats not accessible at {base_url}: {e}")
+        return {
+            'accessible': False,
+            'error': str(e)[:200],
+        }
+
+
 def check_in():
     """
     Send check-in to logstashui with current agent state
@@ -1065,6 +1151,8 @@ def check_in():
 
         api_port = state.get('api_port', 9600)
         status_blob['logstash_api'] = get_logstash_api_status(api_port)
+        status_blob['health_report'] = get_logstash_health_report(api_port)
+        status_blob['node_stats'] = get_logstash_node_stats(api_port)
         status_blob['last_policy_apply'] = state.get('last_policy_apply')
 
         logger.debug(f"Path validation status: {status_blob}")

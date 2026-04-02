@@ -281,7 +281,7 @@
                             <p class="text-sm text-gray-400 mt-0.5">{{ connection.policy.name }}</p>
                             {% endif %}
                           </div>
-                          {% if connection.status_blob.settings_path_found == False or connection.status_blob.logs_path_found == False or connection.status_blob.binary_path_found == False or connection.status_blob.logstash_api.accessible == False or connection.status_blob.logstash_api.status == 'red' or connection.status_blob.last_policy_apply.success == False %}
+                          {% if connection.status_blob.settings_path_found == False or connection.status_blob.logs_path_found == False or connection.status_blob.binary_path_found == False or connection.status_blob.logstash_api.accessible == False or connection.status_blob.logstash_api.status == 'red' or connection.status_blob.last_policy_apply.success == False or connection.status_blob.health_report.status == 'yellow' or connection.status_blob.health_report.status == 'red' %}
                           <span class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-900/40 text-yellow-300 border border-yellow-700/30">
                             <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse"></span>Degraded
                           </span>
@@ -481,6 +481,101 @@
                                 <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.logstash_api.version }}</p>
                               </div>
                               {% endif %}
+                            </div>
+                            {% endif %}
+                          </div>
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {# ── Health Report card ───────────────────────────────────── #}
+                      {% if connection.status_blob.health_report %}
+                      <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
+                        {% if connection.status_blob.health_report.status == 'red' %}<div class="h-0.5 bg-red-500/60"></div>
+                        {% elif connection.status_blob.health_report.status == 'yellow' %}<div class="h-0.5 bg-yellow-500/60"></div>
+                        {% elif connection.status_blob.health_report.status == 'green' %}<div class="h-0.5 bg-green-500/60"></div>
+                        {% endif %}
+                        <div class="p-4">
+                          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Health Report</p>
+                          {% if connection.status_blob.health_report.accessible %}
+                          <div class="flex items-center gap-3">
+                            {% if connection.status_blob.health_report.status == 'green' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-900/40 text-green-300 border border-green-700/30">
+                              <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>green
+                            </span>
+                            {% elif connection.status_blob.health_report.status == 'yellow' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-900/40 text-yellow-300 border border-yellow-700/30">
+                              <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse"></span>yellow
+                            </span>
+                            {% elif connection.status_blob.health_report.status == 'red' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/40 text-red-300 border border-red-700/30">
+                              <span class="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>red
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-700/60 text-gray-300 border border-gray-600/30">
+                              <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>{{ connection.status_blob.health_report.status }}
+                            </span>
+                            {% endif %}
+                            {% if connection.status_blob.health_report.symptom and connection.status_blob.health_report.status != 'green' %}
+                            <p class="text-sm text-gray-300">{{ connection.status_blob.health_report.symptom }}</p>
+                            {% endif %}
+                          </div>
+                          {% else %}
+                          <div class="flex items-center gap-2.5">
+                            <svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                            <span class="text-sm font-medium text-red-300">Health report not accessible</span>
+                          </div>
+                          {% endif %}
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {# ── Node Stats card ───────────────────────────────────────── #}
+                      {% if connection.status_blob.node_stats.accessible %}
+                      <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
+                        <div class="p-4">
+                          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Node Stats</p>
+                          <div class="grid grid-cols-2 gap-x-6 gap-y-3">
+                            {% if connection.status_blob.node_stats.jvm.heap_used_percent is not None %}
+                            <div>
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">JVM Heap Used</p>
+                              <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.node_stats.jvm.heap_used_percent }}%</p>
+                            </div>
+                            {% endif %}
+                            {% if connection.status_blob.node_stats.process.cpu_percent is not None %}
+                            <div>
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">CPU</p>
+                              <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.node_stats.process.cpu_percent }}%</p>
+                            </div>
+                            {% endif %}
+                            {% if connection.status_blob.node_stats.pipeline.workers is not None %}
+                            <div>
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Workers</p>
+                              <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.node_stats.pipeline.workers }}</p>
+                            </div>
+                            {% endif %}
+                            {% if connection.status_blob.node_stats.pipeline.batch_size is not None %}
+                            <div>
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Batch Size</p>
+                              <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.node_stats.pipeline.batch_size }}</p>
+                            </div>
+                            {% endif %}
+                            {% if connection.status_blob.node_stats.events.in is not None %}
+                            <div>
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Events In</p>
+                              <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.node_stats.events.in }}</p>
+                            </div>
+                            {% endif %}
+                            {% if connection.status_blob.node_stats.events.out is not None %}
+                            <div>
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Events Out</p>
+                              <p class="text-sm font-medium text-gray-100 mt-0.5">{{ connection.status_blob.node_stats.events.out }}</p>
+                            </div>
+                            {% endif %}
+                            {% if connection.status_blob.node_stats.reloads.failures %}
+                            <div class="col-span-2">
+                              <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Reload Failures</p>
+                              <p class="text-sm font-semibold text-yellow-400 mt-0.5">{{ connection.status_blob.node_stats.reloads.failures }}</p>
                             </div>
                             {% endif %}
                           </div>

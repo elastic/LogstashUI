@@ -138,11 +138,12 @@ class LogstashAPI:
     
     def get_health_report(self) -> Dict[str, Any]:
         """
-        Get health report from Logstash.
-        
+        Get health report from Logstash (/_node/health_report).
+        Used internally for pipeline state detection.
+
         Returns:
             Dict containing health report with pipeline indicators
-        
+
         Raises:
             LogstashAPIError: If the request fails
         """
@@ -152,6 +153,24 @@ class LogstashAPI:
             return response.json()
         except httpx.HTTPError as e:
             raise LogstashAPIError(f"Failed to get health report: {e}")
+
+    def get_instance_health(self) -> Dict[str, Any]:
+        """
+        Get the top-level instance health report from Logstash (/_health_report).
+        Returns overall node status, symptom, and indicator summaries.
+
+        Returns:
+            Dict containing instance health with status, symptom, and indicators
+
+        Raises:
+            LogstashAPIError: If the request fails
+        """
+        try:
+            response = self.client.get(f"{self.base_url}/_health_report")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise LogstashAPIError(f"Failed to get instance health report: {e}")
     
     def get_node_stats(self) -> Dict[str, Any]:
         """
