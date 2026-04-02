@@ -698,6 +698,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
             'logs_path': logs_path,
             'binary_path': binary_path,
             'keystore': keystore_state,
+            'keystore_password_hash': state.get('keystore_password_hash', ''),
             'pipelines': pipelines_state,
         }
         
@@ -793,6 +794,55 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                 logger.info(f"Configuration change found for settings_path: {changes.get('settings_path')}")
             if changes.get('logs_path') and changes.get('logs_path') != False:
                 logger.info(f"Configuration change found for logs_path: {changes.get('logs_path')}")
+
+            # Handle keystore password change (must run BEFORE keystore key changes)
+            if not rollout_aborted:
+                keystore_password_response = changes.get('keystore_password')
+                if keystore_password_response and keystore_password_response != False:
+                    logger.info("Keystore password change detected - destroying and recreating keystore")
+                    try:
+                        decrypted_combined = encryption.decrypt_credential(keystore_password_response)
+                        if decrypted_combined.startswith(f"{api_key}:"):
+                            actual_password = decrypted_combined[len(api_key) + 1:]
+                            new_hash = hashlib.sha256(actual_password.encode('utf-8')).hexdigest()
+
+                            # Destroy old keystore (safe even if it doesn't exist yet)
+                            old_password = state.get('keystore_password', '')
+                            try:
+                                old_ks = LogstashKeystore.load(
+                                    path_settings=settings_path,
+                                    password=old_password
+                                )
+                                old_ks.delete_keystore()
+                                logger.info("Deleted existing keystore")
+                            except Exception as e:
+                                logger.warning(f"Could not delete existing keystore (may not exist yet): {e}")
+
+                            # Create new keystore with the new password
+                            LogstashKeystore.create(
+                                path_settings=settings_path,
+                                password=actual_password
+                            )
+                            logger.info("Created new keystore with updated password")
+
+                            # Persist new password and hash so update_keystore() uses the right password
+                            agent_state.update_state('keystore_password', actual_password)
+                            agent_state.update_state('keystore_password_hash', new_hash)
+                            # Refresh state so update_keystore reads the new password
+                            state = agent_state.get_state()
+
+                            files_updated = True
+                            requires_restart = True
+                            logger.info("Keystore password updated successfully")
+                        else:
+                            logger.error("API key mismatch in keystore_password response - cannot apply password change")
+                            failed_operations.append('keystore password decryption failed')
+                            rollout_aborted = True
+                    except Exception as e:
+                        logger.error(f"Failed to handle keystore password change: {e}")
+                        logger.exception("Keystore password change exception details:")
+                        failed_operations.append('keystore password change failed')
+                        rollout_aborted = True
 
             # Handle keystore changes
             if not rollout_aborted:

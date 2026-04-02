@@ -49,6 +49,7 @@ urlpatterns = [
     path("CreateKeystoreEntry/", manager_views.create_keystore_entry, name="CreateKeystoreEntry"),
     path("UpdateKeystoreEntry/", manager_views.update_keystore_entry, name="UpdateKeystoreEntry"),
     path("DeleteKeystoreEntry/", manager_views.delete_keystore_entry, name="DeleteKeystoreEntry"),
+    path("SetKeystorePassword/", manager_views.set_keystore_password, name="SetKeystorePassword"),
 
     path("GetCurrentPipelineCode/", editor_views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", editor_views.GetDiff, name="GetDiff"),

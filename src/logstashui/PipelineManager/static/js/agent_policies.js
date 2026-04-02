@@ -2084,8 +2084,24 @@ async function loadPolicyKeystore() {
         
         const data = await response.json();
         const tableBody = document.getElementById('keystoreTableBody');
-        
+
         if (data.success && tableBody) {
+            // Toggle UI based on whether a keystore password is set
+            const noPasswordBanner = document.getElementById('keystoreNoPasswordBanner');
+            const passwordedControls = document.getElementById('keystorePasswordedControls');
+            const tableContainer = document.getElementById('keystoreTableContainer');
+
+            if (data.has_keystore_password) {
+                noPasswordBanner?.classList.add('hidden');
+                passwordedControls?.classList.remove('hidden');
+                tableContainer?.classList.remove('hidden');
+            } else {
+                noPasswordBanner?.classList.remove('hidden');
+                passwordedControls?.classList.add('hidden');
+                tableContainer?.classList.add('hidden');
+                return;
+            }
+
             if (data.entries && data.entries.length > 0) {
                 tableBody.innerHTML = data.entries.map(entry => `
                     <tr class="hover:bg-gray-800/50">
@@ -2140,6 +2156,100 @@ async function loadPolicyKeystore() {
     } catch (error) {
         console.error('Error loading keystore:', error);
         showToast('Failed to load keystore entries', 'error');
+    }
+}
+
+async function showSetKeystorePasswordModal() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect?.options[policySelect.selectedIndex];
+    const policyId = selectedOption?.dataset.policyId;
+
+    if (!policyId) {
+        showToast('Please select a policy first', 'error');
+        return;
+    }
+
+    const password = await ConfirmationModal.prompt(
+        'Please input a keystore password.',
+        '',
+        'Set Keystore Password',
+        'Enter password...'
+    );
+
+    if (!password) return;
+
+    try {
+        const response = await fetch('/ConnectionManager/SetKeystorePassword/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ policy_id: policyId, password: password })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadPolicyKeystore();
+        } else {
+            showToast(data.error || 'Failed to set keystore password', 'error');
+        }
+    } catch (error) {
+        console.error('Error setting keystore password:', error);
+        showToast('Failed to set keystore password', 'error');
+    }
+}
+
+async function showChangeKeystorePasswordModal() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect?.options[policySelect.selectedIndex];
+    const policyId = selectedOption?.dataset.policyId;
+
+    if (!policyId) {
+        showToast('Please select a policy first', 'error');
+        return;
+    }
+
+    const confirmed = await ConfirmationModal.show(
+        'WARNING: If you change the keystore password, the keystore will be destroyed and recreated. All existing keystore entries will be re-applied automatically.',
+        'Change Keystore Password',
+        'Continue'
+    );
+
+    if (!confirmed) return;
+
+    const password = await ConfirmationModal.prompt(
+        'Enter new keystore password:',
+        '',
+        'New Keystore Password',
+        'Enter new password...'
+    );
+
+    if (!password) return;
+
+    try {
+        const response = await fetch('/ConnectionManager/SetKeystorePassword/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ policy_id: policyId, password: password })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadPolicyKeystore();
+        } else {
+            showToast(data.error || 'Failed to change keystore password', 'error');
+        }
+    } catch (error) {
+        console.error('Error changing keystore password:', error);
+        showToast('Failed to change keystore password', 'error');
     }
 }
 

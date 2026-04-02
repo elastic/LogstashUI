@@ -1843,6 +1843,7 @@ def get_config_changes(request):
         agent_settings_path = data.get('settings_path', '')
         agent_logs_path = data.get('logs_path', '')
         agent_binary_path = data.get('binary_path', '')
+        agent_keystore_password_hash = data.get('keystore_password_hash', '')
 
         if not connection.policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
@@ -1931,11 +1932,26 @@ def get_config_changes(request):
                 encrypted_value = encrypt_credential(f"{raw_api_key}:{plaintext_value}")
                 keystore_changes['set'][policy_key_name] = encrypted_value
 
-        # Only include keystore changes if there are actual changes
-        if keystore_changes['set'] or keystore_changes['delete']:
-            changes['keystore'] = keystore_changes
+        # Check keystore_password and determine final keystore changes
+        if policy.keystore_password and (agent_keystore_password_hash != policy.keystore_password_hash):
+            # Password changed (or agent doesn't have it yet) - send encrypted password to agent
+            plaintext_password = policy.get_keystore_password()
+            changes['keystore_password'] = encrypt_credential(f"{raw_api_key}:{plaintext_password}")
+            # Force ALL policy keystore keys to be sent - keystore will be destroyed/recreated on agent
+            forced_set = {}
+            for policy_key_name, policy_key_data in policy_keystore.items():
+                forced_set[policy_key_name] = encrypt_credential(f"{raw_api_key}:{policy_key_data['value']}")
+            if forced_set or keystore_changes.get('delete'):
+                changes['keystore'] = {'set': forced_set, 'delete': keystore_changes.get('delete', [])}
+            else:
+                changes['keystore'] = False
         else:
-            changes['keystore'] = False
+            changes['keystore_password'] = False
+            # Only include keystore changes if there are actual changes
+            if keystore_changes['set'] or keystore_changes['delete']:
+                changes['keystore'] = keystore_changes
+            else:
+                changes['keystore'] = False
 
         # Check pipelines
         agent_pipelines = data.get('pipelines', {})  # {name: {config_hash, settings}}
@@ -2041,11 +2057,53 @@ def get_keystore_entries(request):
 
         return JsonResponse({
             "success": True,
-            "entries": entries_data
+            "entries": entries_data,
+            "has_keystore_password": bool(policy.keystore_password)
         })
 
     except Exception as e:
         logger.error(f"Error fetching keystore entries: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def set_keystore_password(request):
+    """
+    Set or update the keystore password for a policy.
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        policy_id = data.get('policy_id')
+        password = data.get('password')
+
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+        if not password:
+            return JsonResponse({"success": False, "error": "Password cannot be empty"}, status=400)
+
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+        policy.keystore_password = password  # save() will encrypt and hash it
+        policy.has_undeployed_changes = True
+        policy.save()
+
+        logger.info(f"User '{request.user.username}' set keystore password for policy '{policy.name}'")
+
+        return JsonResponse({
+            "success": True,
+            "message": "Keystore password updated successfully"
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error setting keystore password: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 

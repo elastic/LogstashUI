@@ -1448,75 +1448,96 @@
 
       <!-- Keystore View -->
       <div id="keystoreView" class="hidden flex-1 overflow-auto px-4 py-6">
-        <!-- Header with Create Button and Search -->
-        <div class="mb-4 flex gap-4 items-center">
+
+        <!-- No-password banner (shown when policy has no keystore password set) -->
+        <div id="keystoreNoPasswordBanner" class="hidden mb-4 p-4 bg-yellow-900/30 border border-yellow-600/50 rounded-lg flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.834-2.694-.834-3.464 0L3.34 16.5C2.57 18.333 3.532 20 5.072 20z" />
+            </svg>
+            <span class="text-yellow-300 text-sm">A keystore password must be set before managing keystore entries.</span>
+          </div>
+          <button onclick="showSetKeystorePasswordModal()" class="btn btn-sm btn-warning ml-4 flex-shrink-0">
+            Set Keystore Password
+          </button>
+        </div>
+
+        <!-- Controls (hidden until keystore password is set) -->
+        <div id="keystorePasswordedControls" class="hidden mb-4 flex gap-4 items-center">
           <button onclick="showCreateKeystoreModal()" class="btn btn-primary btn-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
             </svg>
             Create Key
           </button>
-          
+
+          <button onclick="showChangeKeystorePasswordModal()" class="btn btn-secondary btn-sm">
+            Change Keystore Password
+          </button>
+
           <!-- Search Bar -->
           <div style="max-width: 500px; flex: 1;">
             <input type="text" id="keystoreSearch" placeholder="Search by variable or key..." class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
           </div>
         </div>
-        
-        <!-- No Results State -->
-        <div id="keystoreNoResults" class="hidden p-8 text-center bg-gray-900/50 rounded-lg mb-4">
-          <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-600/20 rounded-full mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <h3 class="text-lg font-bold text-white mb-1">No results found</h3>
-          <p class="text-gray-400 text-sm">Try adjusting your search terms</p>
-        </div>
 
-        <!-- Keystore Table -->
-        <div id="keystoreList" class="overflow-hidden">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-gray-700">
-                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Variable</th>
-                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Key</th>
-                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Value</th>
-                <th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="keystoreTableBody" class="divide-y divide-gray-800">
-              <!-- Keystore entries will be loaded here via JavaScript -->
-              <tr>
-                <td colspan="4" class="px-4 py-8 text-center text-gray-400">
-                  <div class="flex flex-col items-center gap-2">
-                    <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                    </svg>
-                    <p>No keystore entries found</p>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination Controls -->
-        <div id="keystorePagination" class="mt-4 flex justify-between items-center">
-          <div class="flex gap-3 items-center">
-            <div class="text-sm text-gray-400 whitespace-nowrap">
-              Showing <span id="keystoreShowingStart">0</span> to <span id="keystoreShowingEnd">0</span> of <span id="keystoreTotalCount">0</span> entries
+        <!-- Table + pagination (hidden until keystore password is set) -->
+        <div id="keystoreTableContainer" class="hidden">
+          <!-- No Results State -->
+          <div id="keystoreNoResults" class="hidden p-8 text-center bg-gray-900/50 rounded-lg mb-4">
+            <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-600/20 rounded-full mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
-            <select id="keystorePageSize" class="select select-bordered select-sm bg-gray-700 text-white border-gray-600" style="width: 70px;">
-              <option value="10" selected>10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-            </select>
+            <h3 class="text-lg font-bold text-white mb-1">No results found</h3>
+            <p class="text-gray-400 text-sm">Try adjusting your search terms</p>
           </div>
-          <div class="flex gap-2">
-            <button id="keystorePrevBtn" class="btn btn-sm btn-secondary" onclick="previousKeystorePage()">Previous</button>
-            <span id="keystorePageInfo" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
-            <button id="keystoreNextBtn" class="btn btn-sm btn-secondary" onclick="nextKeystorePage()">Next</button>
+
+          <!-- Keystore Table -->
+          <div id="keystoreList" class="overflow-hidden">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-gray-700">
+                  <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Variable</th>
+                  <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Key</th>
+                  <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Value</th>
+                  <th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="keystoreTableBody" class="divide-y divide-gray-800">
+                <!-- Keystore entries will be loaded here via JavaScript -->
+                <tr>
+                  <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                    <div class="flex flex-col items-center gap-2">
+                      <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                      <p>No keystore entries found</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Controls -->
+          <div id="keystorePagination" class="mt-4 flex justify-between items-center">
+            <div class="flex gap-3 items-center">
+              <div class="text-sm text-gray-400 whitespace-nowrap">
+                Showing <span id="keystoreShowingStart">0</span> to <span id="keystoreShowingEnd">0</span> of <span id="keystoreTotalCount">0</span> entries
+              </div>
+              <select id="keystorePageSize" class="select select-bordered select-sm bg-gray-700 text-white border-gray-600" style="width: 70px;">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button id="keystorePrevBtn" class="btn btn-sm btn-secondary" onclick="previousKeystorePage()">Previous</button>
+              <span id="keystorePageInfo" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
+              <button id="keystoreNextBtn" class="btn btn-sm btn-secondary" onclick="nextKeystorePage()">Next</button>
+            </div>
           </div>
         </div>
       </div>

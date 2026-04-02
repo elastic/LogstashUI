@@ -62,7 +62,21 @@ class Policy(models.Model):
         editable=False,
         help_text="SHA256 hash of log4j2.properties content"
     )
-    
+
+    # Keystore password (encrypted at rest)
+    keystore_password = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="Keystore password (encrypted at rest)"
+    )
+    keystore_password_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        help_text="SHA256 hash of keystore password for change detection"
+    )
+
     # Deployment tracking
     has_undeployed_changes = models.BooleanField(
         default=True,
@@ -90,9 +104,26 @@ class Policy(models.Model):
         self.logstash_yml_hash = hashlib.sha256(self.logstash_yml.encode('utf-8')).hexdigest()
         self.jvm_options_hash = hashlib.sha256(self.jvm_options.encode('utf-8')).hexdigest()
         self.log4j2_properties_hash = hashlib.sha256(self.log4j2_properties.encode('utf-8')).hexdigest()
-        
+
+        # Encrypt keystore password and compute hash if provided as plaintext
+        if self.keystore_password and not self._is_encrypted(self.keystore_password):
+            self.keystore_password_hash = hashlib.sha256(
+                self.keystore_password.encode('utf-8')
+            ).hexdigest()
+            self.keystore_password = encrypt_credential(self.keystore_password)
+        elif not self.keystore_password:
+            self.keystore_password_hash = ''
+
         super().save(*args, **kwargs)
-    
+
+    def _is_encrypted(self, value):
+        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        return value and value.startswith('gAAAAA')
+
+    def get_keystore_password(self):
+        """Get decrypted keystore password"""
+        return decrypt_credential(self.keystore_password) if self.keystore_password else None
+
     def __str__(self):
         return self.name
 
