@@ -85,7 +85,7 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "last_check_in", "status_blob"))
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "policy_id", "last_check_in", "status_blob"))
     
     # Add is_online flag based on last_check_in time (within 10 minutes)
     now = datetime.now(timezone.utc)
@@ -1211,6 +1211,38 @@ def get_policies(request):
     except Exception as e:
         logger.error(f"Error fetching policies: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def change_connection_policy(request):
+    """
+    Change the policy assigned to an agent connection
+    """
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    connection_id = request.POST.get('connection_id')
+    policy_id = request.POST.get('policy_id')
+
+    connection = ConnectionTable.objects.filter(
+        id=connection_id, connection_type=ConnectionTable.ConnectionType.AGENT
+    ).first()
+    if not connection:
+        return JsonResponse({"success": False, "error": "Agent connection not found"}, status=404)
+
+    policy = Policy.objects.filter(id=policy_id).first()
+    if not policy:
+        return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+    old_policy_name = connection.policy.name if connection.policy else "None"
+    connection.policy = policy
+    connection.save()
+    logger.info(
+        f"User '{request.user.username}' changed policy of connection '{connection.name}' "
+        f"from '{old_policy_name}' to '{policy.name}'"
+    )
+
+    return JsonResponse({"success": True})
 
 
 @require_admin_role

@@ -200,6 +200,17 @@ if DEBUG:
     ]
 
 
+NO_AUTH_MODE = LOGSTASHUI_CONFIG.get('no_auth', {}).get('enabled', False)
+
+if NO_AUTH_MODE:
+    import logging
+    logging.getLogger(__name__).warning(
+        "*** NO_AUTH MODE IS ENABLED — All authentication is bypassed. "
+        "Do not use in production! ***"
+    )
+    _auth_idx = MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware')
+    MIDDLEWARE.insert(_auth_idx + 1, 'Common.middleware.NoAuthMiddleware')
+
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/Management/Login/"
 LOGIN_URL = "/Management/Login/"

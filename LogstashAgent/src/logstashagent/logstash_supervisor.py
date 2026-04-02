@@ -12,7 +12,6 @@ import psutil
 import shutil
 from typing import Optional
 from .logstash_api import LogstashAPI
-from . import slots
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Set to INFO level for supervisor
@@ -442,6 +441,7 @@ class LogstashSupervisor:
         logger.info("Evicting all slots and cleaning up conf.d before restart...")
         logger.debug("[RESTART] Calling evict_all_slots_and_cleanup()")
         try:
+            from . import slots
             evicted_slots = slots.evict_all_slots_and_cleanup()
             logger.info(f"Successfully evicted {len(evicted_slots)} slots and cleaned up conf.d")
             logger.debug(f"[RESTART] Evicted slots: {evicted_slots}")
@@ -476,7 +476,7 @@ class LogstashSupervisor:
         """
         logger.debug("[SLOTS] Getting expected slot pipelines")
         try:
-            import LogstashAgent.src.logstashagent.slots
+            from . import slots
             slot_state = slots.get_slot_state()
             expected_pipelines = set()
             logger.debug(f"[SLOTS] Retrieved {len(slot_state)} slots from state")
