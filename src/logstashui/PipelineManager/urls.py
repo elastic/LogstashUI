@@ -74,6 +74,9 @@ urlpatterns = [
     path("QueryElasticsearchDocuments/", editor_views.QueryElasticsearchDocuments, name="QueryElasticsearchDocuments"),
     
     # Plugin documentation endpoint
-    path("GetPluginDocumentation/", editor_views.GetPluginDocumentation, name="GetPluginDocumentation")
+    path("GetPluginDocumentation/", editor_views.GetPluginDocumentation, name="GetPluginDocumentation"),
+
+    # SSE: real-time agent status stream
+    path("AgentStatusStream/", manager_views.agent_status_stream, name="AgentStatusStream")
 
 ]

@@ -1619,6 +1619,30 @@
         </div>
       </div>
       
+      <!-- JVM Form Mode -->
+      <div id="jvmFormView" class="hidden flex-1 overflow-y-auto px-4 py-6">
+        <div class="max-w-md">
+          <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+              <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+              </svg>
+              JVM Heap
+            </h3>
+            <p class="text-xs text-gray-400 mb-4">Sets both <code class="text-gray-300">-Xms</code> and <code class="text-gray-300">-Xmx</code> to the same value.</p>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">Heap Size (GB)</label>
+              <div class="flex items-center gap-3">
+                <input type="number" id="jvmHeapInput" min="1" step="1" placeholder="e.g., 1"
+                  class="input input-sm input-bordered w-32 bg-gray-700 text-white border-gray-600">
+                <span class="text-gray-400 text-sm">GB</span>
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Logstash defaults to 1 GB. Set to half of available system RAM for production use.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Code Mode -->
       <div id="codeModeEditor" class="flex-1 overflow-hidden hidden px-4">
         <textarea id="codeEditor" class="h-full w-full"></textarea>

@@ -3,7 +3,7 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from django.shortcuts import render
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.template.loader import get_template
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
@@ -26,6 +26,7 @@ import hashlib
 import secrets
 import requests
 import os
+import time
 from Common.encryption import encrypt_credential
 from cryptography.fernet import Fernet
 
@@ -1923,6 +1924,78 @@ def deploy_policy(request):
     except Exception as e:
         logger.error(f"Error deploying policy: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def agent_status_stream(request):
+    """
+    SSE endpoint — streams agent status for all agent connections every 5 seconds.
+
+    Each event is a JSON array of objects: {id, name, status}
+    where status is one of: 'restarting' | 'unhealthy' | 'healthy' | 'offline'
+
+    This mirrors the priority logic in the pipeline_manager.html template so the
+    JS can update badges without a full page reload.
+
+    NOTE: Under standard WSGI each open SSE connection holds one server thread.
+    This is fine for small internal deployments. Move to ASGI/Channels if scale
+    becomes a concern.
+    """
+    def _compute_status(conn):
+        blob = conn.get('status_blob') or {}
+        logwatcher = blob.get('logwatcher') or {}
+
+        if logwatcher.get('is_restarting'):
+            return 'restarting'
+
+        if blob:
+            logstash_api  = blob.get('logstash_api')  or {}
+            health_report = blob.get('health_report') or {}
+            last_policy   = blob.get('last_policy_apply') or {}
+
+            if (blob.get('settings_path_found') is False or
+                blob.get('logs_path_found')     is False or
+                blob.get('binary_path_found')   is False or
+                logstash_api.get('accessible')  is False or
+                logstash_api.get('status')      == 'red' or
+                last_policy.get('success')      is False or
+                health_report.get('status')     in ('yellow', 'red')):
+                return 'unhealthy'
+
+        if conn.get('is_online'):
+            return 'healthy'
+
+        return 'offline'
+
+    def _event_stream():
+        try:
+            while True:
+                now = datetime.now(timezone.utc)
+                connections = list(
+                    ConnectionTable.objects
+                    .filter(connection_type=ConnectionTable.ConnectionType.AGENT)
+                    .values('pk', 'name', 'last_check_in', 'status_blob')
+                )
+
+                for conn in connections:
+                    if conn['last_check_in']:
+                        conn['is_online'] = (now - conn['last_check_in']).total_seconds() < 600
+                    else:
+                        conn['is_online'] = False
+
+                payload = json.dumps([
+                    {'id': conn['pk'], 'name': conn['name'], 'status': _compute_status(conn)}
+                    for conn in connections
+                ])
+                yield f"data: {payload}\n\n"
+                time.sleep(5)
+        except GeneratorExit:
+            pass
+
+    response = StreamingHttpResponse(_event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'   # prevent nginx from buffering the stream
+    return response
 
 
 @csrf_exempt

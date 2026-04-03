@@ -924,6 +924,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (currentContent !== undefined && currentContent !== null) {
                         fileContents[previousFile] = currentContent;
                     }
+                } else if (currentMode === 'form' && previousFile === 'jvm.options') {
+                    applyJvmHeapToContent();
+                    fileContents['jvm.options'] = window.policyFileContents['jvm.options'] || '';
                 } else if (currentMode === 'form' && previousFile === 'logstash.yml') {
                     // Save form mode content by converting form to YAML
                     try {
@@ -1037,47 +1040,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 return; // Exit early for enrollment tokens tab
             }
             
-            // Show/hide mode toggle based on file type (only for logstash.yml)
+            // Show/hide mode toggle based on file type
             const modeToggleContainer = document.getElementById('modeToggleContainer');
             const enrollmentTokensView = document.getElementById('enrollmentTokensView');
             const pipelinesView = document.getElementById('pipelinesView');
             const keystoreView = document.getElementById('keystoreView');
-            
+
             if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
             if (pipelinesView) pipelinesView.classList.add('hidden');
             if (keystoreView) keystoreView.classList.add('hidden');
-            
+
             if (file === 'logstash.yml') {
                 modeToggleContainer.classList.remove('hidden');
-                // Automatically switch to Form mode for logstash.yml
+                codeModeBtn.textContent = 'YML';
                 switchToFormMode();
-                
-                // Set editor mode for YAML
-                if (editor) {
-                    editor.setOption('mode', 'text/x-yaml');
-                }
+                if (editor) editor.setOption('mode', 'text/x-yaml');
+            } else if (file === 'jvm.options') {
+                modeToggleContainer.classList.remove('hidden');
+                codeModeBtn.textContent = 'Text';
+                switchToJvmFormMode();
             } else {
                 modeToggleContainer.classList.add('hidden');
-                
+
                 // Hide notifications container when switching away from logstash.yml
                 const notificationsContainer = document.getElementById('notificationsContainer');
-                if (notificationsContainer) {
-                    notificationsContainer.classList.add('hidden');
-                }
-                
-                // Automatically switch to Code mode for jvm.options and log4j2.properties
+                if (notificationsContainer) notificationsContainer.classList.add('hidden');
+
                 switchToCodeMode();
-                
-                // Update editor mode and content for non-YAML files
+
                 if (editor) {
                     let mode = 'text/plain';
                     if (file.endsWith('.options') || file.endsWith('.properties')) {
                         mode = 'text/x-simplecomment';
                     }
                     editor.setOption('mode', mode);
-                    
-                    // Load file content - this is already done in switchToCodeMode()
-                    // but we do it again to ensure it's correct
                     const contentToLoad = fileContents[file] || '';
                     editor.setValue(contentToLoad);
                     editor.refresh();
@@ -1098,48 +1094,61 @@ document.addEventListener('DOMContentLoaded', function() {
         codeModeBtn.classList.remove('active');
         formModeEditor.classList.remove('hidden');
         codeModeEditor.classList.add('hidden');
-        
-        // Only parse YAML if we're on logstash.yml tab
-        // Use window.policyCurrentFile to get the actual current file, not the closure variable
+        document.getElementById('jvmFormView')?.classList.add('hidden');
+
         const actualCurrentFile = window.policyCurrentFile || currentFile;
         if (actualCurrentFile === 'logstash.yml' && fileContents['logstash.yml']) {
             parseYmlToForm(fileContents['logstash.yml']);
-            // Show notifications container in Form mode for logstash.yml
             checkConfigNotifications();
         }
     }
-    
+
+    function switchToJvmFormMode() {
+        currentMode = 'form';
+        formModeBtn.classList.add('active');
+        codeModeBtn.classList.remove('active');
+        formModeEditor.classList.add('hidden');
+        codeModeEditor.classList.add('hidden');
+        const jvmFormView = document.getElementById('jvmFormView');
+        jvmFormView?.classList.remove('hidden');
+        // Parse current heap value from jvm.options content
+        const content = fileContents['jvm.options'] || '';
+        const match = content.match(/^-Xms(\d+)g/m);
+        const heapInput = document.getElementById('jvmHeapInput');
+        if (heapInput) heapInput.value = match ? match[1] : '';
+    }
+
     function switchToCodeMode() {
         currentMode = 'code';
         codeModeBtn.classList.add('active');
         formModeBtn.classList.remove('active');
         codeModeEditor.classList.remove('hidden');
         formModeEditor.classList.add('hidden');
-        
+        document.getElementById('jvmFormView')?.classList.add('hidden');
+
         // Hide notifications container when switching to Code mode
         const notificationsContainer = document.getElementById('notificationsContainer');
-        if (notificationsContainer) {
-            notificationsContainer.classList.add('hidden');
+        if (notificationsContainer) notificationsContainer.classList.add('hidden');
+
+        // If switching away from jvm form, write heap back to content first
+        const actualCurrentFile = window.policyCurrentFile || currentFile;
+        if (actualCurrentFile === 'jvm.options') {
+            applyJvmHeapToContent();
         }
-        
+
         // Convert form to YAML if we're on logstash.yml tab
         if (currentFile === 'logstash.yml') {
             const yamlContent = formToYml();
             fileContents['logstash.yml'] = yamlContent;
-            
-            // Initialize CodeMirror if not already done
             if (!editor) {
                 initCodeMirror();
-                // Set the YAML content AFTER initialization
                 editor.setValue(yamlContent);
                 editor.refresh();
             } else {
-                // Load the YAML content we just generated
                 editor.setValue(yamlContent);
                 editor.refresh();
             }
         } else {
-            // For other files, load their content normally
             if (!editor) {
                 initCodeMirror();
             } else {
@@ -1150,7 +1159,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    formModeBtn.addEventListener('click', switchToFormMode);
+    formModeBtn.addEventListener('click', () => {
+        const activeFile = window.policyCurrentFile || currentFile;
+        if (activeFile === 'jvm.options') {
+            switchToJvmFormMode();
+        } else {
+            switchToFormMode();
+        }
+    });
     codeModeBtn.addEventListener('click', switchToCodeMode);
     
     // Global Config toggle
@@ -1166,6 +1182,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Save button
     document.getElementById('saveBtn').addEventListener('click', savePolicyChanges);
     
+    // JVM heap input — update content live as user types
+    document.getElementById('jvmHeapInput')?.addEventListener('input', () => {
+        applyJvmHeapToContent();
+        detectChanges();
+    });
+
     // Deploy button
     document.getElementById('deployBtn').addEventListener('click', function() {
         const policySelect = document.getElementById('policySelect');
@@ -1409,12 +1431,14 @@ async function loadPolicyData(policyValue) {
                 storeOriginalContent();
 
                 // Restore last active tab — use the value captured before page-load
-                // overwrote localStorage via logstashTab.click()
-                const _tabToRestore = window._pendingTabRestore;
+                const _tabToRestore = window._pendingTabRestore || 'logstash.yml';
                 window._pendingTabRestore = null; // consume it — only applies to initial load
-                if (_tabToRestore && _tabToRestore !== 'logstash.yml') {
-                    const tabEl = document.querySelector(`.file-tab[data-file="${_tabToRestore}"]`);
-                    if (tabEl) tabEl.click();
+                const _tabEl = document.querySelector(`.file-tab[data-file="${_tabToRestore}"]`);
+                if (_tabEl) {
+                    _tabEl.click();
+                } else {
+                    // Fallback: ensure banner row is initialized for logstash.yml
+                    updateDocsLink('logstash.yml');
                 }
 
                 // Pulse the Default guide button if this policy has never been deployed
@@ -2600,6 +2624,13 @@ function getCurrentContent(file) {
             // Get from code editor
             return window.policyEditor ? window.policyEditor.getValue() : '';
         }
+    } else if (isCurrentlyEditing && file === 'jvm.options') {
+        // jvm.options form mode: authoritative content is kept in policyFileContents
+        // (applyJvmHeapToContent writes there on every input change)
+        if (currentMode === 'code' && window.policyEditor) {
+            return window.policyEditor.getValue();
+        }
+        return window.policyFileContents['jvm.options'] || '';
     } else if (isCurrentlyEditing && window.policyEditor) {
         // For other files currently being edited, get from editor
         return window.policyEditor.getValue();
@@ -2747,6 +2778,32 @@ function setupChangeDetection() {
 // Reset change tracking after save
 function resetChangeTracking() {
     storeOriginalContent();
+}
+
+// Write the JVM heap input value back into the jvm.options file content
+function applyJvmHeapToContent() {
+    const heapInput = document.getElementById('jvmHeapInput');
+    const gb = parseInt(heapInput?.value, 10);
+    if (!gb || gb < 1) return;
+
+    let content = window.policyFileContents['jvm.options'] || '';
+
+    // Replace existing -Xms / -Xmx lines, or prepend them if absent
+    const hasXms = /-Xms\d+[gGmM]/m.test(content);
+    const hasXmx = /-Xmx\d+[gGmM]/m.test(content);
+
+    if (hasXms) {
+        content = content.replace(/-Xms\d+[gGmM]/gm, `-Xms${gb}g`);
+    } else {
+        content = `-Xms${gb}g\n` + content;
+    }
+    if (hasXmx) {
+        content = content.replace(/-Xmx\d+[gGmM]/gm, `-Xmx${gb}g`);
+    } else {
+        content = `-Xmx${gb}g\n` + content;
+    }
+
+    window.policyFileContents['jvm.options'] = content;
 }
 
 // Note: All guide-related functions have been moved to logstashyml_guides.js

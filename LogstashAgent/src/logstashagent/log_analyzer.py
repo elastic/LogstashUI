@@ -872,14 +872,15 @@ class LogstashLogWatcher:
     line 1).
 
     Tracks:
-    - ``logstash_state``: "unknown" | "restarting" | "started"
+    - ``logstash_state``: "unknown" | "restarting" | "started" | "running"
     - ``warnings_since_last_checkin``: list of WARN entries since last consume
     - ``errors_since_last_checkin``:   list of ERROR entries since last consume
     - ``last_shutdown_ts`` / ``last_startup_ts``: timeMillis of last signals
 
     State transitions:
-        any  → "Logstash shut down."  → "restarting"
-        any  → "Starting Logstash"    → "started"
+        any  → "Logstash shut down."                        → "restarting"
+        any  → "Starting Logstash"                          → "started"
+        any  → "Successfully started Logstash API endpoint" → "running"
 
     Log rotation: when ``logstash-json.log`` is replaced (inode changes or file
     shrinks below our read position) the new file is opened from the beginning.
@@ -895,8 +896,9 @@ class LogstashLogWatcher:
     _MAX_WARNINGS = 200
     _MAX_ERRORS = 200
 
-    _SHUTDOWN_MSG = "logstash shut down"  # matches "Logstash shut down."
-    _STARTING_MSG = "starting logstash"   # matches "Starting Logstash"
+    _SHUTDOWN_MSG = "logstash shut down"              # "Logstash shut down."
+    _STARTING_MSG = "starting logstash"               # "Starting Logstash"
+    _RUNNING_MSG  = "successfully started logstash api endpoint"  # API ready
 
     def __init__(self, log_dir: str = LOG_DIR,
                  checkin_event: Optional[threading.Event] = None):
@@ -1065,6 +1067,8 @@ class LogstashLogWatcher:
 
         if self._SHUTDOWN_MSG in msg_lower:
             new_state = "restarting"
+        elif self._RUNNING_MSG in msg_lower:
+            new_state = "running"
         elif self._STARTING_MSG in msg_lower:
             new_state = "started"
 
@@ -1096,11 +1100,16 @@ class LogstashLogWatcher:
                 prev = self._logstash_state
                 self._logstash_state = "started"
                 self._last_startup_ts = ts
-                signal_checkin = True
+                # Don't trigger early check-in here — API isn't ready yet.
+                # We'll fire when we reach "running".
                 if prev == "restarting":
                     logger.info(f"LogstashLogWatcher: Logstash starting (was restarting, ts={ts})")
                 else:
                     logger.debug(f"LogstashLogWatcher: Logstash starting (ts={ts})")
+            elif new_state == "running":
+                self._logstash_state = "running"
+                signal_checkin = True
+                logger.info(f"LogstashLogWatcher: Logstash API ready (ts={ts})")
 
             if warn_entry and len(self._warnings) < self._MAX_WARNINGS:
                 self._warnings.append(warn_entry)
