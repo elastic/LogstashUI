@@ -86,6 +86,11 @@ class Policy(models.Model):
         default=0,
         help_text="Current revision number of the policy"
     )
+    last_deployed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the most recent successful deployment"
+    )
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)

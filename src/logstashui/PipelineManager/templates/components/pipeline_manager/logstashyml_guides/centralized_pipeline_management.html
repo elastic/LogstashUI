@@ -203,6 +203,38 @@
         </div>
       </div>
 
+      <!-- Pipeline Configuration Settings -->
+      <div>
+        <div class="border-t border-gray-700 pt-4">
+          <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Pipeline Configuration Settings</h4>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <!-- Config Reload Automatic -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Config Reload Automatic</label>
+            <select id="guideCpmConfigReloadAutomatic" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" onchange="syncCpmGuideToMain('config.reload.automatic', this.value); validateCpmGuide();">
+              <option value="">Default (false)</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
+            <p class="text-xs text-gray-300 mt-2">
+              Enables automatic pipeline reloading when config changes.
+              <a href="javascript:void(0)" onclick="setCpmConfigReloadAutomatic('true')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to True</a>
+            </p>
+          </div>
+
+          <!-- Config Reload Interval -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Config Reload Interval</label>
+            <input type="text" id="guideCpmConfigReloadInterval" placeholder="10s" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" oninput="syncCpmGuideToMain('config.reload.interval', this.value); validateCpmGuide();">
+            <p class="text-xs text-gray-300 mt-2">
+              How often Logstash checks for config changes.
+              <a href="javascript:void(0)" onclick="setCpmConfigReloadInterval('10s')" class="text-blue-400 hover:text-blue-300 underline font-medium">Click here to set the value to 10s</a>
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- API Settings -->
       <div>
         <div class="border-t border-gray-700 pt-4">

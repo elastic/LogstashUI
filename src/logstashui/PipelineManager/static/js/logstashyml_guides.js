@@ -518,6 +518,20 @@ function syncMainToCpmGuide() {
     if (password && guidePassword) {
         guidePassword.value = password.value;
     }
+
+    // Config Reload Automatic
+    const configReloadAutomatic = document.querySelector('[name="config.reload.automatic"]');
+    const guideCpmConfigReloadAutomatic = document.getElementById('guideCpmConfigReloadAutomatic');
+    if (configReloadAutomatic && guideCpmConfigReloadAutomatic) {
+        guideCpmConfigReloadAutomatic.value = configReloadAutomatic.value;
+    }
+
+    // Config Reload Interval
+    const configReloadInterval = document.querySelector('[name="config.reload.interval"]');
+    const guideCpmConfigReloadInterval = document.getElementById('guideCpmConfigReloadInterval');
+    if (configReloadInterval && guideCpmConfigReloadInterval) {
+        guideCpmConfigReloadInterval.value = configReloadInterval.value;
+    }
 }
 
 function toggleConnectionMethod(method) {
@@ -782,6 +796,36 @@ function validateCpmGuide() {
         }
     }
     
+    // Validate Config Reload Automatic (should be 'true')
+    const guideCpmConfigReloadAutomatic = document.getElementById('guideCpmConfigReloadAutomatic');
+    if (guideCpmConfigReloadAutomatic) {
+        totalFields++;
+        if (guideCpmConfigReloadAutomatic.value === 'true') {
+            guideCpmConfigReloadAutomatic.classList.remove('border-red-500', 'border-red-600');
+            guideCpmConfigReloadAutomatic.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmConfigReloadAutomatic.classList.remove('border-green-500', 'border-green-600');
+            guideCpmConfigReloadAutomatic.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
+    // Validate Config Reload Interval (should be non-empty)
+    const guideCpmConfigReloadInterval = document.getElementById('guideCpmConfigReloadInterval');
+    if (guideCpmConfigReloadInterval) {
+        totalFields++;
+        if (guideCpmConfigReloadInterval.value && guideCpmConfigReloadInterval.value.trim() !== '') {
+            guideCpmConfigReloadInterval.classList.remove('border-red-500', 'border-red-600');
+            guideCpmConfigReloadInterval.classList.add('border-green-500', 'border-green-600');
+            greenCount++;
+        } else {
+            guideCpmConfigReloadInterval.classList.remove('border-green-500', 'border-green-600');
+            guideCpmConfigReloadInterval.classList.add('border-red-500', 'border-red-600');
+            redCount++;
+        }
+    }
+
     // Validate Connection (Cloud ID OR Hosts - only validate the visible one)
     if (!cloudIdSection?.classList.contains('hidden') && guideCpmCloudId) {
         totalFields++;
@@ -988,6 +1032,30 @@ function setCpmApiPort(value) {
 
     if (guideCpmApiPort) { guideCpmApiPort.value = value; }
     if (mainApiPort) { mainApiPort.value = value; }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmConfigReloadAutomatic(value) {
+    const guideCpmConfigReloadAutomatic = document.getElementById('guideCpmConfigReloadAutomatic');
+    const mainConfigReloadAutomatic = document.querySelector('[name="config.reload.automatic"]');
+
+    if (guideCpmConfigReloadAutomatic) { guideCpmConfigReloadAutomatic.value = value; }
+    if (mainConfigReloadAutomatic) { mainConfigReloadAutomatic.value = value; }
+
+    detectChanges();
+    checkConfigNotifications();
+    validateCpmGuide();
+}
+
+function setCpmConfigReloadInterval(value) {
+    const guideCpmConfigReloadInterval = document.getElementById('guideCpmConfigReloadInterval');
+    const mainConfigReloadInterval = document.querySelector('[name="config.reload.interval"]');
+
+    if (guideCpmConfigReloadInterval) { guideCpmConfigReloadInterval.value = value; }
+    if (mainConfigReloadInterval) { mainConfigReloadInterval.value = value; }
 
     detectChanges();
     checkConfigNotifications();

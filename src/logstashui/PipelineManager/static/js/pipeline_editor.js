@@ -1942,6 +1942,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof window.PluginConfigModal !== 'undefined' && typeof pluginData !== 'undefined') {
         window.PluginConfigModal.init(pluginData);
 
+        // Pass keystore keys if available
+        const keystoreKeysEl = document.getElementById('keystore-keys');
+        if (keystoreKeysEl) {
+            const keystoreKeys = JSON.parse(keystoreKeysEl.textContent);
+            if (keystoreKeys.length > 0) {
+                window.PluginConfigModal.setKeystoreKeys(keystoreKeys);
+            }
+        }
+
         // Add click handler for config buttons
         document.addEventListener('click', function (event) {
             const configBtn = event.target.closest('.config-btn');

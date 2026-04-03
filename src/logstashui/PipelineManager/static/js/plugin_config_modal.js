@@ -9,10 +9,78 @@ window.PluginConfigModal = (function () {
     let currentComponent = null;
     let pluginData = {};
     let isNewComponent = false; // Track if this is a newly added component
+    let keystoreKeys = [];
 
     // Initialize the modal with plugin data
     function init(data) {
         pluginData = data;
+    }
+
+    function setKeystoreKeys(keys) {
+        keystoreKeys = keys;
+    }
+
+    function toggleKeystoreDropdown(fieldId) {
+        const existing = document.getElementById(`keystore-dropdown-${fieldId}`);
+        if (existing) {
+            existing.remove();
+            return;
+        }
+        // Close any other open dropdowns
+        document.querySelectorAll('[id^="keystore-dropdown-"]').forEach(el => el.remove());
+
+        const btn = document.getElementById(`keystore-btn-${fieldId}`);
+        if (!btn) return;
+
+        const dropdown = document.createElement('div');
+        dropdown.id = `keystore-dropdown-${fieldId}`;
+        dropdown.className = 'absolute z-50 mt-1 bg-gray-900 border border-purple-500/50 rounded-lg shadow-xl py-1 min-w-max';
+        dropdown.style.top = `${btn.offsetTop + btn.offsetHeight}px`;
+        dropdown.style.right = '0';
+
+        if (keystoreKeys.length === 0) {
+            dropdown.innerHTML = `<div class="px-4 py-2 text-xs text-gray-400 italic">No keystore entries found</div>`;
+        } else {
+            keystoreKeys.forEach(key => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'w-full text-left px-4 py-1.5 text-sm text-gray-200 hover:bg-purple-800/50 hover:text-white font-mono flex items-center gap-2';
+                item.innerHTML = `
+                    <svg class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                    </svg>
+                    <span class="text-purple-300">\${</span>${escapeHtml(key)}<span class="text-purple-300">}</span>`;
+                item.addEventListener('click', () => insertKeystoreKey(fieldId, key));
+                dropdown.appendChild(item);
+            });
+        }
+
+        btn.parentElement.style.position = 'relative';
+        btn.parentElement.appendChild(dropdown);
+
+        // Close when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', function closeDropdown(e) {
+                if (!dropdown.contains(e.target) && e.target !== btn) {
+                    dropdown.remove();
+                    document.removeEventListener('click', closeDropdown);
+                }
+            });
+        }, 0);
+    }
+
+    function insertKeystoreKey(fieldId, key) {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            input.value = `\${${key}}`;
+            input.type = 'text'; // show the reference, not dots
+            // Trigger plaintext warning check
+            const warningId = `warning-${fieldId}`;
+            const warning = document.getElementById(warningId);
+            if (warning) warning.classList.add('hidden');
+        }
+        const dropdown = document.getElementById(`keystore-dropdown-${fieldId}`);
+        if (dropdown) dropdown.remove();
     }
 
     // Show the configuration modal for a component
@@ -406,20 +474,37 @@ window.PluginConfigModal = (function () {
               </svg>
               It looks like you're storing a credential in plaintext. We highly encourage you to use the Logstash Keystore to store passwords.
             </div>
-            <div class="relative">
-              <input type="password" id="${fieldId}" name="${key}"
-                     value="${escapeHtml(value)}"
-                     class="${inputClasses} pr-10"
-                     oninput="PluginConfigModal.checkPasswordPlaintext('${warningId}', this.value)">
-              <button type="button"
-                      class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                      onclick="togglePasswordVisibility('${fieldId}', this)"
-                      title="Show/Hide">
-                <svg class="w-5 h-5 eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              </button>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <input type="password" id="${fieldId}" name="${key}"
+                       value="${escapeHtml(value)}"
+                       class="${inputClasses} pr-10"
+                       oninput="PluginConfigModal.checkPasswordPlaintext('${warningId}', this.value)">
+                <button type="button"
+                        class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                        onclick="togglePasswordVisibility('${fieldId}', this)"
+                        title="Show/Hide">
+                  <svg class="w-5 h-5 eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+              </div>
+              ${keystoreKeys.length > 0 ? `
+              <div class="relative self-stretch flex-shrink-0">
+                <button type="button"
+                        id="keystore-btn-${fieldId}"
+                        onclick="PluginConfigModal.toggleKeystoreDropdown('${fieldId}')"
+                        title="Insert keystore reference"
+                        class="h-full flex items-center gap-1 px-2 rounded bg-purple-900/40 border border-purple-500/50 hover:bg-purple-900/70 hover:border-purple-400 text-purple-300 hover:text-purple-100 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                  </svg>
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+              </div>` : ''}
             </div>
           `;
                 } else if (inputType === 'fs_path') {
@@ -807,20 +892,37 @@ window.PluginConfigModal = (function () {
               </svg>
               It looks like you're storing a credential in plaintext. We highly encourage you to use the Logstash Keystore to store passwords.
             </div>
-            <div class="relative">
-              <input type="password" id="${fieldId}" name="${key}"
-                     value="${escapeHtml(value)}"
-                     class="${inputClasses} pr-10"
-                     oninput="PluginConfigModal.checkPasswordPlaintext('${warningId}', this.value)">
-              <button type="button"
-                      class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                      onclick="togglePasswordVisibility('${fieldId}', this)"
-                      title="Show/Hide">
-                <svg class="w-5 h-5 eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              </button>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <input type="password" id="${fieldId}" name="${key}"
+                       value="${escapeHtml(value)}"
+                       class="${inputClasses} pr-10"
+                       oninput="PluginConfigModal.checkPasswordPlaintext('${warningId}', this.value)">
+                <button type="button"
+                        class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                        onclick="togglePasswordVisibility('${fieldId}', this)"
+                        title="Show/Hide">
+                  <svg class="w-5 h-5 eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+              </div>
+              ${keystoreKeys.length > 0 ? `
+              <div class="relative self-stretch flex-shrink-0">
+                <button type="button"
+                        id="keystore-btn-${fieldId}"
+                        onclick="PluginConfigModal.toggleKeystoreDropdown('${fieldId}')"
+                        title="Insert keystore reference"
+                        class="h-full flex items-center gap-1 px-2 rounded bg-purple-900/40 border border-purple-500/50 hover:bg-purple-900/70 hover:border-purple-400 text-purple-300 hover:text-purple-100 transition-colors">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                  </svg>
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+              </div>` : ''}
             </div>
           `;
                     } else if (inputType === 'fs_path') {
@@ -1470,7 +1572,10 @@ window.PluginConfigModal = (function () {
         saveConfig,
         filterFields,
         checkPasswordPlaintext,
-        getPluginData: () => pluginData
+        getPluginData: () => pluginData,
+        setKeystoreKeys,
+        toggleKeystoreDropdown,
+        insertKeystoreKey,
     };
 })();
 

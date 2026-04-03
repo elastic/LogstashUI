@@ -29,6 +29,7 @@
 <link rel="stylesheet" href="{% static 'css/show-hint.min.css' %}">
 {{ component_data|json_script:"component-data" }}
 {{ plugin_data|json_script:"plugin-data" }}
+{{ keystore_keys|default:"[]"|json_script:"keystore-keys" }}
 <script>
     // Define components and pluginData early so HTMX hx-vals can reference them
     const components = JSON.parse(document.getElementById('component-data').textContent);
@@ -778,8 +779,33 @@
     
     <div class="mb-6 pt-5 pb-0">
         <!-- Row 1: Pipeline Name -->
-        <div class="flex items-center mb-4">
-            <h1 class="text-3xl font-semibold text-white">{{ pipeline_name }}</h1>
+        <div class="flex items-center mb-4 gap-3">
+            {% if ls_id %}
+            <img src="{% static 'images/LogstashIcon.png' %}" alt="Logstash" class="w-8 h-8">
+            {% elif es_id %}
+            <img src="{% static 'images/ElasticIcon.png' %}" alt="Elastic" class="w-8 h-8">
+            {% endif %}
+            <h1 class="text-3xl font-semibold text-white leading-none">{{ pipeline_name }}</h1>
+            {% if ls_id and policy_name %}
+            <span class="text-gray-500 text-2xl font-thin select-none">/</span>
+            <a href="/ConnectionManager/AgentPolicies?policy_id={{ ls_id }}"
+               class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-900/40 border border-purple-500/50 hover:bg-purple-900/70 hover:border-purple-400 transition-colors group">
+                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span class="text-xs text-purple-300 font-medium uppercase tracking-wide">Policy</span>
+                <span class="text-sm text-purple-100 font-semibold group-hover:text-white transition-colors">{{ policy_name }}</span>
+            </a>
+            {% elif es_id and connection_name %}
+            <span class="text-gray-500 text-2xl font-thin select-none">/</span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/50">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                <span class="text-xs text-blue-300 font-medium uppercase tracking-wide">Connection</span>
+                <span class="text-sm text-blue-100 font-semibold">{{ connection_name }}</span>
+            </span>
+            {% endif %}
         </div>
         
         <!-- Row 2: Status + Centered Toggle + Actions (Responsive Layout) -->

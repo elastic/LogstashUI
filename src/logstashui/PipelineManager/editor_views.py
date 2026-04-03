@@ -89,7 +89,19 @@ def PipelineEditor(request):
                 'description': pipeline_obj.description or '',
             }
             context['ls_id'] = ls_id
+            context['policy_name'] = pipeline_obj.policy.name
+            from PipelineManager.models import Keystore
+            context['keystore_keys'] = list(
+                Keystore.objects.filter(policy_id=ls_id).values_list('key_name', flat=True)
+            )
         else:
+            context['es_id'] = es_id
+            from PipelineManager.models import Connection as ConnectionModel
+            try:
+                connection_obj = ConnectionModel.objects.get(pk=es_id)
+                context['connection_name'] = connection_obj.name
+            except ConnectionModel.DoesNotExist:
+                pass
             pipeline_config = get_logstash_pipeline(es_id, pipeline_name)
             if not pipeline_config:
                 return HttpResponseBadRequest(f"Could not fetch pipeline '{pipeline_name}' from connection {es_id}")

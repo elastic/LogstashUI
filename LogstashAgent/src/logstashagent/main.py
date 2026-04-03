@@ -1596,7 +1596,13 @@ Examples:
         action='store_true',
         help='Run the agent controller (for enrolled agents in host mode)'
     )
-    
+
+    parser.add_argument(
+        '--yes',
+        action='store_true',
+        help='Skip the enrollment confirmation prompt'
+    )
+
     return parser.parse_args()
 
 
@@ -1623,7 +1629,21 @@ if __name__ == "__main__":
             logger.error("--logstash-ui-url is required when using --enroll")
             logger.error("Example: python main.py --enroll=TOKEN --logstash-ui-url=http://localhost:8080")
             sys.exit(1)
-        
+
+        if not args.yes:
+            print("\nThis node will be enrolled into LogstashUI managed mode.")
+            print("\nFuture policy applies may overwrite manual changes made directly on the host, including:")
+            print("  - logstash.yml")
+            print("  - jvm.options")
+            print("  - log4j2.properties")
+            print("  - pipelines")
+            print("  - keystore contents")
+            print()
+            answer = input("Continue? [y/N]: ").strip().lower()
+            if answer != 'y':
+                print("Enrollment cancelled.")
+                sys.exit(0)
+
         try:
             enrollment.perform_enrollment(
                 encoded_token=args.enroll,

@@ -720,16 +720,18 @@ async function showRestartWarning(policyId) {
     }
 }
 
-// Render global settings diff (settings_path and logs_path)
+// Render global settings diff (settings_path, logs_path, binary_path)
 function renderGlobalSettingsDiff(previousData, currentData) {
     const container = document.getElementById('diff-global_settings');
     let html = '<div class="p-4">';
     let hasChanges = false;
-    
+
     const prevSettingsPath = previousData.settings_path || '';
     const currSettingsPath = currentData.settings_path || '';
     const prevLogsPath = previousData.logs_path || '';
     const currLogsPath = currentData.logs_path || '';
+    const prevBinaryPath = previousData.binary_path || '';
+    const currBinaryPath = currentData.binary_path || '';
     
     // Settings Path
     html += '<div class="mb-6">';
@@ -784,14 +786,41 @@ function renderGlobalSettingsDiff(previousData, currentData) {
         `;
     }
     html += '</div>';
-    
+
+    // Binary Path
+    html += '<div class="mb-6">';
+    html += '<h4 class="text-lg font-semibold text-white mb-3">Logstash Binary Path</h4>';
+    if (prevBinaryPath !== currBinaryPath) {
+        hasChanges = true;
+        html += `
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-3 bg-red-900/20 border-l-4 border-red-600 rounded">
+                    <div class="text-red-400 text-xs font-semibold mb-1">Previous</div>
+                    <div class="text-gray-300 font-mono text-sm">${escapeHtml(prevBinaryPath) || '<em class="text-gray-500">Not set</em>'}</div>
+                </div>
+                <div class="p-3 bg-green-900/20 border-l-4 border-green-600 rounded">
+                    <div class="text-green-400 text-xs font-semibold mb-1">New</div>
+                    <div class="text-gray-300 font-mono text-sm">${escapeHtml(currBinaryPath) || '<em class="text-gray-500">Not set</em>'}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="p-3 bg-gray-700/50 border-l-4 border-gray-600 rounded">
+                <div class="text-gray-400 text-xs font-semibold mb-1">No changes</div>
+                <div class="text-gray-300 font-mono text-sm">${escapeHtml(currBinaryPath) || '<em class="text-gray-500">Not set</em>'}</div>
+            </div>
+        `;
+    }
     html += '</div>';
-    
+
+    html += '</div>';
+
     // Track if this section has changes
     if (hasChanges) {
         sectionsWithChanges.add('global_settings');
     }
-    
+
     container.innerHTML = html;
 }
 

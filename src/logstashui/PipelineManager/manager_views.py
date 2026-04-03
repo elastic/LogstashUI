@@ -1197,17 +1197,33 @@ def get_policies(request):
     Get all policies
     """
     try:
-        policies = Policy.objects.all().values(
+        from django.db.models import Count, Q
+        policies = list(Policy.objects.annotate(
+            connection_count=Count(
+                'connections',
+                filter=Q(connections__connection_type='AGENT', connections__is_active=True)
+            )
+        ).values(
             'id', 'name', 'settings_path', 'logs_path', 'binary_path',
             'logstash_yml', 'jvm_options', 'log4j2_properties',
-            'current_revision_number', 'created_at', 'updated_at'
-        )
-        
+            'current_revision_number', 'last_deployed_at',
+            'connection_count', 'created_at', 'updated_at'
+        ))
+
+        # Serialize datetime fields to ISO strings
+        for p in policies:
+            if p['last_deployed_at']:
+                p['last_deployed_at'] = p['last_deployed_at'].isoformat()
+            if p['created_at']:
+                p['created_at'] = p['created_at'].isoformat()
+            if p['updated_at']:
+                p['updated_at'] = p['updated_at'].isoformat()
+
         return JsonResponse({
             "success": True,
-            "policies": list(policies)
+            "policies": policies
         })
-        
+
     except Exception as e:
         logger.error(f"Error fetching policies: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
@@ -1278,6 +1294,83 @@ def get_policy_agent_count(request):
     except Exception as e:
         logger.error(f"Error getting policy agent count: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+def get_policy_change_count(request):
+    """
+    Returns the number of sections (tabs) that have pending changes compared to the last deployed revision.
+    Sections: logstash_yml, jvm_options, log4j2_properties, pipelines, keystore, global_settings
+    """
+    try:
+        policy_id = request.GET.get('policy_id')
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+        last_revision = policy.revisions.first()
+        if last_revision:
+            prev = last_revision.snapshot_json
+        else:
+            prev = {
+                'logstash_yml': '', 'jvm_options': '', 'log4j2_properties': '',
+                'settings_path': '', 'logs_path': '', 'binary_path': '',
+                'pipelines': [], 'keystore': []
+            }
+
+        count = 0
+
+        if policy.logstash_yml != prev.get('logstash_yml', ''):
+            count += 1
+        if policy.jvm_options != prev.get('jvm_options', ''):
+            count += 1
+        if policy.log4j2_properties != prev.get('log4j2_properties', ''):
+            count += 1
+
+        # Pipelines: compare sorted list of {name, lscl}
+        curr_pipelines = sorted(
+            [{'name': p['name'], 'lscl': p['lscl']}
+             for p in policy.pipelines.values('name', 'lscl')],
+            key=lambda p: p['name']
+        )
+        prev_pipelines = sorted(
+            [{'name': p['name'], 'lscl': p['lscl']}
+             for p in prev.get('pipelines', [])
+             if 'name' in p and 'lscl' in p],
+            key=lambda p: p['name']
+        )
+        if curr_pipelines != prev_pipelines:
+            count += 1
+
+        # Keystore: compare by key names and encrypted values in snapshot
+        curr_keystore = sorted(
+            [{'key_name': e['key_name'], 'key_value': e['key_value']}
+             for e in policy.keystore_entries.values('key_name', 'key_value')],
+            key=lambda e: e['key_name']
+        )
+        prev_keystore = sorted(
+            [{'key_name': e['key_name'], 'key_value': e.get('key_value', '')}
+             for e in prev.get('keystore', []) if 'key_name' in e],
+            key=lambda e: e['key_name']
+        )
+        if curr_keystore != prev_keystore:
+            count += 1
+
+        # Global settings: settings_path, logs_path, binary_path
+        if (policy.settings_path != prev.get('settings_path', '') or
+                policy.logs_path != prev.get('logs_path', '') or
+                policy.binary_path != prev.get('binary_path', '')):
+            count += 1
+
+        return JsonResponse({"success": True, "pending_changes": count})
+
+    except Exception as e:
+        logger.error(f"Error getting policy change count: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
 
 
 @require_admin_role
@@ -1725,7 +1818,7 @@ def get_policy_diff(request):
             'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
             'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
         }
-        
+
         # Get last revision (if any)
         last_revision = policy.revisions.first()  # Already ordered by -revision_number
         
@@ -1812,7 +1905,8 @@ def deploy_policy(request):
             created_by=request.user.username
         )
         
-        # Save the policy with updated revision number
+        # Save the policy with updated revision number and deployment timestamp
+        policy.last_deployed_at = datetime.now(timezone.utc)
         policy.save()
         
         logger.info(f"Policy '{policy.name}' deployed as revision {new_revision_number} by {request.user.username}")

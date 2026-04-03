@@ -26,6 +26,11 @@ function checkConfigNotifications() {
     const logsPathSetting = document.getElementById('logsPath')?.value || '';
     const logLevel = document.querySelector('[name="log.level"]')?.value || '';
     const logFormat = document.querySelector('[name="log.format"]')?.value || '';
+    const configReloadAutomatic = document.querySelector('[name="config.reload.automatic"]')?.value || '';
+    const configReloadInterval = document.querySelector('[name="config.reload.interval"]')?.value || '';
+    const apiEnabled = document.querySelector('[name="api.enabled"]')?.value || '';
+    const apiHost = document.querySelector('[name="api.http.host"]')?.value || '';
+    const apiPort = document.querySelector('[name="api.http.port"]')?.value || '';
     const unsafeShutdown = document.querySelector('[name="pipeline.unsafe_shutdown"]')?.value || '';
     const allowSuperuser = document.querySelector('[name="allow_superuser"]')?.value || '';
     const configDebug = document.querySelector('[name="config.debug"]')?.value || '';
@@ -44,45 +49,52 @@ function checkConfigNotifications() {
         }
     }
     
-    const logsPathMismatchNotification = document.getElementById('logsPathMismatchNotification');
-    const logLevelFormatNotification = document.getElementById('logLevelFormatNotification');
     const unsafeShutdownNotification = document.getElementById('unsafeShutdownNotification');
     const allowSuperuserNotification = document.getElementById('allowSuperuserNotification');
     const configDebugNotification = document.getElementById('configDebugNotification');
     const batchDelayNotification = document.getElementById('batchDelayNotification');
     const notificationsContainer = document.getElementById('notificationsContainer');
-    
-    // Check for logs path mismatch - show notification if:
-    // 1. Policy Config has a value AND it doesn't match the form's path.logs field
-    // This ensures the notification appears when editing either field
-    const hasMismatch = logsPathSetting && logsPathGlobal !== logsPathSetting;
-    
-    console.log('Mismatch check:', {
-        global: logsPathGlobal,
-        setting: logsPathSetting,
-        hasMismatch: hasMismatch
-    });
-    
-    if (hasMismatch) {
-        console.log('Mismatch detected - showing notification');
-        logsPathMismatchNotification?.classList.remove('hidden');
-        notificationsContainer?.classList.remove('hidden');
-    } else {
-        console.log('No mismatch - hiding notification');
-        logsPathMismatchNotification?.classList.add('hidden');
+
+    // --- Requirements tile (mirrors Default guide validation exactly) ---
+    const hasMismatch        = logsPathSetting && logsPathGlobal !== logsPathSetting;
+    const needsLogLevel      = logLevel !== 'info';
+    const needsLogFormat     = logFormat !== 'json';
+    const needsReloadAuto    = configReloadAutomatic !== 'true';
+    const needsReloadInterval= !configReloadInterval.trim();
+    const needsApiEnabled    = apiEnabled === 'false';
+    const needsApiHost       = !apiHost.trim();
+    const needsApiPort       = !apiPort.trim();
+    const unmetCount = [hasMismatch, needsLogLevel, needsLogFormat, needsReloadAuto,
+                        needsReloadInterval, needsApiEnabled, needsApiHost, needsApiPort]
+                       .filter(Boolean).length;
+
+    const requirementsTile = document.getElementById('requirementsTile');
+    const requirementsBadge = document.getElementById('requirementsBadge');
+    const requirementsIcon = document.getElementById('requirementsIcon');
+    const requirementsLabel = document.getElementById('requirementsLabel');
+
+    if (requirementsTile) {
+        if (unmetCount > 0) {
+            requirementsTile.classList.remove('requirement-tile-ok');
+            requirementsTile.classList.add('requirement-tile-fail');
+            if (requirementsIcon) {
+                requirementsIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />';
+            }
+        } else {
+            requirementsTile.classList.remove('requirement-tile-fail');
+            requirementsTile.classList.add('requirement-tile-ok');
+            if (requirementsIcon) {
+                requirementsIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />';
+            }
+        }
     }
-    
-    // Check for log level and format - show if either is not set or not optimal for logstashui
-    // logstashui needs log.level to be set (preferably 'info' or 'debug') and log.format to be 'json'
-    const needsLogConfig = !logLevel || !logFormat || logFormat !== 'json';
-    
-    if (needsLogConfig) {
-        console.log('Log level/format needs configuration - showing notification');
-        logLevelFormatNotification?.classList.remove('hidden');
-        notificationsContainer?.classList.remove('hidden');
-    } else {
-        console.log('Log level/format configured correctly - hiding notification');
-        logLevelFormatNotification?.classList.add('hidden');
+    if (requirementsBadge) {
+        if (unmetCount > 0) {
+            requirementsBadge.textContent = unmetCount + ' unmet';
+            requirementsBadge.classList.remove('hidden');
+        } else {
+            requirementsBadge.classList.add('hidden');
+        }
     }
     
     // Check for unsafe shutdown - show if set to true
@@ -141,18 +153,11 @@ function checkConfigNotifications() {
     
     // Collect active notifications for indicator
     const activeNotifications = [];
-    if (!logsPathMismatchNotification?.classList.contains('hidden')) {
+    if (unmetCount > 0) {
         activeNotifications.push({
             type: 'warning',
-            title: 'Logs Path Mismatch',
-            message: 'Global logs path differs from config setting'
-        });
-    }
-    if (!logLevelFormatNotification?.classList.contains('hidden')) {
-        activeNotifications.push({
-            type: 'warning',
-            title: 'Log Level and Format',
-            message: 'logstashui needs to manage your log level and format'
+            title: 'Requirements',
+            message: unmetCount + ' unmet requirement' + (unmetCount > 1 ? 's' : '')
         });
     }
     if (!unsafeShutdownNotification?.classList.contains('hidden')) {
@@ -823,50 +828,55 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Update documentation link based on file
     function updateDocsLink(file) {
+        const bannerRow = document.getElementById('bannerRow');
         const docsLink = document.getElementById('docsLink');
-        const docsLinkUrl = document.getElementById('docsLinkUrl');
+        const requirementsTile = document.getElementById('requirementsTile');
         const quickSetupRow = document.getElementById('quickSetupRow');
-        if (!docsLinkUrl || !docsLink) return;
-        
-        // Show Quick Setup row only for logstash.yml
-        if (quickSetupRow) {
-            if (file === 'logstash.yml') {
-                quickSetupRow.classList.remove('hidden');
-            } else {
-                quickSetupRow.classList.add('hidden');
-            }
-        }
-        
-        // Hide docs link for Pipelines, Keystore, and Enrollment Tokens tabs
-        if (file === 'pipelines' || file === 'keystore' || file === 'enrollment-tokens') {
-            docsLink.classList.add('hidden');
+        if (!docsLink || !bannerRow) return;
+
+        const tipTile = document.getElementById('tipTile');
+        const tipText = document.getElementById('tipText');
+
+        // Hide all optional tiles first, then selectively show
+        requirementsTile?.classList.add('hidden');
+        quickSetupRow?.classList.add('hidden');
+        tipTile?.classList.add('hidden');
+
+        // No banner row for enrollment tokens
+        if (file === 'enrollment-tokens') {
+            bannerRow.classList.add('hidden');
             return;
-        } else {
-            docsLink.classList.remove('hidden');
         }
-        
-        const docsLinks = {
-            'logstash.yml': {
-                url: 'https://www.elastic.co/docs/reference/logstash/logstash-settings-file',
-                text: 'Logstash Settings File Reference'
-            },
-            'jvm.options': {
-                url: 'https://www.elastic.co/docs/reference/logstash/jvm-settings',
-                text: 'JVM Settings Reference'
-            },
-            'log4j2.properties': {
-                url: 'https://www.elastic.co/guide/en/logstash/8.19/logging.html#log4j2',
-                text: 'Log4j2 Configuration Reference'
-            },
-            'enrollment-tokens': {
-                url: '#',
-                text: 'Enrollment Tokens'
+
+        bannerRow.classList.remove('hidden');
+
+        if (file === 'logstash.yml') {
+            // 6col guided setup | 3col requirements | 1col docs
+            bannerRow.style.gridTemplateColumns = '6fr 3fr 1fr';
+            quickSetupRow?.classList.remove('hidden');
+            requirementsTile?.classList.remove('hidden');
+        } else if (file === 'pipelines' || file === 'keystore') {
+            // 1col tip | 1col docs
+            bannerRow.style.gridTemplateColumns = '1fr 1fr';
+            if (tipTile && tipText) {
+                tipText.textContent = file === 'pipelines'
+                    ? 'Your pipelines are saved when you create or edit them.'
+                    : 'Your keystore keys are saved when you create or edit them.';
+                tipTile.classList.remove('hidden');
             }
+        } else {
+            // jvm.options, log4j2.properties — docs only
+            bannerRow.style.gridTemplateColumns = '1fr';
+        }
+
+        const docsLinks = {
+            'logstash.yml':       'https://www.elastic.co/docs/reference/logstash/logstash-settings-file',
+            'jvm.options':        'https://www.elastic.co/docs/reference/logstash/jvm-settings',
+            'log4j2.properties':  'https://www.elastic.co/guide/en/logstash/8.19/logging.html#log4j2',
+            'pipelines':          'https://www.elastic.co/docs/reference/logstash/configuration-file-structure',
+            'keystore':           'https://www.elastic.co/docs/reference/logstash/keystore',
         };
-        
-        const link = docsLinks[file] || docsLinks['logstash.yml'];
-        docsLinkUrl.href = link.url;
-        docsLinkUrl.textContent = link.text;
+        docsLink.href = docsLinks[file] || docsLinks['logstash.yml'];
     }
     
     // File tab switching
@@ -929,9 +939,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Now update to the new file
             currentFile = file;
-            
+
             // Update global currentFile reference
             window.policyCurrentFile = file;
+
+            // Persist active tab
+            localStorage.setItem('agentPolicies_lastTab', file);
             
             // Handle pipelines tab
             if (file === 'pipelines') {
@@ -1178,7 +1191,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     policySelect.addEventListener('change', async function() {
         const selectedValue = this.value;
-        
+
+        // Persist selected policy to localStorage (skip the add_new pseudo-option)
+        if (selectedValue !== 'add_new') {
+            const selectedOpt = this.options[this.selectedIndex];
+            const policyId = selectedOpt?.dataset.policyId;
+            if (policyId) {
+                localStorage.setItem('agentPolicies_lastPolicyId', policyId);
+            }
+        }
+
         if (selectedValue === 'add_new') {
             // Reset to default values for new policy
             document.getElementById('settingsPath').value = '/etc/logstash/';
@@ -1251,12 +1273,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Regular policy selection
             currentPolicy = selectedValue;
 
-            // Always return to the logstash.yml tab when switching policies
-            const logstashTab = document.querySelector('[data-file="logstash.yml"]');
-            if (logstashTab) {
-                logstashTab.click();
-            }
-
             // Update UI based on whether it's the default policy
             const isDefaultPolicy = selectedValue === 'default';
             updatePolicyUI(isDefaultPolicy);
@@ -1318,7 +1334,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load policies on page load, auto-selecting a policy if policy_id is in the URL
     const _urlParams = new URLSearchParams(window.location.search);
     const _urlPolicyId = _urlParams.get('policy_id');
-    loadPolicies(null, _urlPolicyId ? parseInt(_urlPolicyId) : null);
+    if (_urlPolicyId) {
+        // URL param takes priority — also update localStorage so next visit restores this policy
+        localStorage.setItem('agentPolicies_lastPolicyId', _urlPolicyId);
+    }
+    const _savedPolicyId = !_urlPolicyId ? localStorage.getItem('agentPolicies_lastPolicyId') : null;
+
+    // Capture saved tab NOW before loadPolicies triggers logstashTab.click() which would overwrite it
+    window._pendingTabRestore = localStorage.getItem('agentPolicies_lastTab');
+
+    loadPolicies(null, _urlPolicyId ? parseInt(_urlPolicyId) : (_savedPolicyId ? parseInt(_savedPolicyId) : null));
     
     // Add click handler for empty state Add Policy button
     const emptyStateAddPolicyBtn = document.getElementById('emptyStateAddPolicyBtn');
@@ -1382,15 +1407,37 @@ async function loadPolicyData(policyValue) {
                 
                 // Store original content for change detection
                 storeOriginalContent();
-                
+
+                // Restore last active tab — use the value captured before page-load
+                // overwrote localStorage via logstashTab.click()
+                const _tabToRestore = window._pendingTabRestore;
+                window._pendingTabRestore = null; // consume it — only applies to initial load
+                if (_tabToRestore && _tabToRestore !== 'logstash.yml') {
+                    const tabEl = document.querySelector(`.file-tab[data-file="${_tabToRestore}"]`);
+                    if (tabEl) tabEl.click();
+                }
+
                 // Pulse the Default guide button if this policy has never been deployed
-                const defaultGuideBtn = document.getElementById('defaultGuideBtn');
-                if (defaultGuideBtn) {
+                const quickSetupRowEl = document.getElementById('quickSetupRow');
+                if (quickSetupRowEl) {
                     if (policy.current_revision_number === 0) {
-                        defaultGuideBtn.classList.add('guide-btn-highlight');
+                        quickSetupRowEl.classList.add('guide-btn-highlight');
                     } else {
-                        defaultGuideBtn.classList.remove('guide-btn-highlight');
+                        quickSetupRowEl.classList.remove('guide-btn-highlight');
                     }
+                }
+
+                // Update policy stats cards
+                updatePolicyStats(policy);
+
+                // Refresh DB-backed tabs if one of them is currently active
+                const activeTab = window.policyCurrentFile;
+                if (activeTab === 'pipelines') {
+                    loadPolicyPipelines();
+                } else if (activeTab === 'keystore') {
+                    loadPolicyKeystore();
+                } else if (activeTab === 'enrollment-tokens') {
+                    loadEnrollmentTokens();
                 }
 
                 // Check for configuration notifications after loading policy data
@@ -1403,6 +1450,70 @@ async function loadPolicyData(policyValue) {
     } catch (error) {
         console.error('Error loading policy data:', error);
         showToast('Failed to load policy data: ' + error.message, 'error');
+    }
+}
+
+async function updatePolicyStats(policy) {
+    // Revision
+    const revEl = document.getElementById('statRevision');
+    if (revEl) {
+        revEl.textContent = `#${policy.current_revision_number}`;
+    }
+
+    // Managed instances
+    const instEl = document.getElementById('statInstances');
+    if (instEl) {
+        instEl.textContent = policy.connection_count ?? '—';
+    }
+
+    // Last deployed
+    const deployedEl = document.getElementById('statLastDeployed');
+    if (deployedEl) {
+        if (policy.last_deployed_at) {
+            const d = new Date(policy.last_deployed_at);
+            deployedEl.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        } else {
+            deployedEl.textContent = 'Never';
+        }
+    }
+
+    // Undeployed changes — read from sectionsWithChanges after the diff modal loads
+    // Set a placeholder now; it'll be updated once loadPolicyDiff populates sectionsWithChanges
+    const pendingEl = document.getElementById('statPendingChanges');
+    if (pendingEl) {
+        pendingEl.textContent = '…';
+        // Load the diff silently to populate sectionsWithChanges, then update the stat
+        if (policy.id) {
+            fetch(`/ConnectionManager/GetPolicyDiff/?policy_id=${policy.id}`, {
+                headers: { 'X-CSRFToken': getCsrfToken() }
+            }).then(r => r.json()).then(data => {
+                if (!data.success) { pendingEl.textContent = '—'; return; }
+                // Mirror the same logic as policy_deploy_modal.js renderSideBySideTextDiff / renderPipelinesDiff etc.
+                const prev = data.previous;
+                const curr = data.current;
+                let count = 0;
+                if ((prev.logstash_yml || '') !== (curr.logstash_yml || '')) count++;
+                if ((prev.jvm_options || '') !== (curr.jvm_options || '')) count++;
+                if ((prev.log4j2_properties || '') !== (curr.log4j2_properties || '')) count++;
+                // Pipelines: compare JSON representation
+                const prevPipes = JSON.stringify((prev.pipelines || []).map(p => p.name).sort());
+                const currPipes = JSON.stringify((curr.pipelines || []).map(p => p.name).sort());
+                if (prevPipes !== currPipes) count++;
+                else {
+                    const prevLscl = JSON.stringify((prev.pipelines || []).sort((a,b) => a.name > b.name ? 1 : -1).map(p => p.lscl));
+                    const currLscl = JSON.stringify((curr.pipelines || []).sort((a,b) => a.name > b.name ? 1 : -1).map(p => p.lscl));
+                    if (prevLscl !== currLscl) count++;
+                }
+                // Keystore: compare key names
+                const prevKeys = JSON.stringify((prev.keystore || []).map(k => k.key_name).sort());
+                const currKeys = JSON.stringify((curr.keystore || []).map(k => k.key_name).sort());
+                if (prevKeys !== currKeys) count++;
+                // Global settings
+                if (prev.settings_path !== curr.settings_path || prev.logs_path !== curr.logs_path) count++;
+                pendingEl.textContent = count === 0 ? 'None' : `${count} section${count !== 1 ? 's' : ''}`;
+            }).catch(() => { pendingEl.textContent = '—'; });
+        }
     }
 }
 
@@ -1942,15 +2053,17 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Added event listeners to config logs path field');
     }
     
-    // Also monitor settings path for changes
+    // Also monitor settings path and binary path for changes
     const settingsPathField = document.getElementById('settingsPath');
     if (settingsPathField) {
-        settingsPathField.addEventListener('input', () => {
-            detectChanges();
-        });
-        settingsPathField.addEventListener('change', () => {
-            detectChanges();
-        });
+        settingsPathField.addEventListener('input', () => { detectChanges(); });
+        settingsPathField.addEventListener('change', () => { detectChanges(); });
+    }
+
+    const binaryPathField = document.getElementById('binaryPath');
+    if (binaryPathField) {
+        binaryPathField.addEventListener('input', () => { detectChanges(); });
+        binaryPathField.addEventListener('change', () => { detectChanges(); });
         console.log('Added event listeners to settings path field');
     }
     
@@ -2455,9 +2568,10 @@ function storeOriginalContent() {
     originalFileContents['jvm.options'] = window.policyFileContents['jvm.options'] || '';
     originalFileContents['log4j2.properties'] = window.policyFileContents['log4j2.properties'] || '';
     
-    // Store original settings and logs paths
+    // Store original settings, logs, and binary paths
     originalFileContents['settingsPath'] = document.getElementById('settingsPath')?.value || '';
     originalFileContents['logsPath'] = document.getElementById('logsPath')?.value || '';
+    originalFileContents['binaryPath'] = document.getElementById('binaryPath')?.value || '';
     
     // Reset all visual indicators
     updateChangeIndicators();
@@ -2511,25 +2625,15 @@ function detectChanges() {
         }
     });
     
-    // Check settings path and logs path changes
+    // Check settings path, logs path, and binary path changes
     const currentSettingsPath = document.getElementById('settingsPath')?.value || '';
     const currentLogsPath = document.getElementById('logsPath')?.value || '';
+    const currentBinaryPath = document.getElementById('binaryPath')?.value || '';
     const originalSettingsPath = originalFileContents['settingsPath'] || '';
     const originalLogsPath = originalFileContents['logsPath'] || '';
-    
-    console.log('Settings path check:', {
-        current: currentSettingsPath,
-        original: originalSettingsPath,
-        changed: currentSettingsPath !== originalSettingsPath
-    });
-    console.log('Logs path check:', {
-        current: currentLogsPath,
-        original: originalLogsPath,
-        changed: currentLogsPath !== originalLogsPath
-    });
-    
-    if (currentSettingsPath !== originalSettingsPath || currentLogsPath !== originalLogsPath) {
-        console.log('Settings/logs path changed - adding to changedFiles');
+    const originalBinaryPath = originalFileContents['binaryPath'] || '';
+
+    if (currentSettingsPath !== originalSettingsPath || currentLogsPath !== originalLogsPath || currentBinaryPath !== originalBinaryPath) {
         changedFiles.add('settings');
     }
     
@@ -2644,3 +2748,44 @@ function resetChangeTracking() {
 }
 
 // Note: All guide-related functions have been moved to logstashyml_guides.js
+
+// ---------------------------------------------------------------------------
+// Unsaved-changes navigation guard
+// ---------------------------------------------------------------------------
+
+// In-app link clicks → custom modal
+document.addEventListener('click', function(e) {
+    if (changedFiles.size === 0) return;
+
+    const link = e.target.closest('a[href]');
+    if (!link) return;
+
+    const href = link.getAttribute('href');
+    // Skip anchors, javascript: pseudo-links, and new-tab links
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || link.target === '_blank') return;
+
+    e.preventDefault();
+
+    ConfirmationModal.show(
+        'You have unsaved changes that will be lost if you leave this page.',
+        'Unsaved Changes',
+        'Leave Page',
+        null,
+        false,
+        'Stay'
+    ).then(confirmed => {
+        if (confirmed) {
+            // Bypass guard on the way out
+            changedFiles.clear();
+            window.location.href = href;
+        }
+    });
+}, true); // capture phase so we intercept before any other handlers
+
+// Browser close / refresh / address-bar navigation → native dialog
+window.addEventListener('beforeunload', function(e) {
+    if (changedFiles.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
