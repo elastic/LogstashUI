@@ -782,13 +782,24 @@
                     </svg>
                   </button>
 
-                  <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                  <div class="action-menu-items hidden fixed z-50 w-44 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
                       <div class="px-1 py-1">
+                        {% if connection.connection_type == "AGENT" %}
+                        <a href="#"
+                           onclick="event.preventDefault(); ChangePolicyModal.open({{ connection.pk }}, {{ connection.policy_id|default:'null' }}); return false;"
+                           class="group flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md"
+                           role="menuitem">
+                          <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          Change Policy
+                        </a>
+                        {% endif %}
                         <form method="POST">
                           {% csrf_token %}
                           <a href="#"
                            onclick="event.preventDefault(); deleteConnection({{ connection.pk }}); return false;"
-                           class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" 
+                           class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
                            role="menuitem">
                           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -825,6 +836,9 @@
 
   <!-- Agent Inspect Flyout -->
   {% include 'components/pipeline_manager/agent_inspect_modal.html' %}
+
+  <!-- Change Policy Modal -->
+  {% include 'components/pipeline_manager/change_policy_modal.html' %}
 
 </div>
 

@@ -1,0 +1,204 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- Change Policy Modal -->
+<div id="changePolicyModal" class="hidden fixed inset-0 flex items-center justify-center z-[10001] p-4">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="ChangePolicyModal.close()"></div>
+    <div class="bg-gray-800 rounded-lg w-full max-w-md relative z-10 border border-gray-700 shadow-2xl">
+        <!-- Modal Header -->
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-white">Change Policy</h3>
+            <button onclick="ChangePolicyModal.close()" class="text-gray-400 hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-4">
+            <p class="text-sm text-gray-400 mb-3">Select the policy to assign to this agent.</p>
+            <div id="changePolicyList" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                <!-- Policy cards rendered by JS -->
+                <div class="flex items-center justify-center py-6">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-4 border-t border-gray-700 flex justify-end space-x-3">
+            <button type="button" onclick="ChangePolicyModal.close()"
+                    class="px-5 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+                Cancel
+            </button>
+            <button type="button" onclick="ChangePolicyModal.confirm()"
+                    id="changePolicyConfirmBtn"
+                    disabled
+                    class="px-5 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Change Policy
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+window.ChangePolicyModal = {
+    _connectionId: null,
+    _currentPolicyId: null,
+    _selectedPolicyId: null,
+
+    open: function(connectionId, currentPolicyId) {
+        this._connectionId = connectionId;
+        this._currentPolicyId = currentPolicyId;
+        this._selectedPolicyId = null;
+
+        const modal = document.getElementById('changePolicyModal');
+        const list = document.getElementById('changePolicyList');
+        const confirmBtn = document.getElementById('changePolicyConfirmBtn');
+
+        // Reset state
+        confirmBtn.disabled = true;
+        list.innerHTML = '<div class="flex items-center justify-center py-6"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500"></div></div>';
+
+        modal.classList.remove('hidden');
+
+        // Fetch policies
+        fetch('/ConnectionManager/GetPolicies/')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    list.innerHTML = '<p class="text-sm text-red-400 text-center py-4">Failed to load policies.</p>';
+                    return;
+                }
+                this._renderPolicies(data.policies);
+            })
+            .catch(() => {
+                list.innerHTML = '<p class="text-sm text-red-400 text-center py-4">Failed to load policies.</p>';
+            });
+    },
+
+    _renderPolicies: function(policies) {
+        const list = document.getElementById('changePolicyList');
+
+        if (!policies.length) {
+            list.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No policies available.</p>';
+            return;
+        }
+
+        list.innerHTML = policies.map(policy => {
+            const isCurrent = policy.id === this._currentPolicyId;
+            return `
+                <button type="button"
+                        onclick="ChangePolicyModal._selectPolicy(${policy.id})"
+                        id="policyCard-${policy.id}"
+                        class="w-full text-left px-4 py-3 rounded-md border transition-colors
+                               ${isCurrent
+                                   ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500'
+                                   : 'border-gray-600 bg-gray-700/50 hover:bg-gray-700 hover:border-gray-500'}">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-white">${this._escapeHtml(policy.name)}</span>
+                        ${isCurrent ? '<span class="text-xs text-purple-400 font-medium">Current</span>' : ''}
+                    </div>
+                </button>`;
+        }).join('');
+    },
+
+    _selectPolicy: function(policyId) {
+        this._selectedPolicyId = policyId;
+        const confirmBtn = document.getElementById('changePolicyConfirmBtn');
+
+        // Update card styles
+        document.querySelectorAll('[id^="policyCard-"]').forEach(card => {
+            const cardId = parseInt(card.id.replace('policyCard-', ''));
+            const isCurrent = cardId === this._currentPolicyId;
+            const isSelected = cardId === policyId;
+
+            card.className = `w-full text-left px-4 py-3 rounded-md border transition-colors ${
+                isSelected
+                    ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500'
+                    : (isCurrent
+                        ? 'border-gray-500 bg-gray-700/50 hover:bg-gray-700 hover:border-gray-500'
+                        : 'border-gray-600 bg-gray-700/50 hover:bg-gray-700 hover:border-gray-500')
+            }`;
+
+            // Update "Current" badge — show only on the current-policy card when it's not the selected one
+            const badge = card.querySelector('span.text-purple-400');
+            if (badge) badge.remove();
+            if (isCurrent && !isSelected) {
+                const nameSpan = card.querySelector('span.text-white');
+                const wrapper = nameSpan.parentElement;
+                const newBadge = document.createElement('span');
+                newBadge.className = 'text-xs text-purple-400 font-medium';
+                newBadge.textContent = 'Current';
+                wrapper.appendChild(newBadge);
+            }
+        });
+
+        // Enable confirm only if a different policy is selected
+        confirmBtn.disabled = (policyId === this._currentPolicyId);
+    },
+
+    _escapeHtml: function(str) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    },
+
+    close: function() {
+        document.getElementById('changePolicyModal').classList.add('hidden');
+        this._connectionId = null;
+        this._currentPolicyId = null;
+        this._selectedPolicyId = null;
+    },
+
+    confirm: function() {
+        if (!this._selectedPolicyId || this._selectedPolicyId === this._currentPolicyId) return;
+
+        const confirmBtn = document.getElementById('changePolicyConfirmBtn');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Saving...';
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const formData = new FormData();
+        formData.append('connection_id', this._connectionId);
+        formData.append('policy_id', this._selectedPolicyId);
+
+        fetch('/ConnectionManager/ChangeConnectionPolicy/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                this.close();
+                showToast('Policy updated successfully!', 'success');
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                showToast(data.error || 'Failed to update policy.', 'error');
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Change Policy';
+            }
+        })
+        .catch(() => {
+            showToast('Failed to update policy.', 'error');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Change Policy';
+        });
+    }
+};
+
+// ESC key closes the modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('changePolicyModal');
+        if (modal && !modal.classList.contains('hidden')) {
+            ChangePolicyModal.close();
+        }
+    }
+});
+</script>

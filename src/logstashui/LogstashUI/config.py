@@ -60,11 +60,17 @@ def load_config() -> dict:
     config = DEFAULT_CONFIG.copy()
     
     config_path = os.environ.get('LOGSTASHUI_CONFIG')
-    
+
     if not config_path:
-        logger.info("LOGSTASHUI_CONFIG environment variable not set, using default configuration")
-        return config
-    
+        # Fall back to logstashui.yml adjacent to the project directory
+        default_config_path = Path(__file__).resolve().parent.parent / 'logstashui.yml'
+        if default_config_path.exists():
+            logger.info(f"LOGSTASHUI_CONFIG not set, using default path: {default_config_path}")
+            config_path = str(default_config_path)
+        else:
+            logger.info("LOGSTASHUI_CONFIG not set and no logstashui.yml found, using default configuration")
+            return config
+
     config_file = Path(config_path)
     
     if not config_file.exists():

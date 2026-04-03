@@ -9,6 +9,7 @@ import json
 import hashlib
 import base64
 import subprocess
+from pathlib import Path
 from datetime import datetime, timezone
 from cryptography.fernet import Fernet
 from . import agent_state
@@ -28,6 +29,41 @@ def _decrypt_from_server(raw_api_key: str, encrypted: str) -> str:
     """
     key = base64.urlsafe_b64encode(hashlib.sha256(raw_api_key.encode('utf-8')).digest())
     return Fernet(key).decrypt(encrypted.encode('utf-8')).decode('utf-8')
+
+
+# Default environment file sourced by the Logstash systemd unit.
+_LOGSTASH_ENV_FILE = Path('/etc/default/logstash')
+
+
+def update_logstash_env_file(password: str) -> None:
+    """
+    Write (or update) LOGSTASH_KEYSTORE_PASS in /etc/default/logstash so that
+    the Logstash systemd service can open the password-protected keystore on startup.
+
+    The file is written with mode 0o640 so that Logstash (running as the
+    logstash user/group) can read it but unprivileged users cannot.
+    """
+    var_name = 'LOGSTASH_KEYSTORE_PASS'
+
+    # Read existing lines, stripping any previous LOGSTASH_KEYSTORE_PASS entry
+    existing_lines = []
+    if _LOGSTASH_ENV_FILE.exists():
+        try:
+            existing_lines = _LOGSTASH_ENV_FILE.read_text(encoding='utf-8').splitlines()
+        except OSError as e:
+            logger.warning(f"Could not read {_LOGSTASH_ENV_FILE}: {e}")
+
+    filtered = [ln for ln in existing_lines if not ln.startswith(f'{var_name}=')]
+    filtered.append(f'{var_name}={password}')
+
+    content = '\n'.join(filtered) + '\n'
+    try:
+        _LOGSTASH_ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _LOGSTASH_ENV_FILE.write_text(content, encoding='utf-8')
+        _LOGSTASH_ENV_FILE.chmod(0o640)
+        logger.info(f"Updated {var_name} in {_LOGSTASH_ENV_FILE}")
+    except OSError as e:
+        logger.error(f"Failed to write {_LOGSTASH_ENV_FILE}: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +200,6 @@ def update_keystore(settings_path, keystore_changes):
             logger.debug(f"Keystore contains {len(ks.keys)} existing keys")
         except IncorrectPassword:
             logger.warning("Incorrect keystore password - deleting incompatible keystore and recreating")
-            from pathlib import Path
             keystore_file = Path(settings_path) / 'logstash.keystore'
             try:
                 keystore_file.unlink(missing_ok=True)
@@ -818,7 +853,6 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                         logger.info("Successfully decrypted new keystore password")
 
                         # Delete the keystore file directly — no need to load/decrypt the old one
-                        from pathlib import Path
                         keystore_file = Path(settings_path) / 'logstash.keystore'
                         try:
                             keystore_file.unlink(missing_ok=True)
@@ -832,6 +866,7 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                             agent_state.update_state('keystore_password', actual_password)
                             agent_state.update_state('keystore_password_hash', new_hash)
                             state = agent_state.get_state()
+                            update_logstash_env_file(actual_password)
                             files_updated = True
                             requires_restart = True
                         except Exception as create_error:
@@ -846,7 +881,6 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                         # values are encrypted with the same key and will also fail.
                         logger.error(f"Failed to decrypt keystore password from server: {decrypt_error}")
                         failed_operations.append(f'keystore_password decrypt failed: {decrypt_error}')
-                        from pathlib import Path
                         keystore_file = Path(settings_path) / 'logstash.keystore'
                         try:
                             keystore_file.unlink(missing_ok=True)
@@ -909,6 +943,11 @@ def get_config_changes(server_settings_path=None, server_logs_path=None, server_
                         logger.info(f"Updated agent revision number to {server_revision}")
             else:
                 logger.info("No configuration file changes detected")
+                # Still sync revision number so future check-ins don't re-trigger get_config_changes
+                server_revision = result.get('current_revision')
+                if server_revision is not None:
+                    agent_state.update_state('revision_number', server_revision)
+                    logger.info(f"Updated agent revision number to {server_revision} (no config changes needed)")
 
             # Persist policy apply result to state (fires regardless of whether files changed)
             server_revision = result.get('current_revision')
