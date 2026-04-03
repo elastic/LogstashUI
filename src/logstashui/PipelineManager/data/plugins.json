@@ -17,10 +17,14 @@
             "options": {
                 "config_mode": {
                     "setting": "config_mode",
-                    "input_type": "string, (basic or advanced)",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-azure_event_hubs-config_mode",
-                    "important": "No"
+                    "important": "No",
+                    "options": [
+                        "basic",
+                        "advanced"
+                    ]
                 },
                 "event_hubs": {
                     "setting": "event_hubs",
@@ -70,10 +74,15 @@
                 },
                 "initial_position": {
                     "setting": "initial_position",
-                    "input_type": "string, (beginning, end, or look_back)",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-azure_event_hubs-initial_position",
-                    "important": "No"
+                    "important": "No",
+                    "options": [
+                        "beginning",
+                        "end",
+                        "look_back"
+                    ]
                 },
                 "initial_position_look_back": {
                     "setting": "initial_position_look_back",
@@ -367,7 +376,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-cloudwatch-access_key_id",
                     "important": "Yes"
@@ -462,14 +471,14 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-cloudwatch-secret_access_key",
                     "important": "Yes"
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-cloudwatch-session_token",
                     "important": "No"
@@ -1082,17 +1091,6 @@
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_serverless_forwarder-port",
                     "important": "Yes"
-                },
-                "ssl": {
-                    "setting": "ssl",
-                    "input_type": "boolean",
-                    "required": "Deprecated",
-                    "setting_link": "#plugins-inputs-elastic_serverless_forwarder-ssl",
-                    "important": "Yes",
-                    "options": [
-                        "true",
-                        "false"
-                    ]
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
@@ -2844,10 +2842,16 @@
                 },
                 "response_code": {
                     "setting": "response_code",
-                    "input_type": "number, one of [200, 201, 202, 204]",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-response_code",
-                    "important": "No"
+                    "important": "No",
+                    "options": [
+                        200,
+                        201,
+                        202,
+                        204
+                    ]
                 },
                 "ssl_certificate": {
                     "setting": "ssl_certificate",
@@ -3870,6 +3874,13 @@
                     "setting_link": "#plugins-inputs-jdbc-connection_retry_attempts_wait_time",
                     "important": "No"
                 },
+                "interval": {
+                    "setting": "interval",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-jdbc-interval",
+                    "important": "No"
+                },
                 "jdbc_connection_string": {
                     "setting": "jdbc_connection_string",
                     "input_type": "string",
@@ -3943,7 +3954,7 @@
                 },
                 "jdbc_password_filepath": {
                     "setting": "jdbc_password_filepath",
-                    "input_type": "fs_path",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jdbc-jdbc_password_filepath",
                     "important": "No"
@@ -4003,6 +4014,13 @@
                     "input_type": "hash",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jdbc-parameters",
+                    "important": "No"
+                },
+                "period": {
+                    "setting": "period",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-jdbc-period",
                     "important": "No"
                 },
                 "plugin_timezone": {
@@ -4359,7 +4377,7 @@
                 },
                 "password": {
                     "setting": "password",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jms-password",
                     "important": "Yes"
@@ -4760,6 +4778,13 @@
                     "setting_link": "#plugins-inputs-kafka-group_instance_id",
                     "important": "No"
                 },
+                "group_protocol": {
+                    "setting": "group_protocol",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-kafka-group_protocol",
+                    "important": "No"
+                },
                 "heartbeat_interval_ms": {
                     "setting": "heartbeat_interval_ms",
                     "input_type": "number",
@@ -4851,6 +4876,13 @@
                     "setting_link": "#plugins-inputs-kafka-reconnect_backoff_ms",
                     "important": "No"
                 },
+                "reconnect_backoff_max_ms": {
+                    "setting": "reconnect_backoff_max_ms",
+                    "input_type": "number",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-kafka-reconnect_backoff_max_ms",
+                    "important": "No"
+                },
                 "request_timeout_ms": {
                     "setting": "request_timeout_ms",
                     "input_type": "number",
@@ -4930,7 +4962,7 @@
                 },
                 "sasl_jaas_config": {
                     "setting": "sasl_jaas_config",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-sasl_jaas_config",
                     "important": "No"
@@ -4951,7 +4983,7 @@
                 },
                 "schema_registry_key": {
                     "setting": "schema_registry_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-schema_registry_key",
                     "important": "No"
@@ -4965,7 +4997,7 @@
                 },
                 "schema_registry_secret": {
                     "setting": "schema_registry_secret",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-kafka-schema_registry_secret",
                     "important": "No"
@@ -5697,7 +5729,7 @@
                 },
                 "meetupkey": {
                     "setting": "meetupkey",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-meetup-meetupkey",
                     "important": "Yes"
@@ -5877,7 +5909,7 @@
                 },
                 "private_key": {
                     "setting": "private_key",
-                    "input_type": "fs_path",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-puppet_facter-private_key",
                     "important": "No"
@@ -6129,7 +6161,7 @@
                 },
                 "ssl_certificate_password": {
                     "setting": "ssl_certificate_password",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-rabbitmq-ssl_certificate_password",
                     "important": "No"
@@ -6570,7 +6602,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-s3-access_key_id",
                     "important": "Yes"
@@ -6616,6 +6648,13 @@
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-s3-bucket",
                     "important": "Yes"
+                },
+                "cutoff_second": {
+                    "setting": "cutoff_second",
+                    "input_type": "number",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-s3-cutoff_second",
+                    "important": "No"
                 },
                 "delete": {
                     "setting": "delete",
@@ -6711,14 +6750,14 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-s3-secret_access_key",
                     "important": "Yes"
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-s3-session_token",
                     "important": "No"
@@ -6959,6 +6998,13 @@
                     "setting_link": "#plugins-inputs-salesforce-api_version",
                     "important": "No"
                 },
+                "changed_data_filter": {
+                    "setting": "changed_data_filter",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-salesforce-changed_data_filter",
+                    "important": "No"
+                },
                 "client_id": {
                     "setting": "client_id",
                     "input_type": "string",
@@ -6972,6 +7018,13 @@
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-salesforce-client_secret",
                     "important": "Yes"
+                },
+                "interval": {
+                    "setting": "interval",
+                    "input_type": "number",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-salesforce-interval",
+                    "important": "No"
                 },
                 "password": {
                     "setting": "password",
@@ -7015,6 +7068,13 @@
                     "setting_link": "#plugins-inputs-salesforce-sfdc_object_name",
                     "important": "Yes"
                 },
+                "timeout": {
+                    "setting": "timeout",
+                    "input_type": "number",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-salesforce-timeout",
+                    "important": "No"
+                },
                 "to_underscores": {
                     "setting": "to_underscores",
                     "input_type": "boolean",
@@ -7025,6 +7085,20 @@
                         "true",
                         "false"
                     ]
+                },
+                "tracking_field": {
+                    "setting": "tracking_field",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-salesforce-tracking_field",
+                    "important": "No"
+                },
+                "tracking_field_value_file": {
+                    "setting": "tracking_field_value_file",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-inputs-salesforce-tracking_field_value_file",
+                    "important": "No"
                 },
                 "use_test_sandbox": {
                     "setting": "use_test_sandbox",
@@ -7294,7 +7368,8 @@
                         "aes",
                         "aes128",
                         "aes192",
-                        "aes256"
+                        "aes256",
+                        "aes256with3desKey"
                     ]
                 },
                 "security_level": {
@@ -7524,7 +7599,8 @@
                         "aes",
                         "aes128",
                         "aes192",
-                        "aes256"
+                        "aes256",
+                        "aes256with3desKey"
                     ]
                 },
                 "security_level": {
@@ -7679,7 +7755,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-sqs-access_key_id",
                     "important": "Yes"
@@ -7770,7 +7846,7 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-sqs-secret_access_key",
                     "important": "Yes"
@@ -7784,7 +7860,7 @@
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-inputs-sqs-session_token",
                     "important": "No"
@@ -8393,7 +8469,7 @@
             "options": {
                 "consumer_key": {
                     "setting": "consumer_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-twitter-consumer_key",
                     "important": "Yes"
@@ -8464,7 +8540,7 @@
                 },
                 "oauth_token": {
                     "setting": "oauth_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "#plugins-inputs-twitter-oauth_token",
                     "important": "Yes"
@@ -9298,7 +9374,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-cloudwatch-access_key_id",
                     "important": "Yes"
@@ -9414,14 +9490,14 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-cloudwatch-secret_access_key",
                     "important": "Yes"
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-cloudwatch-session_token",
                     "important": "No"
@@ -9869,7 +9945,7 @@
                 },
                 "api_key": {
                     "setting": "api_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "https://github.com/dynatrace-oss/logstash-output-dynatrace/blob/main/docs/index.asciidoc#plugins-outputs-dynatrace-api_key",
                     "important": "Yes"
@@ -10053,10 +10129,22 @@
                 },
                 "compression_level": {
                     "setting": "compression_level",
-                    "input_type": "number, one of [0 ~ 9]",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-compression_level",
-                    "important": "No"
+                    "important": "No",
+                    "options": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9
+                    ]
                 },
                 "custom_headers": {
                     "setting": "custom_headers",
@@ -10161,6 +10249,13 @@
                     "input_type": "string",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-document_type",
+                    "important": "No"
+                },
+                "drop_error_types": {
+                    "setting": "drop_error_types",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-elasticsearch-drop_error_types",
                     "important": "No"
                 },
                 "ecs_compatibility": {
@@ -11304,7 +11399,7 @@
                 },
                 "key_password": {
                     "setting": "key_password",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Deprecated",
                     "setting_link": "#plugins-outputs-google_bigquery-key_password",
                     "important": "No"
@@ -11477,7 +11572,7 @@
                 },
                 "key_password": {
                     "setting": "key_password",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Deprecated",
                     "setting_link": "#plugins-outputs-google_cloud_storage-key_password",
                     "important": "No"
@@ -12773,6 +12868,13 @@
                     "setting_link": "#plugins-outputs-kafka-reconnect_backoff_ms",
                     "important": "No"
                 },
+                "reconnect_backoff_max_ms": {
+                    "setting": "reconnect_backoff_max_ms",
+                    "input_type": "number",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-kafka-reconnect_backoff_max_ms",
+                    "important": "No"
+                },
                 "request_timeout_ms": {
                     "setting": "request_timeout_ms",
                     "input_type": "number",
@@ -12859,7 +12961,7 @@
                 },
                 "sasl_jaas_config": {
                     "setting": "sasl_jaas_config",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-kafka-sasl_jaas_config",
                     "important": "No"
@@ -13019,7 +13121,7 @@
                 },
                 "api_token": {
                     "setting": "api_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "#plugins-outputs-librato-api_token",
                     "important": "Yes"
@@ -13840,7 +13942,7 @@
                 },
                 "service_key": {
                     "setting": "service_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "#plugins-outputs-pagerduty-service_key",
                     "important": "Yes"
@@ -14075,7 +14177,7 @@
                 },
                 "ssl_certificate_password": {
                     "setting": "ssl_certificate_password",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-rabbitmq-ssl_certificate_password",
                     "important": "No"
@@ -14421,7 +14523,7 @@
                 },
                 "token": {
                     "setting": "token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "#plugins-outputs-redmine-token",
                     "important": "Yes"
@@ -14680,7 +14782,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-s3-access_key_id",
                     "important": "Yes"
@@ -14815,7 +14917,7 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-s3-secret_access_key",
                     "important": "Yes"
@@ -14844,7 +14946,7 @@
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-s3-session_token",
                     "important": "No"
@@ -15029,7 +15131,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-sns-access_key_id",
                     "important": "Yes"
@@ -15089,14 +15191,14 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-sns-secret_access_key",
                     "important": "Yes"
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-sns-session_token",
                     "important": "No"
@@ -15210,7 +15312,7 @@
             "options": {
                 "access_key_id": {
                     "setting": "access_key_id",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-sqs-access_key_id",
                     "important": "Yes"
@@ -15287,14 +15389,14 @@
                 },
                 "secret_access_key": {
                     "setting": "secret_access_key",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-sqs-secret_access_key",
                     "important": "Yes"
                 },
                 "session_token": {
                     "setting": "session_token",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-sqs-session_token",
                     "important": "No"
@@ -15691,18 +15793,18 @@
                     "setting_link": "#plugins-outputs-syslog-sourcehost",
                     "important": "No"
                 },
-                "ssl_cacert": {
-                    "setting": "ssl_cacert",
+                "ssl_certificate": {
+                    "setting": "ssl_certificate",
                     "input_type": "fs_path",
                     "required": "No",
-                    "setting_link": "#plugins-outputs-syslog-ssl_cacert",
+                    "setting_link": "#plugins-outputs-syslog-ssl_certificate",
                     "important": "No"
                 },
-                "ssl_cert": {
-                    "setting": "ssl_cert",
-                    "input_type": "fs_path",
+                "ssl_certificate_authorities": {
+                    "setting": "ssl_certificate_authorities",
+                    "input_type": "array",
                     "required": "No",
-                    "setting_link": "#plugins-outputs-syslog-ssl_cert",
+                    "setting_link": "#plugins-outputs-syslog-ssl_certificate_authorities",
                     "important": "No"
                 },
                 "ssl_key": {
@@ -15730,6 +15832,34 @@
                         "false"
                     ]
                 },
+                "ssl_crl_path": {
+                    "setting": "ssl_crl_path",
+                    "input_type": "fs_path",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-syslog-ssl_crl_path",
+                    "important": "No"
+                },
+                "ssl_crl_check": {
+                    "setting": "ssl_crl_check",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-syslog-ssl_crl_check",
+                    "important": "No"
+                },
+                "ssl_cipher_suites": {
+                    "setting": "ssl_cipher_suites",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-syslog-ssl_cipher_suites",
+                    "important": "No"
+                },
+                "ssl_supported_protocols": {
+                    "setting": "ssl_supported_protocols",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-syslog-ssl_supported_protocols",
+                    "important": "No"
+                },
                 "use_labels": {
                     "setting": "use_labels",
                     "input_type": "boolean",
@@ -15740,6 +15870,27 @@
                         "true",
                         "false"
                     ]
+                },
+                "structured_data": {
+                    "setting": "structured_data",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-outputs-syslog-structured_data",
+                    "important": "No"
+                },
+                "ssl_cacert": {
+                    "setting": "ssl_cacert",
+                    "input_type": "fs_path",
+                    "required": "ssl_certificate_authorities",
+                    "setting_link": "#plugins-outputs-syslog-ssl_cacert",
+                    "important": "No"
+                },
+                "ssl_cert": {
+                    "setting": "ssl_cert",
+                    "input_type": "fs_path",
+                    "required": "ssl_certificate",
+                    "setting_link": "#plugins-outputs-syslog-ssl_cert",
+                    "important": "No"
                 },
                 "codec": {
                     "setting": "codec",
@@ -15921,7 +16072,7 @@
             "options": {
                 "api_key": {
                     "setting": "api_key",
-                    "input_type": "Your Timber.io API key",
+                    "input_type": "password",
                     "required": "No",
                     "setting_link": "#plugins-outputs-timber-api_key",
                     "important": "Yes"
@@ -16776,6 +16927,13 @@
                     "setting_link": "#plugins-filters-aggregate-timeout_timestamp_field",
                     "important": "No"
                 },
+                "map_count_warning_threshold": {
+                    "setting": "map_count_warning_threshold",
+                    "input_type": "number",
+                    "required": "No",
+                    "setting_link": "#plugins-filters-aggregate-map_count_warning_threshold",
+                    "important": "No"
+                },
                 "add_field": {
                     "setting": "add_field",
                     "input_type": "hash",
@@ -17025,6 +17183,13 @@
                     "required": "No",
                     "setting_link": "#plugins-filters-cidr-address",
                     "important": "Yes"
+                },
+                "address_field": {
+                    "setting": "address_field",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-filters-cidr-address_field",
+                    "important": "No"
                 },
                 "network": {
                     "setting": "network",
@@ -17535,6 +17700,13 @@
                     "required": "No",
                     "setting_link": "#plugins-filters-date-match",
                     "important": "Yes"
+                },
+                "precision": {
+                    "setting": "precision",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-filters-date-precision",
+                    "important": "No"
                 },
                 "tag_on_failure": {
                     "setting": "tag_on_failure",
@@ -18469,6 +18641,24 @@
                     "required": "No",
                     "setting_link": "#plugins-filters-elasticsearch-query",
                     "important": "Yes"
+                },
+                "query_type": {
+                    "setting": "query_type",
+                    "input_type": "dropdown",
+                    "required": "No",
+                    "setting_link": "#plugins-filters-elasticsearch-query_type",
+                    "important": "No",
+                    "options": [
+                        "dsl",
+                        "esql"
+                    ]
+                },
+                "query_params": {
+                    "setting": "query_params",
+                    "input_type": "hash or hash",
+                    "required": "No",
+                    "setting_link": "#plugins-filters-elasticsearch-query_params",
+                    "important": "No"
                 },
                 "query_template": {
                     "setting": "query_template",
@@ -21566,7 +21756,7 @@
                 },
                 "password": {
                     "setting": "password",
-                    "input_type": "string",
+                    "input_type": "password",
                     "required": "Yes",
                     "setting_link": "https://github.com/empow/logstash-filter-threats_classifier/blob/master/README.md",
                     "important": "Yes"
@@ -21887,6 +22077,17 @@
                     "required": "No",
                     "setting_link": "#plugins-filters-translate-yaml_dictionary_code_point_limit",
                     "important": "No"
+                },
+                "yaml_load_strategy": {
+                    "setting": "yaml_load_strategy",
+                    "input_type": "dropdown",
+                    "required": "No",
+                    "setting_link": "#plugins-filters-translate-yaml_load_strategy",
+                    "important": "No",
+                    "options": [
+                        "one_shot",
+                        "streaming"
+                    ]
                 },
                 "add_field": {
                     "setting": "add_field",
@@ -22868,12 +23069,121 @@
                         "base64"
                     ]
                 },
+                "password": {
+                    "setting": "password",
+                    "input_type": "password",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-password",
+                    "important": "No"
+                },
+                "proxy": {
+                    "setting": "proxy",
+                    "input_type": "uri",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-proxy",
+                    "important": "No"
+                },
                 "schema_uri": {
                     "setting": "schema_uri",
                     "input_type": "string",
                     "required": "Yes",
                     "setting_link": "#plugins-codecs-avro-schema_uri",
                     "important": "Yes"
+                },
+                "ssl_certificate": {
+                    "setting": "ssl_certificate",
+                    "input_type": "fs_path",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_certificate",
+                    "important": "No"
+                },
+                "ssl_certificate_authorities": {
+                    "setting": "ssl_certificate_authorities",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_certificate_authorities",
+                    "important": "No"
+                },
+                "ssl_cipher_suites": {
+                    "setting": "ssl_cipher_suites",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_cipher_suites",
+                    "important": "No"
+                },
+                "ssl_enabled": {
+                    "setting": "ssl_enabled",
+                    "input_type": "boolean",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_enabled",
+                    "important": "No",
+                    "options": [
+                        "true",
+                        "false"
+                    ]
+                },
+                "ssl_key": {
+                    "setting": "ssl_key",
+                    "input_type": "fs_path",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_key",
+                    "important": "No"
+                },
+                "ssl_keystore_password": {
+                    "setting": "ssl_keystore_password",
+                    "input_type": "password",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_keystore_password",
+                    "important": "No"
+                },
+                "ssl_keystore_path": {
+                    "setting": "ssl_keystore_path",
+                    "input_type": "fs_path",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_keystore_path",
+                    "important": "No"
+                },
+                "ssl_keystore_type": {
+                    "setting": "ssl_keystore_type",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_keystore_type",
+                    "important": "No"
+                },
+                "ssl_supported_protocols": {
+                    "setting": "ssl_supported_protocols",
+                    "input_type": "array",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_supported_protocols",
+                    "important": "No"
+                },
+                "ssl_truststore_password": {
+                    "setting": "ssl_truststore_password",
+                    "input_type": "password",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_truststore_password",
+                    "important": "No"
+                },
+                "ssl_truststore_path": {
+                    "setting": "ssl_truststore_path",
+                    "input_type": "fs_path",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_truststore_path",
+                    "important": "No"
+                },
+                "ssl_truststore_type": {
+                    "setting": "ssl_truststore_type",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_truststore_type",
+                    "important": "No"
+                },
+                "ssl_verification_mode": {
+                    "setting": "ssl_verification_mode",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-ssl_verification_mode",
+                    "important": "No"
                 },
                 "tag_on_failure": {
                     "setting": "tag_on_failure",
@@ -22891,6 +23201,13 @@
                     "input_type": "string",
                     "required": "No",
                     "setting_link": "#plugins-codecs-avro-target",
+                    "important": "No"
+                },
+                "username": {
+                    "setting": "username",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-avro-username",
                     "important": "No"
                 }
             },
@@ -24853,6 +25170,13 @@
                         "external",
                         "locale"
                     ]
+                },
+                "decode_size_limit_bytes": {
+                    "setting": "decode_size_limit_bytes",
+                    "input_type": "string",
+                    "required": "No",
+                    "setting_link": "#plugins-codecs-json_lines-decode_size_limit_bytes",
+                    "important": "No"
                 },
                 "delimiter": {
                     "setting": "delimiter",

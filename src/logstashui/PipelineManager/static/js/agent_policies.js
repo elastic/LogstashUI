@@ -2303,7 +2303,8 @@ async function showSetKeystorePasswordModal() {
         'Please input a keystore password.',
         '',
         'Set Keystore Password',
-        'Enter password...'
+        'Enter password...',
+        true
     );
 
     if (!password) return;
@@ -2354,7 +2355,8 @@ async function showChangeKeystorePasswordModal() {
         'Enter new keystore password:',
         '',
         'New Keystore Password',
-        'Enter new password...'
+        'Enter new password...',
+        true
     );
 
     if (!password) return;

@@ -212,7 +212,7 @@ def perform_enrollment(encoded_token: str, logstash_ui_url: str, agent_id: str):
         logger.info(f"API Key: {result['api_key'][:10]}...")
         logger.info("=" * 60)
         logger.info("Configuration saved to state.json")
-        logger.info("You can now start the agent in normal mode")
+        logger.info("You can now start the agent using the --run flag")
         logger.info("=" * 60)
         
         return result
