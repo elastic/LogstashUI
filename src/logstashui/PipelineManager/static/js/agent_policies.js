@@ -6,6 +6,14 @@
 let originalFileContents = {};
 let changedFiles = new Set();
 
+// Notification buckets — merged before updating the bell indicator
+let logstashNotifications = [];
+let jvmNotifications = [];
+
+function refreshBellNotifications() {
+    updateNotificationIndicator([...logstashNotifications, ...jvmNotifications]);
+}
+
 // Toggle advanced settings sections
 function toggleAdvanced(sectionId) {
     const section = document.getElementById(sectionId);
@@ -190,7 +198,8 @@ function checkConfigNotifications() {
     }
     
     // Update notification indicator
-    updateNotificationIndicator(activeNotifications);
+    logstashNotifications = activeNotifications;
+    refreshBellNotifications();
 }
 
 // Fix logs path mismatch by syncing FROM config TO global setting
@@ -969,6 +978,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                document.getElementById('jvmFormView')?.classList.add('hidden');
                 if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
                 if (keystoreView) keystoreView.classList.add('hidden');
                 if (pipelinesView) {
@@ -999,6 +1009,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                document.getElementById('jvmFormView')?.classList.add('hidden');
                 if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
                 if (pipelinesView) pipelinesView.classList.add('hidden');
                 if (keystoreView) {
@@ -1030,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                document.getElementById('jvmFormView')?.classList.add('hidden');
                 if (pipelinesView) pipelinesView.classList.add('hidden');
                 if (keystoreView) keystoreView.classList.add('hidden');
                 if (enrollmentTokensView) {
@@ -1111,11 +1123,15 @@ document.addEventListener('DOMContentLoaded', function() {
         codeModeEditor.classList.add('hidden');
         const jvmFormView = document.getElementById('jvmFormView');
         jvmFormView?.classList.remove('hidden');
-        // Parse current heap value from jvm.options content
+        // Parse current Xms / Xmx values from jvm.options content
         const content = fileContents['jvm.options'] || '';
-        const match = content.match(/^-Xms(\d+)g/m);
-        const heapInput = document.getElementById('jvmHeapInput');
-        if (heapInput) heapInput.value = match ? match[1] : '';
+        const xmsMatch = content.match(/^-Xms(\d+)g/m);
+        const xmxMatch = content.match(/^-Xmx(\d+)g/m);
+        const xmsInput = document.getElementById('jvmXmsInput');
+        const xmxInput = document.getElementById('jvmXmxInput');
+        if (xmsInput) xmsInput.value = xmsMatch ? xmsMatch[1] : '';
+        if (xmxInput) xmxInput.value = xmxMatch ? xmxMatch[1] : '';
+        updateJvmHeapMismatchWarning();
     }
 
     function switchToCodeMode() {
@@ -1162,6 +1178,12 @@ document.addEventListener('DOMContentLoaded', function() {
     formModeBtn.addEventListener('click', () => {
         const activeFile = window.policyCurrentFile || currentFile;
         if (activeFile === 'jvm.options') {
+            // Sync editor content back before switching to form (only when already on jvm.options tab)
+            if (currentMode === 'code' && window.policyEditor) {
+                const editorContent = window.policyEditor.getValue();
+                fileContents['jvm.options'] = editorContent;
+                window.policyFileContents['jvm.options'] = editorContent;
+            }
             switchToJvmFormMode();
         } else {
             switchToFormMode();
@@ -1182,11 +1204,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Save button
     document.getElementById('saveBtn').addEventListener('click', savePolicyChanges);
     
-    // JVM heap input — update content live as user types
-    document.getElementById('jvmHeapInput')?.addEventListener('input', () => {
+    // JVM heap inputs — update content live as user types
+    const jvmInputHandler = () => {
         applyJvmHeapToContent();
+        updateJvmHeapMismatchWarning();
         detectChanges();
-    });
+    };
+    document.getElementById('jvmXmsInput')?.addEventListener('input', jvmInputHandler);
+    document.getElementById('jvmXmxInput')?.addEventListener('input', jvmInputHandler);
 
     // Deploy button
     document.getElementById('deployBtn').addEventListener('click', function() {
@@ -1674,11 +1699,10 @@ async function savePolicyChanges() {
     // Update fileContents with current editor/form state
     if (window.policyFileContents) {
         const currentFile = window.policyCurrentFile || 'logstash.yml';
-        
-        // Special handling for logstash.yml in Form Mode
+        const isFormMode = document.getElementById('formModeBtn')?.classList.contains('active');
+
         if (currentFile === 'logstash.yml') {
-            const currentMode = document.getElementById('formModeBtn')?.classList.contains('active') ? 'form' : 'code';
-            if (currentMode === 'form') {
+            if (isFormMode) {
                 // Convert form data to YAML
                 try {
                     const yamlContent = formToYml();
@@ -1689,11 +1713,18 @@ async function savePolicyChanges() {
                     return;
                 }
             } else if (window.policyEditor) {
-                // In Code Mode, save editor content
                 window.policyFileContents['logstash.yml'] = window.policyEditor.getValue();
             }
+        } else if (currentFile === 'jvm.options') {
+            if (isFormMode) {
+                // Form mode: write Xms/Xmx inputs into content — never touch the editor
+                applyJvmHeapToContent();
+            } else if (window.policyEditor) {
+                // Text mode: editor holds the authoritative content
+                window.policyFileContents['jvm.options'] = window.policyEditor.getValue();
+            }
         } else if (window.policyEditor) {
-            // For other files, save current editor content
+            // All other file tabs are always in code/text mode
             window.policyFileContents[currentFile] = window.policyEditor.getValue();
         }
     }
@@ -2143,15 +2174,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const notificationIndicatorBtn = document.getElementById('notificationIndicatorBtn');
     if (notificationIndicatorBtn) {
         notificationIndicatorBtn.addEventListener('click', function() {
-            const logstashTab = document.querySelector('[data-file="logstash.yml"]');
-            if (logstashTab) {
-                logstashTab.click();
-                setTimeout(() => {
-                    const formModeBtn = document.getElementById('formModeBtn');
-                    if (formModeBtn && !formModeBtn.classList.contains('active')) {
-                        formModeBtn.click();
-                    }
-                }, 100);
+            // Navigate to jvm.options when that's the only active notification source
+            if (jvmNotifications.length > 0 && logstashNotifications.length === 0) {
+                const jvmTab = document.querySelector('[data-file="jvm.options"]');
+                if (jvmTab) {
+                    jvmTab.click();
+                    setTimeout(() => {
+                        const formModeBtn = document.getElementById('formModeBtn');
+                        if (formModeBtn && !formModeBtn.classList.contains('active')) {
+                            formModeBtn.click();
+                        }
+                    }, 100);
+                }
+            } else {
+                const logstashTab = document.querySelector('[data-file="logstash.yml"]');
+                if (logstashTab) {
+                    logstashTab.click();
+                    setTimeout(() => {
+                        const formModeBtn = document.getElementById('formModeBtn');
+                        if (formModeBtn && !formModeBtn.classList.contains('active')) {
+                            formModeBtn.click();
+                        }
+                    }, 100);
+                }
             }
         });
     }
@@ -2625,9 +2670,9 @@ function getCurrentContent(file) {
             return window.policyEditor ? window.policyEditor.getValue() : '';
         }
     } else if (isCurrentlyEditing && file === 'jvm.options') {
-        // jvm.options form mode: authoritative content is kept in policyFileContents
-        // (applyJvmHeapToContent writes there on every input change)
-        if (currentMode === 'code' && window.policyEditor) {
+        // Use DOM to check mode (currentMode is a closure variable, not in scope here)
+        const jvmMode = document.getElementById('formModeBtn')?.classList.contains('active') ? 'form' : 'code';
+        if (jvmMode === 'code' && window.policyEditor) {
             return window.policyEditor.getValue();
         }
         return window.policyFileContents['jvm.options'] || '';
@@ -2780,30 +2825,48 @@ function resetChangeTracking() {
     storeOriginalContent();
 }
 
-// Write the JVM heap input value back into the jvm.options file content
+// Write the JVM Xms/Xmx input values back into the jvm.options file content
 function applyJvmHeapToContent() {
-    const heapInput = document.getElementById('jvmHeapInput');
-    const gb = parseInt(heapInput?.value, 10);
-    if (!gb || gb < 1) return;
+    const xmsInput = document.getElementById('jvmXmsInput');
+    const xmxInput = document.getElementById('jvmXmxInput');
+    const xms = parseInt(xmsInput?.value, 10);
+    const xmx = parseInt(xmxInput?.value, 10);
 
     let content = window.policyFileContents['jvm.options'] || '';
 
-    // Replace existing -Xms / -Xmx lines, or prepend them if absent
-    const hasXms = /-Xms\d+[gGmM]/m.test(content);
-    const hasXmx = /-Xmx\d+[gGmM]/m.test(content);
-
-    if (hasXms) {
-        content = content.replace(/-Xms\d+[gGmM]/gm, `-Xms${gb}g`);
-    } else {
-        content = `-Xms${gb}g\n` + content;
+    if (xms >= 1) {
+        const hasXms = /-Xms\d+[gGmM]/m.test(content);
+        if (hasXms) { content = content.replace(/-Xms\d+[gGmM]/gm, `-Xms${xms}g`); }
+        else { content = `-Xms${xms}g\n` + content; }
     }
-    if (hasXmx) {
-        content = content.replace(/-Xmx\d+[gGmM]/gm, `-Xmx${gb}g`);
-    } else {
-        content = `-Xmx${gb}g\n` + content;
+
+    if (xmx >= 1) {
+        const hasXmx = /-Xmx\d+[gGmM]/m.test(content);
+        if (hasXmx) { content = content.replace(/-Xmx\d+[gGmM]/gm, `-Xmx${xmx}g`); }
+        else { content = `-Xmx${xmx}g\n` + content; }
     }
 
     window.policyFileContents['jvm.options'] = content;
+}
+
+// Show or hide the heap mismatch banner and update the bell
+function updateJvmHeapMismatchWarning() {
+    const xmsVal = document.getElementById('jvmXmsInput')?.value;
+    const xmxVal = document.getElementById('jvmXmxInput')?.value;
+    const banner = document.getElementById('jvmMismatchBanner');
+    const mismatch = xmsVal && xmxVal && xmsVal !== xmxVal;
+
+    if (banner) {
+        if (mismatch) { banner.classList.remove('hidden'); }
+        else { banner.classList.add('hidden'); }
+    }
+
+    jvmNotifications = mismatch ? [{
+        type: 'warning',
+        title: 'Heap Size Mismatch',
+        message: '-Xms and -Xmx should be equal to avoid performance issues'
+    }] : [];
+    refreshBellNotifications();
 }
 
 // Note: All guide-related functions have been moved to logstashyml_guides.js
@@ -2848,3 +2911,4 @@ window.addEventListener('beforeunload', function(e) {
         e.returnValue = '';
     }
 });
+

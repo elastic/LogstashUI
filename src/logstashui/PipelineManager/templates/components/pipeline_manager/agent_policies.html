@@ -467,7 +467,7 @@
                 <!-- Notifications will be populated here -->
               </div>
               <div class="mt-2 pt-2 border-t border-gray-700 text-xs text-gray-400">
-                Click to view in logstash.yml
+                Click to navigate to the affected tab
               </div>
             </div>
           </div>
@@ -1620,27 +1620,43 @@
       </div>
       
       <!-- JVM Form Mode -->
-      <div id="jvmFormView" class="hidden flex-1 overflow-y-auto px-4 py-6">
-        <div class="max-w-md">
-          <div class="bg-gray-900/50 rounded-lg p-4">
-            <h3 class="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-              <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
-              </svg>
-              JVM Heap
-            </h3>
-            <p class="text-xs text-gray-400 mb-4">Sets both <code class="text-gray-300">-Xms</code> and <code class="text-gray-300">-Xmx</code> to the same value.</p>
+      <div id="jvmFormView" class="hidden flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        <!-- Mismatch banner (styled like Unsafe Shutdown) -->
+        <div id="jvmMismatchBanner" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg hidden">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">Heap Size (GB)</label>
-              <div class="flex items-center gap-3">
-                <input type="number" id="jvmHeapInput" min="1" step="1" placeholder="e.g., 1"
-                  class="input input-sm input-bordered w-32 bg-gray-700 text-white border-gray-600">
-                <span class="text-gray-400 text-sm">GB</span>
-              </div>
-              <p class="text-xs text-gray-500 mt-2">Logstash defaults to 1 GB. Set to half of available system RAM for production use.</p>
+              <div class="text-sm font-medium text-yellow-300 mb-1">Heap Size Mismatch</div>
+              <div class="text-xs text-gray-300">Initial Space (<code>-Xms</code>) and Total Space (<code>-Xmx</code>) differ. It is strongly recommended to keep them equal to avoid GC overhead and performance issues.</div>
             </div>
           </div>
         </div>
+        <!-- Side-by-side inputs -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Heap: Initial Space (Xms) -->
+          <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-base font-semibold text-white mb-1">Heap: Initial Space</h3>
+            <p class="text-xs text-gray-400 mb-3">Controls <code class="text-gray-300">-Xms</code> — initial heap at JVM startup.</p>
+            <div class="flex items-center gap-2">
+              <input type="number" id="jvmXmsInput" min="1" step="1" placeholder="e.g., 1"
+                class="input input-sm input-bordered w-28 bg-gray-700 text-white border-gray-600">
+              <span class="text-gray-400 text-sm">GB</span>
+            </div>
+          </div>
+          <!-- Heap: Total Space (Xmx) -->
+          <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-base font-semibold text-white mb-1">Heap: Total Space</h3>
+            <p class="text-xs text-gray-400 mb-3">Controls <code class="text-gray-300">-Xmx</code> — maximum heap the JVM may use.</p>
+            <div class="flex items-center gap-2">
+              <input type="number" id="jvmXmxInput" min="1" step="1" placeholder="e.g., 1"
+                class="input input-sm input-bordered w-28 bg-gray-700 text-white border-gray-600">
+              <span class="text-gray-400 text-sm">GB</span>
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 px-1">Logstash defaults to 1 GB each. Set to half of available system RAM for production use.</p>
       </div>
 
       <!-- Code Mode -->

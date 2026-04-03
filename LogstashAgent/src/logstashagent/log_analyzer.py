@@ -895,6 +895,7 @@ class LogstashLogWatcher:
     POLL_INTERVAL = 0.5   # seconds between reads when at EOF
     _MAX_WARNINGS = 200
     _MAX_ERRORS = 200
+    _MAX_FATALS = 200
 
     _SHUTDOWN_MSG = "logstash shut down"              # "Logstash shut down."
     _STARTING_MSG = "starting logstash"               # "Starting Logstash"
@@ -913,6 +914,7 @@ class LogstashLogWatcher:
         self._logstash_state: str = "unknown"
         self._warnings: List[Dict[str, Any]] = []
         self._errors: List[Dict[str, Any]] = []
+        self._fatals: List[Dict[str, Any]] = []
         self._last_shutdown_ts: Optional[int] = None
         self._last_startup_ts: Optional[int] = None
 
@@ -936,10 +938,18 @@ class LogstashLogWatcher:
         self._stop_event.set()
         self._thread.join(timeout=5)
 
+    @staticmethod
+    def _fmt_ts(ts_ms: Optional[int]) -> Optional[str]:
+        """Convert epoch-millisecond timestamp to a UTC string for display."""
+        if ts_ms is None:
+            return None
+        from datetime import datetime, timezone as _tz
+        return datetime.fromtimestamp(ts_ms / 1000, tz=_tz.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+
     def get_state(self) -> Dict[str, Any]:
         """
         Thread-safe snapshot of current log state.
-        Does NOT clear warnings/errors — use consume_for_checkin() for that.
+        Does NOT clear warnings/errors/fatals — use consume_for_checkin() for that.
         """
         with self._lock:
             return {
@@ -947,13 +957,16 @@ class LogstashLogWatcher:
                 "is_restarting": self._logstash_state == "restarting",
                 "warnings_since_last_checkin": list(self._warnings),
                 "errors_since_last_checkin": list(self._errors),
+                "fatals_since_last_checkin": list(self._fatals),
                 "last_shutdown_ts": self._last_shutdown_ts,
                 "last_startup_ts": self._last_startup_ts,
+                "last_shutdown_dt": self._fmt_ts(self._last_shutdown_ts),
+                "last_startup_dt": self._fmt_ts(self._last_startup_ts),
             }
 
     def consume_for_checkin(self) -> Dict[str, Any]:
         """
-        Returns current log state AND clears warnings/errors atomically.
+        Returns current log state AND clears warnings/errors/fatals atomically.
         Call this from check_in() so each checkin reports only what happened
         since the previous one.
         """
@@ -963,11 +976,15 @@ class LogstashLogWatcher:
                 "is_restarting": self._logstash_state == "restarting",
                 "warnings_since_last_checkin": list(self._warnings),
                 "errors_since_last_checkin": list(self._errors),
+                "fatals_since_last_checkin": list(self._fatals),
                 "last_shutdown_ts": self._last_shutdown_ts,
                 "last_startup_ts": self._last_startup_ts,
+                "last_shutdown_dt": self._fmt_ts(self._last_shutdown_ts),
+                "last_startup_dt": self._fmt_ts(self._last_startup_ts),
             }
             self._warnings = []
             self._errors = []
+            self._fatals = []
             return state
 
     # ------------------------------------------------------------------
@@ -1060,10 +1077,11 @@ class LogstashLogWatcher:
         message = log_event.get('message', '') if isinstance(log_event, dict) else ''
         msg_lower = message.lower() if message else ''
 
-        # Determine state change and whether this is a warning/error to collect
+        # Determine state change and whether this is a warning/error/fatal to collect
         new_state: Optional[str] = None
         warn_entry: Optional[Dict[str, Any]] = None
         error_entry: Optional[Dict[str, Any]] = None
+        fatal_entry: Optional[Dict[str, Any]] = None
 
         if self._SHUTDOWN_MSG in msg_lower:
             new_state = "restarting"
@@ -1084,9 +1102,15 @@ class LogstashLogWatcher:
                 "logger": entry.get('loggerName', ''),
                 "message": message,
             }
+        elif level == 'FATAL':
+            fatal_entry = {
+                "ts": ts,
+                "logger": entry.get('loggerName', ''),
+                "message": message,
+            }
 
         # Nothing interesting in this entry
-        if new_state is None and warn_entry is None and error_entry is None:
+        if new_state is None and warn_entry is None and error_entry is None and fatal_entry is None:
             return
 
         signal_checkin = False
@@ -1115,6 +1139,8 @@ class LogstashLogWatcher:
                 self._warnings.append(warn_entry)
             if error_entry and len(self._errors) < self._MAX_ERRORS:
                 self._errors.append(error_entry)
+            if fatal_entry and len(self._fatals) < self._MAX_FATALS:
+                self._fatals.append(fatal_entry)
 
         if signal_checkin and self._checkin_event is not None:
             self._checkin_event.set()

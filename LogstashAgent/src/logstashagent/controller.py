@@ -1127,6 +1127,80 @@ def get_logstash_node_stats(api_port=9600):
         }
 
 
+def get_logstash_process_info():
+    """
+    Use psutil to locate the Logstash JVM process and return OS-level stats.
+
+    Logstash runs as a Java process whose command-line contains 'logstash'.
+    We iterate all processes and match on that heuristic.
+
+    Returns:
+        dict with keys: available, running, and (if running) pid, status,
+        cpu_percent, memory_rss_mb, memory_percent, num_threads, uptime
+    """
+    try:
+        import psutil
+    except ImportError:
+        logger.debug("psutil not installed — process info unavailable")
+        return {'available': False, 'running': False}
+
+    try:
+        logstash_proc = None
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                name    = (proc.info.get('name') or '').lower()
+                # Logstash ships as a JVM app; 'logstash' always appears in the
+                # command line even when the process is named 'java'.
+                if 'logstash' in cmdline and ('java' in name or 'logstash' in name):
+                    logstash_proc = proc
+                    break
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if logstash_proc is None:
+            return {'available': True, 'running': False}
+
+        # Snapshot the stats we care about in one call where possible.
+        with logstash_proc.oneshot():
+            status      = logstash_proc.status()
+            num_threads = logstash_proc.num_threads()
+            mem         = logstash_proc.memory_info()
+            mem_pct     = round(logstash_proc.memory_percent(), 1)
+            # cpu_percent with a tiny interval gives a reasonable instantaneous
+            # reading without a long blocking call.
+            cpu_pct     = round(logstash_proc.cpu_percent(interval=0.2), 1)
+            create_time = logstash_proc.create_time()
+            pid         = logstash_proc.pid
+
+        uptime_seconds = int(datetime.now(timezone.utc).timestamp() - create_time)
+        hours, rem  = divmod(uptime_seconds, 3600)
+        minutes, secs = divmod(rem, 60)
+        if hours:
+            uptime_str = f"{hours}h {minutes}m"
+        elif minutes:
+            uptime_str = f"{minutes}m {secs}s"
+        else:
+            uptime_str = f"{secs}s"
+
+        return {
+            'available': True,
+            'running': True,
+            'pid': pid,
+            'status': status,
+            'cpu_percent': cpu_pct,
+            'memory_rss_mb': round(mem.rss / (1024 * 1024), 1),
+            'memory_percent': mem_pct,
+            'num_threads': num_threads,
+            'uptime': uptime_str,
+            'uptime_seconds': uptime_seconds,
+        }
+
+    except Exception as e:
+        logger.warning(f"Failed to collect Logstash process info: {e}")
+        return {'available': True, 'running': False, 'error': str(e)[:200]}
+
+
 def check_in():
     """
     Send check-in to logstashui with current agent state
@@ -1295,6 +1369,7 @@ def check_in():
         status_blob['logstash_api'] = get_logstash_api_status(api_port)
         status_blob['health_report'] = get_logstash_health_report(api_port)
         status_blob['node_stats'] = get_logstash_node_stats(api_port)
+        status_blob['process_info'] = get_logstash_process_info()
         status_blob['last_policy_apply'] = state.get('last_policy_apply')
 
         # Log state — prefer live watcher (near-realtime, clears warnings/errors
@@ -1348,7 +1423,7 @@ def check_in():
         
         if result.get('success'):
             logger.info("Check-in successful")
-            
+
             # Compare revision numbers
             agent_revision = state.get('revision_number', 0)
             server_revision = result.get('current_revision_number', 0)

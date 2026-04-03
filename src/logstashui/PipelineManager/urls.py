@@ -76,6 +76,9 @@ urlpatterns = [
     # Plugin documentation endpoint
     path("GetPluginDocumentation/", editor_views.GetPluginDocumentation, name="GetPluginDocumentation"),
 
+    # Agent inspect modal — fresh data on each open
+    path("AgentInspect/<int:connection_id>/", manager_views.get_agent_inspect, name="AgentInspect"),
+
     # SSE: real-time agent status stream
     path("AgentStatusStream/", manager_views.agent_status_stream, name="AgentStatusStream")
 

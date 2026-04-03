@@ -1614,13 +1614,18 @@ def check_in(request):
         
         # Update last_check_in timestamp and status_blob
         connection.last_check_in = datetime.now(timezone.utc)
-        
+
         # Extract and store status_blob if provided
         status_blob = data.get('status_blob')
         if status_blob:
             connection.status_blob = status_blob
             logger.debug(f"Updated status_blob: {status_blob}")
-        
+
+        # Capture and clear the restart flag atomically
+        should_restart = connection.restart_on_next_checkin
+        if should_restart:
+            connection.restart_on_next_checkin = False
+
         connection.save()
         
         # Log the check-in with configuration hashes
@@ -1643,7 +1648,8 @@ def check_in(request):
             "current_revision_number": policy.current_revision_number,
             "settings_path": policy.settings_path,
             "logs_path": policy.logs_path,
-            "binary_path": policy.binary_path
+            "binary_path": policy.binary_path,
+            "restart": should_restart
         })
         
     except json.JSONDecodeError:
@@ -1894,6 +1900,7 @@ def deploy_policy(request):
             'log4j2_properties': policy.log4j2_properties,
             'settings_path': policy.settings_path,
             'logs_path': policy.logs_path,
+            'binary_path': policy.binary_path,
             'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
             'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
         }
@@ -1924,6 +1931,35 @@ def deploy_policy(request):
     except Exception as e:
         logger.error(f"Error deploying policy: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_agent_inspect(request, connection_id):
+    """
+    Return fresh rendered HTML for the agent inspect modal.
+
+    Called via fetch() each time the user opens the flyout so the data is
+    never stale. Renders agent_inspect_content.html with a live DB query.
+    """
+    try:
+        connection = ConnectionTable.objects.select_related('policy').get(
+            pk=connection_id,
+            connection_type=ConnectionTable.ConnectionType.AGENT,
+        )
+    except ConnectionTable.DoesNotExist:
+        return HttpResponse('Agent not found', status=404)
+
+    now = datetime.now(timezone.utc)
+    if connection.last_check_in:
+        connection.is_online = (now - connection.last_check_in).total_seconds() < 600
+    else:
+        connection.is_online = False
+
+    return render(
+        request,
+        'components/pipeline_manager/agent_inspect_content.html',
+        {'connection': connection},
+    )
 
 
 @require_admin_role

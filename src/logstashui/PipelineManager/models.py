@@ -233,6 +233,10 @@ class Connection(models.Model):
         help_text="JSON blob containing agent health status information"
     )
     is_active = models.BooleanField(default=True)
+    restart_on_next_checkin = models.BooleanField(
+        default=False,
+        help_text="If true, instructs the agent to restart Logstash on its next check-in"
+    )
 
     class Meta:
         ordering = ['name']
