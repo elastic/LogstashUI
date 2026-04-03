@@ -134,44 +134,43 @@ function countTotalConditions(components) {
 /**
  * Count password-type fields across all plugins that have plaintext (non-keystore) values
  * @param {Object} components - The components object with input, filter, output arrays
- * @returns {number} - Count of plaintext password fields
+ * @returns {{ count: number, details: Array<{section: string, plugin: string, field: string}> }}
  */
 function countPlaintextPasswords(components) {
     const pluginDataSource = window.pluginData;
-    if (!pluginDataSource) return 0;
-    let count = 0;
+    if (!pluginDataSource) return { count: 0, details: [] };
+    const details = [];
 
-    function checkComponent(component) {
+    function checkComponent(component, section) {
         if (component.plugin === 'comment') return;
         if (component.plugin === 'if') {
-            (component.config?.plugins || []).forEach(checkComponent);
-            (component.config?.else_ifs || []).forEach(ei => (ei.plugins || []).forEach(checkComponent));
-            (component.config?.else?.plugins || []).forEach(checkComponent);
+            (component.config?.plugins || []).forEach(c => checkComponent(c, section));
+            (component.config?.else_ifs || []).forEach(ei => (ei.plugins || []).forEach(c => checkComponent(c, section)));
+            (component.config?.else?.plugins || []).forEach(c => checkComponent(c, section));
         } else {
             const pluginInfo = pluginDataSource[component.type]?.[component.plugin];
             if (!pluginInfo?.options) return;
             Object.entries(pluginInfo.options).forEach(([key, option]) => {
-                // Check if this is a sensitive field type (password, api_key, secret, token, etc.)
                 const inputType = (option.input_type || '').toLowerCase();
-                const isSensitiveType = inputType === 'password' || 
-                                       inputType === 'api_key' || 
+                const isSensitiveType = inputType === 'password' ||
+                                       inputType === 'api_key' ||
                                        inputType === 'apikey' ||
                                        inputType === 'token' ||
                                        inputType === 'secret';
                 if (isSensitiveType) {
                     const val = component.config?.[key];
                     if (val && !String(val).startsWith('${')) {
-                        count++;
+                        details.push({ section, plugin: component.plugin, field: key });
                     }
                 }
             });
         }
     }
 
-    ['input', 'filter', 'output'].forEach(type => {
-        (components[type] || []).forEach(checkComponent);
+    ['input', 'filter', 'output'].forEach(section => {
+        (components[section] || []).forEach(c => checkComponent(c, section));
     });
-    return count;
+    return { count: details.length, details };
 }
 
 /**
@@ -201,13 +200,30 @@ function updateStatsStrip() {
     }
 
     // Count plaintext passwords
-    const plaintextPasswords = countPlaintextPasswords(components);
+    const { count: plaintextPasswords, details: plaintextDetails } = countPlaintextPasswords(components);
     const plaintextEl = document.getElementById('plaintextPasswordsCount');
     if (plaintextEl) plaintextEl.textContent = plaintextPasswords;
     const plaintextIndicator = document.getElementById('plaintextPasswordsIndicator');
     if (plaintextIndicator) {
-        // Always show the indicator, even when count is 0
         plaintextIndicator.classList.remove('hidden');
+    }
+
+    // Populate tooltip details
+    const tooltipContent = document.getElementById('plaintextPasswordsTooltipContent');
+    if (tooltipContent) {
+        if (plaintextDetails.length === 0) {
+            tooltipContent.innerHTML = '<span class="text-gray-400 italic">No plaintext sensitive fields detected.</span>';
+        } else {
+            tooltipContent.innerHTML = plaintextDetails.map(d =>
+                `<div class="flex items-center gap-1.5">
+                    <span class="text-gray-500 capitalize">${d.section}</span>
+                    <span class="text-gray-500">›</span>
+                    <span class="text-amber-300 font-medium">${d.plugin}</span>
+                    <span class="text-gray-500">›</span>
+                    <span class="text-white font-mono">${d.field}</span>
+                </div>`
+            ).join('');
+        }
     }
 }
 

@@ -329,6 +329,269 @@ def find_related_logs(pipeline_id: str, log_dir: str = LOG_DIR,
     return related_logs
 
 
+# Keywords in logEvent.message that indicate a graceful Logstash shutdown
+_SHUTDOWN_KEYWORDS = [
+    "logstash shutdown completed",
+    "stopping all pipelines",
+    "pipeline terminated",
+    "shutting down",
+]
+
+# Minimum milliseconds between consecutive running_pipelines entries before
+# we consider the gap a possible crash-restart (no explicit down entry logged)
+_CRASH_GAP_THRESHOLD_MS = 5000
+
+
+def _check_for_shutdown_message(logs: List[Dict[str, Any]], near_timestamp: int,
+                                 window_ms: int = 10000) -> bool:
+    """
+    Return True if any log entry within window_ms of near_timestamp contains a
+    known Logstash shutdown message keyword.
+    """
+    lo = near_timestamp - window_ms
+    hi = near_timestamp + window_ms
+    for entry in logs:
+        ts = entry.get('timeMillis', 0)
+        if not (lo <= ts <= hi):
+            continue
+        message = entry.get('logEvent', {}).get('message', '')
+        if isinstance(message, str):
+            msg_lower = message.lower()
+            if any(kw in msg_lower for kw in _SHUTDOWN_KEYWORDS):
+                return True
+    return False
+
+
+def _extract_cause_hint(logs: List[Dict[str, Any]], shutdown_timestamp: int,
+                        window_ms: int = 10000) -> str:
+    """
+    Inspect logs near shutdown_timestamp for clues about what caused the restart.
+
+    Returns a short string like "FailedAction", "OOM", "graceful shutdown", or "unknown".
+    """
+    lo = shutdown_timestamp - window_ms
+    hi = shutdown_timestamp + window_ms
+
+    for entry in logs:
+        ts = entry.get('timeMillis', 0)
+        if not (lo <= ts <= hi):
+            continue
+
+        log_event = entry.get('logEvent', {})
+
+        # FailedAction errors from existing detection logic
+        if entry.get('level') == 'ERROR':
+            action_type = log_event.get('action_type', '')
+            if 'FailedAction' in action_type:
+                return 'FailedAction'
+
+        # OOM indicators in message
+        message = log_event.get('message', '')
+        if isinstance(message, str):
+            msg_lower = message.lower()
+            if 'out of memory' in msg_lower or 'outofmemory' in msg_lower:
+                return 'OOM'
+            if any(kw in msg_lower for kw in _SHUTDOWN_KEYWORDS):
+                return 'graceful shutdown'
+
+    return 'unknown'
+
+
+def detect_restart_events(
+    log_dir: str = LOG_DIR,
+    since_timestamp: Optional[int] = None,
+    max_events: int = 10,
+    max_lines: int = 500
+) -> List[Dict[str, Any]]:
+    """
+    Detect Logstash restart events by analysing running_pipelines log transitions.
+
+    Reads up to max_lines from the *end* of the log files (efficient tail-style read),
+    then processes entries chronologically to find:
+      - Graceful restarts: running_pipelines goes non-empty → empty, then back
+      - Crash restarts: a gap > 5 seconds between consecutive non-empty entries
+        with no explicit "down" entry in between
+      - Pipeline reload loops: a single pipeline disappears and reappears ≥ 3 times
+        within 60 seconds (Logstash-internal, process may not restart)
+
+    Args:
+        log_dir: Directory containing Logstash JSON log files.
+        since_timestamp: Optional lower bound (timeMillis). Events whose
+            shutdown_timestamp is older than this are excluded.
+        max_events: Maximum number of events to return.
+        max_lines: How many lines to read from the end of log files.
+            Increase for longer lookback. Default 500 is sufficient for the
+            "is it currently restarting?" question without reading the whole file.
+
+    Returns:
+        List of restart event dicts, newest first:
+        {
+            "type": "graceful" | "crash" | "pipeline_loop",
+            "shutdown_timestamp": int,       # timeMillis of detected shutdown
+            "startup_timestamp": int | None, # timeMillis of detected startup (None if still down)
+            "is_complete": bool,
+            "duration_ms": int | None,
+            "cause_hint": str,               # "graceful shutdown", "FailedAction", "OOM",
+                                             #  "gap_detected", "unknown"
+        }
+    """
+    # Read from end of file — avoid re-reading the whole log on every call
+    raw_logs = _read_json_logs(log_dir=log_dir, max_lines=max_lines, reverse=True)
+    # Reverse to chronological order for transition analysis
+    raw_logs.reverse()
+
+    if not raw_logs:
+        return []
+
+    # ------------------------------------------------------------------
+    # 1. Extract pipeline-status entries in chronological order
+    # ------------------------------------------------------------------
+    status_entries: List[Dict[str, Any]] = []
+    for entry in raw_logs:
+        log_event = entry.get('logEvent', {})
+        if 'running_pipelines' in log_event:
+            ts = entry.get('timeMillis', 0)
+            if since_timestamp is not None and ts < since_timestamp:
+                continue
+            status_entries.append({
+                'running_pipelines': log_event.get('running_pipelines', []),
+                'count': log_event.get('count', 0),
+                'timestamp': ts,
+            })
+
+    if not status_entries:
+        logger.debug("detect_restart_events: no running_pipelines entries found")
+        return []
+
+    # ------------------------------------------------------------------
+    # 2. State-machine walk to find restart transitions
+    # ------------------------------------------------------------------
+    events: List[Dict[str, Any]] = []
+    open_event: Optional[Dict[str, Any]] = None  # a shutdown seen, startup not yet
+
+    prev = status_entries[0]
+    prev_is_up = prev['count'] > 0 or len(prev['running_pipelines']) > 0
+
+    for status in status_entries[1:]:
+        ts = status['timestamp']
+        is_up = status['count'] > 0 or len(status['running_pipelines']) > 0
+        prev_ts = prev['timestamp']
+
+        if prev_is_up and not is_up:
+            # Transition: UP → DOWN  →  shutdown began
+            restart_type = 'graceful' if _check_for_shutdown_message(raw_logs, ts) else 'crash'
+            cause = _extract_cause_hint(raw_logs, ts)
+            open_event = {
+                'type': restart_type,
+                'shutdown_timestamp': ts,
+                'startup_timestamp': None,
+                'is_complete': False,
+                'duration_ms': None,
+                'cause_hint': cause,
+            }
+            logger.debug(f"detect_restart_events: shutdown at {ts} type={restart_type}")
+
+        elif not prev_is_up and is_up:
+            # Transition: DOWN → UP  →  startup complete
+            if open_event is not None:
+                open_event['startup_timestamp'] = ts
+                open_event['is_complete'] = True
+                open_event['duration_ms'] = ts - open_event['shutdown_timestamp']
+                events.append(open_event)
+                logger.debug(f"detect_restart_events: startup at {ts}, duration={open_event['duration_ms']}ms")
+                open_event = None
+            else:
+                # Startup with no preceding explicit down — first entry was already down
+                logger.debug(f"detect_restart_events: startup at {ts} with no preceding shutdown entry")
+
+        elif prev_is_up and is_up:
+            # Both UP — check for a suspiciously large gap (crash with no down entry logged)
+            gap = ts - prev_ts
+            if gap > _CRASH_GAP_THRESHOLD_MS:
+                events.append({
+                    'type': 'crash',
+                    'shutdown_timestamp': prev_ts,
+                    'startup_timestamp': ts,
+                    'is_complete': True,
+                    'duration_ms': gap,
+                    'cause_hint': 'gap_detected',
+                })
+                logger.debug(f"detect_restart_events: gap-based crash at {prev_ts} gap={gap}ms")
+
+        prev = status
+        prev_is_up = is_up
+
+    # If we still have an open event, Logstash hasn't come back up yet
+    if open_event is not None:
+        events.append(open_event)
+        logger.debug("detect_restart_events: open (incomplete) restart event — Logstash still down")
+
+    # ------------------------------------------------------------------
+    # 3. Pipeline reload loop detection
+    # ------------------------------------------------------------------
+    LOOP_WINDOW_MS = 60_000
+    LOOP_MIN_CYCLES = 3
+
+    # Track per-pipeline appearance/disappearance counts within rolling windows
+    pipeline_events: Dict[str, List[int]] = {}  # pipeline_id → list of appearance timestamps
+    for status in status_entries:
+        ts = status['timestamp']
+        for pid in status['running_pipelines']:
+            pipeline_events.setdefault(pid, []).append(ts)
+
+    for pid, appearances in pipeline_events.items():
+        if len(appearances) < LOOP_MIN_CYCLES:
+            continue
+        # Slide over appearances and look for LOOP_MIN_CYCLES within LOOP_WINDOW_MS
+        for i in range(len(appearances) - LOOP_MIN_CYCLES + 1):
+            window_start = appearances[i]
+            window_end = appearances[i + LOOP_MIN_CYCLES - 1]
+            if (window_end - window_start) <= LOOP_WINDOW_MS:
+                # Check that the pipeline also *disappeared* inside this window
+                # by verifying it was absent from at least one status entry between appearances
+                window_statuses = [s for s in status_entries
+                                   if window_start <= s['timestamp'] <= window_end]
+                absent = any(pid not in s['running_pipelines'] for s in window_statuses)
+                if absent:
+                    events.append({
+                        'type': 'pipeline_loop',
+                        'shutdown_timestamp': window_start,
+                        'startup_timestamp': window_end,
+                        'is_complete': True,
+                        'duration_ms': window_end - window_start,
+                        'cause_hint': f'pipeline {pid} reloading repeatedly',
+                    })
+                    logger.warning(
+                        f"detect_restart_events: pipeline_loop for {pid} "
+                        f"({LOOP_MIN_CYCLES}+ cycles in {window_end - window_start}ms)"
+                    )
+                    break  # one loop event per pipeline is enough
+
+    # ------------------------------------------------------------------
+    # 4. Return newest-first, capped at max_events
+    # ------------------------------------------------------------------
+    events.sort(key=lambda e: e['shutdown_timestamp'], reverse=True)
+    return events[:max_events]
+
+
+def is_logstash_restarting(log_dir: str = LOG_DIR) -> bool:
+    """
+    Return True if Logstash appears to be mid-restart right now.
+
+    Uses a short lookback (500 lines from end of log) so it is cheap to call
+    repeatedly (e.g. from a health-check loop or UI polling endpoint).
+
+    Returns:
+        True if the most recent restart event is incomplete (shutdown seen,
+        startup not yet observed in logs). False otherwise.
+    """
+    events = detect_restart_events(log_dir=log_dir, max_events=1, max_lines=500)
+    if not events:
+        return False
+    latest = events[0]
+    return not latest['is_complete']
+
+
 def is_pipeline_running(pipeline_id: str, log_dir: str = LOG_DIR) -> bool:
     """
     Check if a specific pipeline is currently running.
