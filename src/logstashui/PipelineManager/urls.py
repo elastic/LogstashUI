@@ -28,6 +28,7 @@ urlpatterns = [
     path("AddConnection", manager_views.AddConnection, name="AddConnection"),
     path("DeleteConnection/<int:connection_id>/", manager_views.DeleteConnection, name="DeleteConnection"),
     path("ChangeConnectionPolicy/", manager_views.change_connection_policy, name="ChangeConnectionPolicy"),
+    path("RestartLogstash/", manager_views.restart_logstash, name="RestartLogstash"),
     path("GetPipelines/<int:connection_id>/", manager_views.GetPipelines, name="GetPipelines"),
     path("GetPolicyPipelines/", manager_views.GetPolicyPipelines, name="GetPolicyPipelines"),
     

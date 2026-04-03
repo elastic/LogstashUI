@@ -1438,7 +1438,11 @@ def check_in():
                 server_logs_path = result.get('logs_path')
                 server_binary_path = result.get('binary_path')
                 get_config_changes(server_settings_path, server_logs_path, server_binary_path)
-            
+
+            if result.get('restart'):
+                logger.warning("Server requested Logstash restart — restarting now")
+                restart_logstash()
+
             return result
         else:
             logger.warning(f"Check-in returned success=false: {result.get('message', 'Unknown error')}")

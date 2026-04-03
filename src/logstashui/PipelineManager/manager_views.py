@@ -1263,6 +1263,31 @@ def change_connection_policy(request):
 
 
 @require_admin_role
+def restart_logstash(request):
+    """
+    Set restart_on_next_checkin on an agent connection so the agent restarts Logstash on its next check-in.
+    """
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    connection_id = request.POST.get('connection_id')
+
+    connection = ConnectionTable.objects.filter(
+        id=connection_id, connection_type=ConnectionTable.ConnectionType.AGENT
+    ).first()
+    if not connection:
+        return JsonResponse({"success": False, "error": "Agent connection not found"}, status=404)
+
+    connection.restart_on_next_checkin = True
+    connection.save()
+    logger.info(
+        f"User '{request.user.username}' queued a Logstash restart for connection '{connection.name}' (ID: {connection_id})"
+    )
+
+    return JsonResponse({"success": True})
+
+
+@require_admin_role
 def get_policy_agent_count(request):
     """
     Get the count of agents (connections) using a specific policy

@@ -809,6 +809,15 @@
                           </svg>
                           Change Policy
                         </a>
+                        <a href="#"
+                           onclick="event.preventDefault(); restartLogstash({{ connection.pk }}); return false;"
+                           class="group flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md"
+                           role="menuitem">
+                          <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Restart Logstash
+                        </a>
                         {% endif %}
                         <form method="POST">
                           {% csrf_token %}
@@ -976,6 +985,35 @@
       menu.classList.add('hidden');
     });
   }, true);
+
+  // Restart Logstash on next agent check-in
+  async function restartLogstash(connectionId) {
+    const confirmed = await ConfirmationModal.show(
+      'Are you sure? This will restart Logstash on the agent\'s next check-in.',
+      'Restart Logstash',
+      'Yes'
+    );
+
+    if (confirmed) {
+      const formData = new FormData();
+      formData.append('connection_id', connectionId);
+
+      fetch('/ConnectionManager/RestartLogstash/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+        body: formData
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          showToast('Restart queued. Logstash will restart on the agent\'s next check-in.', 'success');
+        } else {
+          showToast(data.error || 'Failed to queue restart.', 'error');
+        }
+      })
+      .catch(() => showToast('Failed to queue restart.', 'error'));
+    }
+  }
 
   // Delete connection with custom popup
   async function deleteConnection(connectionId) {
