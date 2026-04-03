@@ -1315,8 +1315,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Load policies on page load
-    loadPolicies();
+    // Load policies on page load, auto-selecting a policy if policy_id is in the URL
+    const _urlParams = new URLSearchParams(window.location.search);
+    const _urlPolicyId = _urlParams.get('policy_id');
+    loadPolicies(null, _urlPolicyId ? parseInt(_urlPolicyId) : null);
     
     // Add click handler for empty state Add Policy button
     const emptyStateAddPolicyBtn = document.getElementById('emptyStateAddPolicyBtn');
@@ -1381,6 +1383,16 @@ async function loadPolicyData(policyValue) {
                 // Store original content for change detection
                 storeOriginalContent();
                 
+                // Pulse the Default guide button if this policy has never been deployed
+                const defaultGuideBtn = document.getElementById('defaultGuideBtn');
+                if (defaultGuideBtn) {
+                    if (policy.current_revision_number === 0) {
+                        defaultGuideBtn.classList.add('guide-btn-highlight');
+                    } else {
+                        defaultGuideBtn.classList.remove('guide-btn-highlight');
+                    }
+                }
+
                 // Check for configuration notifications after loading policy data
                 // Use setTimeout to ensure DOM has updated
                 setTimeout(() => {
@@ -1396,7 +1408,7 @@ async function loadPolicyData(policyValue) {
 
 // Load all policies from the server
 // If newPolicyName is provided, select that policy after loading
-async function loadPolicies(newPolicyName = null) {
+async function loadPolicies(newPolicyName = null, selectPolicyId = null) {
     try {
         const response = await fetch('/ConnectionManager/GetPolicies/', {
             method: 'GET',
@@ -1462,13 +1474,18 @@ async function loadPolicies(newPolicyName = null) {
             // Auto-select the appropriate policy
             if (data.policies.length > 0) {
                 let policyToSelect;
-                
-                // If a new policy name was provided, select it
-                if (newPolicyName) {
+
+                // If a policy ID was provided (e.g. via URL param), select by ID first
+                if (selectPolicyId) {
+                    policyToSelect = data.policies.find(p => p.id === selectPolicyId);
+                }
+
+                // Then fall back to name match (e.g. after creating a new policy)
+                if (!policyToSelect && newPolicyName) {
                     policyToSelect = data.policies.find(p => p.name === newPolicyName);
                 }
-                
-                // Fall back to first policy if new policy not found or not specified
+
+                // Fall back to first policy if nothing matched
                 if (!policyToSelect) {
                     policyToSelect = data.policies[0];
                 }

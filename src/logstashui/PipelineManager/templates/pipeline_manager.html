@@ -198,8 +198,13 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 {% if connection.connection_type == "CENTRALIZED" %}
                   <span class="italic text-gray-400">Centralized</span>
+                {% elif connection.policy_id %}
+                  <a href="/ConnectionManager/AgentPolicies?policy_id={{ connection.policy_id }}"
+                     class="text-gray-300 hover:text-purple-400 hover:underline transition-colors">
+                    {{ connection.policy__name }}
+                  </a>
                 {% else %}
-                  {{ connection.policy__name|default:"No Policy" }}
+                  <span class="italic text-gray-500">No Policy</span>
                 {% endif %}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center overflow-visible">

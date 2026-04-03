@@ -1200,7 +1200,7 @@ def get_policies(request):
         policies = Policy.objects.all().values(
             'id', 'name', 'settings_path', 'logs_path', 'binary_path',
             'logstash_yml', 'jvm_options', 'log4j2_properties',
-            'created_at', 'updated_at'
+            'current_revision_number', 'created_at', 'updated_at'
         )
         
         return JsonResponse({
