@@ -117,6 +117,8 @@
     <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
       {% if not connection.status_blob.settings_path_found or not connection.status_blob.binary_path_found or not connection.status_blob.logs_path_found %}
       <div class="h-0.5 bg-red-500/60"></div>
+      {% else %}
+      <div class="h-0.5 bg-green-500/60"></div>
       {% endif %}
       <div class="p-4 space-y-4">
         <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Files</p>
@@ -262,7 +264,7 @@
             <span class="text-sm font-medium text-red-300">API not accessible</span>
             {% endif %}
           </div>
-          {% if connection.status_blob.logstash_api.accessible %}
+          {% if connection.status_blob.logstash_api.accessible and connection.status_blob.logstash_api.status != 'unknown' %}
           <div class="grid grid-cols-2 gap-3 pt-1">
             <div>
               <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Status</p>
@@ -283,11 +285,13 @@
             </div>
             {% endif %}
           </div>
+          {% elif connection.status_blob.logstash_api.accessible and connection.status_blob.logstash_api.status == 'unknown' %}
+          <p class="text-xs text-gray-500 mt-2 italic">API is up but status hasn't been read yet — full details will be reported on the next check-in.</p>
           {% endif %}
         </div>
 
-        {# ── Health Report ── #}
-        {% if connection.status_blob.health_report %}
+        {# ── Health Report — hidden during unknown/warmup state ── #}
+        {% if connection.status_blob.health_report and connection.status_blob.logstash_api.status != 'unknown' %}
         <div class="pt-3 border-t border-gray-700/40">
           <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Health Report</p>
           {% if connection.status_blob.health_report.accessible %}
@@ -366,8 +370,8 @@
         </div>
         {% endif %}
 
-        {# ── Node Stats ── #}
-        {% if connection.status_blob.node_stats.accessible %}
+        {# ── Node Stats — hidden during unknown/warmup state ── #}
+        {% if connection.status_blob.node_stats.accessible and connection.status_blob.logstash_api.status != 'unknown' %}
         <div class="pt-3 border-t border-gray-700/40">
           <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Node Stats</p>
           <div class="grid grid-cols-2 gap-x-6 gap-y-3">
