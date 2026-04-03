@@ -964,124 +964,52 @@ class LogstashLogWatcher:
             return state
 
     # ------------------------------------------------------------------
-    # Bootstrap: establish initial state from recent log history
-    # ------------------------------------------------------------------
-
-    def _bootstrap(self) -> None:
-        """
-        Tail up to 200 lines from the end of the log to establish initial state
-        before entering the continuous tail loop. Catches restarts that were
-        in-progress when the agent started.
-        """
-        raw_logs = _read_json_logs(log_dir=self.log_dir, max_lines=200, reverse=True)
-        raw_logs.reverse()  # chronological
-
-        lifecycle = _find_logstash_lifecycle_events(raw_logs)
-
-        # Determine the last running_pipelines state
-        last_pipelines_up: Optional[bool] = None
-        for entry in raw_logs:
-            log_event = entry.get('logEvent', {})
-            if 'running_pipelines' in log_event:
-                count = log_event.get('count', 0)
-                pipelines = log_event.get('running_pipelines', [])
-                last_pipelines_up = (count > 0 or bool(pipelines))
-
-        if lifecycle:
-            last_ev = lifecycle[-1]
-            if last_ev['event_type'] == 'shutdown':
-                # Is there a startup after this shutdown?
-                has_later_startup = any(
-                    e['event_type'] == 'startup' and e['timestamp'] > last_ev['timestamp']
-                    for e in lifecycle
-                )
-                if not has_later_startup:
-                    # Also verify running_pipelines is currently down (avoids
-                    # false positive when the shutdown message is very old)
-                    if last_pipelines_up is not False:
-                        # running_pipelines is up → not actually restarting
-                        with self._lock:
-                            self._state = "RUNNING"
-                        logger.debug(
-                            "LogstashLogWatcher bootstrap: shutdown msg found but "
-                            "running_pipelines is up — treating as RUNNING"
-                        )
-                        return
-                    with self._lock:
-                        self._state = "RESTARTING"
-                        self._is_restarting = True
-                        self._restart_started_at = last_ev['timestamp'] / 1000.0
-                    logger.warning(
-                        f"LogstashLogWatcher bootstrap: Logstash appears mid-restart "
-                        f"(shutdown at {last_ev['timestamp']})"
-                    )
-                    return
-            # Last lifecycle event is startup
-            with self._lock:
-                self._state = "RUNNING"
-            logger.debug("LogstashLogWatcher bootstrap: state=RUNNING (lifecycle)")
-            return
-
-        # No lifecycle messages found — use running_pipelines as signal
-        if last_pipelines_up is True:
-            with self._lock:
-                self._state = "RUNNING"
-            logger.debug("LogstashLogWatcher bootstrap: state=RUNNING (running_pipelines)")
-        else:
-            logger.debug("LogstashLogWatcher bootstrap: state=UNKNOWN (no signals found)")
-
-    # ------------------------------------------------------------------
-    # Background tail loop
+    # Background loop
     # ------------------------------------------------------------------
 
     def _run(self) -> None:
-        log_path = str(Path(self.log_dir) / "logstash-json.log")
         fp = None
         current_inode: Optional[int] = None
-        buf = b""  # partial-line carry buffer
+        buf = b""  # carry buffer for partial lines
 
         while not self._stop_event.is_set():
             try:
-                # --- Check file existence and inode ---
                 try:
-                    stat = os.stat(log_path)
+                    stat = os.stat(self._log_path)
                 except OSError:
+                    # File doesn't exist yet — Logstash not started or mid-rotation
                     if fp:
                         fp.close()
                         fp = None
                         current_inode = None
+                        buf = b""
                     _time.sleep(self.POLL_INTERVAL)
                     continue
 
                 new_inode = stat.st_ino
-                file_size = stat.st_size
 
-                # Detect logrotate: inode changed (create mode) or file shrank
-                # (copytruncate mode — position past end of file)
-                rotated = (
-                    fp is not None and (
-                        new_inode != current_inode or
-                        fp.tell() > file_size
-                    )
-                )
-
-                if fp is None or rotated:
-                    if fp:
-                        # Drain any remaining unread bytes before closing
-                        remaining = fp.read()
-                        if remaining:
-                            buf = self._process_bytes(buf + remaining)
-                        fp.close()
-                        logger.debug(
-                            f"LogstashLogWatcher: log rotated "
-                            f"(inode {current_inode}→{new_inode})"
-                        )
-                    fp = open(log_path, 'rb')
-                    fp.seek(0, 2)  # tail: start at end of file
+                if fp is None:
+                    # First open — read from the beginning of the file
+                    fp = open(self._log_path, 'rb')
                     current_inode = new_inode
                     buf = b""
+                    logger.debug(f"LogstashLogWatcher: opened {self._log_path} from beginning")
 
-                # --- Read new bytes ---
+                elif new_inode != current_inode or stat.st_size < fp.tell():
+                    # Log rotated: drain remaining bytes from old file, then open new one
+                    remaining = fp.read()
+                    if remaining:
+                        buf = self._process_bytes(buf + remaining)
+                    fp.close()
+                    fp = open(self._log_path, 'rb')
+                    current_inode = new_inode
+                    buf = b""
+                    logger.info(
+                        f"LogstashLogWatcher: log rotated "
+                        f"(inode {current_inode}→{new_inode}), reading new file from beginning"
+                    )
+
+                # Read next chunk (existing content on startup, new bytes at EOF)
                 chunk = fp.read(65536)
                 if not chunk:
                     _time.sleep(self.POLL_INTERVAL)
@@ -1098,91 +1026,76 @@ class LogstashLogWatcher:
 
     def _process_bytes(self, data: bytes) -> bytes:
         """
-        Split data into lines, parse JSON, call _process_entry for each.
-        Returns any trailing partial line as bytes (no newline yet).
+        Decode data, split on newlines, parse each complete line as JSON,
+        and pass to _process_entry. Returns any trailing incomplete line
+        as bytes to be prepended to the next chunk.
         """
         text = data.decode('utf-8', errors='ignore')
         lines = text.split('\n')
-        # Last element is either empty (ended with \n) or a partial line
-        partial = lines.pop()
+        partial = lines.pop()  # incomplete line at end (or empty string)
         for line in lines:
             line = line.strip()
             if not line:
                 continue
             try:
-                entry = json.loads(line)
-                self._process_entry(entry)
+                self._process_entry(json.loads(line))
             except json.JSONDecodeError:
                 pass
         return partial.encode('utf-8') if partial else b""
 
     def _process_entry(self, entry: Dict[str, Any]) -> None:
-        """Update the state machine from a single parsed log entry."""
+        """Update state from a single parsed log entry."""
+        level = entry.get('level', '').upper()
         ts = entry.get('timeMillis', 0)
-        message = entry.get('logEvent', {}).get('message', '')
-        if not isinstance(message, str):
-            message = ''
-        msg_lower = message.lower()
+        log_event = entry.get('logEvent', {})
+        message = log_event.get('message', '') if isinstance(log_event, dict) else ''
+        msg_lower = message.lower() if message else ''
 
-        is_shutdown = any(kw in msg_lower for kw in _SHUTDOWN_KEYWORDS)
-        is_startup = any(kw in msg_lower for kw in _STARTUP_KEYWORDS)
+        # Determine state change and whether this is a warning/error to collect
+        new_state: Optional[str] = None
+        warn_entry: Optional[Dict[str, Any]] = None
+        error_entry: Optional[Dict[str, Any]] = None
 
-        # A non-empty running_pipelines entry also signals Logstash is up
-        if not is_startup and self._STARTUP_FROM_PIPELINES:
-            log_event = entry.get('logEvent', {})
-            if 'running_pipelines' in log_event:
-                count = log_event.get('count', 0)
-                pipelines = log_event.get('running_pipelines', [])
-                if count > 0 or bool(pipelines):
-                    is_startup = True
+        if self._SHUTDOWN_MSG in msg_lower:
+            new_state = "restarting"
+        elif self._STARTING_MSG in msg_lower:
+            new_state = "started"
 
-        if not is_shutdown and not is_startup:
+        if level in ('WARN', 'WARNING'):
+            warn_entry = {
+                "ts": ts,
+                "logger": entry.get('loggerName', ''),
+                "message": message,
+            }
+        elif level == 'ERROR':
+            error_entry = {
+                "ts": ts,
+                "logger": entry.get('loggerName', ''),
+                "message": message,
+            }
+
+        # Nothing interesting in this entry
+        if new_state is None and warn_entry is None and error_entry is None:
             return
 
         with self._lock:
-            if is_shutdown and self._state != "RESTARTING":
-                prev_state = self._state
-                self._state = "RESTARTING"
-                self._is_restarting = True
-                self._restart_started_at = ts / 1000.0
-                logger.warning(
-                    f"LogstashLogWatcher: shutdown detected "
-                    f"(was {prev_state}) — '{message[:80]}'"
-                )
-
-            elif is_startup and self._state in ("RESTARTING", "UNKNOWN"):
-                prev_state = self._state
-                self._state = "RUNNING"
-                self._is_restarting = False
-
-                if prev_state == "RESTARTING" and self._restart_started_at is not None:
-                    shutdown_ts = int(self._restart_started_at * 1000)
-                    duration_ms = ts - shutdown_ts
-                    restart_event: Dict[str, Any] = {
-                        "type": "graceful",
-                        "shutdown_timestamp": shutdown_ts,
-                        "startup_timestamp": ts,
-                        "is_complete": True,
-                        "duration_ms": duration_ms,
-                        "cause_hint": "watcher_detected",
-                    }
-                    self._recent_restarts.insert(0, restart_event)
-                    self._recent_restarts = self._recent_restarts[:10]
-                    logger.info(
-                        f"LogstashLogWatcher: Logstash back online "
-                        f"(restart took {duration_ms / 1000:.1f}s)"
-                    )
+            if new_state == "restarting":
+                self._logstash_state = "restarting"
+                self._last_shutdown_ts = ts
+                logger.warning(f"LogstashLogWatcher: Logstash shut down (ts={ts})")
+            elif new_state == "started":
+                prev = self._logstash_state
+                self._logstash_state = "started"
+                self._last_startup_ts = ts
+                if prev == "restarting":
+                    logger.info(f"LogstashLogWatcher: Logstash starting (was restarting, ts={ts})")
                 else:
-                    logger.debug(
-                        f"LogstashLogWatcher: startup signal in state={prev_state} "
-                        f"— now RUNNING"
-                    )
-                self._restart_started_at = None
+                    logger.debug(f"LogstashLogWatcher: Logstash starting (ts={ts})")
 
-            elif is_startup and self._state == "RUNNING":
-                # Already running — e.g. pipeline reload or repeated running_pipelines
-                # entry. No state change needed.
-                pass
+            if warn_entry and len(self._warnings) < self._MAX_WARNINGS:
+                self._warnings.append(warn_entry)
+            if error_entry and len(self._errors) < self._MAX_ERRORS:
+                self._errors.append(error_entry)
 
 
 def is_pipeline_running(pipeline_id: str, log_dir: str = LOG_DIR) -> bool:

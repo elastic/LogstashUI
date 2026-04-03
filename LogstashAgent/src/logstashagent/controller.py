@@ -1296,12 +1296,16 @@ def check_in():
         status_blob['node_stats'] = get_logstash_node_stats(api_port)
         status_blob['last_policy_apply'] = state.get('last_policy_apply')
 
-        # Restart detection — prefer the live watcher (near-realtime) when it has
-        # started; fall back to snapshot reads if it hasn't been initialised yet.
+        # Log state — prefer live watcher (near-realtime, clears warnings/errors
+        # after each checkin); fall back to snapshot if watcher not yet started.
         if _log_watcher is not None:
-            restart_state = _log_watcher.get_restart_state()
-            status_blob['is_restarting'] = restart_state['is_restarting']
-            status_blob['recent_restarts'] = restart_state['recent_restarts']
+            log_state = _log_watcher.consume_for_checkin()
+            status_blob['logstash_state'] = log_state['logstash_state']
+            status_blob['is_restarting'] = log_state['is_restarting']
+            status_blob['warnings_since_last_checkin'] = log_state['warnings_since_last_checkin']
+            status_blob['errors_since_last_checkin'] = log_state['errors_since_last_checkin']
+            status_blob['last_shutdown_ts'] = log_state['last_shutdown_ts']
+            status_blob['last_startup_ts'] = log_state['last_startup_ts']
         else:
             status_blob['is_restarting'] = log_analyzer.is_logstash_restarting(log_dir=logs_path)
             status_blob['recent_restarts'] = log_analyzer.detect_restart_events(
@@ -1446,7 +1450,7 @@ def run_controller():
 
             # --- Restart state transition logging ---
             if _log_watcher is not None:
-                currently_restarting = _log_watcher.get_restart_state()['is_restarting']
+                currently_restarting = _log_watcher.get_state()['is_restarting']
             else:
                 current_state = agent_state.get_state()
                 logs_path = current_state.get('logs_path', '')
