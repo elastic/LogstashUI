@@ -69,6 +69,9 @@ def update_logstash_env_file(password: str) -> None:
 
 logger = logging.getLogger(__name__)
 
+# Module-level watcher — started once by run_controller(), consulted by check_in()
+_log_watcher: Optional[log_analyzer.LogstashLogWatcher] = None
+
 
 def update_logstash_yml(settings_path, content):
     """
@@ -1293,12 +1296,17 @@ def check_in():
         status_blob['node_stats'] = get_logstash_node_stats(api_port)
         status_blob['last_policy_apply'] = state.get('last_policy_apply')
 
-        # Restart detection — works regardless of whether the agent initiated
-        # the restart or it happened externally (crash, systemd, manual).
-        status_blob['is_restarting'] = log_analyzer.is_logstash_restarting(log_dir=logs_path)
-        status_blob['recent_restarts'] = log_analyzer.detect_restart_events(
-            log_dir=logs_path, max_events=5
-        )
+        # Restart detection — prefer the live watcher (near-realtime) when it has
+        # started; fall back to snapshot reads if it hasn't been initialised yet.
+        if _log_watcher is not None:
+            restart_state = _log_watcher.get_restart_state()
+            status_blob['is_restarting'] = restart_state['is_restarting']
+            status_blob['recent_restarts'] = restart_state['recent_restarts']
+        else:
+            status_blob['is_restarting'] = log_analyzer.is_logstash_restarting(log_dir=logs_path)
+            status_blob['recent_restarts'] = log_analyzer.detect_restart_events(
+                log_dir=logs_path, max_events=5
+            )
 
         logger.debug(f"Path validation status: {status_blob}")
         
@@ -1399,16 +1407,35 @@ def run_controller():
     logger.info("Press Ctrl+C to stop")
     logger.info("=" * 60)
     
+    global _log_watcher
     check_in_interval = 60  # seconds
 
-    # Restart state tracking across loop iterations.
-    # Used to detect transitions (started restarting / came back online)
-    # and will later support detecting stuck or failed restarts.
+    # --- Start the continuous log watcher ---
+    initial_state = agent_state.get_state()
+    logs_path = initial_state.get('logs_path', '')
+    if logs_path:
+        _log_watcher = log_analyzer.LogstashLogWatcher(log_dir=logs_path)
+        _log_watcher.start()
+    else:
+        logger.warning(
+            "logs_path not set in agent state — LogstashLogWatcher not started. "
+            "Restart detection will fall back to snapshot reads."
+        )
+
+    # Restart state tracking: detect transitions for controller-level logging.
+    # The watcher fires log lines within ~0.5s of a shutdown/startup signal.
     was_restarting: bool = False
-    restart_started_at: Optional[float] = None
 
     try:
         while True:
+            # Start watcher if it wasn't ready at startup (logs_path set later)
+            if _log_watcher is None:
+                current_state = agent_state.get_state()
+                logs_path = current_state.get('logs_path', '')
+                if logs_path:
+                    _log_watcher = log_analyzer.LogstashLogWatcher(log_dir=logs_path)
+                    _log_watcher.start()
+
             # Perform check-in
             result = check_in()
 
@@ -1417,22 +1444,18 @@ def run_controller():
             else:
                 logger.warning("Check-in failed, will retry in 60 seconds")
 
-            # --- Restart state tracking ---
-            current_state = agent_state.get_state()
-            logs_path = current_state.get('logs_path', '')
-            currently_restarting = log_analyzer.is_logstash_restarting(log_dir=logs_path)
+            # --- Restart state transition logging ---
+            if _log_watcher is not None:
+                currently_restarting = _log_watcher.get_restart_state()['is_restarting']
+            else:
+                current_state = agent_state.get_state()
+                logs_path = current_state.get('logs_path', '')
+                currently_restarting = log_analyzer.is_logstash_restarting(log_dir=logs_path)
 
             if currently_restarting and not was_restarting:
-                restart_started_at = time.time()
                 logger.warning("Logstash restart detected — monitoring until it comes back online")
-
             elif not currently_restarting and was_restarting:
-                if restart_started_at is not None:
-                    duration = time.time() - restart_started_at
-                    logger.info(f"Logstash is back online (restart took {duration:.1f}s)")
-                else:
-                    logger.info("Logstash is back online")
-                restart_started_at = None
+                logger.info("Logstash is back online")
 
             was_restarting = currently_restarting
             # --- End restart state tracking ---
