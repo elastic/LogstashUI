@@ -898,9 +898,14 @@ class LogstashLogWatcher:
     _SHUTDOWN_MSG = "logstash shut down"  # matches "Logstash shut down."
     _STARTING_MSG = "starting logstash"   # matches "Starting Logstash"
 
-    def __init__(self, log_dir: str = LOG_DIR):
+    def __init__(self, log_dir: str = LOG_DIR,
+                 checkin_event: Optional[threading.Event] = None):
         self.log_dir = log_dir
         self._log_path = str(Path(log_dir) / "logstash-json.log")
+
+        # Set by the controller — watcher signals this on shutdown/startup so
+        # the controller can fire an early check-in instead of waiting 60s.
+        self._checkin_event = checkin_event
 
         # --- Mutable state (protected by _lock) ---
         self._logstash_state: str = "unknown"
@@ -989,11 +994,13 @@ class LogstashLogWatcher:
                 new_inode = stat.st_ino
 
                 if fp is None:
-                    # First open — read from the beginning of the file
+                    # First open — seek to EOF so we only follow new content.
+                    # Current state is determined by the API health check, not log replay.
                     fp = open(self._log_path, 'rb')
+                    fp.seek(0, 2)
                     current_inode = new_inode
                     buf = b""
-                    logger.debug(f"LogstashLogWatcher: opened {self._log_path} from beginning")
+                    logger.debug(f"LogstashLogWatcher: opened {self._log_path} at EOF")
 
                 elif new_inode != current_inode or stat.st_size < fp.tell():
                     # Log rotated: drain remaining bytes from old file, then open new one
@@ -1078,15 +1085,18 @@ class LogstashLogWatcher:
         if new_state is None and warn_entry is None and error_entry is None:
             return
 
+        signal_checkin = False
         with self._lock:
             if new_state == "restarting":
                 self._logstash_state = "restarting"
                 self._last_shutdown_ts = ts
+                signal_checkin = True
                 logger.warning(f"LogstashLogWatcher: Logstash shut down (ts={ts})")
             elif new_state == "started":
                 prev = self._logstash_state
                 self._logstash_state = "started"
                 self._last_startup_ts = ts
+                signal_checkin = True
                 if prev == "restarting":
                     logger.info(f"LogstashLogWatcher: Logstash starting (was restarting, ts={ts})")
                 else:
@@ -1096,6 +1106,9 @@ class LogstashLogWatcher:
                 self._warnings.append(warn_entry)
             if error_entry and len(self._errors) < self._MAX_ERRORS:
                 self._errors.append(error_entry)
+
+        if signal_checkin and self._checkin_event is not None:
+            self._checkin_event.set()
 
 
 def is_pipeline_running(pipeline_id: str, log_dir: str = LOG_DIR) -> bool:

@@ -3,6 +3,7 @@
 #you may not use this file except in compliance with the Elastic License.
 
 import time
+import threading
 import logging
 import requests
 from typing import Optional
@@ -1299,18 +1300,9 @@ def check_in():
         # Log state — prefer live watcher (near-realtime, clears warnings/errors
         # after each checkin); fall back to snapshot if watcher not yet started.
         if _log_watcher is not None:
-            log_state = _log_watcher.consume_for_checkin()
-            status_blob['logstash_state'] = log_state['logstash_state']
-            status_blob['is_restarting'] = log_state['is_restarting']
-            status_blob['warnings_since_last_checkin'] = log_state['warnings_since_last_checkin']
-            status_blob['errors_since_last_checkin'] = log_state['errors_since_last_checkin']
-            status_blob['last_shutdown_ts'] = log_state['last_shutdown_ts']
-            status_blob['last_startup_ts'] = log_state['last_startup_ts']
+            status_blob['logwatcher'] = _log_watcher.consume_for_checkin()
         else:
-            status_blob['is_restarting'] = log_analyzer.is_logstash_restarting(log_dir=logs_path)
-            status_blob['recent_restarts'] = log_analyzer.detect_restart_events(
-                log_dir=logs_path, max_events=5
-            )
+            status_blob['logwatcher'] = None
 
         logger.debug(f"Path validation status: {status_blob}")
         
@@ -1414,11 +1406,17 @@ def run_controller():
     global _log_watcher
     check_in_interval = 60  # seconds
 
+    # Event shared with the watcher — set when shutdown/startup is detected so
+    # the controller loop wakes up early and fires an immediate check-in.
+    _checkin_event = threading.Event()
+
     # --- Start the continuous log watcher ---
     initial_state = agent_state.get_state()
     logs_path = initial_state.get('logs_path', '')
     if logs_path:
-        _log_watcher = log_analyzer.LogstashLogWatcher(log_dir=logs_path)
+        _log_watcher = log_analyzer.LogstashLogWatcher(
+            log_dir=logs_path, checkin_event=_checkin_event
+        )
         _log_watcher.start()
     else:
         logger.warning(
@@ -1437,7 +1435,9 @@ def run_controller():
                 current_state = agent_state.get_state()
                 logs_path = current_state.get('logs_path', '')
                 if logs_path:
-                    _log_watcher = log_analyzer.LogstashLogWatcher(log_dir=logs_path)
+                    _log_watcher = log_analyzer.LogstashLogWatcher(
+                        log_dir=logs_path, checkin_event=_checkin_event
+                    )
                     _log_watcher.start()
 
             # Perform check-in
@@ -1450,7 +1450,7 @@ def run_controller():
 
             # --- Restart state transition logging ---
             if _log_watcher is not None:
-                currently_restarting = _log_watcher.get_state()['is_restarting']
+                currently_restarting = _log_watcher.get_state()['logstash_state'] == 'restarting'
             else:
                 current_state = agent_state.get_state()
                 logs_path = current_state.get('logs_path', '')
@@ -1464,8 +1464,9 @@ def run_controller():
             was_restarting = currently_restarting
             # --- End restart state tracking ---
 
-            # Wait for next check-in
-            time.sleep(check_in_interval)
+            # Wait for next check-in — wakes up early if watcher fires an event
+            _checkin_event.wait(timeout=check_in_interval)
+            _checkin_event.clear()
             
     except KeyboardInterrupt:
         logger.info("\n" + "=" * 60)
