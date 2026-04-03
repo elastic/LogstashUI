@@ -486,24 +486,24 @@ def find_related_logs(pipeline_id: str, log_dir: str = LOG_DIR,
     return related_logs
 
 
-# Keywords in logEvent.message that indicate a Logstash shutdown.
-# Matched case-insensitively as substrings.
+# Process-level shutdown keywords — only messages emitted by the Logstash
+# process itself as it exits. Pipeline-level messages ("Pipeline terminated",
+# "Stopping all pipelines") are intentionally excluded: they fire on config
+# reloads and pipeline restarts within a running process, which would create
+# false shutdown signals and break restart pairing logic.
 _SHUTDOWN_KEYWORDS = [
-    "logstash shut down",       # definitive: "Logstash shut down." (9.x)
-    "stopping all pipelines",
-    "pipeline terminated",
-    "shutting down",            # covers "SIGTERM received. Shutting down."
+    "logstash shut down",   # "Logstash shut down."  — process has fully exited
+    "shutting down",        # "SIGTERM received. Shutting down." — process is exiting
 ]
 
-# Keywords in logEvent.message that indicate Logstash has fully started.
-# Intentionally conservative: "Starting Logstash" is excluded because it is
-# the very first startup log entry and Logstash can still fail to come up
-# after it (e.g. bad pipeline config). Only messages logged once Logstash
-# is actually accepting work are included.
+# Process-level startup keywords — only messages that are emitted exactly
+# once per Logstash process startup. Pipeline-level messages ("Pipelines
+# running", "Pipeline started") are excluded because they also fire on config
+# reloads within a running process, creating false startup signals.
+# The running_pipelines metric transitions (Source C in detect_restart_events)
+# handle pipeline-level state changes separately.
 _STARTUP_KEYWORDS = [
-    "pipelines running",                    # agent confirms pipelines are up
-    "successfully started logstash",        # API endpoint is accepting connections
-    "pipeline started",                     # at least one pipeline is running
+    "successfully started logstash",  # "Successfully started Logstash API endpoint"
 ]
 
 # Minimum milliseconds between consecutive running_pipelines entries before
