@@ -506,10 +506,6 @@ _STARTUP_KEYWORDS = [
     "successfully started logstash",  # "Successfully started Logstash API endpoint"
 ]
 
-# Minimum milliseconds between consecutive running_pipelines entries before
-# we consider the gap a possible crash-restart (no explicit down entry logged)
-_CRASH_GAP_THRESHOLD_MS = 5000
-
 
 def _check_for_shutdown_message(logs: List[Dict[str, Any]], near_timestamp: int,
                                  window_ms: int = 10000) -> bool:
@@ -707,19 +703,16 @@ def detect_restart_events(
                     'timestamp': ts,
                     'source': 'pipeline_metric',
                 })
-            elif prev_is_up and is_up:
-                # Both up — check for gap indicating a crash with no down entry logged
-                gap = ts - prev_ts
-                if gap > _CRASH_GAP_THRESHOLD_MS:
-                    shutdown_signals.append({
-                        'timestamp': prev_ts,
-                        'source': 'pipeline_metric_gap',
-                        'cause_hint': 'gap_detected',
-                    })
-                    startup_signals.append({
-                        'timestamp': ts,
-                        'source': 'pipeline_metric_gap',
-                    })
+            # Note: gap detection between two consecutive UP states has been
+            # intentionally removed. "Pipelines running" is only logged when
+            # pipeline state changes (not periodically), so a long gap between
+            # two UP entries is normal and indistinguishable from a crash-restart.
+            # Crash restarts that produce no shutdown messages are instead handled
+            # by the agent log (Source B: "Logstash process died") when the agent
+            # is running in simulation mode. In service mode, the process-level
+            # lifecycle messages ("Logstash shut down.", "shutting down") provide
+            # the shutdown signal even for clean shutdowns; ungraceful kills will
+            # appear as a shutdown→startup gap visible via timestamp difference.
 
             prev = status
             prev_is_up = is_up
@@ -735,8 +728,7 @@ def detect_restart_events(
         for sig in signals_sorted[1:]:
             if sig['timestamp'] - merged[-1]['timestamp'] <= DEDUP_WINDOW_MS:
                 # Keep the more informative signal (prefer agent_log > logstash_message > metric)
-                priority = {'agent_log': 0, 'logstash_message': 1,
-                            'pipeline_metric': 2, 'pipeline_metric_gap': 3}
+                priority = {'agent_log': 0, 'logstash_message': 1, 'pipeline_metric': 2}
                 existing_pri = priority.get(merged[-1].get('source', ''), 9)
                 new_pri      = priority.get(sig.get('source', ''), 9)
                 if new_pri < existing_pri:
