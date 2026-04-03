@@ -257,20 +257,12 @@ def _find_logstash_lifecycle_events(logs: List[Dict[str, Any]]) -> List[Dict[str
     Scan already-read Logstash JSON log entries for explicit shutdown and startup
     messages emitted by Logstash itself.
 
-    This provides a direct, message-based restart signal independent of the
-    running_pipelines periodic status entries.
+    Uses the module-level _SHUTDOWN_KEYWORDS and _STARTUP_KEYWORDS lists.
+    Matched case-insensitively as substrings of logEvent.message.
 
     Returns list of dicts (chronological order):
         {"event_type": "shutdown"|"startup", "timestamp": int, "message": str}
     """
-    _STARTUP_KEYWORDS = [
-        "logstash started",
-        "starting logstash",
-        "pipelines running",
-        "pipeline started",
-        "successfully started logstash",
-    ]
-
     events: List[Dict[str, Any]] = []
 
     for entry in logs:
@@ -494,12 +486,24 @@ def find_related_logs(pipeline_id: str, log_dir: str = LOG_DIR,
     return related_logs
 
 
-# Keywords in logEvent.message that indicate a graceful Logstash shutdown
+# Keywords in logEvent.message that indicate a Logstash shutdown.
+# Matched case-insensitively as substrings.
 _SHUTDOWN_KEYWORDS = [
-    "logstash shutdown completed",
+    "logstash shut down",       # definitive: "Logstash shut down." (9.x)
     "stopping all pipelines",
     "pipeline terminated",
-    "shutting down",
+    "shutting down",            # covers "SIGTERM received. Shutting down."
+]
+
+# Keywords in logEvent.message that indicate Logstash has fully started.
+# Intentionally conservative: "Starting Logstash" is excluded because it is
+# the very first startup log entry and Logstash can still fail to come up
+# after it (e.g. bad pipeline config). Only messages logged once Logstash
+# is actually accepting work are included.
+_STARTUP_KEYWORDS = [
+    "pipelines running",                    # agent confirms pipelines are up
+    "successfully started logstash",        # API endpoint is accepting connections
+    "pipeline started",                     # at least one pipeline is running
 ]
 
 # Minimum milliseconds between consecutive running_pipelines entries before
