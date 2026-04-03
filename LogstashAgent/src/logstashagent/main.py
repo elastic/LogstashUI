@@ -640,7 +640,7 @@ async def logstash_health():
     supervisor = logstash_supervisor.get_supervisor()
     with _queue_lock:
         queue_size = len(_simulation_queue)
-    
+
     if supervisor:
         return JSONResponse(
             status_code=200 if supervisor.is_healthy else 503,

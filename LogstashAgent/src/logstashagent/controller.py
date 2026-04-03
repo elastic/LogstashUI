@@ -5,6 +5,7 @@
 import time
 import logging
 import requests
+from typing import Optional
 import json
 import hashlib
 import base64
@@ -14,6 +15,7 @@ from datetime import datetime, timezone
 from cryptography.fernet import Fernet
 from . import agent_state
 from . import encryption
+from . import log_analyzer
 from .ls_keystore_utils import LogstashKeystore
 from .ls_keystore_utils.exceptions import (
     LogstashKeystoreException,
@@ -1291,6 +1293,13 @@ def check_in():
         status_blob['node_stats'] = get_logstash_node_stats(api_port)
         status_blob['last_policy_apply'] = state.get('last_policy_apply')
 
+        # Restart detection — works regardless of whether the agent initiated
+        # the restart or it happened externally (crash, systemd, manual).
+        status_blob['is_restarting'] = log_analyzer.is_logstash_restarting(log_dir=logs_path)
+        status_blob['recent_restarts'] = log_analyzer.detect_restart_events(
+            log_dir=logs_path, max_events=5
+        )
+
         logger.debug(f"Path validation status: {status_blob}")
         
         # Prepare check-in data
@@ -1391,17 +1400,43 @@ def run_controller():
     logger.info("=" * 60)
     
     check_in_interval = 60  # seconds
-    
+
+    # Restart state tracking across loop iterations.
+    # Used to detect transitions (started restarting / came back online)
+    # and will later support detecting stuck or failed restarts.
+    was_restarting: bool = False
+    restart_started_at: Optional[float] = None
+
     try:
         while True:
             # Perform check-in
             result = check_in()
-            
+
             if result:
                 logger.debug(f"Check-in response: {result}")
             else:
                 logger.warning("Check-in failed, will retry in 60 seconds")
-            
+
+            # --- Restart state tracking ---
+            current_state = agent_state.get_state()
+            logs_path = current_state.get('logs_path', '')
+            currently_restarting = log_analyzer.is_logstash_restarting(log_dir=logs_path)
+
+            if currently_restarting and not was_restarting:
+                restart_started_at = time.time()
+                logger.warning("Logstash restart detected — monitoring until it comes back online")
+
+            elif not currently_restarting and was_restarting:
+                if restart_started_at is not None:
+                    duration = time.time() - restart_started_at
+                    logger.info(f"Logstash is back online (restart took {duration:.1f}s)")
+                else:
+                    logger.info("Logstash is back online")
+                restart_started_at = None
+
+            was_restarting = currently_restarting
+            # --- End restart state tracking ---
+
             # Wait for next check-in
             time.sleep(check_in_interval)
             
