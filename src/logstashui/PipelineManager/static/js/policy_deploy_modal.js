@@ -369,6 +369,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
     let addedCount = 0;
     let modifiedCount = 0;
     let removedCount = 0;
+    let hasWarnings = false; // Track if any pipelines have warnings
 
     // Create maps for easier comparison
     const oldMap = new Map(oldPipelines.map(p => [p.name, p]));
@@ -488,7 +489,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
     }
 
     // Helper: build a pipeline card
-    function buildPipelineCard(name, description, action, leftHtml, rightHtml) {
+    function buildPipelineCard(name, description, action, leftHtml, rightHtml, pipelineData) {
         const badge = action === 'added'
             ? '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>'
             : action === 'removed'
@@ -498,12 +499,46 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
         const leftTitle = action === 'added' ? 'No Existing Pipeline' : 'Current Pipeline';
         const rightTitle = action === 'removed' ? 'Pipeline Will Be Deleted' : 'New Pipeline (After Deploy)';
 
+        // Build warning banners for no_input and non_reloadable flags
+        let warningBannersHtml = '';
+        if (pipelineData && action !== 'removed') {
+            if (pipelineData.no_input) {
+                hasWarnings = true;
+                warningBannersHtml += `
+                    <div class="pipeline-warning-banner no-input">
+                        <svg class="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div class="flex-1">
+                            <span class="text-sm text-blue-300 font-semibold">Pipeline found with no input.</span>
+                            <p class="text-xs text-blue-200 mt-1">This will be deployed, but skipped until it has an input.</p>
+                        </div>
+                    </div>
+                `;
+            }
+            if (pipelineData.non_reloadable) {
+                hasWarnings = true;
+                warningBannersHtml += `
+                    <div class="pipeline-warning-banner non-reloadable">
+                        <svg class="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div class="flex-1">
+                            <span class="text-sm text-amber-300 font-semibold">Stdin input found.</span>
+                            <p class="text-xs text-amber-200 mt-1">Stdin is non-reloadable. We will re-create the pipeline every time instead of hot reloading it.</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         return `
             <div class="pipeline-diff-card border border-gray-600 rounded-lg overflow-hidden mb-4">
                 <div class="bg-gray-700 px-4 py-2 border-b border-gray-600">
                     <h4 class="text-white font-semibold">${escapeHtml(name)}${badge}</h4>
                     <p class="text-sm text-gray-400">Description: ${escapeHtml(description || 'N/A')}</p>
                 </div>
+                ${warningBannersHtml ? `<div class="px-4 pt-3">${warningBannersHtml}</div>` : ''}
                 <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 400px;">
                     <div class="p-4 bg-gray-700 border-r border-gray-600" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
                         <div class="mb-2" style="flex-shrink: 0;">
@@ -534,7 +569,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
             const lines = (pipeline.lscl || '').split('\n');
             const lineDiff = [{ type: 'insert', lines }];
             const { leftHtml, rightHtml } = buildDiffHtml(lineDiff, 'added');
-            cardsHtml += buildPipelineCard(pipeline.name, pipeline.description, 'added', leftHtml, rightHtml);
+            cardsHtml += buildPipelineCard(pipeline.name, pipeline.description, 'added', leftHtml, rightHtml, pipeline);
         }
     });
 
@@ -546,7 +581,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
             const lines = (pipeline.lscl || '').split('\n');
             const lineDiff = [{ type: 'delete', lines }];
             const { leftHtml, rightHtml } = buildDiffHtml(lineDiff, 'removed');
-            cardsHtml += buildPipelineCard(pipeline.name, pipeline.description, 'removed', leftHtml, rightHtml);
+            cardsHtml += buildPipelineCard(pipeline.name, pipeline.description, 'removed', leftHtml, rightHtml, null);
         }
     });
 
@@ -560,7 +595,7 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
             const newLines = (newPipeline.lscl || '').split('\n');
             const lineDiff = computeLineDiff(oldLines, newLines);
             const { leftHtml, rightHtml } = buildDiffHtml(lineDiff, 'modified');
-            cardsHtml += buildPipelineCard(newPipeline.name, newPipeline.description, 'modified', leftHtml, rightHtml);
+            cardsHtml += buildPipelineCard(newPipeline.name, newPipeline.description, 'modified', leftHtml, rightHtml, newPipeline);
         }
     });
 
@@ -623,6 +658,14 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
 
     // Track if this section has changes
     sectionsWithChanges.add('pipelines');
+    
+    // Add warning indicator to pipelines tab if any pipeline has warnings
+    if (hasWarnings) {
+        const pipelinesTab = document.querySelector('.deploy-diff-tab[data-section="pipelines"]');
+        if (pipelinesTab) {
+            pipelinesTab.classList.add('has-warnings');
+        }
+    }
 }
 
 // Render keystore diff

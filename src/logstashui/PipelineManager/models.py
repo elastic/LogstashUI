@@ -7,6 +7,7 @@ from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password, check_password
 import hashlib
+from Common import logstash_config_parse
 
 
 class Policy(models.Model):
@@ -359,7 +360,17 @@ class Pipeline(models.Model):
         default=1024,
         help_text="Number of writes before checkpoint (for persisted queue)"
     )
-    
+
+    # Pipeline analysis flags (auto-computed on save)
+    no_input = models.BooleanField(
+        default=False,
+        help_text="True if the pipeline's input block contains no plugins"
+    )
+    non_reloadable = models.BooleanField(
+        default=False,
+        help_text="True if the pipeline contains a stdin input plugin (prevents hot-reload)"
+    )
+
     class Meta:
         ordering = ['policy', 'name']
         verbose_name = 'Pipeline'
@@ -378,6 +389,29 @@ class Pipeline(models.Model):
             f"{self.queue_checkpoint_writes}"
         )
         self.pipeline_hash = hashlib.sha256(hash_input.encode('utf-8')).hexdigest()
+
+        # Compute analysis flags from parsed pipeline
+        try:
+            import json as _json
+            components = _json.loads(logstash_config_parse.logstash_config_to_components(self.lscl))
+            inputs = components.get("input", [])
+
+            self.no_input = len(inputs) == 0
+
+            def _has_stdin(plugins):
+                for plugin in plugins:
+                    if plugin.get("plugin") == "stdin":
+                        return True
+                    nested = plugin.get("config", {}).get("plugins", [])
+                    if nested and _has_stdin(nested):
+                        return True
+                return False
+
+            self.non_reloadable = _has_stdin(inputs)
+        except Exception:
+            # Parsing failure — leave existing flags unchanged
+            pass
+
         super().save(*args, **kwargs)
 
     def __str__(self):

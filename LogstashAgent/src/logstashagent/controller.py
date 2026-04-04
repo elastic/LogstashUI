@@ -425,6 +425,20 @@ def build_pipelines_state(settings_path):
                 'config_hash': config_hash,
                 'settings': settings,
             }
+            # Preserve metadata flags and revision from state
+            if stored.get('non_reloadable'):
+                pipelines_state[pipeline_name]['non_reloadable'] = True
+            if stored.get('revision') is not None:
+                pipelines_state[pipeline_name]['revision'] = stored.get('revision')
+
+        # Include no_input pipelines from state (they don't have .conf files)
+        for pipeline_name, stored in persisted_pipelines.items():
+            if stored.get('no_input') and pipeline_name not in pipelines_state:
+                pipelines_state[pipeline_name] = {
+                    'config_hash': stored.get('config_hash', ''),
+                    'no_input': True,
+                    'settings': stored.get('settings', {})
+                }
 
         logger.debug(f"Built pipelines state: {list(pipelines_state.keys())}")
         return pipelines_state
@@ -438,14 +452,16 @@ def update_pipelines(settings_path, pipeline_changes):
     """
     Apply pipeline set/delete directives from the server.
 
-    - Writes {settings_path}/conf.d/{name}.conf for each entry in 'set'
+    - Writes {settings_path}/conf.d/{name}.conf for each entry in 'set' (unless no_input=True)
     - Deletes {settings_path}/conf.d/{name}.conf for each entry in 'delete'
     - Rewrites {settings_path}/pipelines.yml from current conf.d state
     - Updates agent state with new pipelines dict (using server pipeline_hash values)
+    - Handles no_input flag: skips writing .conf but updates state with hash
+    - Handles non_reloadable flag: appends revision number to pipeline_id to force recreation
 
     Args:
         settings_path: Path to Logstash settings directory
-        pipeline_changes: {'set': {name: {lscl, pipeline_hash, settings}}, 'delete': [name, ...]}
+        pipeline_changes: {'set': {name: {lscl, pipeline_hash, settings, no_input, non_reloadable}}, 'delete': [name, ...]}
 
     Returns:
         bool: True if successful, False otherwise
@@ -490,7 +506,22 @@ def update_pipelines(settings_path, pipeline_changes):
         # Process sets
         for pipeline_name, pipeline_data in pipelines_to_set.items():
             lscl_content = pipeline_data.get('lscl', '')
+            no_input = pipeline_data.get('no_input', False)
             conf_path = conf_d_path + pipeline_name + '.conf'
+            
+            # Skip writing .conf file if pipeline has no input
+            if no_input:
+                logger.info(f"Pipeline {pipeline_name} has no_input=True, skipping .conf write")
+                # Delete the .conf file if it exists from a previous version
+                try:
+                    if os.path.isfile(conf_path):
+                        os.remove(conf_path)
+                        logger.info(f"Deleted existing .conf for no_input pipeline: {conf_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete existing .conf for no_input pipeline {conf_path}: {e}")
+                continue
+            
+            # Write .conf file for pipelines with input
             try:
                 with open(conf_path, 'w', encoding='utf-8') as f:
                     f.write(lscl_content)
@@ -521,10 +552,12 @@ def update_pipelines(settings_path, pipeline_changes):
             if pipeline_name in pipelines_to_set:
                 settings = pipelines_to_set[pipeline_name].get('settings', {})
                 config_hash = pipelines_to_set[pipeline_name].get('pipeline_hash', '')
+                non_reloadable = pipelines_to_set[pipeline_name].get('non_reloadable', False)
             else:
                 existing = existing_pipelines.get(pipeline_name, {})
                 settings = existing.get('settings', {})
                 config_hash = existing.get('config_hash', '')
+                non_reloadable = existing.get('non_reloadable', False)
 
             workers = settings.get('pipeline_workers', 1)
             batch_size = settings.get('pipeline_batch_size', 128)
@@ -533,8 +566,20 @@ def update_pipelines(settings_path, pipeline_changes):
             queue_max_bytes = settings.get('queue_max_bytes', '1gb')
             checkpoint_writes = settings.get('queue_checkpoint_writes', 1024)
 
+            # For non-reloadable pipelines, append revision number to force recreation
+            if non_reloadable:
+                # Get or increment revision for this pipeline
+                existing = existing_pipelines.get(pipeline_name, {})
+                current_revision = existing.get('revision', 0)
+                new_revision = current_revision + 1
+                pipeline_id = f"{pipeline_name}-{new_revision}"
+                logger.info(f"Pipeline {pipeline_name} is non_reloadable, using pipeline.id: {pipeline_id}")
+            else:
+                pipeline_id = pipeline_name
+                new_revision = None
+
             yml_entry = {
-                'pipeline.id': pipeline_name,
+                'pipeline.id': pipeline_id,
                 'path.config': f"{conf_d_path}{pipeline_name}.conf",
                 'pipeline.workers': workers,
                 'pipeline.batch.size': batch_size,
@@ -547,6 +592,7 @@ def update_pipelines(settings_path, pipeline_changes):
 
             new_pipelines_state[pipeline_name] = {
                 'config_hash': config_hash,
+                'non_reloadable': non_reloadable,
                 'settings': {
                     'pipeline_workers': workers,
                     'pipeline_batch_size': batch_size,
@@ -556,6 +602,8 @@ def update_pipelines(settings_path, pipeline_changes):
                     'queue_checkpoint_writes': checkpoint_writes,
                 }
             }
+            if new_revision is not None:
+                new_pipelines_state[pipeline_name]['revision'] = new_revision
 
         # Write pipelines.yml
         try:
@@ -565,6 +613,20 @@ def update_pipelines(settings_path, pipeline_changes):
         except Exception as e:
             logger.error(f"Failed to write pipelines.yml: {e}")
             return False
+
+        # Handle no_input pipelines - add to state but not to pipelines.yml
+        for pipeline_name, pipeline_data in pipelines_to_set.items():
+            no_input = pipeline_data.get('no_input', False)
+            if no_input and pipeline_name not in new_pipelines_state:
+                # Pipeline has no input, store in state but don't write to pipelines.yml
+                config_hash = pipeline_data.get('pipeline_hash', '')
+                settings = pipeline_data.get('settings', {})
+                logger.info(f"Storing no_input pipeline {pipeline_name} in state only (hash: {config_hash[:8]}...)")
+                new_pipelines_state[pipeline_name] = {
+                    'config_hash': config_hash,
+                    'no_input': True,
+                    'settings': settings
+                }
 
         # Update agent state
         agent_state.update_state('pipelines', new_pipelines_state)

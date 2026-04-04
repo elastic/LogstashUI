@@ -1847,7 +1847,7 @@ def get_policy_diff(request):
             'settings_path': policy.settings_path,
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
-            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
+            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
             'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
         }
 
@@ -1926,7 +1926,7 @@ def deploy_policy(request):
             'settings_path': policy.settings_path,
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
-            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl')),
+            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
             'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
         }
         
@@ -2245,6 +2245,8 @@ def get_config_changes(request):
                 pipeline_changes['set'][p.name] = {
                     'lscl': p.lscl,
                     'pipeline_hash': p.pipeline_hash,
+                    'no_input': p.no_input,
+                    'non_reloadable': p.non_reloadable,
                     'settings': {
                         'pipeline_workers': p.pipeline_workers,
                         'pipeline_batch_size': p.pipeline_batch_size,

@@ -61,6 +61,38 @@
     border-radius: 50%;
     box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);
   }
+  
+  /* Warning indicator for pipelines tab */
+  .deploy-diff-tab.has-warnings::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 6px;
+    height: 6px;
+    background-color: #f59e0b;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+  }
+  
+  /* Pipeline warning banner styles */
+  .pipeline-warning-banner {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background-color: rgb(55, 65, 81);
+    border-left: 4px solid;
+  }
+  
+  .pipeline-warning-banner.no-input {
+    border-left-color: rgb(59, 130, 246);
+  }
+  
+  .pipeline-warning-banner.non-reloadable {
+    border-left-color: rgb(245, 158, 11);
+  }
 </style>
 
 <!-- Policy Deploy Diff Modal -->
