@@ -77,7 +77,11 @@ function loadConnections(selectedConnectionId = null) {
       connectionSelect.innerHTML = '<option value="">Select a connection...</option>';
       connectionSelect.innerHTML += '<option value="add_new" class="font-bold text-primary">+ Add Connection</option>';
 
-      connections.forEach(connection => {
+      const centralizedConnections = connections.filter(connection => 
+        connection.connection_type === 'CENTRALIZED'
+      );
+
+      centralizedConnections.forEach(connection => {
         const option = document.createElement('option');
         option.value = connection.id;
         option.textContent = `${connection.name} (${connection.connection_type})`;
