@@ -517,8 +517,7 @@ async def root():
     return {
         "name": "logstashagent",
         "version": AGENT_VERSION,
-        "status": "running",
-        "logstash_version": "9.3.0"
+        "status": "running"
     }
 
 

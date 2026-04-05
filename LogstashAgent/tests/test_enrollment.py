@@ -160,6 +160,7 @@ class TestSaveEnrollmentConfig:
             ("connection_id", 7),
             ("settings_path", "/etc/logstash"),
             ("logs_path", "/var/log"),
+            ("binary_path", None),
             ("revision_number", 0),
         ]
 

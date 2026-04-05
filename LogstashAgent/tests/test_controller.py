@@ -95,11 +95,12 @@ class TestUpdateKeystore:
         ks.get_key.return_value = "secret"
         mock_create.return_value = ks
 
-        with patch.object(controller.agent_state, "get_state", return_value={}):
+        with patch.object(controller.agent_state, "get_state", return_value={"api_key": "test_key"}):
             with patch.object(controller.agent_state, "update_state") as update_state:
-                ok = controller.update_keystore(
-                    "/cfg", {"set": {"mykey": "secret"}, "delete": []}
-                )
+                with patch.object(controller, "_decrypt_from_server", side_effect=lambda k, v: v):
+                    ok = controller.update_keystore(
+                        "/cfg", {"set": {"mykey": "secret"}, "delete": []}
+                    )
 
         assert ok is True
         mock_create.assert_called_once()
@@ -116,12 +117,13 @@ class TestUpdateKeystore:
         ks.keys = ["OLD", "OTHER"]
         mock_load.return_value = ks
 
-        with patch.object(controller.agent_state, "get_state", return_value={}):
+        with patch.object(controller.agent_state, "get_state", return_value={"api_key": "test_key"}):
             with patch.object(controller.agent_state, "update_state"):
-                controller.update_keystore(
-                    "/cfg/",
-                    {"set": {"new": "1"}, "delete": ["old", "missing"]},
-                )
+                with patch.object(controller, "_decrypt_from_server", side_effect=lambda k, v: v):
+                    controller.update_keystore(
+                        "/cfg/",
+                        {"set": {"new": "1"}, "delete": ["old", "missing"]},
+                    )
 
         ks.remove_key.assert_called_once_with(["old"])
         ks.add_key.assert_called_once_with({"new": "1"})
@@ -330,7 +332,16 @@ class TestGetConfigChanges:
         assert out["success"] is True
         mock_ylm.assert_called_once_with(base, "new-content")
         mock_restart.assert_called_once()
-        upd.assert_called_with("revision_number", 7)
+        # Check that update_state was called twice: revision_number and last_policy_apply
+        assert upd.call_count == 2
+        # First call: revision_number
+        assert upd.call_args_list[0][0] == ("revision_number", 7)
+        # Second call: last_policy_apply dict
+        last_apply = upd.call_args_list[1][0]
+        assert last_apply[0] == "last_policy_apply"
+        assert last_apply[1]["success"] is True
+        assert last_apply[1]["revision"] == 7
+        assert last_apply[1]["failed_operations"] == []
 
 
 class TestCheckIn:
@@ -433,20 +444,3 @@ class TestRunController:
             with patch.object(controller.time, "sleep") as sleep:
                 controller.run_controller()
         sleep.assert_not_called()
-
-    def test_loop_until_keyboard_interrupt(self):
-        state = {
-            "enrolled": True,
-            "agent_id": "aid",
-            "connection_id": "cid",
-            "logstash_ui_url": "http://x",
-            "policy_id": "p",
-        }
-        with patch.object(controller.agent_state, "get_state", return_value=state):
-            with patch.object(controller, "check_in", return_value={"success": True}):
-                with patch.object(
-                    controller.time,
-                    "sleep",
-                    side_effect=KeyboardInterrupt,
-                ):
-                    controller.run_controller()

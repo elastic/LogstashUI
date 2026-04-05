@@ -34,4 +34,5 @@ echo "=========================================="
 
 cd /app
 # Listen on 0.0.0.0 so nginx can access via Docker network
-exec uvicorn main:app --host 0.0.0.0 --port 9500
+# Use proper module path with PYTHONPATH set
+exec python3 -m uvicorn logstashagent.main:app --host 0.0.0.0 --port 9500

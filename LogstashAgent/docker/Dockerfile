@@ -3,23 +3,27 @@ FROM docker.elastic.co/logstash/logstash:9.3.1
 # Switch to root to install dependencies
 USER root
 
-# Install Python and system dependencies
-RUN microdnf install -y python3 python3-pip && \
-    microdnf clean all
+# Try to install Python 3.12 via microdnf
+RUN microdnf install -y python3.12 python3.12-pip && \
+    microdnf clean all && \
+    ln -sf /usr/bin/python3.12 /usr/local/bin/python3 && \
+    ln -sf /usr/bin/pip3.12 /usr/local/bin/pip3
 
-# Set work directory for FastAPI app
+# Install uv for faster dependency resolution
+RUN pip3 install --no-cache-dir uv
+
+# Set work directory
 WORKDIR /app
 
-# Copy Python requirements and install
-COPY ../requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Copy the entire src directory (includes all modules and package structure)
+COPY src/ /app/src/
 
-# Copy FastAPI application
-COPY ../src/logstashagent/main.py .
-COPY ../src/logstashagent/slots.py .
-COPY ../src/logstashagent/log_analyzer.py .
-COPY ../src/logstashagent/logstash_api.py .
-COPY ../src/logstashagent/logstash_supervisor.py .
+# Copy dependency files
+COPY pyproject.toml uv.lock /app/
+
+# Install dependencies using uv
+RUN uv pip install --system --no-cache -r pyproject.toml
+
 # Note: logstashagent.yml is mounted at runtime via docker-compose volumes
 # Config is read from /app/logstashui.yml (preferred) or /app/logstashui.example.yml
 
@@ -29,17 +33,18 @@ RUN mkdir -p /etc/logstash \
     /etc/logstash/config \
     /etc/logstash/pipeline-metadata \
     /var/log/logstash \
+    /app/src/logstashagent/data/logs \
     /tmp
 
 # Copy Logstash configuration files
-COPY config/logstash.yml /etc/logstash/logstash.yml
-COPY config/pipelines.yml /etc/logstash/pipelines.yml
-COPY config/jvm.options /etc/logstash/jvm.options
-COPY config/log4j2.properties /etc/logstash/log4j2.properties
+COPY docker/config/logstash.yml /etc/logstash/logstash.yml
+COPY docker/config/pipelines.yml /etc/logstash/pipelines.yml
+COPY docker/config/jvm.options /etc/logstash/jvm.options
+COPY docker/config/log4j2.properties /etc/logstash/log4j2.properties
 
 # Copy simulation pipeline configs
-COPY config/simulate_start.conf /etc/logstash/config/simulate_start.conf
-COPY config/simulate_end.conf /etc/logstash/config/simulate_end.conf
+COPY docker/config/simulate_start.conf /etc/logstash/config/simulate_start.conf
+COPY docker/config/simulate_end.conf /etc/logstash/config/simulate_end.conf
 
 # Set permissions
 RUN chown -R logstash:logstash /etc/logstash /var/log/logstash /app /tmp && \
@@ -47,7 +52,7 @@ RUN chown -R logstash:logstash /etc/logstash /var/log/logstash /app /tmp && \
     chmod 1777 /tmp
 
 # Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && \
     chown logstash:logstash /entrypoint.sh
 
@@ -57,6 +62,7 @@ RUN chmod +x /entrypoint.sh && \
 ARG LOGSTASH_URL=http://host.docker.internal:8080
 ENV LOGSTASH_URL=${LOGSTASH_URL}
 ENV MALLOC_ARENA_MAX=4
+ENV PYTHONPATH=/app/src
 
 # Switch back to logstash user
 USER logstash
