@@ -95,25 +95,25 @@ echo.
 
 REM Ensure logstashui.yml exists (required for Docker volume mount)
 REM If it doesn't exist, create a copy from logstashui.example.yml
-if not exist "logstashui.yml" (
-    if exist "logstashui.example.yml" (
+if not exist "src\logstashui\logstashui.yml" (
+    if exist "src\logstashui\logstashui.example.yml" (
         echo Creating logstashui.yml copy from logstashui.example.yml
-        copy logstashui.example.yml logstashui.yml >nul
+        copy src\logstashui\logstashui.example.yml src\logstashui\logstashui.yml >nul
     ) else (
-        echo ERROR: logstashui.example.yml not found!
+        echo ERROR: src\logstashui\logstashui.example.yml not found!
         echo Current directory: %CD%
         exit /b 1
     )
 )
 
 REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if exist "logstashui.yml" (
-    set CONFIG_FILE=logstashui.yml
-) else if exist "logstashui.example.yml" (
-    set CONFIG_FILE=logstashui.example.yml
+if exist "src\logstashui\logstashui.yml" (
+    set CONFIG_FILE=src\logstashui\logstashui.yml
+) else if exist "src\logstashui\logstashui.example.yml" (
+    set CONFIG_FILE=src\logstashui\logstashui.example.yml
 ) else (
     echo ERROR: No config file found!
-    echo Expected logstashui.yml or logstashui.example.yml in project root.
+    echo Expected logstashui.yml or logstashui.example.yml in src\logstashui\
     echo Current directory: %CD%
     echo.
     echo Directory contents:
@@ -180,7 +180,8 @@ call LogstashAgent\.venv\Scripts\activate.bat
 
 REM Install/update Python dependencies for LogstashAgent
 echo Installing Python dependencies for LogstashAgent
-pip install -r LogstashAgent\requirements.txt
+cd LogstashAgent
+pip install -e .
 if errorlevel 1 (
     echo ERROR: Failed to install dependencies!
     echo Please check that Python and pip are working correctly.
@@ -200,8 +201,8 @@ if errorlevel 1 (
 
 echo Starting LogstashAgent on port 9501 (localhost only)
 cd LogstashAgent
-REM Start uvicorn using the virtual environment's Python
-start "LogstashAgent" cmd /K ".venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 9501"
+REM Start uvicorn using the virtual environment's Python with proper module path
+start "LogstashAgent" cmd /K ".venv\Scripts\python.exe -m uvicorn logstashagent.main:app --host 127.0.0.1 --port 9501"
 cd ..
 
 REM Deactivate virtual environment (agent is running in separate window)
@@ -220,12 +221,14 @@ echo.
 
 REM Ensure agent container is stopped in host mode
 echo Stopping any existing containers
+cd docker
 %DOCKER_COMPOSE% stop logstashagent 2>nul
 %DOCKER_COMPOSE% rm -f logstashagent 2>nul
 
 REM Start only logstashui and nginx in detached mode
 REM Nginx will detect host mode and proxy to host.docker.internal:9501
 %DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
+cd ..
 goto END_MODE_SELECTION
 
 :EMBEDDED_MODE
@@ -237,7 +240,9 @@ echo Logstash will run inside the agent container.
 echo.
 
 REM Start all containers in detached mode with embedded profile
+cd docker
 %DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
+cd ..
 goto END_MODE_SELECTION
 
 :END_MODE_SELECTION

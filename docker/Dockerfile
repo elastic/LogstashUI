@@ -11,27 +11,38 @@ RUN apt-get update && apt-get install -y \
     sqlite3 \
   && rm -rf /var/lib/apt/lists/*
 
-COPY ../LogstashUI/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install uv for dependency management
+RUN pip install --no-cache-dir uv
 
-# Copy *this* build context into /app
-COPY ../LogstashUI .
+# Copy dependency files
+COPY pyproject.toml uv.lock /app/
 
-# If theme is directly under /app/theme
-WORKDIR /app/theme/static_src
+# Install Python dependencies
+RUN uv pip install --system --no-cache -r pyproject.toml
+
+# Copy the entire src directory
+COPY src/ /app/src/
+
+# Set PYTHONPATH so Django can find LogstashUI module
+ENV PYTHONPATH=/app/src/logstashui
+
+# Build Tailwind CSS
+WORKDIR /app/src/logstashui/theme/static_src
 RUN rm -rf node_modules && npm install
 
-# Build Tailwind + collectstatic from where manage.py is
-WORKDIR /app
+# Build Tailwind and collect static files
+WORKDIR /app/src/logstashui
 RUN python manage.py tailwind build
 RUN python manage.py collectstatic --noinput --clear
 
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Create app user with home directory and set permissions
+RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 RUN mkdir -p /app/data && \
-    chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /app /home/appuser && \
     chmod -R 755 /app
 
-COPY entrypoint.sh /entrypoint.sh
+# Copy entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && chown appuser:appuser /entrypoint.sh
 
 USER appuser

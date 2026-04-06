@@ -18,13 +18,11 @@ ENV
 *.swp
 *.swo
 
-# Database
 *.sqlite3
-LogstashUI/data/db.sqlite3
-../LogstashUI/data/
+src/logstashui/data/
 
 # Static files (will be collected during build)
-staticfiles/
+src/logstashui/staticfiles/
 
 # Node modules (will be installed during build)
 node_modules/

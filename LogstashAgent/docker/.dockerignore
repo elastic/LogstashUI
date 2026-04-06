@@ -21,6 +21,8 @@ ENV
 # Logs
 *.log
 
+src/logstashagent/data/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Change to Django project directory
+cd /app/src/logstashui
+
 # Create data directory if it doesn't exist
 mkdir -p /app/data
 
