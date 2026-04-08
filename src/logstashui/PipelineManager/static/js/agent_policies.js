@@ -1206,6 +1206,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // JVM heap inputs — update content live as user types
     const jvmInputHandler = () => {
+        validateJvmHeapSettings();
         applyJvmHeapToContent();
         updateJvmHeapMismatchWarning();
         detectChanges();
@@ -2867,6 +2868,29 @@ function updateJvmHeapMismatchWarning() {
         message: '-Xms and -Xmx should be equal to avoid performance issues'
     }] : [];
     refreshBellNotifications();
+}
+
+// Validate JVM heap settings - ensure Initial Space doesn't exceed Total Space
+function validateJvmHeapSettings() {
+    const xmsInput = document.getElementById('jvmXmsInput');
+    const xmxInput = document.getElementById('jvmXmxInput');
+    
+    if (!xmsInput || !xmxInput) return;
+    
+    const xms = parseInt(xmsInput.value, 10);
+    const xmx = parseInt(xmxInput.value, 10);
+    
+    // If both values are set and Initial Space is larger than Total Space
+    if (xms && xmx && xms > xmx) {
+        // Set Initial Space to match Total Space
+        xmsInput.value = xmx;
+        
+        // Show toast notification
+        showToast('Initial space cannot be larger than total space. Setting initial to be the same as total.', 'warning');
+        
+        // Update the mismatch warning after adjustment
+        updateJvmHeapMismatchWarning();
+    }
 }
 
 // Note: All guide-related functions have been moved to logstashyml_guides.js
