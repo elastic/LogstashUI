@@ -11,19 +11,22 @@
     {# ════════════════════════════════════════════════════════════════════════ #}
     {# Card 1 — Summary + Last Policy Apply                                    #}
     {# ════════════════════════════════════════════════════════════════════════ #}
-    <div class="rounded-xl bg-gray-800 border border-gray-700/60 overflow-hidden">
+    <div class="rounded-xl bg-gray-800 border border-gray-700/60 overflow-hidden agent-inspect-card" data-card-green="{% if connection.status_blob.last_policy_apply and not connection.status_blob.last_policy_apply.success %}false{% else %}true{% endif %}">
       {% if connection.status_blob.last_policy_apply and not connection.status_blob.last_policy_apply.success %}
       <div class="h-0.5 bg-red-500/60"></div>
       {% endif %}
-      <div class="p-5">
-
-        {# ── Name + Health badge ── #}
-        <div class="flex items-start justify-between gap-3 mb-4">
-          <div class="min-w-0">
-            <p class="text-xl font-bold text-white truncate">{{ connection.name }}</p>
-            {% if connection.policy %}
-            <p class="text-sm text-gray-400 mt-0.5">{{ connection.policy.name }}</p>
-            {% endif %}
+      <div class="p-5 cursor-pointer card-header" onclick="toggleAgentCard(this)">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <svg class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+            <div class="min-w-0">
+              <p class="text-xl font-bold text-white truncate">{{ connection.name }}</p>
+              {% if connection.policy %}
+              <p class="text-sm text-gray-400 mt-0.5">{{ connection.policy.name }}</p>
+              {% endif %}
+            </div>
           </div>
           {% if connection.status_blob.logwatcher.is_restarting %}
           <span data-modal-badge class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-900/40 text-blue-300 border border-blue-700/30">
@@ -43,7 +46,10 @@
           </span>
           {% endif %}
         </div>
+      </div>
 
+      <div class="card-content">
+        <div class="px-5 pb-5">
         {# ── Quick-glance stats ── #}
         <div class="grid grid-cols-3 gap-4 pb-4 border-b border-gray-700/50">
           <div>
@@ -107,21 +113,31 @@
           {% endif %}
         </div>
         {% endif %}
-
+        </div>
       </div>
     </div>
 
     {# ════════════════════════════════════════════════════════════════════════ #}
     {# Card 2 — Files (Config Files + Binaries + Log File)                     #}
     {# ════════════════════════════════════════════════════════════════════════ #}
-    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
+    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden agent-inspect-card" data-card-green="{% if connection.status_blob.settings_path_found and connection.status_blob.binary_path_found and connection.status_blob.logs_path_found %}true{% else %}false{% endif %}">
       {% if not connection.status_blob.settings_path_found or not connection.status_blob.binary_path_found or not connection.status_blob.logs_path_found %}
       <div class="h-0.5 bg-red-500/60"></div>
       {% else %}
       <div class="h-0.5 bg-green-500/60"></div>
       {% endif %}
-      <div class="p-4 space-y-4">
-        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Files</p>
+      
+      <div class="p-4 cursor-pointer card-header" onclick="toggleAgentCard(this)">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Files</p>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div class="px-4 pb-4 space-y-4">
 
         {# ── Config Files ── #}
         {% if connection.status_blob.config_files %}
@@ -232,7 +248,7 @@
           </div>
           {% endif %}
         </div>
-
+        </div>
       </div>
     </div>
 
@@ -240,7 +256,7 @@
     {# Card 3 — API (Logstash API + Health Report + Node Stats)                #}
     {# ════════════════════════════════════════════════════════════════════════ #}
     {% if connection.status_blob.logstash_api %}
-    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
+    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden agent-inspect-card" data-card-green="{% if connection.status_blob.logstash_api.status == 'green' and connection.status_blob.health_report.status == 'green' %}true{% else %}false{% endif %}">
       {# Top-border colour: red if API down or red status or health red;       #}
       {# yellow if API yellow or health yellow; green if all green.            #}
       {% if not connection.status_blob.logstash_api.accessible or connection.status_blob.logstash_api.status == 'red' or connection.status_blob.health_report.status == 'red' %}
@@ -250,8 +266,18 @@
       {% elif connection.status_blob.logstash_api.status == 'green' and connection.status_blob.health_report.status == 'green' %}
       <div class="h-0.5 bg-green-500/60"></div>
       {% endif %}
-      <div class="p-4 space-y-4">
-        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">API</p>
+      
+      <div class="p-4 cursor-pointer card-header" onclick="toggleAgentCard(this)">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">API</p>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div class="px-4 pb-4 space-y-4">
 
         {# ── Logstash API accessibility + status + version ── #}
         <div class="space-y-2">
@@ -420,7 +446,7 @@
           </div>
         </div>
         {% endif %}
-
+        </div>
       </div>
     </div>
     {% endif %}
@@ -429,14 +455,24 @@
     {# Card 4 — Process (OS-level psutil data)                                 #}
     {# ════════════════════════════════════════════════════════════════════════ #}
     {% if connection.status_blob.process_info.available %}
-    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
+    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden agent-inspect-card" data-card-green="{% if connection.status_blob.process_info.running %}true{% else %}false{% endif %}">
       {% if connection.status_blob.process_info.running %}
       <div class="h-0.5 bg-green-500/60"></div>
       {% else %}
       <div class="h-0.5 bg-red-500/60"></div>
       {% endif %}
-      <div class="p-4">
-        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Process</p>
+      
+      <div class="p-4 cursor-pointer card-header" onclick="toggleAgentCard(this)">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Process</p>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div class="px-4 pb-4">
 
         {# Running / Not Running indicator #}
         <div class="flex items-center gap-2.5 mb-3">
@@ -494,7 +530,7 @@
           {% endif %}
         </div>
         {% endif %}
-
+        </div>
       </div>
     </div>
     {% endif %}
@@ -504,7 +540,7 @@
     {# ════════════════════════════════════════════════════════════════════════ #}
     {% if connection.status_blob.logwatcher %}
     {% with lw=connection.status_blob.logwatcher %}
-    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden">
+    <div class="rounded-xl bg-gray-800/50 border border-gray-700/50 overflow-hidden agent-inspect-card" data-card-green="{% if not lw.fatals_since_last_checkin and not lw.errors_since_last_checkin and not lw.warnings_since_last_checkin %}true{% else %}false{% endif %}">
       {# Top-border: red on fatals/errors, yellow on warnings, green if clean #}
       {% if lw.fatals_since_last_checkin %}
       <div class="h-0.5 bg-red-500/60"></div>
@@ -512,9 +548,21 @@
       <div class="h-0.5 bg-red-500/60"></div>
       {% elif lw.warnings_since_last_checkin %}
       <div class="h-0.5 bg-yellow-500/60"></div>
+      {% else %}
+      <div class="h-0.5 bg-green-500/60"></div>
       {% endif %}
-      <div class="p-4">
-        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Logging</p>
+      
+      <div class="p-4 cursor-pointer card-header" onclick="toggleAgentCard(this)">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Logging</p>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div class="px-4 pb-4">
 
         {# ── State + timestamps ── #}
         <div class="flex items-center gap-2.5 mb-3 flex-wrap">
@@ -609,7 +657,7 @@
           No fatals, errors, or warnings since last check-in
         </div>
         {% endif %}
-
+        </div>
       </div>
     </div>
     {% endwith %}
@@ -619,11 +667,22 @@
     {# Card 6 — Problems (unchanged, only shown when present)                  #}
     {# ════════════════════════════════════════════════════════════════════════ #}
     {% if connection.status_blob.problems %}
-    <div class="rounded-xl bg-yellow-950/20 border border-yellow-800/30 overflow-hidden">
+    <div class="rounded-xl bg-yellow-950/20 border border-yellow-800/30 overflow-hidden agent-inspect-card" data-card-green="false">
       <div class="h-0.5 bg-yellow-500/60"></div>
-      <div class="p-4">
-        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Problems Detected</p>
-        <p class="text-sm text-yellow-200/80 whitespace-pre-line">{{ connection.status_blob.problems }}</p>
+      
+      <div class="p-4 cursor-pointer card-header" onclick="toggleAgentCard(this)">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+          <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Problems Detected</p>
+        </div>
+      </div>
+
+      <div class="card-content">
+        <div class="px-4 pb-4">
+          <p class="text-sm text-yellow-200/80 whitespace-pre-line">{{ connection.status_blob.problems }}</p>
+        </div>
       </div>
     </div>
     {% endif %}

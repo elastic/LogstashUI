@@ -51,6 +51,8 @@ function openAgentInspect(connectionId, connectionName) {
         // (The user may have closed it while the fetch was in flight.)
         if (!document.getElementById('agentInspectFlyout').classList.contains('hidden')) {
             contentEl.innerHTML = html;
+            // Initialize collapsible cards after content is injected
+            setTimeout(initializeAgentCards, 100);
         }
     })
     .catch(function (err) {
@@ -74,3 +76,52 @@ function closeAgentInspect() {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeAgentInspect();
 });
+
+// ── Collapsible Card Functionality ──────────────────────────────────────────
+
+function toggleAgentCard(headerElement) {
+    const card = headerElement.closest('.agent-inspect-card');
+    const content = card.querySelector('.card-content');
+    const chevron = card.querySelector('.card-chevron');
+    
+    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+        // Collapse
+        content.style.maxHeight = '0px';
+        content.style.opacity = '0';
+        chevron.style.transform = 'rotate(-90deg)';
+    } else {
+        // Expand
+        content.style.maxHeight = content.scrollHeight + 'px';
+        content.style.opacity = '1';
+        chevron.style.transform = 'rotate(0deg)';
+    }
+}
+
+function initializeAgentCards() {
+    // Initialize all cards based on their data-card-green attribute
+    const cards = document.querySelectorAll('.agent-inspect-card');
+    
+    cards.forEach(card => {
+        const content = card.querySelector('.card-content');
+        const chevron = card.querySelector('.card-chevron');
+        const isGreen = card.getAttribute('data-card-green') === 'true';
+        
+        if (!content || !chevron) return;
+        
+        // Add transition styles
+        content.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
+        content.style.overflow = 'hidden';
+        
+        if (isGreen) {
+            // Green cards start collapsed
+            content.style.maxHeight = '0px';
+            content.style.opacity = '0';
+            chevron.style.transform = 'rotate(-90deg)';
+        } else {
+            // Non-green cards start expanded
+            content.style.maxHeight = content.scrollHeight + 'px';
+            content.style.opacity = '1';
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    });
+}
