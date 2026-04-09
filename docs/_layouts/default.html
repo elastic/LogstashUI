@@ -215,10 +215,8 @@
             <div class="p-3">
                 <div class="relative">
                     <select id="version-select" class="w-full bg-gray-700 text-gray-100 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        {% for version in site.versions %}
-                        <option value="{{ version }}" {% if version == site.current_version %}selected{% endif %}>
-                            {{ version }}
-                        </option>
+                        {% for version in site.data.navigation.versions %}
+                        <option value="{{ version }}">{{ version }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -240,10 +238,9 @@
                 </ul>
                 <hr class="nav-divider">
                 
-                <!-- Dynamic Navigation from File Structure -->
+                <!-- Navigation from Data File -->
                 <ul class="menu p-2 w-full">
-                    {% assign current_nav = site.version_nav[site.current_version] %}
-                    {% for item in current_nav %}
+                    {% for item in site.data.navigation.beta %}
                         {% if item.type == 'section' %}
                         <li class="mb-2">
                             <div class="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -262,7 +259,7 @@
                                 {% endfor %}
                             </ul>
                         </li>
-                        {% elsif item.type == 'page' %}
+                        {% else %}
                         <li>
                             <a href="{{ item.url | relative_url }}" class="nav-item">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

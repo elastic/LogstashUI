@@ -1,0 +1,17 @@
+# Navigation structure for each version
+# This file is manually maintained but provides full control
+
+versions:
+  - beta
+
+beta:
+  - title: Build Guide
+    url: /docs/beta/build
+    
+  - title: Configuration
+    type: section
+    children:
+      - title: Host Mode
+        url: /docs/beta/configuration/host_mode
+      - title: Simulation
+        url: /docs/beta/configuration/simulation
