@@ -90,6 +90,18 @@
             display: block;
         }
 
+        /* Subsection headers */
+        .nav-subsection-header {
+            color: #6b7280;
+            font-size: 0.7rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.25rem 0.5rem;
+            display: block;
+            margin-top: 0.5rem;
+        }
+
         /* Smooth scroll */
         html {
             scroll-behavior: smooth;
@@ -260,14 +272,34 @@
                             </div>
                             <ul class="ml-2">
                                 {% for child in item.children %}
-                                <li>
-                                    <a href="{{ child.url | relative_url }}" class="nav-item">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <span>{{ child.title }}</span>
-                                    </a>
-                                </li>
+                                    {% if child.type == 'subsection' %}
+                                    <li class="mb-2">
+                                        <div class="nav-subsection-header">
+                                            {{ child.title }}
+                                        </div>
+                                        <ul class="ml-2">
+                                            {% for subchild in child.children %}
+                                            <li>
+                                                <a href="{{ subchild.url | relative_url }}" class="nav-item">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    <span>{{ subchild.title }}</span>
+                                                </a>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </li>
+                                    {% else %}
+                                    <li>
+                                        <a href="{{ child.url | relative_url }}" class="nav-item">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <span>{{ child.title }}</span>
+                                        </a>
+                                    </li>
+                                    {% endif %}
                                 {% endfor %}
                             </ul>
                         </li>

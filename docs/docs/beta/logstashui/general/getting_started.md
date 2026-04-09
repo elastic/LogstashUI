@@ -18,7 +18,7 @@ description: Get up and running with LogstashUI
 #### For Embedded mode (See Quick Start)
 - [Docker](https://www.docker.com/get-started/)
 
-#### For [Host mode](configuration/logstashuiyml/host_mode.md) (If you have a simulation-heavy use case)
+#### For [Host mode](../configuration/host_mode.md) (If you have a simulation-heavy use case)
 - [Docker](https://www.docker.com/get-started/)
 - [Python 3.12+](https://www.python.org/downloads/)
 - [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
@@ -31,7 +31,7 @@ description: Get up and running with LogstashUI
 
 ## Quick Start - Embedded Mode
 
-> **Tip:** If you plan on doing a lot of simulations, consider using [host mode](configuration/logstashuiyml/host_mode.md). It's more performant.
+> **Tip:** If you plan on doing a lot of simulations, consider using [host mode](../configuration/host_mode.md). It's more performant.
 
 ### Download LogstashUI
 ```bash
@@ -64,15 +64,15 @@ And that's it!
 ## Add Your First Connection
 
 ### 1. Create an initial user
-![Login](../../images/login.png)
+![Login](../../../../images/login.png)
 
 ### 2. Add a connection
-![New Connection](../../images/new_connection.gif)
+![New Connection](../../../../images/new_connection.gif)
 
 ### 3. Start managing pipelines!
-![Simulate](../../images/simulate.gif)
+![Simulate](../../../../images/simulate.gif)
 
 ### Optional: Add monitoring to your connections
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. Once Logstash monitoring data is indexed into Elasticsearch, metrics and logs will appear in the UI.
 
-![Monitoring](../../images/monitoring.png)
+![Monitoring](../../../../images/monitoring.png)

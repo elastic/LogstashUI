@@ -5,18 +5,34 @@ versions:
   - beta
 
 beta:
-  - title: General
+  - title: LogstashUI
     type: section
     children:
-      - title: Getting Started
-        url: /docs/beta/getting_started
-      - title: Build Guide
-        url: /docs/beta/build
-      - title: Updating
-        url: /docs/beta/updating
+      - title: General
+        type: subsection
+        children:
+          - title: Getting Started
+            url: /docs/beta/logstashui/general/getting_started
+          - title: Build Guide
+            url: /docs/beta/logstashui/general/build
+          - title: Updating
+            url: /docs/beta/logstashui/general/updating
+      - title: Configuration
+        type: subsection
+        children:
+          - title: logstashui.yml
+            url: /docs/beta/logstashui/configuration/logstashui.yml
     
-  - title: Configuration
+  - title: LogstashAgent
     type: section
     children:
-      - title: logstashui.yml
-        url: /docs/beta/configuration/logstashui.yml
+      - title: General
+        type: subsection
+        children:
+          - title: Build Guide
+            url: /docs/beta/logstashagent/general/build
+      - title: Configuration
+        type: subsection
+        children:
+          - title: logstashagent.yml
+            url: /docs/beta/logstashagent/configuration/logstashagent.yml

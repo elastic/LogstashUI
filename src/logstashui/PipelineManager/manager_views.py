@@ -1449,6 +1449,103 @@ def delete_policy(request):
 
 
 @require_admin_role
+def clone_policy(request):
+    """
+    Clone an existing policy with all its pipelines and keystore entries
+    """
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        
+        source_policy_id = data.get('source_policy_id')
+        new_policy_name = data.get('new_policy_name', '').strip()
+        
+        if not source_policy_id:
+            return JsonResponse({"success": False, "error": "Source policy ID is required"}, status=400)
+        
+        if not new_policy_name:
+            return JsonResponse({"success": False, "error": "New policy name is required"}, status=400)
+        
+        # Check if new policy name already exists
+        if Policy.objects.filter(name=new_policy_name).exists():
+            return JsonResponse({"success": False, "error": f"Policy '{new_policy_name}' already exists"}, status=400)
+        
+        # Get source policy
+        try:
+            source_policy = Policy.objects.get(pk=source_policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": f"Source policy not found"}, status=404)
+        
+        # Create new policy with same configuration as source
+        new_policy = Policy.objects.create(
+            name=new_policy_name,
+            settings_path=source_policy.settings_path,
+            logs_path=source_policy.logs_path,
+            binary_path=source_policy.binary_path,
+            logstash_yml=source_policy.logstash_yml,
+            jvm_options=source_policy.jvm_options,
+            log4j2_properties=source_policy.log4j2_properties,
+            keystore_password=source_policy.keystore_password,
+            keystore_password_hash=source_policy.keystore_password_hash
+        )
+        
+        # Generate default enrollment token for new policy (same as add_policy)
+        enrollment_token = secrets.token_urlsafe(32)
+        EnrollmentToken.objects.create(
+            policy=new_policy,
+            name='default',
+            token=enrollment_token
+        )
+        
+        # Clone all pipelines from source policy
+        source_pipelines = Pipeline.objects.filter(policy=source_policy)
+        for source_pipeline in source_pipelines:
+            Pipeline.objects.create(
+                policy=new_policy,
+                name=source_pipeline.name,
+                description=source_pipeline.description,
+                lscl=source_pipeline.lscl,
+                pipeline_workers=source_pipeline.pipeline_workers,
+                pipeline_batch_size=source_pipeline.pipeline_batch_size,
+                pipeline_batch_delay=source_pipeline.pipeline_batch_delay,
+                queue_type=source_pipeline.queue_type,
+                queue_max_bytes=source_pipeline.queue_max_bytes,
+                queue_checkpoint_writes=source_pipeline.queue_checkpoint_writes
+            )
+        
+        # Clone all keystore entries from source policy
+        source_keystore_entries = Keystore.objects.filter(policy=source_policy)
+        for source_entry in source_keystore_entries:
+            Keystore.objects.create(
+                policy=new_policy,
+                key_name=source_entry.key_name,
+                key_value=source_entry.key_value,
+                kv_hash=source_entry.kv_hash
+            )
+        
+        logger.info(
+            f"User '{request.user.username}' cloned policy '{source_policy.name}' to '{new_policy_name}' "
+            f"(ID: {new_policy.id}) with {source_pipelines.count()} pipelines and "
+            f"{source_keystore_entries.count()} keystore entries"
+        )
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Policy '{new_policy_name}' created successfully",
+            "policy_id": new_policy.id,
+            "policy_name": new_policy.name
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error cloning policy: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
 def generate_enrollment_token(request):
     """
     Generate an enrollment token for Logstash Agent

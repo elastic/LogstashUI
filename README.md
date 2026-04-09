@@ -152,8 +152,6 @@ input {
 - Reusable grok and regex patterns
 - Git backups for configuration
 - Loggy AI Assistant for pipeline failure analysis
-- Management of Logstash Nodes via external agent
-- Logstash Keystore management
 - Expression editor for conditions
 
 ## Reporting Issues

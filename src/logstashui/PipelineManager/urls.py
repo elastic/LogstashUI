@@ -36,6 +36,7 @@ urlpatterns = [
     path("AddPolicy/", manager_views.add_policy, name="AddPolicy"),
     path("UpdatePolicy/", manager_views.update_policy, name="UpdatePolicy"),
     path("DeletePolicy/", manager_views.delete_policy, name="DeletePolicy"),
+    path("ClonePolicy/", manager_views.clone_policy, name="ClonePolicy"),
     path("GetPolicyDiff/", manager_views.get_policy_diff, name="GetPolicyDiff"),
     path("GetPolicyAgentCount/", manager_views.get_policy_agent_count, name="GetPolicyAgentCount"),
     path("GetPolicyChangeCount/", manager_views.get_policy_change_count, name="GetPolicyChangeCount"),

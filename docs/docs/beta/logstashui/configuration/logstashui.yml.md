@@ -45,7 +45,7 @@ no_auth:
 
 ### `simulation`
 
-Controls pipeline simulation behavior. See the [full simulation documentation](logstashuiyml/simulation) for detailed information.
+Controls pipeline simulation behavior. See the [full simulation documentation](simulation.md) for detailed information.
 
 ```yaml
 simulation:
@@ -64,7 +64,7 @@ simulation:
 | **Setup** | Simple - no dependencies | Requires Logstash installation |
 | **Best For** | Quick start, occasional simulations | Heavy simulation workloads |
 
-📖 **Learn more:** [Simulation Configuration](logstashuiyml/simulation)
+📖 **Learn more:** [Simulation Configuration](simulation.md)
 
 ---
 
@@ -101,7 +101,7 @@ logstash_agent:
 
 > **IMPORTANT:** When using host mode, Logstash is fully managed by LogstashAgent. Logstash should not be started manually, and your configuration files will be modified.
 
-📖 **Learn more:** [Host Mode Setup Guide](logstashuiyml/host_mode)
+📖 **Learn more:** [Host Mode Setup Guide](host_mode.md)
 
 ---
 
@@ -166,6 +166,6 @@ simulation:
 
 ## Related Documentation
 
-- **[Simulation Configuration](logstashuiyml/simulation)** - Detailed simulation modes and settings
-- **[Host Mode Setup](logstashuiyml/host_mode)** - Complete guide to setting up host mode for high-performance simulations
+- **[Simulation Configuration](simulation.md)** - Detailed simulation modes and settings
+- **[Host Mode Setup](host_mode.md)** - Complete guide to setting up host mode for high-performance simulations
 - **[Getting Started](../getting_started)** - Quick start guide for LogstashUI

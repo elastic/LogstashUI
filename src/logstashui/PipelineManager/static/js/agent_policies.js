@@ -1815,6 +1815,69 @@ async function deleteCurrentPolicy() {
     }
 }
 
+// Clone current policy
+async function cloneCurrentPolicy() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect.options[policySelect.selectedIndex];
+    const policyName = selectedOption.dataset.policyName || selectedOption.textContent;
+    const policyId = selectedOption.dataset.policyId;
+    
+    if (!policyId) {
+        showToast('No policy selected', 'error');
+        return;
+    }
+    
+    // Prompt for new policy name
+    const newPolicyName = await ConfirmationModal.prompt(
+        `Enter a name for the cloned policy:`,
+        `${policyName} (Copy)`,
+        'Clone Policy',
+        'New policy name'
+    );
+    
+    if (!newPolicyName) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/ConnectionManager/ClonePolicy/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                source_policy_id: policyId,
+                new_policy_name: newPolicyName
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            
+            // Reload policies and switch to the new policy
+            await loadPolicies();
+            
+            // Select the newly cloned policy
+            const policySelect = document.getElementById('policySelect');
+            const newOption = Array.from(policySelect.options).find(
+                opt => opt.dataset.policyId == data.policy_id
+            );
+            if (newOption) {
+                policySelect.value = newOption.value;
+                await loadPolicyData();
+            }
+        } else {
+            showToast(data.error || 'Failed to clone policy', 'error');
+        }
+    } catch (error) {
+        console.error('Error cloning policy:', error);
+        showToast('Failed to clone policy: ' + error.message, 'error');
+    }
+}
+
 // Load enrollment tokens for the current policy
 async function loadEnrollmentTokens() {
     const policySelect = document.getElementById('policySelect');
