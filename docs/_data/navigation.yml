@@ -5,13 +5,17 @@ versions:
   - beta
 
 beta:
+  - title: Getting Started
+    url: /docs/beta/getting_started
+    
   - title: Build Guide
     url: /docs/beta/build
+    
+  - title: Updating
+    url: /docs/beta/updating
     
   - title: Configuration
     type: section
     children:
-      - title: Host Mode
-        url: /docs/beta/configuration/host_mode
-      - title: Simulation
-        url: /docs/beta/configuration/simulation
+      - title: logstashui.yml
+        url: /docs/beta/configuration/logstashui.yml
