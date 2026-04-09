@@ -60,7 +60,7 @@ Instead of editing configuration files manually, pipelines can be authored visua
 #### For Embedded mode (See Quick Start)
 - [Docker](https://www.docker.com/get-started/)
 
-#### For [Host mode](docs/host_mode.md) (If you have a simulation-heavy use case)
+#### For [Host mode](docs/docs/beta/PipelineEditor/host_mode.md) (If you have a simulation-heavy use case)
 - [Docker](https://www.docker.com/get-started/)
 - [Python 3.12+](https://www.python.org/downloads/)
 - [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
@@ -75,7 +75,7 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ## Quick Start - Embedded Mode
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](docs/host_mode.md). It's more performant.
+> If you plan on doing a lot of simulations, consider using [host mode](docs/docs/beta/PipelineEditor/host_mode.md). It's more performant.
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git

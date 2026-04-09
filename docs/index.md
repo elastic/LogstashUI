@@ -105,7 +105,7 @@ Access the application at `http://localhost:8000`
 Configure LogstashUI using environment variables or a `.env` file:
 
 ```bash
-# Database Configuration
+# Database configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/logstashui
 
 # Security

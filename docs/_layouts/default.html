@@ -211,41 +211,67 @@
             </div>
             <hr class="nav-divider">
 
+            <!-- Version Picker -->
+            <div class="p-3">
+                <div class="relative">
+                    <select id="version-select" class="w-full bg-gray-700 text-gray-100 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        {% for version in site.versions %}
+                        <option value="{{ version }}" {% if version == site.current_version %}selected{% endif %}>
+                            {{ version }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <hr class="nav-divider">
+
             <!-- Navigation Menu -->
             <div class="flex-1 overflow-y-auto">
+                <!-- Home Link -->
                 <ul class="menu p-2 w-full">
-                    {% for item in site.navigation %}
                     <li>
-                        <a href="{{ item.url | relative_url }}" class="nav-item">
-                            {% if item.title == "Home" %}
+                        <a href="{{ '/' | relative_url }}" class="nav-item">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                             </svg>
-                            {% elsif item.title == "Getting Started" %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                            {% elsif item.title == "Installation" %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            {% elsif item.title == "Configuration" %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            {% elsif item.title == "Contributing" %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                            {% else %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            {% endif %}
-                            <span>{{ item.title }}</span>
+                            <span>Home</span>
                         </a>
                     </li>
+                </ul>
+                <hr class="nav-divider">
+                
+                <!-- Dynamic Navigation from File Structure -->
+                <ul class="menu p-2 w-full">
+                    {% assign current_nav = site.version_nav[site.current_version] %}
+                    {% for item in current_nav %}
+                        {% if item.type == 'section' %}
+                        <li class="mb-2">
+                            <div class="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                {{ item.title }}
+                            </div>
+                            <ul class="ml-2">
+                                {% for child in item.children %}
+                                <li>
+                                    <a href="{{ child.url | relative_url }}" class="nav-item">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <span>{{ child.title }}</span>
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </li>
+                        {% elsif item.type == 'page' %}
+                        <li>
+                            <a href="{{ item.url | relative_url }}" class="nav-item">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>{{ item.title }}</span>
+                            </a>
+                        </li>
+                        {% endif %}
                     {% endfor %}
                 </ul>
             </div>
@@ -299,6 +325,30 @@
                     item.classList.add('active');
                 }
             });
+
+            // Version picker functionality
+            const versionSelect = document.getElementById('version-select');
+            if (versionSelect) {
+                versionSelect.addEventListener('change', function() {
+                    const selectedVersion = this.value;
+                    const currentPath = window.location.pathname;
+                    const baseUrl = '{{ site.baseurl }}';
+                    
+                    // If we're on a docs page, switch to the same page in the new version
+                    if (currentPath.includes('/docs/')) {
+                        const pathParts = currentPath.split('/docs/');
+                        if (pathParts.length > 1) {
+                            const afterDocs = pathParts[1].split('/').slice(1).join('/');
+                            window.location.href = baseUrl + '/docs/' + selectedVersion + '/' + afterDocs;
+                        } else {
+                            window.location.href = baseUrl + '/docs/' + selectedVersion + '/';
+                        }
+                    } else {
+                        // If on home page, stay on home page
+                        window.location.href = baseUrl + '/';
+                    }
+                });
+            }
 
             // Handle hash navigation for same-page anchors
             const sections = document.querySelectorAll('section[id], h2[id], h3[id]');
