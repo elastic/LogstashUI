@@ -239,9 +239,9 @@
                 <hr class="nav-divider">
                 
                 <!-- Navigation from Data File -->
-                <ul class="menu p-2 w-full">
-                    {% for item in site.data.navigation.beta %}
-                        {% if item.type == 'section' %}
+                {% for item in site.data.navigation.beta %}
+                    {% if item.type == 'section' %}
+                    <ul class="menu p-2 w-full">
                         <li class="mb-2">
                             <div class="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 {{ item.title }}
@@ -259,7 +259,10 @@
                                 {% endfor %}
                             </ul>
                         </li>
-                        {% else %}
+                    </ul>
+                    <hr class="nav-divider">
+                    {% else %}
+                    <ul class="menu p-2 w-full">
                         <li>
                             <a href="{{ item.url | relative_url }}" class="nav-item">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -268,9 +271,10 @@
                                 <span>{{ item.title }}</span>
                             </a>
                         </li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
+                    </ul>
+                    <hr class="nav-divider">
+                    {% endif %}
+                {% endfor %}
             </div>
 
             <!-- Footer Links -->
@@ -318,7 +322,13 @@
             
             navItems.forEach(item => {
                 const href = item.getAttribute('href');
-                if (href === currentPath || (currentPath.endsWith('/') && href === '/')) {
+                // Normalize paths for comparison
+                const normalizedHref = href.endsWith('/') ? href.slice(0, -1) : href;
+                const normalizedPath = currentPath.endsWith('/') ? currentPath.slice(0, -1) : currentPath;
+                
+                if (normalizedHref === normalizedPath || 
+                    (normalizedPath === '' && normalizedHref === '{{ site.baseurl }}') ||
+                    (normalizedPath === '{{ site.baseurl }}' && normalizedHref === '{{ site.baseurl }}')) {
                     item.classList.add('active');
                 }
             });

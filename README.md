@@ -4,6 +4,8 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
+📖 **[View Documentation](https://elastic.github.io/LogstashUI/)**
+
 <img src="docs/images/simulate.png" width="100%">
 
 ## Overview

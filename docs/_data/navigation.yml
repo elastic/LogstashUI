@@ -5,14 +5,15 @@ versions:
   - beta
 
 beta:
-  - title: Getting Started
-    url: /docs/beta/getting_started
-    
-  - title: Build Guide
-    url: /docs/beta/build
-    
-  - title: Updating
-    url: /docs/beta/updating
+  - title: General
+    type: section
+    children:
+      - title: Getting Started
+        url: /docs/beta/getting_started
+      - title: Build Guide
+        url: /docs/beta/build
+      - title: Updating
+        url: /docs/beta/updating
     
   - title: Configuration
     type: section
