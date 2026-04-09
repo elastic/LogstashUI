@@ -1,3 +1,9 @@
+---
+layout: default
+title: Host Mode
+description: High-performance pipeline simulation using native Logstash
+---
+
 # Host Mode - High-Performance Pipeline Simulation
 
 ## What is Host Mode?

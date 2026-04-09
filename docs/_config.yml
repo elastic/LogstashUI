@@ -1,0 +1,35 @@
+title: LogstashUI Documentation
+description: A modern web-based interface for managing and monitoring your Logstash instances and pipelines
+baseurl: ""
+url: "https://elastic.github.io/LogstashUI"
+
+# Build settings
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Exclude files
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+
+# Navigation items
+navigation:
+  - title: Home
+    url: /
+  - title: Getting Started
+    url: /#getting-started
+  - title: Installation
+    url: /#installation
+  - title: Configuration
+    url: /#configuration
+  - title: Build Guide
+    url: /build
+  - title: Host Mode
+    url: /host_mode
+  - title: Simulation
+    url: /simulation
+  - title: Contributing
+    url: /#contributing
