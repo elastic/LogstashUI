@@ -48,6 +48,7 @@ EXCLUDED_FILES = {
     'apps.py',
     'postcss.config.js',
     'tailwind.config.js',
+    'yaml.js',
 }
 
 EXCLUDED_PATTERNS = [
@@ -55,6 +56,8 @@ EXCLUDED_PATTERNS = [
     'monokai.',
     'show-hint.',
     'd3.',
+    '.min.js',
+    'js-yaml',
 ]
 
 
@@ -218,7 +221,7 @@ def main():
         '--root',
         type=str,
         default=None,
-        help='Root directory to crawl (defaults to logstashui directory)'
+        help='Root directory to crawl (defaults to src/logstashui directory)'
     )
     
     args = parser.parse_args()
@@ -229,7 +232,7 @@ def main():
     else:
         # Assume script is in scripts/ subdirectory
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.join(script_dir, '..', 'logstashagent')
+        root_dir = os.path.join(script_dir, '..', 'src', 'logstashui')
     
     root_dir = os.path.abspath(root_dir)
     
