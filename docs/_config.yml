@@ -1,13 +1,25 @@
 title: LogstashUI Documentation
 description: A modern web-based interface for managing and monitoring your Logstash instances and pipelines
-baseurl: ""
-url: "https://elastic.github.io/LogstashUI"
+baseurl: "/LogstashUI"
+url: "https://elastic.github.io"
 
 # Build settings
 markdown: kramdown
 kramdown:
   input: GFM
   syntax_highlighter: rouge
+  
+# Permalink settings
+permalink: pretty
+
+# Plugins
+plugins:
+  - jekyll-relative-links
+
+# Relative links
+relative_links:
+  enabled: true
+  collections: false
 
 # Exclude files
 exclude:

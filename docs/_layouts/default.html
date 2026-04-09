@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if page.title %}{{ page.title }} - {% endif %}{{ site.title }}</title>
+    <meta name="description" content="{% if page.description %}{{ page.description }}{% else %}{{ site.description }}{% endif %}">
+    <link rel="icon" type="image/png" href="{{ '/images/LogstashIcon.png' | relative_url }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'base-100': '#1f2937',
+                        'base-200': '#111827',
+                        'base-content': '#e5e7eb',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Premium inset gradient divider */
+        hr.nav-divider {
+            border: none;
+            height: 1px;
+            margin: 0.375rem 1.25rem;
+            background: linear-gradient(
+                to right,
+                transparent,
+                rgba(148, 163, 184, 0.08) 20%,
+                rgba(148, 163, 184, 0.18) 50%,
+                rgba(148, 163, 184, 0.08) 80%,
+                transparent
+            );
+            position: relative;
+        }
+
+        hr.nav-divider::after {
+            content: '';
+            display: block;
+            height: 1px;
+            margin-top: 1px;
+            background: linear-gradient(
+                to right,
+                transparent,
+                rgba(0, 0, 0, 0.12) 20%,
+                rgba(0, 0, 0, 0.18) 50%,
+                rgba(0, 0, 0, 0.12) 80%,
+                transparent
+            );
+        }
+
+        .nav-item {
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            color: #e5e7eb;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: linear-gradient(to right, rgba(110, 65, 150, 0.08), rgba(110, 65, 150, 0.02));
+            box-shadow: inset 0 0 8px rgba(168, 85, 247, 0.04);
+            color: rgba(255, 255, 255, 0.90);
+        }
+
+        .nav-item.active {
+            border-left: 3px solid rgba(168, 85, 247, 0.85);
+            background: linear-gradient(to right, rgba(110, 65, 150, 0.10), rgba(110, 65, 150, 0.02));
+            box-shadow: inset 0 0 10px rgba(168, 85, 247, 0.06);
+            color: white;
+            font-weight: 500;
+        }
+
+        /* Smooth scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Code blocks */
+        pre {
+            background: #111827 !important;
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+
+        code {
+            background: #1f2937;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            color: #10b981;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+        }
+
+        /* Main content styling */
+        .content-wrapper {
+            color: #d1d5db;
+        }
+
+        .content-wrapper h1,
+        .content-wrapper h2,
+        .content-wrapper h3,
+        .content-wrapper h4 {
+            color: white;
+            font-weight: bold;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .content-wrapper h1 { font-size: 2.5rem; }
+        .content-wrapper h2 { font-size: 2rem; }
+        .content-wrapper h3 { font-size: 1.5rem; }
+        .content-wrapper h4 { font-size: 1.25rem; }
+
+        .content-wrapper p {
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .content-wrapper ul,
+        .content-wrapper ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .content-wrapper li {
+            margin-bottom: 0.5rem;
+        }
+
+        .content-wrapper a {
+            color: #a78bfa;
+            text-decoration: underline;
+        }
+
+        .content-wrapper a:hover {
+            color: #c4b5fd;
+        }
+
+        .content-wrapper strong {
+            color: white;
+            font-weight: 600;
+        }
+
+        .content-wrapper blockquote {
+            border-left: 4px solid #6b7280;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .content-wrapper table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        .content-wrapper th,
+        .content-wrapper td {
+            border: 1px solid #374151;
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        .content-wrapper th {
+            background: #1f2937;
+            font-weight: 600;
+            color: white;
+        }
+
+        .content-wrapper tr:hover {
+            background: rgba(31, 41, 55, 0.5);
+        }
+
+        /* Force dark background */
+        html, body {
+            background-color: #111827 !important;
+            color: #e5e7eb !important;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen bg-gray-900 text-gray-100" style="background-color: #111827 !important;">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 h-screen bg-gray-800 text-gray-100 flex flex-col sticky top-0 overflow-y-auto border-r border-gray-700">
+            <!-- Sidebar Header -->
+            <div class="p-4">
+                <a href="{{ '/' | relative_url }}" class="flex items-center gap-2">
+                    <div class="relative w-10 h-10 flex items-center justify-center p-1.5">
+                        <div class="absolute inset-0 w-10 h-10 bg-purple-500/15 rounded-lg blur-md"></div>
+                        <img src="{{ '/images/LogstashIcon.png' | relative_url }}" 
+                             alt="Logstash UI" 
+                             class="w-full h-full object-contain relative z-10">
+                    </div>
+                    <h1 class="text-xl font-bold">Logstash UI</h1>
+                </a>
+            </div>
+            <hr class="nav-divider">
+
+            <!-- Navigation Menu -->
+            <div class="flex-1 overflow-y-auto">
+                <ul class="menu p-2 w-full">
+                    {% for item in site.navigation %}
+                    <li>
+                        <a href="{{ item.url | relative_url }}" class="nav-item">
+                            {% if item.title == "Home" %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                            {% elsif item.title == "Getting Started" %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            {% elsif item.title == "Installation" %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            {% elsif item.title == "Configuration" %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {% elsif item.title == "Contributing" %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {% endif %}
+                            <span>{{ item.title }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Footer Links -->
+            <hr class="nav-divider">
+            <div class="p-4 mt-auto">
+                <div class="text-xs text-gray-400 text-center mb-3">
+                    LogstashUI Documentation
+                </div>
+                <div class="flex items-center justify-center gap-2 mb-4">
+                    <a href="https://github.com/elastic/LogstashUI" target="_blank" rel="noopener noreferrer"
+                       class="p-2 hover:bg-gray-700 rounded transition-colors" title="GitHub Repository">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </a>
+                    <a href="https://github.com/elastic/LogstashUI/issues/new?template=issue.md" target="_blank" rel="noopener noreferrer"
+                       class="p-2 hover:bg-gray-700 rounded transition-colors" title="Report a Bug">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </a>
+                    <a href="https://www.elastic.co/guide/en/logstash/current/index.html" target="_blank" rel="noopener noreferrer"
+                       class="p-2 hover:bg-gray-700 rounded transition-colors" title="Logstash Documentation">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 bg-gray-900 overflow-y-auto">
+            <div class="p-6 max-w-5xl mx-auto content-wrapper">
+                {{ content }}
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Update active nav item based on current page
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            navItems.forEach(item => {
+                const href = item.getAttribute('href');
+                if (href === currentPath || (currentPath.endsWith('/') && href === '/')) {
+                    item.classList.add('active');
+                }
+            });
+
+            // Handle hash navigation for same-page anchors
+            const sections = document.querySelectorAll('section[id], h2[id], h3[id]');
+            
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 200) {
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navItems.forEach(item => {
+                    const href = item.getAttribute('href');
+                    if (href.includes('#' + current)) {
+                        item.classList.add('active');
+                    } else if (!href.includes('#')) {
+                        // Keep page-level active state
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
