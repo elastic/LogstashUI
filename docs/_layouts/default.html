@@ -62,6 +62,7 @@
             border-radius: 0.5rem;
             color: #e5e7eb;
             text-decoration: none;
+            border-left: 3px solid transparent;
         }
 
         .nav-item:hover {
@@ -71,11 +72,22 @@
         }
 
         .nav-item.active {
-            border-left: 3px solid rgba(168, 85, 247, 0.85);
+            border-left-color: rgba(168, 85, 247, 0.85);
             background: linear-gradient(to right, rgba(110, 65, 150, 0.10), rgba(110, 65, 150, 0.02));
             box-shadow: inset 0 0 10px rgba(168, 85, 247, 0.06);
             color: white;
             font-weight: 500;
+        }
+
+        /* Section headers */
+        .nav-section-header {
+            color: #9ca3af;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.25rem 0.75rem;
+            display: block;
         }
 
         /* Smooth scroll */
@@ -243,7 +255,7 @@
                     {% if item.type == 'section' %}
                     <ul class="menu p-2 w-full">
                         <li class="mb-2">
-                            <div class="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <div class="nav-section-header">
                                 {{ item.title }}
                             </div>
                             <ul class="ml-2">
@@ -322,11 +334,14 @@
             
             navItems.forEach(item => {
                 const href = item.getAttribute('href');
-                // Normalize paths for comparison
-                const normalizedHref = href.endsWith('/') ? href.slice(0, -1) : href;
-                const normalizedPath = currentPath.endsWith('/') ? currentPath.slice(0, -1) : currentPath;
                 
+                // Normalize paths for comparison (remove trailing slashes and .html)
+                const normalizedHref = href.replace(/\/$/, '').replace(/\.html$/, '');
+                const normalizedPath = currentPath.replace(/\/$/, '').replace(/\.html$/, '');
+                
+                // Check for exact match or if current path starts with the href (for index pages)
                 if (normalizedHref === normalizedPath || 
+                    normalizedPath === normalizedHref + '/index' ||
                     (normalizedPath === '' && normalizedHref === '{{ site.baseurl }}') ||
                     (normalizedPath === '{{ site.baseurl }}' && normalizedHref === '{{ site.baseurl }}')) {
                     item.classList.add('active');
