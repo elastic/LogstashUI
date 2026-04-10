@@ -238,6 +238,12 @@ class Connection(models.Model):
         default=False,
         help_text="If true, instructs the agent to restart Logstash on its next check-in"
     )
+    desired_agent_version = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Desired LogstashAgent version for this connection (triggers upgrade on next check-in)"
+    )
 
     class Meta:
         ordering = ['name']

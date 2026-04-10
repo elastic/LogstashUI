@@ -200,7 +200,23 @@
                 </div>
               </td>
 
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ connection.name }}</td>
+              <td class="px-6 py-4 text-sm font-medium text-white">
+                <div class="flex flex-col">
+                  <span>{{ connection.name }}</span>
+                  {% if connection.connection_type != "CENTRALIZED" and connection.status_blob.agent_version %}
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-xs text-gray-500">v{{ connection.status_blob.agent_version }}</span>
+                    {% if connection.desired_agent_version and connection.status_blob.agent_version != connection.desired_agent_version %}
+                    <span class="text-xs text-gray-500">Upgrading</span>
+                    {% elif connection.status_blob.agent_version != preferred_agent_version %}
+                    <button onclick="upgradeAgent({{ connection.pk }}, '{{ connection.name }}', '{{ preferred_agent_version }}')" class="text-xs px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors">
+                      Upgrade
+                    </button>
+                    {% endif %}
+                  </div>
+                  {% endif %}
+                </div>
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300" title="{% if connection.host %}{{ connection.host }}{% else %}{{ connection.cloud_id }}{% endif %}">{% if connection.host %}{{ connection.host|truncatechars:20 }}{% else %}{{ connection.cloud_id|truncatechars:12 }}{% endif %}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 {% if connection.connection_type == "CENTRALIZED" %}
@@ -1098,6 +1114,50 @@
           true  // isAlert = true
         );
       });
+    }
+  }
+
+  // Upgrade agent to preferred version
+  window.upgradeAgent = async function(connectionId, connectionName, targetVersion) {
+    const confirmed = await ConfirmationModal.show(
+      `Are you sure you want to upgrade "${connectionName}" to version ${targetVersion}?\n\nThe agent will automatically upgrade on its next check-in.`,
+      'Upgrade Agent',
+      'Upgrade'
+    );
+    
+    if (confirmed) {
+      fetch(`/ConnectionManager/UpgradeAgent/${connectionId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+      }).then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showToast(data.message, 'success');
+            // Reload page after short delay to show updated status
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            ConfirmationModal.show(
+              data.error || 'Failed to initiate upgrade',
+              'Upgrade Failed',
+              'OK',
+              null,
+              true
+            );
+          }
+        })
+        .catch(error => {
+          console.error('Error upgrading agent:', error);
+          ConfirmationModal.show(
+            error.message,
+            'Error Upgrading Agent',
+            'OK',
+            null,
+            true
+          );
+        });
     }
   }
 </script>

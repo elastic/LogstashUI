@@ -240,8 +240,9 @@
                         Copy
                       </button>
                     </div>
-                    <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>pip install logstash-agent
-logstash-agent --enroll {enrollment_token} --logstash-ui-url {url}
+                    <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>curl -LO https://github.com/elastic/LogstashAgent/releases/download/{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
+tar -xzf logstash-agent-linux-amd64.tar.gz
+./logstash-agent/logstash-agent install --enroll {enrollment_token} --logstash-ui-url {url}
 systemctl enable logstash-agent
 systemctl start logstash-agent</code></pre>
                   </div>
@@ -682,8 +683,9 @@ sudo systemctl enable logstash
       
       // Add LogstashAgent installation commands
       commands += `# Install LogstashAgent
-pip install logstash-agent
-logstash-agent --enroll ${encodedToken} --logstash-ui-url ${currentUrl}
+curl -LO https://github.com/elastic/LogstashAgent/releases/download/{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
+tar -xzf logstash-agent-linux-amd64.tar.gz
+./logstash-agent/logstash-agent install --enroll ${encodedToken} --logstash-ui-url ${currentUrl}
 systemctl enable logstash-agent
 systemctl start logstash-agent`;
       

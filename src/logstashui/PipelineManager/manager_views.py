@@ -86,7 +86,7 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "policy_id", "last_check_in", "status_blob"))
+    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "policy_id", "last_check_in", "status_blob", "desired_agent_version"))
     
     # Add is_online flag based on last_check_in time (within 10 minutes)
     now = datetime.now(timezone.utc)
@@ -148,6 +148,7 @@ def PipelineManager(request):
     context['connections'] = connections
     context['has_connections'] = len(connections) > 0
     context['form'] = ConnectionForm()
+    context['preferred_agent_version'] = settings.__PREFERRED_LS_AGENT_VERSION__
 
     return render(request, "pipeline_manager.html", context=context)
 
@@ -252,6 +253,37 @@ def AddConnection(request):
             }, status=200)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@require_admin_role
+def UpgradeAgent(request, connection_id=None):
+    """Set desired agent version to trigger upgrade on next check-in"""
+    if request.method != "POST":
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    if not connection_id:
+        return JsonResponse({'success': False, 'error': 'Connection ID is required'}, status=400)
+    
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
+    
+    if connection.connection_type != 'AGENT':
+        return JsonResponse({'success': False, 'error': 'Only agent connections can be upgraded'}, status=400)
+    
+    # Set desired version to the preferred version from settings
+    connection.desired_agent_version = settings.__PREFERRED_LS_AGENT_VERSION__
+    connection.save(update_fields=['desired_agent_version'])
+    
+    logger.info(
+        f"User '{request.user.username}' requested upgrade for agent '{connection.name}' (ID: {connection_id}) "
+        f"to version {settings.__PREFERRED_LS_AGENT_VERSION__}"
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Agent will upgrade to v{settings.__PREFERRED_LS_AGENT_VERSION__} on next check-in'
+    })
 
 
 @require_admin_role
@@ -1771,7 +1803,8 @@ def check_in(request):
             "settings_path": policy.settings_path,
             "logs_path": policy.logs_path,
             "binary_path": policy.binary_path,
-            "restart": should_restart
+            "restart": should_restart,
+            "desired_agent_version": connection.desired_agent_version
         })
         
     except json.JSONDecodeError:
