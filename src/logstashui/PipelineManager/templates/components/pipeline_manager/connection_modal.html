@@ -229,18 +229,28 @@
                   
                   <!-- Localhost Warning -->
                   <div id="localhostWarning" class="hidden p-3 mb-3 bg-yellow-900/20 border border-yellow-600 rounded-lg">
-                    <p class="text-yellow-300 text-sm">
-                      ⚠️ It looks like you're hosting LogstashUI on your local machine. Be sure to replace the --logstash-ui-url with the actual hostname or IP address of the host.
+                    <p class="text-yellow-300 text-sm mb-2">
+                      ⚠️ It looks like you're hosting LogstashUI on your local machine.
                     </p>
+                    <label class="block text-yellow-200 text-sm mb-2">
+                      Enter the hostname or IP address that LogstashAgent should use to reach this LogstashUI instance:
+                    </label>
+                    <input 
+                      type="text" 
+                      id="customLogstashUIUrl" 
+                      class="w-full px-3 py-2 bg-gray-900 border border-yellow-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent" 
+                      placeholder="e.g., https://logstash-ui.example.com or http://192.168.1.100:8000"
+                      oninput="updateLinuxCommandsUrl()"
+                    >
                   </div>
                   <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 font-mono text-sm">
                     <div class="flex justify-between items-center mb-2">
                       <span class="text-gray-400 text-xs">BASH</span>
-                      <button type="button" onclick="copyToClipboard('linuxCommands')" class="text-blue-400 hover:text-blue-300 text-xs">
+                      <button type="button" onclick="copyToClipboard('linuxCommands', event)" class="text-blue-400 hover:text-blue-300 text-xs">
                         Copy
                       </button>
                     </div>
-                    <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>curl -LO https://github.com/elastic/LogstashAgent/releases/download/{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
+                    <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>curl -LO https://github.com/elastic/LogstashAgent/releases/download/v{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
 tar -xzf logstash-agent-linux-amd64.tar.gz
 ./logstash-agent/logstash-agent install --enroll {enrollment_token} --logstash-ui-url {url}
 systemctl enable logstash-agent
@@ -630,13 +640,16 @@ systemctl start logstash-agent</code></pre>
     const localhostWarning = document.getElementById('localhostWarning');
     const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
     const packageManagerRadio = document.querySelector('input[name="package_manager"]:checked');
+    const customUrlInput = document.getElementById('customLogstashUIUrl');
     
     if (linuxCommandsElement) {
-      // Get the current URL from the browser
-      const currentUrl = window.location.origin;
+      // Get the URL to use - custom input takes precedence over browser URL
+      const browserUrl = window.location.origin;
+      const customUrl = customUrlInput ? customUrlInput.value.trim() : '';
+      const currentUrl = customUrl || browserUrl;
       
       // Check if the URL contains localhost or 127.0.0.1
-      const isLocalhost = currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1');
+      const isLocalhost = browserUrl.includes('localhost') || browserUrl.includes('127.0.0.1');
       
       // Show or hide the localhost warning
       if (localhostWarning) {
@@ -683,7 +696,7 @@ sudo systemctl enable logstash
       
       // Add LogstashAgent installation commands
       commands += `# Install LogstashAgent
-curl -LO https://github.com/elastic/LogstashAgent/releases/download/{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
+curl -LO https://github.com/elastic/LogstashAgent/releases/download/v{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
 tar -xzf logstash-agent-linux-amd64.tar.gz
 ./logstash-agent/logstash-agent install --enroll ${encodedToken} --logstash-ui-url ${currentUrl}
 systemctl enable logstash-agent
@@ -691,6 +704,19 @@ systemctl start logstash-agent`;
       
       // Update the commands
       linuxCommandsElement.innerHTML = `<code>${commands}</code>`;
+    }
+  }
+  
+  // Function to update Linux commands when custom URL changes
+  function updateLinuxCommandsUrl() {
+    // Get the currently selected enrollment token
+    const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+    if (enrollmentTokenSelect && enrollmentTokenSelect.value && enrollmentTokenSelect.value !== 'add_new') {
+      const selectedOption = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+      const encodedToken = selectedOption.dataset.encodedToken;
+      if (encodedToken) {
+        updateLinuxCommands(encodedToken);
+      }
     }
   }
   
@@ -831,7 +857,7 @@ systemctl start logstash-agent`;
   }
 
   // Copy to clipboard function for agent installation commands
-  function copyToClipboard(elementId) {
+  function copyToClipboard(elementId, event) {
     const element = document.getElementById(elementId);
     const copyButton = event.target;
     
@@ -842,20 +868,22 @@ systemctl start logstash-agent`;
     
     const text = element.textContent;
     
-    navigator.clipboard.writeText(text).then(function() {
-      // Update button text and style
+    // Function to update button state on success
+    function onSuccess() {
       const originalText = copyButton.textContent;
       copyButton.textContent = 'Copied!';
       copyButton.classList.remove('text-blue-400', 'hover:text-blue-300');
       copyButton.classList.add('text-green-400', 'hover:text-green-300');
       
-      // Reset button after 2 seconds
       setTimeout(function() {
         copyButton.textContent = originalText;
         copyButton.classList.remove('text-green-400', 'hover:text-green-300');
         copyButton.classList.add('text-blue-400', 'hover:text-blue-300');
       }, 2000);
-    }, function(err) {
+    }
+    
+    // Function to update button state on failure
+    function onFailure(err) {
       console.error('Failed to copy text: ', err);
       copyButton.textContent = 'Failed!';
       copyButton.classList.remove('text-blue-400', 'hover:text-blue-300');
@@ -866,7 +894,32 @@ systemctl start logstash-agent`;
         copyButton.classList.remove('text-red-400', 'hover:text-red-300');
         copyButton.classList.add('text-blue-400', 'hover:text-blue-300');
       }, 2000);
-    });
+    }
+    
+    // Try modern Clipboard API first (requires HTTPS or localhost)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onSuccess, onFailure);
+    } else {
+      // Fallback for non-secure contexts (HTTP)
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        if (successful) {
+          onSuccess();
+        } else {
+          onFailure(new Error('execCommand copy failed'));
+        }
+      } catch (err) {
+        onFailure(err);
+      }
+    }
   }
 
   // Handle Install Logstash checkbox change

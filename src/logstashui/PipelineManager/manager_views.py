@@ -2139,6 +2139,10 @@ def agent_status_stream(request):
         if logwatcher.get('is_restarting'):
             return 'restarting'
 
+        # Check offline status before unhealthy - takes priority
+        if not conn.get('is_online'):
+            return 'offline'
+
         if blob:
             logstash_api  = blob.get('logstash_api')  or {}
             health_report = blob.get('health_report') or {}
@@ -2153,10 +2157,7 @@ def agent_status_stream(request):
                 health_report.get('status')     in ('yellow', 'red')):
                 return 'unhealthy'
 
-        if conn.get('is_online'):
-            return 'healthy'
-
-        return 'offline'
+        return 'healthy'
 
     def _event_stream():
         try:

@@ -202,6 +202,64 @@ function checkConfigNotifications() {
     refreshBellNotifications();
 }
 
+// Check and update path permission notifications
+function checkPathPermissionNotifications() {
+    const settingsPathField = document.getElementById('settingsPath');
+    const logsPathField = document.getElementById('logsPath');
+    const binaryPathField = document.getElementById('binaryPath');
+    const settingsPathNotification = document.getElementById('settingsPathNotification');
+    const settingsPathNotificationText = document.getElementById('settingsPathNotificationText');
+    const logsPathNotification = document.getElementById('logsPathNotification');
+    const logsPathNotificationText = document.getElementById('logsPathNotificationText');
+    const binaryPathNotification = document.getElementById('binaryPathNotification');
+    const binaryPathNotificationText = document.getElementById('binaryPathNotificationText');
+    
+    if (settingsPathField && settingsPathNotification && settingsPathNotificationText) {
+        const settingsPath = settingsPathField.value.trim();
+        if (settingsPath && settingsPath !== '/etc/logstash' && settingsPath !== '/etc/logstash/') {
+            settingsPathNotificationText.textContent = `${settingsPath} will need to allow read and write access to the 'logstash' user`;
+            settingsPathNotification.classList.remove('hidden');
+        } else {
+            settingsPathNotification.classList.add('hidden');
+        }
+    }
+    
+    if (logsPathField && logsPathNotification && logsPathNotificationText) {
+        const logsPath = logsPathField.value.trim();
+        if (logsPath && logsPath !== '/var/log/logstash' && logsPath !== '/var/log/logstash/') {
+            logsPathNotificationText.textContent = `${logsPath} will need to allow read access to the 'logstash' user`;
+            logsPathNotification.classList.remove('hidden');
+        } else {
+            logsPathNotification.classList.add('hidden');
+        }
+    }
+    
+    if (binaryPathField && binaryPathNotification && binaryPathNotificationText) {
+        const binaryPath = binaryPathField.value.trim();
+        if (binaryPath && binaryPath !== '/usr/share/logstash/bin' && binaryPath !== '/usr/share/logstash/bin/') {
+            binaryPathNotificationText.textContent = `${binaryPath} will need to allow the 'logstash' user to execute its binaries`;
+            binaryPathNotification.classList.remove('hidden');
+        } else {
+            binaryPathNotification.classList.add('hidden');
+        }
+    }
+}
+
+// Update deploy button indicator based on undeployed changes count
+function updateDeployButtonIndicator(count) {
+    const indicator = document.getElementById('deployBtnIndicator');
+    const indicatorText = document.getElementById('deployBtnIndicatorText');
+    
+    if (!indicator || !indicatorText) return;
+    
+    if (count > 0) {
+        indicatorText.textContent = `${count} undeployed change${count !== 1 ? 's' : ''}`;
+        indicator.classList.remove('hidden');
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
 // Fix logs path mismatch by syncing FROM config TO global setting
 function fixLogsPathMismatch() {
     const logsPathGlobal = document.querySelector('[name="path.logs"]');
@@ -1494,6 +1552,7 @@ async function loadPolicyData(policyValue) {
                 // Use setTimeout to ensure DOM has updated
                 setTimeout(() => {
                     checkConfigNotifications();
+                    checkPathPermissionNotifications();
                 }, 100);
             }
         }
@@ -1562,7 +1621,13 @@ async function updatePolicyStats(policy) {
                 // Global settings
                 if (prev.settings_path !== curr.settings_path || prev.logs_path !== curr.logs_path) count++;
                 pendingEl.textContent = count === 0 ? 'None' : `${count} section${count !== 1 ? 's' : ''}`;
-            }).catch(() => { pendingEl.textContent = '—'; });
+                
+                // Update deploy button indicator
+                updateDeployButtonIndicator(count);
+            }).catch(() => { 
+                pendingEl.textContent = '—'; 
+                updateDeployButtonIndicator(0);
+            });
         }
     }
 }
@@ -2164,10 +2229,12 @@ document.addEventListener('DOMContentLoaded', function() {
         logsPathSettingField.addEventListener('input', () => {
             checkConfigNotifications();
             detectChanges();
+            checkPathPermissionNotifications();
         });
         logsPathSettingField.addEventListener('change', () => {
             checkConfigNotifications();
             detectChanges();
+            checkPathPermissionNotifications();
         });
         console.log('Added event listeners to config logs path field');
     }
@@ -2175,20 +2242,33 @@ document.addEventListener('DOMContentLoaded', function() {
     // Also monitor settings path and binary path for changes
     const settingsPathField = document.getElementById('settingsPath');
     if (settingsPathField) {
-        settingsPathField.addEventListener('input', () => { detectChanges(); });
-        settingsPathField.addEventListener('change', () => { detectChanges(); });
+        settingsPathField.addEventListener('input', () => { 
+            detectChanges(); 
+            checkPathPermissionNotifications();
+        });
+        settingsPathField.addEventListener('change', () => { 
+            detectChanges(); 
+            checkPathPermissionNotifications();
+        });
     }
 
     const binaryPathField = document.getElementById('binaryPath');
     if (binaryPathField) {
-        binaryPathField.addEventListener('input', () => { detectChanges(); });
-        binaryPathField.addEventListener('change', () => { detectChanges(); });
-        console.log('Added event listeners to settings path field');
+        binaryPathField.addEventListener('input', () => { 
+            detectChanges(); 
+            checkPathPermissionNotifications();
+        });
+        binaryPathField.addEventListener('change', () => { 
+            detectChanges(); 
+            checkPathPermissionNotifications();
+        });
+        console.log('Added event listeners to binary path field');
     }
     
     // Initial check for notifications
     setTimeout(() => {
         checkConfigNotifications();
+        checkPathPermissionNotifications();
     }, 500);
 });
 

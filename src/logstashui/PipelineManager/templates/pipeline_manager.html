@@ -268,22 +268,22 @@
                             Restarting
                             <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
                           </span>
+                        {% elif not connection.is_online %}
+                          {# Red pill if offline - takes priority over unhealthy #}
+                          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 cursor-pointer" onclick="openAgentInspect('{{ connection.pk }}', '{{ connection.name }}')">
+                            Offline
+                            <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+                          </span>
                         {% elif connection.status_blob.settings_path_found == False or connection.status_blob.logs_path_found == False or connection.status_blob.binary_path_found == False or connection.status_blob.logstash_api.accessible == False or connection.status_blob.logstash_api.status == 'red' or connection.status_blob.last_policy_apply.success == False %}
                           {# Yellow pulsing pill if any path is not found or last policy apply failed #}
                           <span class="pulse-badge pulse-yellow inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 cursor-pointer" onclick="openAgentInspect('{{ connection.pk }}', '{{ connection.name }}')">
                             Unhealthy
                             <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
                           </span>
-                        {% elif connection.is_online %}
+                        {% else %}
                           {# Green pulsing pill if online and all paths found #}
                           <span class="pulse-badge pulse-green inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 cursor-pointer" onclick="openAgentInspect('{{ connection.pk }}', '{{ connection.name }}')">
                             Healthy
-                            <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
-                          </span>
-                        {% else %}
-                          {# Red pill if offline #}
-                          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 cursor-pointer" onclick="openAgentInspect('{{ connection.pk }}', '{{ connection.name }}')">
-                            Offline
                             <svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
                           </span>
                         {% endif %}
