@@ -245,6 +245,18 @@ function checkPathPermissionNotifications() {
     }
 }
 
+// Update the undeployed changes count in the stats strip
+function updateUndeployedChangesInStatsStrip(count) {
+    const pendingEl = document.getElementById('statPendingChanges');
+    if (pendingEl) {
+        if (count === 0) {
+            pendingEl.textContent = 'None';
+        } else {
+            pendingEl.textContent = `${count} section${count !== 1 ? 's' : ''}`;
+        }
+    }
+}
+
 // Update deploy button indicator based on undeployed changes count
 function updateDeployButtonIndicator(count) {
     const indicator = document.getElementById('deployBtnIndicator');
@@ -253,11 +265,14 @@ function updateDeployButtonIndicator(count) {
     if (!indicator || !indicatorText) return;
     
     if (count > 0) {
-        indicatorText.textContent = `${count} undeployed change${count !== 1 ? 's' : ''}`;
+        indicatorText.textContent = 'Undeployed changes';
         indicator.classList.remove('hidden');
     } else {
         indicator.classList.add('hidden');
     }
+    
+    // Also update the stats strip
+    updateUndeployedChangesInStatsStrip(count);
 }
 
 // Fix logs path mismatch by syncing FROM config TO global setting
@@ -1620,9 +1635,8 @@ async function updatePolicyStats(policy) {
                 if (prevKeys !== currKeys) count++;
                 // Global settings
                 if (prev.settings_path !== curr.settings_path || prev.logs_path !== curr.logs_path) count++;
-                pendingEl.textContent = count === 0 ? 'None' : `${count} section${count !== 1 ? 's' : ''}`;
                 
-                // Update deploy button indicator
+                // Update deploy button indicator (which also updates the stats strip)
                 updateDeployButtonIndicator(count);
             }).catch(() => { 
                 pendingEl.textContent = '—'; 
