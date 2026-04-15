@@ -1629,6 +1629,8 @@ async function updatePolicyStats(policy) {
                 const prevKeys = JSON.stringify((prev.keystore || []).map(k => k.key_name).sort());
                 const currKeys = JSON.stringify((curr.keystore || []).map(k => k.key_name).sort());
                 if (prevKeys !== currKeys) count++;
+                // Keystore password: compare hash
+                if ((prev.keystore_password_hash || '') !== (curr.keystore_password_hash || '')) count++;
                 // Global settings
                 if (prev.settings_path !== curr.settings_path || prev.logs_path !== curr.logs_path) count++;
                 

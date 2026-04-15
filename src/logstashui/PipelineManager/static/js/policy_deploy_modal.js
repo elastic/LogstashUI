@@ -669,10 +669,21 @@ function renderPipelinesDiff(oldPipelines, newPipelines) {
 }
 
 // Render keystore diff
-function renderKeystoreDiff(oldKeystore, newKeystore) {
+function renderKeystoreDiff(oldKeystore, newKeystore, oldPasswordHash, newPasswordHash) {
     const container = document.getElementById('diff-keystore');
     let html = '';
     let hasChanges = false;
+    
+    // Check for keystore password change
+    if (oldPasswordHash !== newPasswordHash) {
+        hasChanges = true;
+        html += `
+            <div class="mb-2 p-2 bg-amber-900/20 border-l-4 border-amber-600">
+                <span class="text-amber-400 font-semibold">⚠ Keystore Password Changed</span>
+                <span class="text-gray-400 ml-2">(password updated)</span>
+            </div>
+        `;
+    }
     
     // Create maps for easier comparison
     const oldMap = new Map(oldKeystore.map(k => [k.key_name, k]));
@@ -915,7 +926,7 @@ async function loadPolicyDiff(policyId, policyName) {
         console.log('Rendering log4j2.properties diff...');
         renderSideBySideTextDiff('diff-log4j2_properties', data.previous.log4j2_properties || '', data.current.log4j2_properties || '');
         renderPipelinesDiff(data.previous.pipelines || [], data.current.pipelines || []);
-        renderKeystoreDiff(data.previous.keystore || [], data.current.keystore || []);
+        renderKeystoreDiff(data.previous.keystore || [], data.current.keystore || [], data.previous.keystore_password_hash || '', data.current.keystore_password_hash || '');
         renderGlobalSettingsDiff(data.previous, data.current);
         
         // Setup tab switching

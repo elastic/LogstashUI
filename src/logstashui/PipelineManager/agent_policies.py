@@ -93,7 +93,8 @@ def deploy_policy(request):
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
             'pipelines': list(policy.pipelines.values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
-            'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
+            'keystore': list(policy.keystore_entries.values('key_name', 'key_value')),
+            'keystore_password_hash': policy.keystore_password_hash
         }
 
         # Create new Revision record
@@ -154,7 +155,8 @@ def get_policy_diff(request):
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
             'pipelines': list(policy.pipelines.values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
-            'keystore': list(policy.keystore_entries.values('key_name', 'key_value'))
+            'keystore': list(policy.keystore_entries.values('key_name', 'key_value')),
+            'keystore_password_hash': policy.keystore_password_hash
         }
 
         # Get last revision (if any)
@@ -174,7 +176,8 @@ def get_policy_diff(request):
                 'logs_path': '',
                 'binary_path': '',
                 'pipelines': [],
-                'keystore': []
+                'keystore': [],
+                'keystore_password_hash': ''
             }
             revision_number = 0
 
@@ -253,7 +256,7 @@ def get_policy_change_count(request):
             prev = {
                 'logstash_yml': '', 'jvm_options': '', 'log4j2_properties': '',
                 'settings_path': '', 'logs_path': '', 'binary_path': '',
-                'pipelines': [], 'keystore': []
+                'pipelines': [], 'keystore': [], 'keystore_password_hash': ''
             }
 
         count = 0
@@ -292,6 +295,10 @@ def get_policy_change_count(request):
             key=lambda e: e['key_name']
         )
         if curr_keystore != prev_keystore:
+            count += 1
+
+        # Keystore password: compare hash
+        if policy.keystore_password_hash != prev.get('keystore_password_hash', ''):
             count += 1
 
         # Global settings: settings_path, logs_path, binary_path
