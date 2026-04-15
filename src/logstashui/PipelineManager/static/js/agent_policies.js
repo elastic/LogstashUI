@@ -1394,15 +1394,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Regular policy selection
             currentPolicy = selectedValue;
 
-            // Update UI based on whether it's the default policy
-            const isDefaultPolicy = selectedValue === 'default';
-            updatePolicyUI(isDefaultPolicy);
+            // Update UI - all policies are now editable
+            updatePolicyUI(false);
 
-            // Load policy data into form if it's a custom policy
-            if (!isDefaultPolicy) {
-                // Fetch fresh policy data from database
-                loadPolicyData(selectedValue);
-            }
+            // Fetch fresh policy data from database
+            loadPolicyData(selectedValue);
         }
     });
     
@@ -1766,11 +1762,6 @@ async function savePolicyChanges() {
     const selectedOption = policySelect.options[policySelect.selectedIndex];
     const policyName = selectedOption.dataset.policyName || selectedOption.textContent;
     
-    if (policySelect.value === 'default') {
-        showToast('Cannot save changes to Default Policy', 'error');
-        return;
-    }
-    
     // Get the current editor instance and save current content to fileContents
     const settingsPath = document.getElementById('settingsPath').value;
     const logsPath = document.getElementById('logsPath').value;
@@ -1847,11 +1838,6 @@ async function deleteCurrentPolicy() {
     const policySelect = document.getElementById('policySelect');
     const selectedOption = policySelect.options[policySelect.selectedIndex];
     const policyName = selectedOption.dataset.policyName || selectedOption.textContent;
-    
-    if (policySelect.value === 'default') {
-        showToast('Cannot delete Default Policy', 'error');
-        return;
-    }
     
     const confirmed = await ConfirmationModal.show(
         `Are you sure you want to delete the policy "${policyName}"?\n\nThis action cannot be undone.`,
