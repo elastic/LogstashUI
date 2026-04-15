@@ -11,6 +11,40 @@
 
 set -e  # Exit on error
 
+# Check for required dependencies
+check_dependencies() {
+    local missing_deps=()
+    
+    # Check for Docker
+    if ! command -v docker &> /dev/null; then
+        missing_deps+=("docker")
+    fi
+    
+    # Check for Git
+    if ! command -v git &> /dev/null; then
+        missing_deps+=("git")
+    fi
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo "ERROR: Missing required dependencies: ${missing_deps[*]}"
+        echo ""
+        echo "Please install the following:"
+        for dep in "${missing_deps[@]}"; do
+            if [ "$dep" == "docker" ]; then
+                echo "  - Docker: https://docs.docker.com/engine/install/"
+                echo "    (For Debian/Ubuntu: apt-get install docker.io)"
+                echo "    (For RHEL/CentOS: yum install docker)"
+            elif [ "$dep" == "git" ]; then
+                echo "  - Git: apt-get install git | yum install git"
+            fi
+        done
+        exit 1
+    fi
+}
+
+# Run dependency check
+check_dependencies
+
 # Detect docker-compose command (hyphen vs space)
 if command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE="docker-compose"

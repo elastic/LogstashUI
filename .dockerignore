@@ -36,5 +36,5 @@ Thumbs.db
 
 # Docker
 LogstashUI/Dockerfile
-docker-compose*.yml
+docker/docker-compose.yml
 .dockerignore

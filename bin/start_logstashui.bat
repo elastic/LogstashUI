@@ -12,6 +12,42 @@ REM   start_logstashui.bat --update  - Pull latest code and images, then start
 REM IMPORTANT: Don't enable delayed expansion yet - it breaks paths with exclamation marks
 setlocal disabledelayedexpansion
 
+REM Check for required dependencies
+echo Checking dependencies...
+set MISSING_DEPS=
+
+REM Check for Docker
+docker --version >nul 2>&1
+if errorlevel 1 (
+    set MISSING_DEPS=%MISSING_DEPS% docker
+)
+
+REM Check for Git
+git --version >nul 2>&1
+if errorlevel 1 (
+    set MISSING_DEPS=%MISSING_DEPS% git
+)
+
+if not "%MISSING_DEPS%"=="" (
+    echo.
+    echo ERROR: Missing required dependencies:%MISSING_DEPS%
+    echo.
+    echo Please install the following:
+    echo %MISSING_DEPS% | findstr "docker" >nul
+    if not errorlevel 1 (
+        echo   - Docker Desktop: https://www.docker.com/get-started/
+    )
+    echo %MISSING_DEPS% | findstr "git" >nul
+    if not errorlevel 1 (
+        echo   - Git: https://git-scm.com/download/win
+    )
+    echo.
+    pause
+    exit /b 1
+)
+echo Dependencies check passed.
+echo.
+
 REM Detect docker-compose command (hyphen vs space)
 docker-compose version >nul 2>&1
 if %errorlevel% equ 0 (

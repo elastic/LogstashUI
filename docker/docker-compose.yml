@@ -37,11 +37,7 @@ services:
       - logstashui_network
 
   logstashagent:
-    #image: codyjackson032/logstashagent:latest
-    # Uncomment below to build locally instead of pulling from Docker Hub
-    build:
-      context: ../LogstashAgent
-      dockerfile: docker/Dockerfile
+    image: codyjackson032/logstash-agent:latest
     profiles:
       - embedded  # Only start this container in embedded mode
     ports:
@@ -69,7 +65,7 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "443:443"
+      - "0.0.0.0:443:443"
       - "80:80"
       - "9500:9500"  # logstashagent API proxy (HTTPS)
     volumes:
