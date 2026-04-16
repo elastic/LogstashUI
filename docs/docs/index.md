@@ -19,7 +19,7 @@ LogstashUI provides a web-based platform for authoring pipelines visually, simul
 - **Pipeline Monitoring** - View metrics and performance for running pipelines
 - **SNMP Support** - Configure SNMP polling, traps, and discovery
 
-![LogstashUI Simulation](../images/simulate.png)
+![LogstashUI Simulation](docs/images/simulate.png)
 
 **📖 [View LogstashUI Documentation →](logstashui/index.md)**
 

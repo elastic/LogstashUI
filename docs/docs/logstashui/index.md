@@ -4,7 +4,7 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
-![LogstashUI Simulation](../images/simulate.png)
+![LogstashUI Simulation](docs/images/simulate.png)
 
 ## Overview
 
@@ -17,12 +17,12 @@ Instead of editing configuration files manually, pipelines can be authored visua
 ### Visual Pipeline Editor
 Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.
 
-![Visual Pipeline Editor](../images/graph.gif)
+![Visual Pipeline Editor](docs/images/graph.gif)
 
 ### Pipeline Simulation
 Execute pipelines against sample events and inspect transformations step-by-step.
 
-![Pipeline Simulation](../images/simulate.gif)
+![Pipeline Simulation](docs/images/simulate.gif)
 
 ### Multi-Instance Management
 Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management.
@@ -30,12 +30,12 @@ Manage pipelines across multiple Logstash nodes using Centralized Pipeline Manag
 ### Pipeline Monitoring
 View metrics and performance for running pipelines.
 
-![Pipeline Monitoring](../images/monitoring.png)
+![Pipeline Monitoring](docs/images/monitoring.png)
 
 ### SNMP Support
 Configure polling, traps, and discovery through a web interface.
 
-![SNMP Support](../images/snmp.gif)
+![SNMP Support](docs/images/snmp.gif)
 
 ---
 
