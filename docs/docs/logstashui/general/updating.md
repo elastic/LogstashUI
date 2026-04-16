@@ -1,9 +1,3 @@
----
-layout: default
-title: Updating
-description: How to update LogstashUI to the latest version
----
-
 # Updating
 
 LogstashUI will notify you when a new version is available via a banner in the navigation sidebar.

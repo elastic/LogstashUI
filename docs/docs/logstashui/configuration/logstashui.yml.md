@@ -1,9 +1,3 @@
----
-layout: default
-title: logstashui.yml
-description: Configuration reference for LogstashUI
----
-
 # logstashui.yml Configuration
 
 The `logstashui.yml` file is the main configuration file for LogstashUI. It controls authentication, simulation behavior, and Logstash agent settings.

@@ -1,9 +1,3 @@
----
-layout: default
-title: Build Guide
-description: Instructions for building and running LogstashUI
----
-
 # Building and Running LogstashUI
 
 There are a few different ways to run this project.

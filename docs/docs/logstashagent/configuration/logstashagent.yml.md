@@ -1,9 +1,3 @@
----
-layout: default
-title: logstashagent.yml
-description: Configuration reference for LogstashAgent
----
-
 # logstashagent.yml Configuration
 
 > **Note:** `logstashagent.yml` ONLY applies for simulation mode. It is unused when running this as an agent to control Logstash instances.

@@ -1,16 +1,10 @@
----
-layout: default
-title: Home
-description: A visual tool for authoring, simulating, and managing Logstash pipelines
----
-
 # LogstashUI
 
 > A visual tool for authoring, simulating, and managing Logstash pipelines.
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
-![LogstashUI Simulation](images/simulate.png)
+![LogstashUI Simulation](../images/simulate.png)
 
 ## Overview
 
@@ -23,12 +17,12 @@ Instead of editing configuration files manually, pipelines can be authored visua
 ### Visual Pipeline Editor
 Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.
 
-![Visual Pipeline Editor](images/graph.gif)
+![Visual Pipeline Editor](../images/graph.gif)
 
 ### Pipeline Simulation
 Execute pipelines against sample events and inspect transformations step-by-step.
 
-![Pipeline Simulation](images/simulate.gif)
+![Pipeline Simulation](../images/simulate.gif)
 
 ### Multi-Instance Management
 Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management.
@@ -36,12 +30,19 @@ Manage pipelines across multiple Logstash nodes using Centralized Pipeline Manag
 ### Pipeline Monitoring
 View metrics and performance for running pipelines.
 
-![Pipeline Monitoring](images/monitoring.png)
+![Pipeline Monitoring](../images/monitoring.png)
 
 ### SNMP Support
 Configure polling, traps, and discovery through a web interface.
 
-![SNMP Support](images/snmp.gif)
+![SNMP Support](../images/snmp.gif)
+
+---
+
+## Documentation
+
+- **[LogstashUI Documentation](logstashui/index.md)** - Installation, configuration, and usage guides for LogstashUI
+- **[LogstashAgent Documentation](logstashagent/index.md)** - Setup and configuration for LogstashAgent
 
 ---
 

@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'SNMP',
     'Monitoring',
     'Site',
+    'Documentation',
 
     # Frameworks
     'django_htmx',
@@ -185,7 +186,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_DIRS = [
-    BASE_DIR / "Site/static"
+    BASE_DIR / "Site/static",
+    PROJECT_ROOT / "docs" / "images",
 ]
 
 if platform.system() == "Windows":

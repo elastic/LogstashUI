@@ -4,8 +4,6 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
-📖 **[View Documentation](https://elastic.github.io/LogstashUI/)**
-
 <img src="docs/images/simulate.png" width="100%">
 
 ## Overview
@@ -49,6 +47,14 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 </details>
 
+---
+
+## Documentation
+
+- **[LogstashUI Documentation](docs/docs/logstashui/index.md)** - Installation, configuration, and usage guides for LogstashUI
+- **[LogstashAgent Documentation](docs/docs/logstashagent/index.md)** - Setup and configuration for LogstashAgent
+
+---
 
 ## Requirements
 

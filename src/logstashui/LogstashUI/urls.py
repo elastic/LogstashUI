@@ -18,11 +18,11 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
+
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib.auth import views as auth_views
+
 
 # Custom error handlers
 handler400 = 'Common.error_handlers.handler400'
@@ -40,7 +40,7 @@ urlpatterns = [
     path('SNMP/', include('SNMP.urls')),
     path('Monitoring/', include('Monitoring.urls')),
     path('', include('Site.urls')),
-    #path('Documentation/', include("Documentation.urls")),  # TODO: Create Documentation module
+    path('Documentation/', include("Documentation.urls")),
     #path('Crash', crash)
 ]
 

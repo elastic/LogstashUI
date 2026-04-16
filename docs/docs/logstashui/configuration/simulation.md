@@ -1,9 +1,3 @@
----
-layout: default
-title: Simulation
-description: Pipeline simulation modes and configuration
----
-
 # Simulation
 
 LogstashUI provides the ability to simulate pipelines using a real Logstash node.
