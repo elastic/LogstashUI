@@ -30,7 +30,7 @@ try:
         sys.exit(1)
     
     # Write to agent config file
-    agent_config_path = agent_config_dir / 'logstashagent.yml'
+    agent_config_path = agent_config_dir / 'config' / 'logstashagent.yml'
     with open(agent_config_path, 'w') as f:
         yaml.dump(agent_config, f)
     
