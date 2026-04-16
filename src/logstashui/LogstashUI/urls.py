@@ -40,6 +40,7 @@ urlpatterns = [
     path('SNMP/', include('SNMP.urls')),
     path('Monitoring/', include('Monitoring.urls')),
     path('', include('Site.urls')),
+    #path('Documentation/', include("Documentation.urls")),  # TODO: Create Documentation module
     #path('Crash', crash)
 ]
 

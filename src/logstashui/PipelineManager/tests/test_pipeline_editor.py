@@ -86,7 +86,7 @@ class TestPipelineEditorView:
 class TestGetPipeline:
     """Test GetPipeline view"""
 
-    @patch('PipelineManager.manager_views.get_logstash_pipeline')
+    @patch('PipelineManager.pipelines_crud.get_logstash_pipeline')
     def test_get_pipeline_success(self, mock_get_pipeline, authenticated_client, test_connection):
         """Test successful pipeline retrieval"""
         pipeline_config = 'input { stdin {} }\nfilter { mutate { add_field => { "test" => "value" } } }\noutput { stdout {} }'
@@ -441,7 +441,7 @@ class TestGetCurrentPipelineCode:
 class TestClonePipeline:
     """Test ClonePipeline view"""
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_clone_pipeline_success(self, mock_get_es, authenticated_client, test_connection):
         """Test successful pipeline cloning"""
         mock_es = MagicMock()
@@ -474,7 +474,7 @@ class TestClonePipeline:
         # Should have HX-Trigger header for HTMX
         assert 'HX-Trigger' in response
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_clone_pipeline_duplicate_name(self, mock_get_es, authenticated_client, test_connection):
         """Test cloning with duplicate pipeline name"""
         mock_es = MagicMock()
@@ -529,7 +529,7 @@ class TestClonePipeline:
         assert response.status_code == 400
         assert b'Pipeline' in response.content and (b'invalid' in response.content.lower() or b'error' in response.content.lower())
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_clone_pipeline_source_not_found(self, mock_get_es, authenticated_client, test_connection):
         """Test cloning when source pipeline doesn't exist"""
         mock_es = MagicMock()

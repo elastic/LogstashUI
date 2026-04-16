@@ -116,7 +116,7 @@ class TestConnectionCRUD:
 class TestPipelineCRUD:
     """Test Pipeline Create, Read, Update, Delete operations"""
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_create_pipeline_success(self, mock_get_es, authenticated_client, test_connection):
         """Test successful pipeline creation"""
         # Mock Elasticsearch connection
@@ -149,7 +149,7 @@ class TestPipelineCRUD:
         assert response.status_code == 400
         assert b'Pipeline ID must begin with a letter or underscore' in response.content
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_delete_pipeline_success(self, mock_get_es, authenticated_client, test_connection):
         """Test successful pipeline deletion"""
         # Mock Elasticsearch connection
@@ -167,8 +167,8 @@ class TestPipelineCRUD:
         # Verify delete_pipeline was called
         mock_es.logstash.delete_pipeline.assert_called_once_with(id='test_pipeline')
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
-    @patch('PipelineManager.manager_views.get_logstash_pipeline')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_logstash_pipeline')
     def test_update_pipeline_settings_success(self, mock_get_pipeline, mock_get_es, authenticated_client,
                                               test_connection):
         """Test successful pipeline settings update"""
@@ -210,7 +210,7 @@ class TestPipelineCRUD:
 class TestPipelineNameValidation:
     """Test pipeline name validation"""
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_pipeline_name_starts_with_letter(self, mock_get_es, authenticated_client, test_connection):
         """Test that pipeline name can start with a letter"""
         mock_es = MagicMock()
@@ -224,7 +224,7 @@ class TestPipelineNameValidation:
 
         assert response.status_code == 200
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_pipeline_name_starts_with_underscore(self, mock_get_es, authenticated_client, test_connection):
         """Test that pipeline name can start with underscore"""
         mock_es = MagicMock()
@@ -505,7 +505,7 @@ class TestGetPipelineEndpoint:
         )
         assert response.status_code == 400
 
-    @patch('PipelineManager.manager_views.get_logstash_pipeline', return_value=None)
+    @patch('PipelineManager.pipelines_crud.get_logstash_pipeline', return_value=None)
     def test_pipeline_not_found_returns_400(self, mock_glp, authenticated_client, test_connection):
         response = authenticated_client.get(
             f'/ConnectionManager/GetPipeline/?es_id={test_connection.id}&pipeline=missing'
@@ -513,7 +513,7 @@ class TestGetPipelineEndpoint:
         assert response.status_code == 400
         assert 'error' in response.json()
 
-    @patch('PipelineManager.manager_views.get_logstash_pipeline')
+    @patch('PipelineManager.pipelines_crud.get_logstash_pipeline')
     def test_success_returns_code(self, mock_glp, authenticated_client, test_connection):
         mock_glp.return_value = {'pipeline': 'input {} filter {} output {}'}
         response = authenticated_client.get(
@@ -547,7 +547,7 @@ class TestClonePipelineEdgeCases:
         })
         assert response.status_code == 400
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_source_pipeline_not_found_returns_404(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
         # get_pipeline returns dict that does NOT contain source_pipeline key
@@ -560,7 +560,7 @@ class TestClonePipelineEdgeCases:
         })
         assert response.status_code == 404
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_new_pipeline_name_already_exists_returns_400(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
         mock_es.logstash.get_pipeline.side_effect = [
@@ -579,7 +579,7 @@ class TestClonePipelineEdgeCases:
         assert response.status_code == 400
         assert b'already exists' in response.content
 
-    @patch('PipelineManager.manager_views.get_elastic_connection', side_effect=Exception("ES down"))
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection', side_effect=Exception("ES down"))
     def test_clone_exception_returns_500(self, mock_get_es, authenticated_client, test_connection):
         response = authenticated_client.post('/ConnectionManager/ClonePipeline/', {
             'es_id': test_connection.id,
@@ -614,7 +614,7 @@ class TestIntegration:
     """Integration tests for complete workflows"""
 
     @patch('PipelineManager.manager_views.test_connectivity')
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_full_pipeline_lifecycle(self, mock_get_es, mock_test_connectivity, authenticated_client):
         """Test complete pipeline lifecycle: create connection, create pipeline, update, delete"""
         # Step 1: Create connection
@@ -664,7 +664,7 @@ class TestIntegration:
 class TestCreatePipelineAdditional:
     """Additional CreatePipeline tests"""
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
+    @patch('PipelineManager.pipelines_crud.get_elastic_connection')
     def test_creates_default_empty_config_when_no_pipeline_config(
             self, mock_get_es, authenticated_client, test_connection):
         """When no pipeline_config is given, the default 'input {} filter {} output {}' is used"""
@@ -681,7 +681,7 @@ class TestCreatePipelineAdditional:
         call_body = mock_es.logstash.put_pipeline.call_args[1]['body']
         assert 'input {}' in call_body['pipeline']
 
-    @patch('PipelineManager.manager_views.requests.put')
+    @patch('PipelineManager.pipelines_crud.requests.put')
     def test_simulate_mode_success(self, mock_put, authenticated_client, settings):
         """CreatePipeline in simulate=True mode sends a PUT to logstashagent"""
         settings.LOGSTASH_AGENT_URL = 'http://localhost:8080'
@@ -689,7 +689,7 @@ class TestCreatePipelineAdditional:
         mock_response.raise_for_status.return_value = None
         mock_put.return_value = mock_response
 
-        from PipelineManager.manager_views import CreatePipeline
+        from PipelineManager.pipelines_crud import CreatePipeline
         from django.test import RequestFactory
         from django.contrib.auth.models import User
 
@@ -707,7 +707,7 @@ class TestCreatePipelineAdditional:
         assert response.status_code == 200
         assert b'Simulation pipeline created successfully' in response.content
 
-    @patch('PipelineManager.manager_views.requests.put',
+    @patch('PipelineManager.pipelines_crud.requests.put',
            side_effect=__import__('requests').exceptions.ConnectionError("agent down"))
     def test_simulate_mode_failure_returns_500(self, mock_put, authenticated_client, settings):
         """CreatePipeline simulate=True with agent failure returns 500.
@@ -717,7 +717,7 @@ class TestCreatePipelineAdditional:
         """
         settings.LOGSTASH_AGENT_URL = 'http://localhost:8080'
 
-        from PipelineManager.manager_views import CreatePipeline
+        from PipelineManager.pipelines_crud import CreatePipeline
         from django.test import RequestFactory
         from django.contrib.auth.models import User
 
