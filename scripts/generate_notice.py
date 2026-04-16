@@ -36,6 +36,7 @@ REPOSITORY_MAPPINGS = {
     'pyyaml': 'https://github.com/yaml/pyyaml/blob/main/LICENSE',
     'daisyui': 'https://github.com/saadeghi/daisyui/blob/master/LICENSE',
     'postcss-cli': 'https://github.com/postcss/postcss-cli/blob/master/LICENSE',
+    'gevent': 'https://github.com/gevent/gevent/blob/master/LICENSE'
 }
 
 # License validation patterns

@@ -81,6 +81,18 @@ if %UPDATE_MODE%==1 (
     echo ========================================
     echo UPDATE MODE
     echo ========================================
+    echo Switching to main branch...
+    echo.
+    
+    git checkout main
+    if errorlevel 1 (
+        echo WARNING: Failed to switch to main branch. Continuing anyway...
+        echo.
+    ) else (
+        echo Switched to main branch successfully!
+        echo.
+    )
+    
     echo Pulling latest code from git...
     echo.
     
@@ -192,57 +204,58 @@ echo Starting LogstashAgent natively on Windows
 echo This allows the agent to control your host Logstash instance.
 echo.
 
-REM Check if Python is available
-python --version >nul 2>&1
+REM Check if uv is available
+uv --version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Python not found in PATH!
-    echo Please install Python 3.9+ and ensure it's in your PATH.
+    echo ERROR: uv not found in PATH!
+    echo Please install uv from: https://docs.astral.sh/uv/getting-started/installation/
+    echo.
+    echo Quick install: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 ^| iex"
     exit /b 1
 )
 
-REM Setup virtual environment for LogstashAgent
-if not exist "LogstashAgent\.venv" (
-    echo Creating virtual environment in LogstashAgent\.venv
-    python -m venv LogstashAgent\.venv
+REM Clone LogstashAgent if it doesn't exist
+if not exist "LogstashAgent" (
+    echo LogstashAgent directory not found, cloning from GitHub...
+    echo.
+    git clone https://github.com/elastic/LogstashAgent.git
     if errorlevel 1 (
-        echo ERROR: Failed to create virtual environment!
-        echo Please ensure Python venv module is available
+        echo ERROR: Failed to clone LogstashAgent repository!
+        echo Please check your internet connection and Git installation.
         exit /b 1
     )
+    echo LogstashAgent cloned successfully!
+    echo.
+) else (
+    echo LogstashAgent directory found.
+    echo.
 )
 
-echo Activating virtual environment
-call LogstashAgent\.venv\Scripts\activate.bat
-
-REM Install/update Python dependencies for LogstashAgent
-echo Installing Python dependencies for LogstashAgent
-cd LogstashAgent
-pip install -e .
+echo.
+echo Preparing LogstashAgent configuration
+REM Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+python bin\sync_config.py
 if errorlevel 1 (
-    echo ERROR: Failed to install dependencies!
-    echo Please check that Python and pip are working correctly.
-    call LogstashAgent\.venv\Scripts\deactivate.bat
+    echo WARNING: Could not update agent config automatically
+    echo Please ensure LogstashAgent\src\logstashagent\logstashagent.yml has correct paths
+)
+
+REM Install/update Python dependencies for LogstashAgent using uv
+echo Installing Python dependencies for LogstashAgent with uv
+cd LogstashAgent
+uv sync
+if errorlevel 1 (
+    echo ERROR: Failed to install dependencies with uv!
+    echo Please check that uv is working correctly.
     exit /b 1
 )
 echo Dependencies installed successfully
 
-echo.
-echo Preparing LogstashAgent configuration
-REM Copy logstash_agent config from logstashui.yml to LogstashAgent/logstashagent.yml
-python bin\sync_config.py
-if errorlevel 1 (
-    echo WARNING: Could not update agent config automatically
-    echo Please ensure LogstashAgent\logstashagent.yml has correct paths
-)
-
 echo Starting LogstashAgent on port 9501 (localhost only)
 cd LogstashAgent
-REM Start uvicorn using the virtual environment's Python with proper module path
-start "LogstashAgent" cmd /K ".venv\Scripts\python.exe -m uvicorn logstashagent.main:app --host 127.0.0.1 --port 9501"
+REM Start uvicorn using uv run
+start "LogstashAgent" cmd /K "uv run uvicorn logstashagent.main:app --host 127.0.0.1 --port 9501"
 cd ..
-
-REM Deactivate virtual environment (agent is running in separate window)
-call LogstashAgent\.venv\Scripts\deactivate.bat
 
 echo Waiting 5 seconds for agent to initialize
 ping 127.0.0.1 -n 6 >nul

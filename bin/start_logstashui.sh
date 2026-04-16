@@ -78,6 +78,18 @@ if [ $UPDATE_MODE -eq 1 ]; then
     echo "========================================"
     echo "UPDATE MODE"
     echo "========================================"
+    echo "Switching to main branch..."
+    echo ""
+    
+    git checkout main
+    if [ $? -ne 0 ]; then
+        echo "WARNING: Failed to switch to main branch. Continuing anyway..."
+        echo ""
+    else
+        echo "Switched to main branch successfully!"
+        echo ""
+    fi
+    
     echo "Pulling latest code from git..."
     echo ""
     
@@ -179,48 +191,53 @@ if [ "$MODE" == "host" ]; then
     echo "This allows the agent to control your host Logstash instance."
     echo ""
     
-    # Check if Python is available
-    if ! command -v python3 &> /dev/null; then
-        echo "ERROR: Python3 not found in PATH!"
-        echo "Please install Python 3.9+ and ensure it's in your PATH."
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "ERROR: uv not found in PATH!"
+        echo "Please install uv from: https://docs.astral.sh/uv/getting-started/installation/"
+        echo ""
+        echo "Quick install: curl -LsSf https://astral.sh/uv/install.sh | sh"
         exit 1
     fi
     
-    # Setup virtual environment for logstashagent
-    VENV_PATH="$PROJECT_ROOT/LogstashAgent/.venv"
-    if [ ! -d "$VENV_PATH" ]; then
-        echo "Creating virtual environment in $VENV_PATH"
-        python3 -m venv "$VENV_PATH"
+    # Clone LogstashAgent if it doesn't exist
+    if [ ! -d "$PROJECT_ROOT/LogstashAgent" ]; then
+        echo "LogstashAgent directory not found, cloning from GitHub..."
+        echo ""
+        cd "$PROJECT_ROOT"
+        git clone https://github.com/elastic/LogstashAgent.git
         if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to create virtual environment!"
-            echo "Please ensure python3-venv is installed (apt-get install python3.12-venv)"
+            echo "ERROR: Failed to clone LogstashAgent repository!"
+            echo "Please check your internet connection and Git installation."
             exit 1
         fi
+        echo "LogstashAgent cloned successfully!"
+        echo ""
+    else
+        echo "LogstashAgent directory found."
+        echo ""
     fi
-    
-    echo "Activating virtual environment"
-    source "$VENV_PATH/bin/activate"
-    
-    # Install/update Python dependencies for logstashagent
-    echo "Installing Python dependencies for LogstashAgent"
-    cd "$PROJECT_ROOT/LogstashAgent"
-    pip install -e .
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to install dependencies!"
-        echo "Please check that Python and pip are working correctly."
-        deactivate
-        exit 1
-    fi
-    echo "Dependencies installed successfully"
     
     echo ""
     echo "Preparing LogstashAgent configuration"
-    # Copy logstash_agent config from logstashui.example.yml to logstashagent/logstashagent.yml
+    # Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+    cd "$PROJECT_ROOT"
     python3 bin/sync_config.py
     if [ $? -ne 0 ]; then
         echo "WARNING: Could not update agent config automatically"
-        echo "Please ensure LogstashAgent/logstashagent.yml has correct paths"
+        echo "Please ensure LogstashAgent/src/logstashagent/logstashagent.yml has correct paths"
     fi
+    
+    # Install/update Python dependencies for logstashagent using uv
+    echo "Installing Python dependencies for LogstashAgent with uv"
+    cd "$PROJECT_ROOT/LogstashAgent"
+    uv sync
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to install dependencies with uv!"
+        echo "Please check that uv is working correctly."
+        exit 1
+    fi
+    echo "Dependencies installed successfully"
     
     echo ""
     echo "Setting Logstash directory ownership for logstash user"
@@ -260,15 +277,11 @@ if [ "$MODE" == "host" ]; then
     
     echo "Starting LogstashAgent on port 9501 (accessible remotely)"
     cd "$PROJECT_ROOT/LogstashAgent"
-    # Start in background using nohup - bind to 0.0.0.0 for remote access
-    # Run uvicorn in the activated virtual environment context with proper module path
-    nohup "$VENV_PATH/bin/python" -m uvicorn logstashagent.main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
+    # Start in background using nohup with uv run - bind to 0.0.0.0 for remote access
+    nohup uv run uvicorn logstashagent.main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
     AGENT_PID=$!
     echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
     cd "$PROJECT_ROOT"
-    
-    # Deactivate virtual environment (agent is running in background)
-    deactivate
     
     echo "LogstashAgent started with PID: $AGENT_PID"
     echo "Waiting 5 seconds for agent to initialize"

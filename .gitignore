@@ -224,3 +224,6 @@ __marimo__/
 /src/logstashui/staticfiles/
 /src/logstashui/data/
 /.plans/
+
+# LogstashAgent (cloned from GitHub in host mode)
+/LogstashAgent/

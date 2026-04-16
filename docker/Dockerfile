@@ -48,4 +48,4 @@ RUN chmod +x /entrypoint.sh && chown appuser:appuser /entrypoint.sh
 USER appuser
 EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn","LogstashUI.wsgi:application","--bind","0.0.0.0:8080","--workers","2","--timeout","60","--access-logfile","-","--error-logfile","-"]
+CMD ["gunicorn","LogstashUI.wsgi:application","--bind","0.0.0.0:8080","--workers","2","--worker-class","gevent","--worker-connections","1000","--timeout","60","--access-logfile","-","--error-logfile","-"]

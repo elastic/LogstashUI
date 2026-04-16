@@ -1,6 +1,6 @@
 [project]
 name = "LogstashUI"
-version = "0.3.5"
+version = "0.4.0"
 description = "A control plane and UI for Logstash!"
 readme = "README.md"
 requires-python = ">=3.12"

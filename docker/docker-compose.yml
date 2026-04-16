@@ -10,10 +10,8 @@ services:
     expose:
       - "8080"
     volumes:
-      - logstashui_data:/app/data
-      # Optional: Mount config files if they exist
-      # - ../logstashui.yml:/app/src/logstashui/logstashui.yml:ro
-      # - ../logstashui.example.yml:/app/src/logstashui/logstashui.example.yml:ro
+      - logstashui_data:/app/src/logstashui/data
+      - ../src/logstashui/logstashui.yml:/app/src/logstashui/logstashui.yml:ro
     environment:
       - DEBUG=False
       # SECRET_KEY: Optional - will auto-generate and persist in data/.django_secret_key if not set
