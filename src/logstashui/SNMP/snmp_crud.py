@@ -2727,7 +2727,17 @@ def GetDiscoveredDevices(request):
 
                                 if network_name:
                                     try:
+                                        # Try exact match first
                                         network_obj = Network.objects.filter(name=network_name).first()
+                                        
+                                        # If no exact match, try case-insensitive match
+                                        if not network_obj:
+                                            network_obj = Network.objects.filter(name__iexact=network_name).first()
+                                        
+                                        # If still no match, try case-insensitive contains (for cases like 'Homelab' -> 'homelab-segment1')
+                                        if not network_obj:
+                                            network_obj = Network.objects.filter(name__icontains=network_name).first()
+                                        
                                         if network_obj:
                                             network_id = network_obj.id
                                             if network_obj.discovery_credential:

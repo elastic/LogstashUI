@@ -50,7 +50,7 @@
 
       <!-- ConnectionManager -->
       <li>
-        <details open>
+        <details id="nav-connection-manager" open>
           <summary class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -85,7 +85,7 @@
 
       <!-- SNMP -->
       <li>
-        <details open>
+        <details id="nav-snmp" open>
           <summary class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
@@ -145,7 +145,7 @@
 
       <!-- Utilities -->
       <li>
-        <details open>
+        <details id="nav-utilities" open>
           <summary class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
@@ -412,3 +412,42 @@
     }
   }
 </style>
+
+<script>
+  // Immediately apply saved states to prevent visual flash
+  (function() {
+    const sections = {
+      'nav-connection-manager': 'Connection Manager',
+      'nav-snmp': 'SNMP',
+      'nav-utilities': 'Utilities'
+    };
+    
+    for (const [id, name] of Object.entries(sections)) {
+      const savedState = localStorage.getItem(`nav-section-${name}`);
+      if (savedState !== null) {
+        const element = document.getElementById(id);
+        if (element) {
+          element.open = savedState === 'true';
+        }
+      }
+    }
+  })();
+  
+  // Set up event listeners after DOM loads
+  document.addEventListener('DOMContentLoaded', function() {
+    const sections = document.querySelectorAll('.menu details');
+    
+    sections.forEach(details => {
+      const summaryText = details.querySelector('summary .nav-text')?.textContent.trim();
+      if (summaryText) {
+        const storageKey = `nav-section-${summaryText}`;
+        
+        // Listen for toggle events - this fires when details element is opened/closed
+        details.addEventListener('toggle', function(e) {
+          const isOpen = details.open;
+          localStorage.setItem(storageKey, isOpen.toString());
+        });
+      }
+    });
+  });
+</script>

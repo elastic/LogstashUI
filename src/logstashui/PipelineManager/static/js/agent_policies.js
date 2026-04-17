@@ -45,7 +45,7 @@ function checkConfigNotifications() {
     const batchDelay = document.querySelector('[name="pipeline.batch.delay"]')?.value || '';
     const cpmEnabled = document.querySelector('[name="xpack.management.enabled"]')?.value || '';
     
-    console.log('Checking notifications - Global:', logsPathGlobal, 'Setting:', logsPathSetting);
+    // console.log('Checking notifications - Global:', logsPathGlobal, 'Setting:', logsPathSetting);
     
     // Check for CPM enabled - show warning on Pipelines tab if true
     const cpmPipelineWarning = document.getElementById('cpmPipelineWarning');
@@ -109,11 +109,11 @@ function checkConfigNotifications() {
     const hasUnsafeShutdown = unsafeShutdown === 'true';
     
     if (hasUnsafeShutdown) {
-        console.log('Unsafe shutdown enabled - showing notification');
+        // console.log('Unsafe shutdown enabled - showing notification');
         unsafeShutdownNotification?.classList.remove('hidden');
         notificationsContainer?.classList.remove('hidden');
     } else {
-        console.log('Unsafe shutdown not enabled - hiding notification');
+        // console.log('Unsafe shutdown not enabled - hiding notification');
         unsafeShutdownNotification?.classList.add('hidden');
     }
     
@@ -121,11 +121,11 @@ function checkConfigNotifications() {
     const hasAllowSuperuser = allowSuperuser === 'true';
     
     if (hasAllowSuperuser) {
-        console.log('Allow superuser enabled - showing notification');
+        // console.log('Allow superuser enabled - showing notification');
         allowSuperuserNotification?.classList.remove('hidden');
         notificationsContainer?.classList.remove('hidden');
     } else {
-        console.log('Allow superuser not enabled - hiding notification');
+        // console.log('Allow superuser not enabled - hiding notification');
         allowSuperuserNotification?.classList.add('hidden');
     }
     
@@ -133,11 +133,11 @@ function checkConfigNotifications() {
     const hasConfigDebug = configDebug === 'true';
     
     if (hasConfigDebug) {
-        console.log('Config debug enabled - showing notification');
+        // console.log('Config debug enabled - showing notification');
         configDebugNotification?.classList.remove('hidden');
         notificationsContainer?.classList.remove('hidden');
     } else {
-        console.log('Config debug not enabled - hiding notification');
+        // console.log('Config debug not enabled - hiding notification');
         configDebugNotification?.classList.add('hidden');
     }
     
@@ -145,11 +145,11 @@ function checkConfigNotifications() {
     const hasBatchDelay = batchDelay && batchDelay.trim() !== '';
     
     if (hasBatchDelay) {
-        console.log('Batch delay modified - showing notification');
+        // console.log('Batch delay modified - showing notification');
         batchDelayNotification?.classList.remove('hidden');
         notificationsContainer?.classList.remove('hidden');
     } else {
-        console.log('Batch delay not modified - hiding notification');
+        // console.log('Batch delay not modified - hiding notification');
         batchDelayNotification?.classList.add('hidden');
     }
     
@@ -390,7 +390,7 @@ function fixBatchDelay() {
 
 // Convert form fields to YAML content
 function formToYml() {
-    console.log('Converting form to YAML...');
+    // console.log('Converting form to YAML...');
     
     const config = {};
     
@@ -593,7 +593,7 @@ function formToYml() {
     
     if (isEmpty) {
         // If form is empty, preserve the original YAML content instead of replacing with {}
-        console.log('Form is empty, preserving original YAML content');
+        // console.log('Form is empty, preserving original YAML content');
         return window.policyFileContents?.['logstash.yml'] || '';
     }
     
@@ -605,19 +605,19 @@ function formToYml() {
         sortKeys: false
     });
     
-    console.log('Form converted to YAML successfully');
+    // console.log('Form converted to YAML successfully');
     return yamlContent;
 }
 
 // Parse YAML content and populate form fields
 function parseYmlToForm(ymlContent) {
     if (!ymlContent || ymlContent.trim() === '') {
-        console.log('No YAML content to parse');
+        // console.log('No YAML content to parse');
         return;
     }
     
-    console.log('Starting YAML parsing...');
-    console.log('YAML content length:', ymlContent.length);
+    // console.log('Starting YAML parsing...');
+    // console.log('YAML content length:', ymlContent.length);
     
     // Clear all form fields first to ensure commented-out values are removed
     const allFormFields = document.querySelectorAll('#formModeEditor input, #formModeEditor select, #formModeEditor textarea');
@@ -632,7 +632,7 @@ function parseYmlToForm(ymlContent) {
         // Parse YAML using js-yaml library
         const config = jsyaml.load(ymlContent);
         
-        console.log('Parsed YAML config:', config);
+        // console.log('Parsed YAML config:', config);
         
         if (!config || typeof config !== 'object') {
             console.warn('Invalid YAML configuration - not an object');
@@ -658,7 +658,7 @@ function parseYmlToForm(ymlContent) {
             const field = document.querySelector(`[name="${fieldName}"]`);
             if (field) {
                 field.value = value;
-                console.log(`Set field ${fieldName} = ${value}`);
+                // console.log(`Set field ${fieldName} = ${value}`);
                 // Trigger change event to apply modified styling
                 field.dispatchEvent(new Event('input', { bubbles: true }));
                 field.dispatchEvent(new Event('change', { bubbles: true }));
@@ -835,7 +835,7 @@ function parseYmlToForm(ymlContent) {
         setFormField('xpack.geoip.downloader.enabled', getNestedValue(config, 'xpack.geoip.downloader.enabled'));
         setFormField('xpack.geoip.downloader.endpoint', getNestedValue(config, 'xpack.geoip.downloader.endpoint'));
         
-        console.log('Successfully parsed YAML and populated form fields');
+        // console.log('Successfully parsed YAML and populated form fields');
         
     } catch (error) {
         console.error('Error parsing YAML:', error);
@@ -2224,7 +2224,7 @@ document.addEventListener('DOMContentLoaded', function() {
             checkConfigNotifications();
             detectChanges();
         });
-        console.log('Added event listeners to global logs path field');
+        // console.log('Added event listeners to global logs path field');
     }
     
     if (logsPathSettingField) {
@@ -2238,7 +2238,7 @@ document.addEventListener('DOMContentLoaded', function() {
             detectChanges();
             checkPathPermissionNotifications();
         });
-        console.log('Added event listeners to config logs path field');
+        // console.log('Added event listeners to config logs path field');
     }
     
     // Also monitor settings path and binary path for changes
@@ -2264,7 +2264,7 @@ document.addEventListener('DOMContentLoaded', function() {
             detectChanges(); 
             checkPathPermissionNotifications();
         });
-        console.log('Added event listeners to binary path field');
+        // console.log('Added event listeners to binary path field');
     }
     
     // Initial check for notifications
@@ -2351,7 +2351,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Load pipelines for the current policy
 async function loadPolicyPipelines() {
     if (!currentPolicy) {
-        console.log('No policy selected');
+        // console.log('No policy selected');
         return;
     }
     
@@ -2360,7 +2360,7 @@ async function loadPolicyPipelines() {
     const policyId = selectedOption?.dataset.policyId;
     
     if (!policyId) {
-        console.log('No policy ID found');
+        // console.log('No policy ID found');
         return;
     }
     
@@ -2415,7 +2415,7 @@ async function loadPolicyKeystore() {
     const policyId = selectedOption?.dataset.policyId;
     
     if (!policyId) {
-        console.log('No policy selected');
+        // console.log('No policy selected');
         return;
     }
     
@@ -2721,11 +2721,11 @@ async function deleteKeystoreEntry(entryId, keyName) {
 }
 
 function previousKeystorePage() {
-    console.log('Previous keystore page');
+    // console.log('Previous keystore page');
 }
 
 function nextKeystorePage() {
-    console.log('Next keystore page');
+    // console.log('Next keystore page');
 }
 
 // Handle action menu (3-dot icon) functionality for keystore table
@@ -2929,13 +2929,13 @@ function setupChangeDetection() {
     const logsPath = document.getElementById('logsPath');
     
     if (settingsPath) {
-        console.log('Added event listeners to settings path field');
+        // console.log('Added event listeners to settings path field');
         settingsPath.addEventListener('input', () => {
-            console.log('Settings path input event fired');
+            // console.log('Settings path input event fired');
             detectChanges();
         });
         settingsPath.addEventListener('change', () => {
-            console.log('Settings path change event fired');
+            // console.log('Settings path change event fired');
             detectChanges();
         });
     } else {
@@ -2943,14 +2943,14 @@ function setupChangeDetection() {
     }
     
     if (logsPath) {
-        console.log('Added event listeners to logs path field');
+        // console.log('Added event listeners to logs path field');
         logsPath.addEventListener('input', () => {
-            console.log('Logs path input event fired');
+            // console.log('Logs path input event fired');
             checkConfigNotifications();
             detectChanges();
         });
         logsPath.addEventListener('change', () => {
-            console.log('Logs path change event fired');
+            // console.log('Logs path change event fired');
             checkConfigNotifications();
             detectChanges();
         });
