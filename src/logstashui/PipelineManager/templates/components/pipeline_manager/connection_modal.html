@@ -8,7 +8,7 @@
   <div id="connectionFormFlyout" class="hidden fixed inset-0 overflow-hidden" style="z-index: 80;">
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeFlyout()"></div>
     <div class="absolute inset-y-0 right-0 max-w-full flex">
-      <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="w-[32rem] bg-base-200 shadow-xl flex flex-col h-full">
         <div class="flex justify-between items-center p-6 border-b border-base-300">
           <h2 class="text-xl font-bold">Add New Connection</h2>
           <button onclick="closeFlyout()" class="btn btn-ghost btn-sm btn-circle">
@@ -77,8 +77,8 @@
               <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
 
               <!-- Connection Name Field (only for centralized connections) -->
-              <div id="connectionNameField" class="mb-4">
-                <label for="{{ form.name.id_for_label }}" class="form-label">
+              <div id="connectionNameField" class="mb-6">
+                <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
                   Connection Name <span class="text-red-500">*</span>
                 </label>
                 {{ form.name }}
@@ -90,79 +90,90 @@
 
               <!-- Centralized Connection Fields -->
               <div id="centralizedFields">
-                <div class="form-radio-group mb-4">
-                  <label class="form-radio-label">
-                    <input type="radio" name="connection_mode" value="cloud" class="form-radio" checked>
-                    <span>Cloud ID</span>
+                <!-- Connection Mode Selection -->
+                <div class="mb-6">
+                  <label class="block text-sm font-medium text-gray-300 mb-3">
+                    Connection Mode
                   </label>
-                  <label class="form-radio-label">
-                    <input type="radio" name="connection_mode" value="url" class="form-radio">
-                    <span>Elastic Node URL</span>
-                  </label>
+                  <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="connection_mode" value="cloud" class="radio radio-sm radio-primary" checked>
+                      <span class="text-sm text-gray-300">Cloud ID</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="connection_mode" value="url" class="radio radio-sm radio-primary">
+                      <span class="text-sm text-gray-300">Elastic Node URL</span>
+                    </label>
+                  </div>
+                  <p class="text-gray-400 text-xs mt-2">Choose how to connect to your Elasticsearch cluster</p>
                 </div>
 
                 <!-- Cloud ID Field -->
-                <div id="cloudIdField">
-                  <label for="{{ form.cloud_id.id_for_label }}" class="form-label">
+                <div id="cloudIdField" class="mb-6">
+                  <label for="{{ form.cloud_id.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
                     Cloud ID
                   </label>
                   {{ form.cloud_id }}
+                  <p class="text-gray-400 text-xs mt-1">Your Elastic Cloud deployment ID</p>
                 </div>
 
                 <!-- Node URL and Port Fields -->
-                <div id="nodeUrlField" class="hidden">
-                  <div class="flex space-x-4">
+                <div id="nodeUrlField" class="hidden mb-6">
+                  <label class="block text-sm font-medium text-gray-300 mb-2">
+                    Elastic Node URL
+                  </label>
+                  <div class="flex gap-3">
                     <div class="flex-1">
-                      <label for="{{ form.host.id_for_label }}" class="form-label">
-                        Elastic Node URL
-                      </label>
                       {{ form.host }}
                     </div>
-                    <div class="w-32">
-                      <label for="{{ form.port.id_for_label }}" class="form-label">
-                        Port
-                      </label>
+                    <div class="w-24">
                       {{ form.port }}
                     </div>
                   </div>
+                  <p class="text-gray-400 text-xs mt-1">URL and port of your Elasticsearch node (e.g., https://elasticsearch.example.com:9200)</p>
                 </div>
 
                 <!-- Authentication Section -->
-                <div class="form-section">
-                  <label class="form-label">Authentication</label>
-                  <div class="form-radio-group">
-                    <label class="form-radio-label">
-                      <input type="radio" name="auth_type" value="basic" class="form-radio" checked>
-                      <span>Username/Password</span>
+                <div class="mb-6">
+                  <label class="block text-sm font-medium text-gray-300 mb-3">
+                    Authentication
+                  </label>
+                  <div class="flex gap-4 mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="auth_type" value="basic" class="radio radio-sm radio-primary" checked>
+                      <span class="text-sm text-gray-300">Username/Password</span>
                     </label>
-                    <label class="form-radio-label">
-                      <input type="radio" name="auth_type" value="apiKey" class="form-radio">
-                      <span>API Key</span>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="auth_type" value="apiKey" class="radio radio-sm radio-primary">
+                      <span class="text-sm text-gray-300">API Key</span>
                     </label>
                   </div>
 
                   <!-- Username/Password Fields -->
                   <div id="basicAuthFields">
                     <div class="mb-4">
-                      <label for="{{ form.username.id_for_label }}" class="form-label">
+                      <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
                         Username
                       </label>
                       {{ form.username }}
+                      <p class="text-gray-400 text-xs mt-1">Elasticsearch username</p>
                     </div>
                     <div class="mb-4">
-                      <label for="{{ form.password.id_for_label }}" class="form-label">
+                      <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
                         Password
                       </label>
                       {{ form.password }}
+                      <p class="text-gray-400 text-xs mt-1">Elasticsearch password</p>
                     </div>
                   </div>
 
                   <!-- API Key Field -->
                   <div id="apiKeyField" class="hidden">
-                    <label for="{{ form.api_key.id_for_label }}" class="form-label">
+                    <label for="{{ form.api_key.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
                       API Key
                     </label>
                     {{ form.api_key }}
+                    <p class="text-gray-400 text-xs mt-1">Base64-encoded API key for authentication</p>
                   </div>
                 </div>
               </div>
