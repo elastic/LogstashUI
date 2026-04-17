@@ -2,11 +2,11 @@ name: LogstashUI
 
 services:
   logstashui:
-    #image: codyjackson032/logstashui:latest
+    image: codyjackson032/logstashui:latest
     # Uncomment below to build locally instead of pulling from Docker Hub
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    #build:
+    #  context: ..
+    #  dockerfile: docker/Dockerfile
     expose:
       - "8080"
     volumes:
