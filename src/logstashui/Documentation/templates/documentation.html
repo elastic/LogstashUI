@@ -1,0 +1,154 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/markdown.css' %}">
+<style>
+    .docs-layout {
+        display: flex;
+        min-height: 100vh;
+        gap: 0;
+    }
+
+    .docs-subnav {
+        width: 220px;
+        flex-shrink: 0;
+        padding: 0 1.5rem 1.5rem 0;
+        position: sticky;
+        top: 0;
+        align-self: flex-start;
+        max-height: 100vh;
+        overflow-y: auto;
+        border-right: 1px solid rgba(148, 163, 184, 0.15);
+        scrollbar-width: thin;
+        scrollbar-color: rgba(168, 85, 247, 0.3) transparent;
+    }
+
+    .docs-subnav::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .docs-subnav::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .docs-subnav::-webkit-scrollbar-thumb {
+        background: rgba(168, 85, 247, 0.3);
+        border-radius: 3px;
+    }
+
+    .docs-subnav::-webkit-scrollbar-thumb:hover {
+        background: rgba(168, 85, 247, 0.5);
+    }
+
+    .docs-subnav h3 {
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: rgba(148, 163, 184, 0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .docs-subnav ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .docs-subnav li {
+        margin: 0.25rem 0;
+    }
+
+    .docs-subnav a {
+        display: block;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        color: rgba(255, 255, 255, 0.7);
+        text-decoration: none;
+        transition: background 0.15s ease, color 0.15s ease;
+        font-size: 0.9rem;
+    }
+
+    .docs-subnav a:hover {
+        background: rgba(168, 85, 247, 0.08);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .docs-subnav a.active {
+        background: rgba(168, 85, 247, 0.12);
+        color: rgba(168, 85, 247, 1);
+        font-weight: 500;
+    }
+
+    /* Nested navigation */
+    .docs-subnav ul ul {
+        margin-left: 0.75rem;
+        padding-left: 0.5rem;
+        border-left: 1px solid rgba(148, 163, 184, 0.15);
+    }
+
+    .docs-subnav details {
+        margin: 0.25rem 0;
+    }
+
+    .docs-subnav summary {
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+    }
+
+    .docs-subnav summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .docs-subnav summary a {
+        display: inline-block;
+        width: 100%;
+    }
+
+    .docs-subnav details[open] > summary {
+        margin-bottom: 0.25rem;
+    }
+
+    .docs-content {
+        flex: 1;
+        min-width: 0;
+        padding-left: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="docs-layout">
+    <!-- Documentation Subnavigation -->
+    <aside class="docs-subnav">
+        <h3>Documentation</h3>
+        <ul>
+            <li>
+                <a href="/Documentation/" class="{% if request.path == '/Documentation/' %}active{% endif %}">
+                    Home
+                </a>
+            </li>
+            {% for item in nav_tree %}
+                {% include 'nav_item.html' with item=item %}
+            {% endfor %}
+        </ul>
+    </aside>
+
+    <!-- Documentation Content -->
+    <div class="docs-content">
+        <div class="documentation-container">
+            <div class="markdown-content">
+                {{ content|safe }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

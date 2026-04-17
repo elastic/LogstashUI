@@ -1,0 +1,28 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<li>
+    {% if item.children %}
+        <!-- Folder with children - collapsible -->
+        <details open>
+            <summary>
+                <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">
+                    {{ item.title }}
+                </a>
+            </summary>
+            <ul>
+                {% for child in item.children %}
+                    {% include 'nav_item.html' with item=child %}
+                {% endfor %}
+            </ul>
+        </details>
+    {% else %}
+        <!-- Leaf item - no children -->
+        <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">
+            {{ item.title }}
+        </a>
+    {% endif %}
+</li>

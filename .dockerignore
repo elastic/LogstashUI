@@ -1,0 +1,40 @@
+# Git
+.git
+../.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+*.sqlite3
+src/logstashui/data/
+
+# Static files (will be collected during build)
+src/logstashui/staticfiles/
+
+# Node modules (will be installed during build)
+node_modules/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+LogstashUI/Dockerfile
+docker/docker-compose.yml
+.dockerignore

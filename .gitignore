@@ -58,13 +58,13 @@ cover/
 # Django stuff:
 *.log
 local_settings.py
-LogstashUI/data/db.sqlite3
+src/logstashui/data/db.sqlite3
 db.sqlite3-journal
-LogstashUI/LogstashUI/data/
-!LogstashUI/SNMP/data/
+src/logstashui/LogstashUI/data/
+!src/logstashui/SNMP/data/
 
-# LogstashAgent data directory (logs, etc.)
-LogstashAgent/data/
+# logstashagent data directory (logs, etc.)
+LogstashAgent/src/logstashagent/data/
 
 # Flask stuff:
 instance/
@@ -191,7 +191,7 @@ cython_debug/
 #   be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #   and can be added to the global gitignore or merged into this file.  For a more nuclear
 #   option (not recommended) you can uncomment the following to ignore the entire idea folder.
-# .idea/
+.idea/
 
 # Abstra
 #   Abstra is an AI-powered process automation framework.
@@ -219,10 +219,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-/LogstashUI/staticfiles/admin/
-/LogstashUI/staticfiles/css/
-/LogstashUI/staticfiles/django-browser-reload/
-/LogstashUI/staticfiles/django_htmx/
-/LogstashUI/staticfiles/images/
-/LogstashUI/staticfiles/js/
+
+# LogstashUI
+/src/logstashui/staticfiles/
+/src/logstashui/data/
 /.plans/
+
+# LogstashAgent (cloned from GitHub in host mode)
+/LogstashAgent/

@@ -1,0 +1,2032 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
+
+<style>
+  @keyframes glowPulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.3);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(59, 130, 246, 0);
+    }
+  }
+
+  @keyframes notificationGlowWarning {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(251, 191, 36, 0.9);
+    }
+  }
+
+  @keyframes notificationGlowError {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    }
+    50% {
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.9);
+    }
+  }
+
+  .glow-button {
+    animation: glowPulse 2s ease-in-out infinite;
+    position: relative;
+  }
+
+  .notification-glow-warning {
+    animation: notificationGlowWarning 2s ease-in-out infinite;
+  }
+
+  .notification-glow-error {
+    animation: notificationGlowError 2s ease-in-out infinite;
+  }
+
+  .notification-badge-warning {
+    background-color: #fbbf24;
+  }
+
+  .notification-badge-error {
+    background-color: #ef4444;
+  }
+
+  /* Prominent purple glow for Save button with unsaved changes */
+  @keyframes saveButtonGlow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(147, 51, 234, 0.8), 0 0 40px rgba(147, 51, 234, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(147, 51, 234, 1), 0 0 60px rgba(147, 51, 234, 0.6);
+    }
+  }
+
+  .save-button-glow {
+    animation: saveButtonGlow 2s ease-in-out infinite;
+  }
+
+  /* Tab change indicator */
+  .tab-changed::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 6px;
+    height: 6px;
+    background-color: #a855f7;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);
+  }
+
+  /* Subtle purple glow for modified form fields */
+  .field-modified {
+    border-color: rgba(147, 51, 234, 0.5) !important;
+    box-shadow: 0 0 0 1px rgba(147, 51, 234, 0.3), 0 0 8px rgba(147, 51, 234, 0.2) !important;
+    transition: all 0.3s ease;
+  }
+
+  .field-modified:focus {
+    border-color: rgba(147, 51, 234, 0.7) !important;
+    box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.4), 0 0 12px rgba(147, 51, 234, 0.3) !important;
+  }
+
+  /* CodeMirror container styling - matching pipeline_text_editor */
+  .CodeMirror {
+    height: 100%;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    background: #1f2937;
+    color: #e5e7eb;
+    border: none !important;
+  }
+  
+  .CodeMirror-gutters {
+    background: #374151;
+    border-right: 1px solid #4b5563;
+  }
+  
+  .CodeMirror-linenumber {
+    color: #9ca3af;
+  }
+  
+  .CodeMirror-cursor {
+    border-left: 1px solid #e5e7eb;
+  }
+  
+  /* Selection highlight */
+  .CodeMirror-selected {
+    background: #3b82f6 !important;
+  }
+  
+  .CodeMirror-focused .CodeMirror-selected {
+    background: #3b82f6 !important;
+  }
+  
+  /* Bracket matching */
+  .CodeMirror-matchingbracket {
+    color: #22c55e !important;
+    background-color: rgba(34, 197, 94, 0.2);
+    font-weight: bold;
+  }
+  
+  .CodeMirror-nonmatchingbracket {
+    color: #ef4444 !important;
+    background-color: rgba(239, 68, 68, 0.2);
+    font-weight: bold;
+  }
+  
+  /* Scrollbar styling */
+  .CodeMirror-vscrollbar::-webkit-scrollbar,
+  .CodeMirror-hscrollbar::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+  .CodeMirror-hscrollbar::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.3);
+    border-radius: 6px;
+  }
+  
+  .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+  .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #475569 0%, #334155 100%);
+    border-radius: 6px;
+    border: 2px solid rgba(30, 41, 59, 0.5);
+  }
+  
+  .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
+  .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+  }
+  
+  .file-tab {
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+  }
+  
+  .file-tab:hover:not(.active) {
+    background-color: #374151;
+  }
+  
+  .file-tab:hover:not(.active) span {
+    color: #d1d5db;
+  }
+  
+  .file-tab:hover:not(.active) svg {
+    opacity: 0.6;
+  }
+  
+  .file-tab.active {
+    border-bottom-color: #3b82f6;
+    background-color: #1a1f2e;
+    box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.1);
+    margin-bottom: -1px;
+    z-index: 1;
+  }
+  
+  .file-tab.active span {
+    font-weight: 600;
+  }
+  
+  .file-tab.active svg {
+    opacity: 0.8;
+  }
+  
+  .mode-toggle {
+    display: inline-flex;
+    border-radius: 0.375rem;
+    overflow: hidden;
+  }
+  
+  .mode-toggle button {
+    padding: 0.25rem 0.75rem;
+    background-color: #374151;
+    color: #9ca3af;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .mode-toggle button:hover {
+    background-color: #4b5563;
+  }
+  
+  .mode-toggle button.active {
+    background-color: #3b82f6;
+    color: white;
+  }
+  
+  /* YAML Syntax Highlighting - Brighter Colors */
+  .cm-atom { color: #60a5fa !important; } /* Keys - bright blue */
+  .cm-string { color: #86efac !important; } /* Strings - bright green */
+  .cm-number { color: #fbbf24 !important; } /* Numbers - bright yellow */
+  .cm-keyword { color: #c084fc !important; } /* Keywords - bright purple */
+  .cm-comment { color: #6b7280 !important; } /* Comments - gray (matching image) */
+  .cm-meta { color: #fb923c !important; } /* Meta - bright orange */
+  .cm-variable-2 { color: #f472b6 !important; } /* Variables - bright pink */
+  .cm-def { color: #34d399 !important; } /* Definitions - bright teal */
+
+  @keyframes guide-section-pulse {
+    0%   { box-shadow: 0 0 8px 2px rgba(168, 85, 247, 0.2); }
+    50%  { box-shadow: 0 0 20px 6px rgba(168, 85, 247, 0.45); }
+    100% { box-shadow: 0 0 8px 2px rgba(168, 85, 247, 0.2); }
+  }
+
+  .guide-btn-highlight {
+    animation: guide-section-pulse 2s ease-in-out infinite;
+    border-color: rgba(168, 85, 247, 0.6) !important;
+  }
+
+  .requirement-tile-ok {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+  }
+
+  .requirement-tile-fail {
+    background: rgba(190, 18, 60, 0.08);
+    border-color: rgba(219, 39, 119, 0.3);
+    color: #f9a8d4;
+  }
+
+  /* Policy Switcher */
+  .policy-switcher {
+    position: relative;
+  }
+
+  .policy-switcher-btn {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.25rem 0.4rem 0.25rem 0;
+    background: transparent;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .policy-switcher-btn:hover {
+    opacity: 0.85;
+  }
+
+  .policy-switcher-prefix {
+    font-size: 1.6rem;
+    font-weight: 400;
+    color: #9ca3af;
+    letter-spacing: -0.01em;
+  }
+
+  .policy-switcher-name {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #f3f4f6;
+    letter-spacing: -0.02em;
+  }
+
+  .policy-switcher-chevron {
+    opacity: 0.4;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    flex-shrink: 0;
+    align-self: center;
+    color: #a78bfa;
+  }
+
+  .policy-switcher-btn:hover .policy-switcher-chevron {
+    opacity: 0.7;
+  }
+
+  .policy-switcher-btn.open .policy-switcher-chevron {
+    transform: rotate(180deg);
+    opacity: 0.8;
+  }
+
+  .policy-switcher-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    background: #1a1f2e;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0,0,0,0.1);
+    z-index: 100;
+    overflow: hidden;
+    animation: switcher-in 0.1s ease;
+  }
+
+  @keyframes switcher-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .policy-switcher-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.9rem;
+    color: #d1d5db;
+    cursor: pointer;
+    transition: background 0.1s ease, color 0.1s ease;
+    position: relative;
+  }
+
+  .policy-switcher-item:hover {
+    background: rgba(139, 92, 246, 0.1);
+    color: #ede9fe;
+  }
+
+  .policy-switcher-item.selected {
+    background: rgba(139, 92, 246, 0.12);
+    color: #ede9fe;
+    font-weight: 600;
+  }
+
+  .policy-switcher-check {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+    color: #a78bfa;
+  }
+
+  .policy-switcher-check.invisible {
+    visibility: hidden;
+  }
+
+  .policy-switcher-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 0.25rem 0;
+  }
+
+  .policy-switcher-add {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    color: #a78bfa;
+    cursor: pointer;
+    transition: background 0.1s ease;
+    font-weight: 500;
+  }
+
+  .policy-switcher-add:hover {
+    background: rgba(139, 92, 246, 0.1);
+  }
+</style>
+
+<div class="p-6">
+  <!-- Empty State (shown when no policies exist) -->
+  <div id="emptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-12rem)]">
+    <div class="max-w-2xl w-full">
+      <div class="bg-gray-800/95 rounded-lg p-8 shadow-xl text-center mb-6">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-2">Get Started with Agent Policies</h2>
+        <p class="text-gray-300 mb-4">Create your first policy to manage Logstash agent configurations</p>
+        <div class="flex justify-center mb-8">
+          <button id="emptyStateAddPolicyBtn" class="btn btn-primary flex items-center gap-x-2 glow-button">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Your First Policy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content (shown when policies exist) -->
+  <div id="mainContent">
+    <!-- Header with Policy Selector and Actions -->
+    <div class="bg-gray-800/95 rounded-lg shadow-xl p-4 mb-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <!-- Hidden native select — all JS logic targets this -->
+        <select id="policySelect" class="hidden">
+          <option value="add_new">+ Add Policy</option>
+        </select>
+        <!-- Headline-style switcher -->
+        <div class="policy-switcher" id="policySwitcher">
+          <button type="button" class="policy-switcher-btn" id="policySwitcherBtn" onclick="togglePolicySwitcher()">
+            <span class="policy-switcher-prefix">Agent Policy</span>
+            <span id="policySwitcherLabel" class="policy-switcher-name">Loading...</span>
+            <svg class="policy-switcher-chevron w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="policy-switcher-menu hidden" id="policySwitcherMenu"></div>
+        </div>
+        <button id="clonePolicyBtn" class="btn btn-sm btn-ghost text-blue-400/60 hover:text-blue-300 hover:bg-blue-900/20" onclick="cloneCurrentPolicy()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <button id="deletePolicyBtn" class="btn btn-sm btn-ghost text-red-400/60 hover:text-red-300 hover:bg-red-900/20" onclick="deleteCurrentPolicy()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+        <!-- Deploy indicator -->
+        <div id="deployBtnIndicator" class="hidden flex items-center gap-1 px-2 py-1 bg-orange-500/20 border border-orange-500/40 rounded-full">
+          <div class="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse"></div>
+          <span id="deployBtnIndicatorText" class="text-xs text-orange-300 font-medium whitespace-nowrap"></span>
+        </div>
+      </div>
+      <div class="flex gap-3 items-center">
+        <!-- Notification Indicator -->
+        <div id="notificationIndicator" class="hidden relative group">
+          <button id="notificationIndicatorBtn" class="relative p-2 rounded-full hover:bg-gray-700 transition-colors">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+            </svg>
+            <span id="notificationBadge" class="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-gray-900"></span>
+          </button>
+          
+          <!-- Tooltip -->
+          <div id="notificationTooltip" class="hidden group-hover:block absolute right-0 top-full mt-2 w-80 bg-gray-800 rounded-lg shadow-xl border border-gray-700 z-50">
+            <div class="p-3">
+              <div class="text-sm font-semibold text-white mb-2">Active Notifications</div>
+              <div id="notificationTooltipContent" class="space-y-2 text-xs">
+                <!-- Notifications will be populated here -->
+              </div>
+              <div class="mt-2 pt-2 border-t border-gray-700 text-xs text-gray-400">
+                Click to navigate to the affected tab
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Unsaved Changes Indicator -->
+        <div id="unsavedChangesIndicator" class="hidden flex items-center gap-2 text-purple-400 text-sm font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span>Unsaved Changes</span>
+        </div>
+        
+        <button id="saveBtn" class="btn btn-primary px-4 py-2.5">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          Save
+        </button>
+        <button id="deployBtn" class="btn bg-green-600 hover:bg-green-700 text-white px-4 py-2.5">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          Deploy
+        </button>
+      </div>
+    </div>
+
+    <!-- Policy Stats Row -->
+    <div class="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-700">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs text-gray-400">Revision</div>
+          <div id="statRevision" class="text-sm font-semibold text-white">—</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs text-gray-400">Managed Instances</div>
+          <div id="statInstances" class="text-sm font-semibold text-white">—</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs text-gray-400">Last Deployed</div>
+          <div id="statLastDeployed" class="text-sm font-semibold text-white">—</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs text-gray-400">Undeployed Changes</div>
+          <div id="statPendingChanges" class="text-sm font-semibold text-white">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Config Section -->
+  <div class="bg-gray-800/95 rounded-lg shadow-xl p-4 mb-4">
+    <div class="flex items-center mb-2">
+      <button id="globalConfigToggle" class="flex items-center gap-2 text-white font-medium hover:text-blue-400 transition-colors relative">
+        <svg class="w-5 h-5 transform transition-transform" id="globalConfigChevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+        Policy Config
+        <span id="policyConfigChangedIndicator" class="hidden ml-2 w-2 h-2 bg-purple-500 rounded-full" style="box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);"></span>
+      </button>
+    </div>
+    <div id="globalConfigContent" class="mt-3 space-y-3">
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Settings Path:</label>
+          <input type="text" id="settingsPath" value="/etc/logstash/" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          <div id="settingsPathNotification" class="hidden mt-1 text-xs text-yellow-400 flex items-start gap-1">
+            <svg class="w-3 h-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <span id="settingsPathNotificationText"></span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Logs Path:</label>
+          <input type="text" id="logsPath" value="/var/log/logstash" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          <div id="logsPathNotification" class="hidden mt-1 text-xs text-yellow-400 flex items-start gap-1">
+            <svg class="w-3 h-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <span id="logsPathNotificationText"></span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Binary Path:</label>
+          <input type="text" id="binaryPath" value="/usr/share/logstash/bin" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          <div id="binaryPathNotification" class="hidden mt-1 text-xs text-yellow-400 flex items-start gap-1">
+            <svg class="w-3 h-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <span id="binaryPathNotificationText"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Tabs and Editor -->
+  <div class="bg-gray-800/95 rounded-lg shadow-xl overflow-hidden">
+    <!-- File Tabs -->
+    <div class="flex items-center justify-between bg-gray-900 border-b border-gray-700">
+      <div class="flex items-center">
+        <!-- Config Files Section -->
+        <div class="file-tab active" data-file="logstash.yml">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="text-white text-sm font-semibold">logstash.yml</span>
+        </div>
+        <div class="file-tab" data-file="jvm.options">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="text-gray-500 text-sm">jvm.options</span>
+        </div>
+        <div class="file-tab" data-file="log4j2.properties">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="text-gray-500 text-sm">log4j2.properties</span>
+        </div>
+        
+        <!-- Visual Separator -->
+        <div class="h-6 w-px bg-gradient-to-b from-transparent via-gray-600/50 to-transparent mx-3 self-center"></div>
+        
+        <!-- Pipeline & Keystore Section -->
+        <div class="file-tab" data-file="pipelines">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+          <span class="text-gray-500 text-sm">Pipelines</span>
+        </div>
+        <div class="file-tab" data-file="keystore">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+          <span class="text-gray-500 text-sm">Keystore</span>
+        </div>
+        
+        <!-- Visual Separator -->
+        <div class="h-6 w-px bg-gradient-to-b from-transparent via-gray-600/50 to-transparent mx-3 self-center"></div>
+        
+        <!-- Enrollment Tokens Section -->
+        <div class="file-tab" data-file="enrollment-tokens">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+          <span class="text-gray-500 text-sm">Enrollment Tokens</span>
+        </div>
+      </div>
+      
+      <!-- Mode Toggle (only visible for logstash.yml) -->
+      <div id="modeToggleContainer" class="pr-4">
+        <span class="text-gray-400 text-sm mr-2">Mode:</span>
+        <div class="mode-toggle">
+          <button id="formModeBtn" class="active">Form</button>
+          <button id="codeModeBtn">YML</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Editor Area -->
+    <div class="flex flex-col flex-1 overflow-hidden">
+      <!-- Banner row — layout varies by tab -->
+      <div id="bannerRow" class="mx-4 mt-4 mb-3 grid gap-3 flex-shrink-0" style="grid-template-columns: 1fr;">
+
+        <!-- Guided Setup (logstash.yml only) -->
+        <div id="quickSetupRow" class="hidden p-3 bg-purple-900/20 border border-purple-500/40 rounded-lg">
+          <div class="flex items-center justify-between h-full">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span class="text-sm text-purple-300 font-medium">Guided Setup</span>
+            </div>
+            <div class="flex gap-2">
+              <button id="defaultGuideBtn" onclick="openDefaultGuideModal()" class="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600 border border-gray-600 hover:border-gray-500 text-gray-200 text-sm rounded-full transition-all hover:shadow-md">
+                <span class="flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Default
+                </span>
+              </button>
+              <button onclick="openCentralizedPipelineManagementModal()" class="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600 border border-gray-600 hover:border-gray-500 text-gray-200 text-sm rounded-full transition-all hover:shadow-md">
+                <span class="flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                  </svg>
+                  Centralized
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Requirements tile (logstash.yml only) -->
+        <div id="requirementsTile" class="hidden p-3 border rounded-lg cursor-pointer transition-all requirement-tile-ok" onclick="openDefaultGuideModal()">
+          <div class="flex items-center justify-between h-full">
+            <div class="flex items-center gap-2">
+              <svg id="requirementsIcon" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span id="requirementsLabel" class="text-sm font-medium">Requirements</span>
+            </div>
+            <span id="requirementsBadge" class="hidden text-xs font-semibold px-2 py-0.5 rounded-full bg-pink-900/40 text-pink-300 border border-pink-500/40"></span>
+          </div>
+          <!-- Hidden stubs kept so existing JS still finds them without errors -->
+          <div id="logsPathMismatchNotification" class="hidden"></div>
+          <div id="logLevelFormatNotification" class="hidden"></div>
+        </div>
+
+        <!-- Tip tile (pipelines / keystore only) -->
+        <div id="tipTile" class="hidden p-3 bg-amber-900/15 border border-amber-500/30 rounded-lg flex items-center gap-2">
+          <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          <span id="tipText" class="text-sm text-amber-300/80"></span>
+        </div>
+
+        <!-- Documentation link — always visible, full tile clickable -->
+        <a id="docsLink" href="https://www.elastic.co/docs/reference/logstash/logstash-settings-file" target="_blank" class="p-3 bg-blue-900/20 border border-blue-500/40 rounded-lg flex items-center gap-2 hover:bg-blue-900/30 transition-colors no-underline">
+          <svg class="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          <span class="text-sm text-blue-300 font-medium">Documentation</span>
+        </a>
+
+      </div>
+
+      <!-- Notifications Container (warnings only — unsafe shutdown, superuser, config debug, batch delay) -->
+      <div id="notificationsContainer" class="mx-4 mb-3 space-y-2 flex-shrink-0 hidden">
+        <!-- Unsafe Shutdown Notification -->
+        <div id="unsafeShutdownNotification" class="p-3 bg-red-900/20 border border-red-500/40 rounded-lg cursor-pointer hover:bg-red-900/30 transition-colors hidden" onclick="fixUnsafeShutdown()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-red-300 mb-1">Unsafe Shutdown Enabled</div>
+              <div class="text-xs text-gray-300">This could result in data loss. Click here to set it back to the default (false).</div>
+            </div>
+            <svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Allow Superuser Notification -->
+        <div id="allowSuperuserNotification" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg cursor-pointer hover:bg-yellow-900/30 transition-colors hidden" onclick="fixAllowSuperuser()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-yellow-300 mb-1">Allow Superuser Enabled</div>
+              <div class="text-xs text-gray-300">We don't recommend using this setting for security purposes. Click to set back to the default (false).</div>
+            </div>
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Config Debug Notification -->
+        <div id="configDebugNotification" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg cursor-pointer hover:bg-yellow-900/30 transition-colors hidden" onclick="fixConfigDebug()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-yellow-300 mb-1">Config Debug Enabled</div>
+              <div class="text-xs text-gray-300">This prints your fully compiled pipeline configuration into the logs as a debug log message. We don't recommend enabling this. Click to set it back to default (false).</div>
+            </div>
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Batch Delay Notification -->
+        <div id="batchDelayNotification" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg cursor-pointer hover:bg-yellow-900/30 transition-colors hidden" onclick="fixBatchDelay()">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium text-yellow-300 mb-1">Batch Delay Modified</div>
+              <div class="text-xs text-gray-300">It's typically not a good idea to change this setting. Click to set it to the default.</div>
+            </div>
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Form Mode -->
+      <div id="formModeEditor" class="flex-1 overflow-y-auto px-4">
+        <div class="space-y-6 pb-6">
+          
+          <!-- Row 1: Node Identity + Data Path -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Node Identity Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Node Identity
+              </h3>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-1">Node Name</label>
+                  <input type="text" name="node.name" placeholder="e.g., test" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <p class="text-xs text-gray-500 mt-1">Descriptive name for the node (defaults to hostname if omitted)</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Data Path Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Data Path
+              </h3>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-1">Data Directory</label>
+                  <input type="text" name="path.data" placeholder="Defaults to LOGSTASH_HOME/data" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <p class="text-xs text-gray-500 mt-1">Directory for persistent data storage</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Pipeline Settings + API Settings -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Pipeline Settings Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Pipeline Settings
+              </h3>
+              
+              <!-- Common Settings -->
+              <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Pipeline ID</label>
+                <input type="text" name="pipeline.id" placeholder="main" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Workers</label>
+                <input type="number" name="pipeline.workers" placeholder="Defaults to CPU cores" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Batch Size</label>
+                <input type="number" name="pipeline.batch.size" placeholder="125" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Batch Delay (ms)</label>
+                <input type="number" name="pipeline.batch.delay" placeholder="50" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('pipeline-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="pipeline-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="pipeline-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Output Chunking Growth Factor</label>
+                <input type="number" name="pipeline.batch.output_chunking.growth_threshold_factor" placeholder="1000" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+                <p class="text-xs text-gray-500 mt-1">Default 1000 (effectively disabled)</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Batch Metrics Sampling</label>
+                <select name="pipeline.batch.metrics.sampling_mode" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (minimal)</option>
+                  <option value="disabled">Disabled</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="full">Full</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Unsafe Shutdown</label>
+                <select name="pipeline.unsafe_shutdown" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+                <p class="text-xs text-red-400 mt-1">⚠️ Can lead to data loss</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Event Ordering</label>
+                <select name="pipeline.ordered" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (auto)</option>
+                  <option value="auto">Auto</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">ECS Compatibility</label>
+                <select name="pipeline.ecs_compatibility" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (v8)</option>
+                  <option value="disabled">Disabled</option>
+                  <option value="v1">v1</option>
+                  <option value="v8">v8</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Separate Logs</label>
+                <select name="pipeline.separate_logs" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Buffer Type</label>
+                <select name="pipeline.buffer.type" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (heap)</option>
+                  <option value="heap">Heap</option>
+                  <option value="direct">Direct</option>
+                </select>
+              </div>
+              </div>
+            </div>
+
+            <!-- API Settings Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+                API Settings
+              </h3>
+              
+              <!-- Common Settings -->
+              <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">API Enabled</label>
+                <select name="api.enabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (true)</option>
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">API Host</label>
+                <input type="text" name="api.http.host" placeholder="127.0.0.1" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">API Port</label>
+                <input type="text" name="api.http.port" placeholder="9600-9700" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Environment</label>
+                <input type="text" name="api.environment" placeholder="production" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('api-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="api-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="api-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Enabled</label>
+                <select name="api.ssl.enabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Keystore Path</label>
+                <input type="text" name="api.ssl.keystore.path" placeholder="/path/to/keystore.jks" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Keystore Password</label>
+                <input type="password" name="api.ssl.keystore.password" placeholder="Password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Supported Protocols</label>
+                <input type="text" name="api.ssl.supported_protocols" placeholder="TLSv1.2, TLSv1.3" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+                <p class="text-xs text-gray-500 mt-1">Comma-separated list (e.g., TLSv1.2,TLSv1.3)</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Auth Type</label>
+                <select name="api.auth.type" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (none)</option>
+                  <option value="none">None</option>
+                  <option value="basic">Basic</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Basic Auth Username</label>
+                <input type="text" name="api.auth.basic.username" placeholder="logstash-user" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Basic Auth Password</label>
+                <input type="password" name="api.auth.basic.password" placeholder="Password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Password Policy Mode</label>
+                <select name="api.auth.basic.password_policy.mode" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (WARN)</option>
+                  <option value="WARN">WARN</option>
+                  <option value="ERROR">ERROR</option>
+                </select>
+              </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Queue Settings + Dead Letter Queue -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Queue Settings Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+                Queue Settings
+              </h3>
+              
+              <!-- Common Settings -->
+              <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Queue Type</label>
+                <select name="queue.type" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (memory)</option>
+                  <option value="memory">Memory</option>
+                  <option value="persisted">Persisted</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Max Bytes</label>
+                <input type="text" name="queue.max_bytes" placeholder="1024mb" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('queue-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="queue-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="queue-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Queue Path</label>
+                <input type="text" name="path.queue" placeholder="path.data/queue" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Page Capacity</label>
+                <input type="text" name="queue.page_capacity" placeholder="64mb" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Max Events</label>
+                <input type="number" name="queue.max_events" placeholder="0 (unlimited)" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Max Bytes</label>
+                <input type="text" name="queue.max_bytes" placeholder="1024mb" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Checkpoint Acks</label>
+                <input type="number" name="queue.checkpoint.acks" placeholder="1024" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Checkpoint Writes</label>
+                <input type="number" name="queue.checkpoint.writes" placeholder="1024" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Compression</label>
+                <select name="queue.compression" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (none)</option>
+                  <option value="none">None</option>
+                  <option value="speed">Speed</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="size">Size</option>
+                </select>
+              </div>
+              </div>
+            </div>
+
+            <!-- Dead Letter Queue Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Dead Letter Queue
+              </h3>
+              
+              <!-- Common Settings -->
+              <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">DLQ Enabled</label>
+                <select name="dead_letter_queue.enable" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Max Bytes</label>
+                <input type="text" name="dead_letter_queue.max_bytes" placeholder="1024mb" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('dlq-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="dlq-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="dlq-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">DLQ Path</label>
+                <input type="text" name="path.dead_letter_queue" placeholder="path.data/dead_letter_queue" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Flush Interval (ms)</label>
+                <input type="number" name="dead_letter_queue.flush_interval" placeholder="5000" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Storage Policy</label>
+                <select name="dead_letter_queue.storage_policy" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (drop_newer)</option>
+                  <option value="drop_newer">Drop Newer</option>
+                  <option value="drop_older">Drop Older</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Retain Age</label>
+                <input type="text" name="dead_letter_queue.retain.age" placeholder="e.g., 1d, 24h" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 4: Pipeline Configuration + Logging Settings -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Pipeline Configuration Settings Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Pipeline Configuration
+              </h3>
+              
+              <!-- Common Settings -->
+              <div class="grid grid-cols-2 gap-4">
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config Path</label>
+                <input type="text" name="path.config" placeholder="Path to pipeline configuration" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config Reload Automatic</label>
+                <select name="config.reload.automatic" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config Reload Interval</label>
+                <input type="text" name="config.reload.interval" placeholder="3s" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('pipelineconfig-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="pipelineconfig-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="pipelineconfig-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config String</label>
+                <textarea name="config.string" placeholder="Pipeline configuration string" rows="3" class="textarea textarea-sm textarea-bordered w-full bg-gray-700 text-white border-gray-600"></textarea>
+                <p class="text-xs text-gray-500 mt-1">Pipeline configuration string for the main pipeline</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config Test and Exit</label>
+                <select name="config.test_and_exit" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config Debug</label>
+                <select name="config.debug" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Config Support Escapes</label>
+                <select name="config.support_escapes" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              </div>
+            </div>
+
+            <!-- Logging Settings Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Logging Settings
+              </h3>
+              
+              <!-- Common Settings -->
+              <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Log Level</label>
+                <select name="log.level" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (info)</option>
+                  <option value="fatal">Fatal</option>
+                  <option value="error">Error</option>
+                  <option value="warn">Warn</option>
+                  <option value="info">Info</option>
+                  <option value="debug">Debug</option>
+                  <option value="trace">Trace</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Log Format</label>
+                <select name="log.format" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (plain)</option>
+                  <option value="plain">Plain</option>
+                  <option value="json">JSON</option>
+                </select>
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('logging-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="logging-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="logging-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">JSON Fix Duplicate Message Fields</label>
+                <select name="log.format.json.fix_duplicate_message_fields" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (true)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Logs Path</label>
+                <input type="text" name="path.logs" placeholder="Default path" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 6: X-Pack Monitoring + X-Pack Management -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- X-Pack Monitoring Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              X-Pack Monitoring
+            </h3>
+            
+            <!-- Common Settings -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Monitoring Enabled</label>
+                <select name="xpack.monitoring.enabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Collection Interval</label>
+                <input type="text" name="xpack.monitoring.collection.interval" placeholder="10s" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">ES Hosts (comma-separated)</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.hosts" placeholder="https://es1:9200, https://es2:9200" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Cloud ID</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.cloud_id" placeholder="monitoring_cluster_id:xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">API Key</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.api_key" placeholder="id:api_key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('xpack-monitoring-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="xpack-monitoring-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="xpack-monitoring-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">ES Username</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.username" placeholder="logstash_system" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">ES Password</label>
+                <input type="password" name="xpack.monitoring.elasticsearch.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Cloud Auth</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.cloud_auth" placeholder="logstash_system:password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">Proxy (comma-separated)</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.proxy" placeholder="http://proxy:port" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Certificate Authority</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.certificate_authority" placeholder="/path/to/ca.crt" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL CA Trusted Fingerprint</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.ca_trusted_fingerprint" placeholder="xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Truststore Path</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.truststore.path" placeholder="path/to/file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Truststore Password</label>
+                <input type="password" name="xpack.monitoring.elasticsearch.ssl.truststore.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Keystore Path</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.keystore.path" placeholder="/path/to/file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Keystore Password</label>
+                <input type="password" name="xpack.monitoring.elasticsearch.ssl.keystore.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Certificate</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.certificate" placeholder="/path/to/file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Key</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.key" placeholder="/path/to/key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Verification Mode</label>
+                <select name="xpack.monitoring.elasticsearch.ssl.verification_mode" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (full)</option>
+                  <option value="full">Full</option>
+                  <option value="certificate">Certificate</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Cipher Suites</label>
+                <input type="text" name="xpack.monitoring.elasticsearch.ssl.cipher_suites" placeholder="Comma-separated" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Sniffing</label>
+                <select name="xpack.monitoring.elasticsearch.sniffing" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Allow Legacy Collection</label>
+                <select name="xpack.monitoring.allow_legacy_collection" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Collection Pipeline Details Enabled</label>
+                <select name="xpack.monitoring.collection.pipeline.details.enabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (true)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+            <!-- X-Pack Management Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              X-Pack Management
+            </h3>
+            
+            <!-- Common Settings -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Management Enabled</label>
+                <select name="xpack.management.enabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Poll Interval</label>
+                <input type="text" name="xpack.management.logstash.poll_interval" placeholder="5s" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">Pipeline IDs (comma-separated)</label>
+                <input type="text" name="xpack.management.pipeline.id" placeholder="main, apache_logs" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">ES Hosts (comma-separated)</label>
+                <input type="text" name="xpack.management.elasticsearch.hosts" placeholder="https://es1:9200, https://es2:9200" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Cloud ID</label>
+                <input type="text" name="xpack.management.elasticsearch.cloud_id" placeholder="management_cluster_id:xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">API Key</label>
+                <input type="text" name="xpack.management.elasticsearch.api_key" placeholder="id:api_key" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              </div>
+              
+              <!-- Advanced Settings Toggle -->
+              <div class="mt-4">
+                <button type="button" onclick="toggleAdvanced('xpack-management-advanced')" class="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+                  <svg id="xpack-management-advanced-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Advanced
+                </button>
+              </div>
+              
+              <!-- Advanced Settings (Hidden by default) -->
+              <div id="xpack-management-advanced" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">ES Username</label>
+                <input type="text" name="xpack.management.elasticsearch.username" placeholder="logstash_admin_user" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">ES Password</label>
+                <input type="password" name="xpack.management.elasticsearch.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Cloud Auth</label>
+                <input type="text" name="xpack.management.elasticsearch.cloud_auth" placeholder="logstash_admin_user:password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-1">Proxy (comma-separated)</label>
+                <input type="text" name="xpack.management.elasticsearch.proxy" placeholder="http://proxy:port" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Certificate Authority</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.certificate_authority" placeholder="/path/to/ca.crt" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL CA Trusted Fingerprint</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.ca_trusted_fingerprint" placeholder="xxxxxxxxxx" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Truststore Path</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.truststore.path" placeholder="path/to/file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Truststore Password</label>
+                <input type="password" name="xpack.management.elasticsearch.ssl.truststore.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Keystore Path</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.keystore.path" placeholder="/path/to/file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Keystore Password</label>
+                <input type="password" name="xpack.management.elasticsearch.ssl.keystore.password" placeholder="password" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Certificate</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.certificate" placeholder="/path/to/file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Key</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.key" placeholder="/path/to/certificate_key_file" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Verification Mode</label>
+                <select name="xpack.management.elasticsearch.ssl.verification_mode" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (full)</option>
+                  <option value="full">Full</option>
+                  <option value="certificate">Certificate</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">SSL Cipher Suites</label>
+                <input type="text" name="xpack.management.elasticsearch.ssl.cipher_suites" placeholder="Comma-separated" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Sniffing</label>
+                <select name="xpack.management.elasticsearch.sniffing" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (false)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <!-- Row 8: Other Settings + X-Pack GeoIP -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Other Settings Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                Other Settings
+              </h3>
+              
+              <!-- All Settings -->
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-1">Allow Superuser</label>
+                  <select name="allow_superuser" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                    <option value="">Default (false)</option>
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-1">Pipeline Separate Logs</label>
+                  <select name="pipeline.separate_logs" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                    <option value="">Default (false)</option>
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-sm font-medium text-gray-300 mb-1">Plugins Path</label>
+                  <input type="text" name="path.plugins" placeholder="Path to custom plugins" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+                </div>
+              </div>
+            </div>
+
+            <!-- X-Pack GeoIP Section -->
+            <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              X-Pack GeoIP
+            </h3>
+            
+            <!-- All Settings (GeoIP is simple, no advanced needed) -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Downloader Enabled</label>
+                <select name="xpack.geoip.downloader.enabled" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                  <option value="">Default (true)</option>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Downloader Endpoint</label>
+                <input type="text" name="xpack.geoip.downloader.endpoint" placeholder="https://geoip.elastic.co/v1/database" class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600">
+              </div>
+            </div>
+          </div>
+          </div>
+
+        </div>
+      </div>
+      
+      <!-- JVM Form Mode -->
+      <div id="jvmFormView" class="hidden flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        <!-- Mismatch banner (styled like Unsafe Shutdown) -->
+        <div id="jvmMismatchBanner" class="p-3 bg-yellow-900/20 border border-yellow-500/40 rounded-lg hidden">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <div class="text-sm font-medium text-yellow-300 mb-1">Heap Size Mismatch</div>
+              <div class="text-xs text-gray-300">Initial Space (<code>-Xms</code>) and Total Space (<code>-Xmx</code>) differ. It is strongly recommended to keep them equal to avoid GC overhead and performance issues.</div>
+            </div>
+          </div>
+        </div>
+        <!-- Side-by-side inputs -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Heap: Initial Space (Xms) -->
+          <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-base font-semibold text-white mb-1">Heap: Initial Space</h3>
+            <p class="text-xs text-gray-400 mb-3">Controls <code class="text-gray-300">-Xms</code> — initial heap at JVM startup.</p>
+            <div class="flex items-center gap-2">
+              <input type="number" id="jvmXmsInput" min="1" step="1" placeholder="e.g., 1"
+                class="input input-sm input-bordered w-28 bg-gray-700 text-white border-gray-600">
+              <span class="text-gray-400 text-sm">GB</span>
+            </div>
+          </div>
+          <!-- Heap: Total Space (Xmx) -->
+          <div class="bg-gray-900/50 rounded-lg p-4">
+            <h3 class="text-base font-semibold text-white mb-1">Heap: Maximum Space</h3>
+            <p class="text-xs text-gray-400 mb-3">Controls <code class="text-gray-300">-Xmx</code> — maximum heap the JVM may use.</p>
+            <div class="flex items-center gap-2">
+              <input type="number" id="jvmXmxInput" min="1" step="1" placeholder="e.g., 1"
+                class="input input-sm input-bordered w-28 bg-gray-700 text-white border-gray-600">
+              <span class="text-gray-400 text-sm">GB</span>
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 px-1">Logstash defaults to 1 GB each. Set to half of available system RAM for production use.</p>
+      </div>
+
+      <!-- Code Mode -->
+      <div id="codeModeEditor" class="flex-1 overflow-hidden hidden px-4">
+        <textarea id="codeEditor" class="h-full w-full"></textarea>
+      </div>
+      
+      <!-- Pipelines View -->
+      <div id="pipelinesView" class="hidden flex-1 overflow-auto px-4 py-6">
+        <!-- CPM Warning (shown when xpack.management.enabled is true) -->
+        <div id="cpmPipelineWarning" class="hidden mb-4 p-4 bg-orange-900/20 border border-orange-500/40 rounded-lg">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <h4 class="text-orange-300 font-semibold mb-1">Warning</h4>
+              <p class="text-gray-300 text-sm">These pipelines will not be applied because this policy uses Centralized Pipeline Management. We will still push the pipelines to the node, but Logstash will not load them. To edit pipelines for this policy, add the Elasticsearch instance as a Connection in the Connection Manager</p>
+            </div>
+          </div>
+        </div>
+        
+        {% include 'components/pipeline_manager/pipeline_list_content.html' %}
+      </div>
+
+      <!-- Keystore View -->
+      <div id="keystoreView" class="hidden flex-1 overflow-auto px-4 py-6">
+
+        <!-- No-password banner (shown when policy has no keystore password set) -->
+        <div id="keystoreNoPasswordBanner" class="hidden mb-4 p-4 bg-yellow-900/30 border border-yellow-600/50 rounded-lg flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.834-2.694-.834-3.464 0L3.34 16.5C2.57 18.333 3.532 20 5.072 20z" />
+            </svg>
+            <span class="text-yellow-300 text-sm">A keystore password must be set before managing keystore entries.</span>
+          </div>
+          <button onclick="showSetKeystorePasswordModal()" class="btn btn-sm btn-warning ml-4 flex-shrink-0">
+            Set Keystore Password
+          </button>
+        </div>
+
+        <!-- Controls (hidden until keystore password is set) -->
+        <div id="keystorePasswordedControls" class="hidden mb-4 flex gap-4 items-center">
+          <button onclick="showCreateKeystoreModal()" class="btn btn-primary btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Create Key
+          </button>
+
+          <button onclick="showChangeKeystorePasswordModal()" class="btn btn-secondary btn-sm">
+            Change Keystore Password
+          </button>
+
+          <!-- Search Bar -->
+          <div style="max-width: 500px; flex: 1;">
+            <input type="text" id="keystoreSearch" placeholder="Search by variable or key..." class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          </div>
+        </div>
+
+        <!-- Table + pagination (hidden until keystore password is set) -->
+        <div id="keystoreTableContainer" class="hidden">
+          <!-- No Results State -->
+          <div id="keystoreNoResults" class="hidden p-8 text-center bg-gray-900/50 rounded-lg mb-4">
+            <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-600/20 rounded-full mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-1">No results found</h3>
+            <p class="text-gray-400 text-sm">Try adjusting your search terms</p>
+          </div>
+
+          <!-- Keystore Table -->
+          <div id="keystoreList" class="overflow-hidden">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-gray-700">
+                  <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Variable</th>
+                  <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Value</th>
+                  <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Updated At</th>
+                  <th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="keystoreTableBody" class="divide-y divide-gray-800">
+                <!-- Keystore entries will be loaded here via JavaScript -->
+                <tr>
+                  <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                    <div class="flex flex-col items-center gap-2">
+                      <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                      <p>No keystore entries found</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Controls -->
+          <div id="keystorePagination" class="mt-4 flex justify-between items-center">
+            <div class="flex gap-3 items-center">
+              <div class="text-sm text-gray-400 whitespace-nowrap">
+                Showing <span id="keystoreShowingStart">0</span> to <span id="keystoreShowingEnd">0</span> of <span id="keystoreTotalCount">0</span> entries
+              </div>
+              <select id="keystorePageSize" class="select select-bordered select-sm bg-gray-700 text-white border-gray-600" style="width: 70px;">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button id="keystorePrevBtn" class="btn btn-sm btn-secondary" onclick="previousKeystorePage()">Previous</button>
+              <span id="keystorePageInfo" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
+              <button id="keystoreNextBtn" class="btn btn-sm btn-secondary" onclick="nextKeystorePage()">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Enrollment Tokens View -->
+      <div id="enrollmentTokensView" class="flex-1 hidden overflow-auto px-4 py-6">
+        <!-- Header with Create Button -->
+        <div class="mb-4 flex gap-4 items-center">
+          <button id="addTokenBtn" onclick="addEnrollmentToken()" class="btn btn-primary btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Add Token
+          </button>
+        </div>
+        
+        <!-- Enrollment Tokens Table -->
+        <div id="enrollmentTokensList" class="overflow-hidden">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-gray-700">
+                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Name</th>
+                <th class="text-left px-4 py-3 text-sm font-medium text-gray-400">Token</th>
+                <th class="text-right px-4 py-3 text-sm font-medium text-gray-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="enrollmentTokensTableBody" class="divide-y divide-gray-800">
+              <!-- Tokens will be loaded here via JavaScript -->
+              <tr>
+                <td colspan="3" class="px-4 py-8 text-center text-gray-400">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    <p>No enrollment tokens found</p>
+                    <p class="text-sm">Tokens will be created automatically when you save this policy</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div> <!-- Close mainContent -->
+</div>
+
+<!-- Default Guide Modal -->
+<div id="defaultGuideModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDefaultGuideModal()"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
+    <!-- Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Default Logstash Configuration Guide</h3>
+        <p class="text-gray-400 text-sm mt-1">Quick setup for standard Logstash configurations</p>
+      </div>
+      <button onclick="closeDefaultGuideModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 overflow-auto p-4">
+      {% include 'components/pipeline_manager/logstashyml_guides/default.html' %}
+    </div>
+
+    <!-- Footer with actions -->
+    <div class="p-4 border-t border-gray-700 flex justify-end items-center flex-shrink-0">
+      <button onclick="closeDefaultGuideModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Centralized Pipeline Management Guide Modal -->
+<div id="centralizedPipelineManagementModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeCentralizedPipelineManagementModal()"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
+    <!-- Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Centralized Pipeline Management Guide</h3>
+        <p class="text-gray-400 text-sm mt-1">Configure Logstash for centralized pipeline management</p>
+      </div>
+      <button onclick="closeCentralizedPipelineManagementModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 overflow-auto p-4">
+      {% include 'components/pipeline_manager/logstashyml_guides/centralized_pipeline_management.html' %}
+    </div>
+
+    <!-- Footer with actions -->
+    <div class="p-4 border-t border-gray-700 flex justify-end items-center flex-shrink-0">
+      <button onclick="closeCentralizedPipelineManagementModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Include popup modal -->
+{% include 'popup.html' %}
+
+<!-- Include deploy diff modal -->
+{% include 'components/pipeline_manager/policy_deploy_modal.html' %}
+
+<!-- Include keystore modal -->
+{% include 'components/pipeline_manager/keystore_modal.html' %}
+
+<script src="{% static 'js/js-yaml.min.js' %}"></script>
+<script src="{% static 'js/codemirror.min.js' %}"></script>
+<script src="{% static 'js/yaml.js' %}"></script>
+<script src="{% static 'js/simple-comment-mode.js' %}"></script>
+<script src="{% static 'js/pipeline_list.js' %}"></script>
+<script src="{% static 'js/logstashyml_guides.js' %}"></script>
+<script src="{% static 'js/agent_policies.js' %}"></script>
+
+<script>
+// Policy Switcher — visual layer over the hidden native #policySelect
+(function() {
+  function rebuildMenu() {
+    const select = document.getElementById('policySelect');
+    const menu = document.getElementById('policySwitcherMenu');
+    const label = document.getElementById('policySwitcherLabel');
+    if (!select || !menu) return;
+
+    // Update button label from current selection
+    const sel = select.options[select.selectedIndex];
+    if (sel) {
+      label.textContent = sel.value === 'add_new' ? 'Select policy…' : (sel.dataset.policyName || sel.textContent);
+    }
+
+    // Rebuild menu items
+    menu.innerHTML = '';
+    const policies = Array.from(select.options).filter(o => o.value !== 'add_new');
+
+    policies.forEach(opt => {
+      const isSelected = opt === sel;
+      const item = document.createElement('div');
+      item.className = 'policy-switcher-item' + (isSelected ? ' selected' : '');
+      item.innerHTML = `
+        <svg class="policy-switcher-check ${isSelected ? '' : 'invisible'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span>${opt.dataset.policyName || opt.textContent}</span>`;
+      item.addEventListener('click', () => {
+        select.value = opt.value;
+        select.dispatchEvent(new Event('change'));
+        closePolicySwitcher();
+      });
+      menu.appendChild(item);
+    });
+
+    // Divider + Add Policy action
+    if (policies.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'policy-switcher-divider';
+      menu.appendChild(divider);
+    }
+
+    const addRow = document.createElement('div');
+    addRow.className = 'policy-switcher-add';
+    addRow.innerHTML = `
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+      </svg>
+      <span>Add Policy</span>`;
+    addRow.addEventListener('click', () => {
+      select.value = 'add_new';
+      select.dispatchEvent(new Event('change'));
+      closePolicySwitcher();
+    });
+    menu.appendChild(addRow);
+  }
+
+  window.togglePolicySwitcher = function() {
+    const menu = document.getElementById('policySwitcherMenu');
+    const btn = document.getElementById('policySwitcherBtn');
+    if (!menu) return;
+    const isOpen = !menu.classList.contains('hidden');
+    if (isOpen) {
+      closePolicySwitcher();
+    } else {
+      rebuildMenu();
+      menu.classList.remove('hidden');
+      btn.classList.add('open');
+    }
+  };
+
+  window.closePolicySwitcher = function() {
+    const menu = document.getElementById('policySwitcherMenu');
+    const btn = document.getElementById('policySwitcherBtn');
+    menu?.classList.add('hidden');
+    btn?.classList.remove('open');
+  };
+
+  // Close on outside click
+  document.addEventListener('click', function(e) {
+    const switcher = document.getElementById('policySwitcher');
+    if (switcher && !switcher.contains(e.target)) {
+      closePolicySwitcher();
+    }
+  });
+
+  // Keep button label in sync whenever the hidden select changes
+  const select = document.getElementById('policySelect');
+  if (select) {
+    select.addEventListener('change', function() {
+      const label = document.getElementById('policySwitcherLabel');
+      const sel = this.options[this.selectedIndex];
+      if (label && sel && sel.value !== 'add_new') {
+        label.textContent = sel.dataset.policyName || sel.textContent;
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

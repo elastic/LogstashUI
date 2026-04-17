@@ -1,0 +1,585 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- Header with Create Pipeline and Search -->
+<div class="mb-4 flex gap-4 items-center">
+    <button onclick="openCreatePipelineModal()" class="btn btn-primary btn-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+        </svg>
+        Create Pipeline
+    </button>
+    
+    <!-- Search Bar -->
+    <div style="max-width: 500px; flex: 1;">
+        <input type="text" id="pipelineSearchInput-{{ es_id|default:'policy' }}" placeholder="Search by pipeline name or description..." class="input input-bordered w-full">
+    </div>
+    
+    {% if es_id %}
+    <!-- Policy Info Message (populated by JavaScript) - only for pipeline_manager context -->
+    <div id="policyInfo-{{ es_id }}" class="hidden flex items-center gap-2 px-4 py-2 bg-blue-900/30 border border-blue-500/40 rounded-lg">
+        <svg class="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div class="text-sm">
+            <span class="text-blue-300 font-medium">Policy: <span id="policyName-{{ es_id }}"></span></span>
+            <span class="text-gray-400 mx-2">•</span>
+            <span class="text-gray-300">Changes apply to all agents in this policy</span>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if es_id %}
+<script>
+    // Extract policy info from parent table row (only for pipeline_manager context)
+    (function() {
+        const esId = '{{ es_id }}';
+        const pipelinesRow = document.getElementById('pipelines-' + esId);
+        if (pipelinesRow) {
+            const parentRow = pipelinesRow.previousElementSibling;
+            if (parentRow) {
+                // Find the policy cell (5th column)
+                const policyCells = parentRow.querySelectorAll('td');
+                if (policyCells.length >= 5) {
+                    const policyCell = policyCells[4];
+                    const policyText = policyCell.textContent.trim();
+                    
+                    // Show policy info if it's not "Centralized" and not empty
+                    if (policyText && policyText !== 'Centralized' && policyText !== 'No Policy') {
+                        document.getElementById('policyName-' + esId).textContent = policyText;
+                        document.getElementById('policyInfo-' + esId).classList.remove('hidden');
+                    }
+                }
+            }
+        }
+    })();
+</script>
+{% endif %}
+
+<!-- No Results State -->
+<div id="pipelineNoResults-{{ es_id|default:'policy' }}" class="hidden p-8 text-center bg-gray-900 rounded-lg mb-4">
+    <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-600/20 rounded-full mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+    </div>
+    <h3 class="text-lg font-bold text-white mb-1">No results found</h3>
+    <p class="text-gray-400 text-sm">Try adjusting your search terms</p>
+</div>
+
+<div id="pipelineList-{{ es_id|default:'policy' }}">
+    <table class="table w-full">
+        <thead>
+            <tr>
+                <th class="text-left">Pipeline Name</th>
+                <th class="text-left">Description</th>
+                <th class="text-left">Last Updated</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="pipelineTableBody-{{ es_id|default:'policy' }}">
+            {% for pipeline in pipelines %}
+            <tr>
+                <td class="px-4 py-2">
+                    <a href="/ConnectionManager/Pipelines/Editor/?{{ editor_id_param }}={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
+                </td>
+                <td class="px-4 py-2 text-gray-300">
+                    {% if pipeline.description %}
+                        {{ pipeline.description|truncatechars:80 }}
+                    {% else %}
+                        <span class="text-gray-500 italic">No description</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-2 text-gray-300">
+                    {% if pipeline.last_modified %}
+                        {{ pipeline.last_modified }}
+                    {% else %}
+                        <span class="text-gray-500 italic">N/A</span>
+                    {% endif %}
+                </td>
+                <td class="text-right px-4 py-2">
+                    <div class="action-menu relative">
+                        <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+                            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                            </svg>
+                        </button>
+                        <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+                            <div class="px-1 py-1">
+                                <button onclick="openCloneModal('{{ pipeline.es_id }}', '{{ pipeline.name }}')"
+                                   class="w-full group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md"
+                                   role="menuitem"
+                                   type="button">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Clone
+                                </button>
+                                <hr class="my-1 border-gray-700">
+                                <button onclick="openRenameModal('{{ pipeline.es_id }}', '{{ pipeline.name }}')"
+                                   class="w-full group flex items-center px-4 py-2 text-sm text-yellow-400 hover:bg-gray-700 rounded-md"
+                                   role="menuitem"
+                                   type="button">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    Rename
+                                </button>
+                                <hr class="my-1 border-gray-700">
+                                <button onclick="openUpdateDescriptionModal('{{ pipeline.es_id }}', '{{ pipeline.name }}', '{{ pipeline.description|default:"" }}')"
+                                   class="w-full group flex items-center px-4 py-2 text-sm text-purple-400 hover:bg-gray-700 rounded-md"
+                                   role="menuitem"
+                                   type="button">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                                    </svg>
+                                    Update Description
+                                </button>
+                                <hr class="my-1 border-gray-700">
+                                <button onclick="deletePipeline('{{ pipeline.es_id }}', '{{ pipeline.name }}', '{{ es_id }}', {% if policy_id %}'{{ policy_id }}'{% else %}null{% endif %})"
+                                   class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
+                                   role="menuitem"
+                                   type="button">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination Controls -->
+<div id="pipelinePagination-{{ es_id|default:'policy' }}" class="mt-4 flex justify-between items-center">
+    <div class="flex gap-3 items-center">
+        <div class="text-sm text-gray-400 whitespace-nowrap">
+            Showing <span id="pipelineShowingStart-{{ es_id|default:'policy' }}">0</span> to <span id="pipelineShowingEnd-{{ es_id|default:'policy' }}">0</span> of <span id="pipelineTotalCount-{{ es_id|default:'policy' }}">0</span> pipelines
+        </div>
+        <select id="pipelinePageSize-{{ es_id|default:'policy' }}" class="select select-bordered select-sm" style="width: 70px;">
+            <option value="10" selected>10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+        </select>
+    </div>
+    <div class="flex gap-2">
+        <button id="pipelinePrevBtn-{{ es_id|default:'policy' }}" class="btn btn-sm btn-secondary" onclick="previousPipelinePage('{{ es_id|default:'policy' }}')">Previous</button>
+        <span id="pipelinePageInfo-{{ es_id|default:'policy' }}" class="px-4 py-2 text-gray-300">Page 1 of 1</span>
+        <button id="pipelineNextBtn-{{ es_id|default:'policy' }}" class="btn btn-sm btn-secondary" onclick="nextPipelinePage('{{ es_id|default:'policy' }}')">Next</button>
+    </div>
+</div>
+
+<!-- Create Pipeline Modal -->
+<dialog id="createPipelineModal" class="modal">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('createPipelineModal').close()"></div>
+    <div class="modal-box relative z-10">
+        <h3 class="font-bold text-lg mb-4">Create New Pipeline</h3>
+
+        <form hx-post="/ConnectionManager/CreatePipeline/"
+              hx-swap="none"
+              hx-on::before-request="
+                const pipelineName = event.target.querySelector('[name=pipeline]').value;
+                const stateKey = '{{ es_id|default:'policy' }}';
+                const state = pipelineStates[stateKey];
+                if (state && state.allPipelines.some(p => p.name === pipelineName)) {
+                  event.preventDefault();
+                  document.getElementById('createPipelineModal').close();
+                  event.target.reset();
+                  showToast('A pipeline with that name already exists', 'error');
+                }
+              "
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  document.getElementById('createPipelineModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  document.getElementById('createPipelineModal').close();
+                  event.target.reset();
+                } else {
+                  document.getElementById('createPipelineModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while creating the pipeline', 'error');
+                }
+              ">
+            {% csrf_token %}
+            <div class="form-control w-full mb-4">
+                <label class="label">
+                    <span class="label-text">Pipeline Name</span>
+                </label>
+                <input type="text" 
+                       name="pipeline" 
+                       class="input input-bordered w-full" 
+                       required
+                       pattern="^[a-zA-Z_][a-zA-Z0-9_\-]*$"
+                       title="Pipeline name must begin with a letter or underscore and can contain only letters, underscores, dashes, and numbers">
+            </div>
+            <div class="form-control w-full">
+                <label class="label">
+                    <span class="label-text">Pipeline Config (Optional)</span>
+                </label>
+                <textarea name="pipeline_config" 
+                          class="textarea textarea-bordered w-full h-32 font-mono text-sm" 
+                          placeholder="input {&#10;  # your input config&#10;}&#10;filter {&#10;  # your filter config&#10;}&#10;output {&#10;  # your output config&#10;}"></textarea>
+                <label class="label">
+                    <span class="label-text-alt">Import an existing Logstash pipeline configuration</span>
+                </label>
+                {% if policy_id %}
+                <input type="hidden" name="policy_id" value="{{ policy_id }}">
+                {% elif es_id %}
+                <input type="hidden" name="es_id" value="{{ es_id }}">
+                {% else %}
+                <!-- Dynamic context - will be set by JavaScript -->
+                <input type="hidden" id="pipelineContextId" name="policy_id" value="">
+                {% endif %}
+            </div>
+            <div class="modal-action">
+                <button type="button" onclick="document.getElementById('createPipelineModal').close()" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Pipeline</button>
+            </div>
+        </form>
+    </div>
+
+</dialog>
+
+<!-- Clone Pipeline Modal -->
+<dialog id="clonePipelineModal" class="modal">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('clonePipelineModal').close()"></div>
+    <div class="modal-box relative z-10">
+        <h3 class="font-bold text-lg mb-4">Clone Pipeline: <span id="cloneSourcePipeline"></span></h3>
+
+        <form hx-post="/ConnectionManager/ClonePipeline/"
+              hx-swap="none"
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  document.getElementById('clonePipelineModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  document.getElementById('clonePipelineModal').close();
+                  event.target.reset();
+                } else {
+                  document.getElementById('clonePipelineModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while cloning the pipeline', 'error');
+                }
+              ">
+            {% csrf_token %}
+            <div class="form-control w-full mb-4">
+                <label class="label">
+                    <span class="label-text">New Pipeline Name</span>
+                </label>
+                <input type="text" 
+                       name="new_pipeline" 
+                       class="input input-bordered w-full" 
+                       required
+                       pattern="^[a-zA-Z_][a-zA-Z0-9_\-]*$"
+                       title="Pipeline name must begin with a letter or underscore and can contain only letters, underscores, dashes, and numbers">
+                <label class="label">
+                    <span class="label-text-alt">Enter a name for the cloned pipeline</span>
+                </label>
+            </div>
+            <input type="hidden" name="es_id" id="cloneEsId" value="">
+            <input type="hidden" name="source_pipeline" id="cloneSourcePipelineInput" value="">
+            {% if policy_id %}
+            <input type="hidden" name="policy_id" value="{{ policy_id }}">
+            {% endif %}
+            <div class="modal-action">
+                <button type="button" onclick="document.getElementById('clonePipelineModal').close()" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Clone Pipeline</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- Rename Pipeline Modal -->
+<dialog id="renamePipelineModal" class="modal">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('renamePipelineModal').close()"></div>
+    <div class="modal-box relative z-10">
+        <h3 class="font-bold text-lg mb-4">Rename Pipeline: <span id="renameSourcePipeline"></span></h3>
+
+        <form hx-post="/ConnectionManager/RenamePipeline/"
+              hx-swap="none"
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  document.getElementById('renamePipelineModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  document.getElementById('renamePipelineModal').close();
+                  event.target.reset();
+                } else {
+                  document.getElementById('renamePipelineModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while renaming the pipeline', 'error');
+                }
+              ">
+            {% csrf_token %}
+            <div class="form-control w-full mb-4">
+                <label class="label">
+                    <span class="label-text">New Pipeline Name</span>
+                </label>
+                <input type="text" 
+                       name="new_pipeline" 
+                       class="input input-bordered w-full" 
+                       required
+                       pattern="^[a-zA-Z_][a-zA-Z0-9_\-]*$"
+                       title="Pipeline name must begin with a letter or underscore and can contain only letters, underscores, dashes, and numbers">
+                <label class="label">
+                    <span class="label-text-alt">Enter a new name for the pipeline</span>
+                </label>
+            </div>
+            <input type="hidden" name="es_id" id="renameEsId" value="">
+            <input type="hidden" name="source_pipeline" id="renameSourcePipelineInput" value="">
+            {% if policy_id %}
+            <input type="hidden" name="policy_id" value="{{ policy_id }}">
+            {% endif %}
+            <div class="modal-action">
+                <button type="button" onclick="document.getElementById('renamePipelineModal').close()" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Rename Pipeline</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<!-- Update Description Modal -->
+<dialog id="updateDescriptionModal" class="modal">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('updateDescriptionModal').close()"></div>
+    <div class="modal-box relative z-10">
+        <h3 class="font-bold text-lg mb-4">Update Description: <span id="updateDescriptionPipelineName"></span></h3>
+
+        <form hx-post="/ConnectionManager/UpdatePipelineDescription/"
+              hx-swap="none"
+              hx-on::after-request="
+                if (event.detail.xhr.status === 403) {
+                  document.getElementById('updateDescriptionModal').close();
+                } else if (event.detail.xhr.status === 200) {
+                  document.getElementById('updateDescriptionModal').close();
+                  event.target.reset();
+                } else {
+                  document.getElementById('updateDescriptionModal').close();
+                  event.target.reset();
+                  showToast(event.detail.xhr.responseText || 'An error occurred while updating the description', 'error');
+                }
+              ">
+            {% csrf_token %}
+            <div class="form-control w-full mb-4">
+                <label class="label">
+                    <span class="label-text">Description</span>
+                </label>
+                <textarea name="description" 
+                          id="updateDescriptionTextarea"
+                          class="textarea textarea-bordered w-full h-32" 
+                          placeholder="Enter a description for this pipeline..."></textarea>
+                <label class="label">
+                    <span class="label-text-alt">Update the pipeline description</span>
+                </label>
+            </div>
+            <input type="hidden" name="es_id" id="updateDescriptionEsId" value="">
+            <input type="hidden" name="pipeline_name" id="updateDescriptionPipelineNameInput" value="">
+            {% if policy_id %}
+            <input type="hidden" name="policy_id" value="{{ policy_id }}">
+            {% endif %}
+            <div class="modal-action">
+                <button type="button" onclick="document.getElementById('updateDescriptionModal').close()" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Description</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+    document.body.addEventListener('htmx:configRequest', function(event) {
+        event.detail.headers['X-CSRFToken'] = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    });
+
+    // Initialize pipeline list with pagination
+    (function() {
+        {% if pipelines %}
+        // Static context (from Django template)
+        const pipelines = {{ pipelines|safe }};
+        const esId = '{{ es_id }}';
+        
+        // Wait for DOM to be ready
+        if (typeof initPipelineList === 'function') {
+            initPipelineList(esId, pipelines);
+        } else {
+            // If script not loaded yet, wait for it
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof initPipelineList === 'function') {
+                    initPipelineList(esId, pipelines);
+                }
+            });
+        }
+        {% else %}
+        // Dynamic context (will be loaded via JavaScript in agent_policies.js)
+        console.log('Pipeline list will be dynamically loaded');
+        {% endif %}
+    })();
+
+    // Initialize action menu event listeners
+    function initActionMenus() {
+        // Remove existing listeners by cloning and replacing buttons
+        document.querySelectorAll('.action-menu-button').forEach(button => {
+            const newButton = button.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
+        });
+        
+        // Add event listeners to action menu buttons
+        document.querySelectorAll('.action-menu-button').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const menu = this.nextElementSibling;
+                const isHidden = menu.classList.contains('hidden');
+                
+                // Close all other open menus
+                document.querySelectorAll('.action-menu-items').forEach(m => {
+                    if (m !== menu) m.classList.add('hidden');
+                });
+                
+                // Position the menu at the cursor
+                if (isHidden) {
+                    const rect = this.getBoundingClientRect();
+                    menu.style.left = `${e.clientX}px`;
+                    menu.style.top = `${e.clientY}px`;
+                }
+                
+                // Toggle current menu
+                menu.classList.toggle('hidden', !isHidden);
+            });
+        });
+    }
+
+    // Handle action menu (3-dot icon) functionality
+    document.addEventListener('click', function(e) {
+        // Close all open action menus when clicking anywhere
+        if (!e.target.closest('.action-menu')) {
+            document.querySelectorAll('.action-menu-items').forEach(menu => {
+                menu.classList.add('hidden');
+            });
+        }
+    });
+    
+    // Close menu when scrolling
+    window.addEventListener('scroll', function() {
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }, true);
+    
+    // Initialize action menus on page load
+    initActionMenus();
+
+    // Open create pipeline modal and set context
+    function openCreatePipelineModal() {
+        // Set the policy_id dynamically when in agent policy context
+        const contextInput = document.getElementById('pipelineContextId');
+        console.log('Opening create modal, contextInput:', contextInput);
+        console.log('window.currentPolicyId:', window.currentPolicyId);
+        if (contextInput && window.currentPolicyId) {
+            contextInput.value = window.currentPolicyId;
+            console.log('Set contextInput.value to:', contextInput.value);
+        } else {
+            console.warn('Could not set policy_id:', { contextInput, currentPolicyId: window.currentPolicyId });
+        }
+        document.getElementById('createPipelineModal').showModal();
+    }
+
+    // Open clone modal and populate with pipeline info
+    function openCloneModal(esId, pipelineName) {
+        document.getElementById('cloneSourcePipeline').textContent = pipelineName;
+        document.getElementById('cloneEsId').value = esId;
+        document.getElementById('cloneSourcePipelineInput').value = pipelineName;
+        document.getElementById('clonePipelineModal').showModal();
+        
+        // Close any open action menus
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+
+    // Open rename modal and populate with pipeline info
+    function openRenameModal(esId, pipelineName) {
+        document.getElementById('renameSourcePipeline').textContent = pipelineName;
+        document.getElementById('renameEsId').value = esId;
+        document.getElementById('renameSourcePipelineInput').value = pipelineName;
+        document.getElementById('renamePipelineModal').showModal();
+        
+        // Close any open action menus
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+
+    // Open update description modal and populate with pipeline info
+    function openUpdateDescriptionModal(esId, pipelineName, currentDescription) {
+        document.getElementById('updateDescriptionPipelineName').textContent = pipelineName;
+        document.getElementById('updateDescriptionEsId').value = esId;
+        document.getElementById('updateDescriptionPipelineNameInput').value = pipelineName;
+        document.getElementById('updateDescriptionTextarea').value = currentDescription || '';
+        document.getElementById('updateDescriptionModal').showModal();
+        
+        // Close any open action menus
+        document.querySelectorAll('.action-menu-items').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+
+    // Listen for pipelineCreated event to refresh the list
+    document.body.addEventListener('pipelineCreated', function() {
+        console.log('Pipeline created event received, refreshing list...');
+        // Reload the pipeline list
+        if (typeof loadPolicyPipelines === 'function') {
+            loadPolicyPipelines();
+            // Re-initialize action menus after list is refreshed
+            setTimeout(function() {
+                initActionMenus();
+            }, 100);
+        }
+    });
+
+    // Listen for pipelineCloned events to refresh the list (for pipeline_manager.html)
+    {% if es_id %}
+    document.body.addEventListener('pipelineCloned-{{ es_id }}', function() {
+        console.log('Pipeline cloned event received for connection {{ es_id }}, refreshing list...');
+        // Refresh the pipeline list using HTMX
+        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
+            target: '#pipelines-{{ es_id }}',
+            swap: 'innerHTML'
+        });
+    });
+    
+    // Listen for pipelineRenamed events to refresh the list (for pipeline_manager.html)
+    document.body.addEventListener('pipelineRenamed-{{ es_id }}', function() {
+        console.log('Pipeline renamed event received for connection {{ es_id }}, refreshing list...');
+        // Refresh the pipeline list using HTMX
+        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
+            target: '#pipelines-{{ es_id }}',
+            swap: 'innerHTML'
+        });
+    });
+    
+    // Listen for pipelineDescriptionUpdated events to refresh the list (for pipeline_manager.html)
+    document.body.addEventListener('pipelineDescriptionUpdated-{{ es_id }}', function() {
+        console.log('Pipeline description updated event received for connection {{ es_id }}, refreshing list...');
+        // Refresh the pipeline list using HTMX
+        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
+            target: '#pipelines-{{ es_id }}',
+            swap: 'innerHTML'
+        });
+    });
+    
+    // Listen for pipelineCreated events to refresh centralized pipeline lists
+    document.body.addEventListener('pipelineCreated-{{ es_id }}', function() {
+        console.log('Pipeline created event received for connection {{ es_id }}, refreshing list...');
+        // Refresh the pipeline list using HTMX
+        htmx.ajax('GET', '/ConnectionManager/GetPipelines/{{ es_id }}/', {
+            target: '#pipelines-{{ es_id }}',
+            swap: 'innerHTML'
+        });
+    });
+    {% endif %}
+</script>

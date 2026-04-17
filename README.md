@@ -1,6 +1,6 @@
 # LogstashUI
 
-> A visual tool for authoring, simulating, and managing Logstash pipelines.
+> A control plane and visual editor for Logstash, built for managing Logstash nodes and authoring, simulating, and deploying pipelines.
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
@@ -15,38 +15,44 @@ Instead of editing configuration files manually, pipelines can be authored visua
 ## Features
 
 <details>
-<summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
+    <summary><b>Control Plane for Logstash</b> — Centrally manage Logstash nodes with Centralized Pipeline Management and Logstash Agent</summary> 
 
-![Visual Pipeline Editor](docs/images/graph.gif)
-
+![Control Plane for Logstash](/docs/images/control_plane.png) 
 </details>
 
 <details>
-<summary><b>Pipeline Simulation</b> — Execute pipelines against sample events and inspect transformations step-by-step</summary>
+    <summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
 
-![Pipeline Simulation](docs/images/simulate.gif)
+![Visual Pipeline Editor](/docs/images/graph.gif) 
+</details> 
 
+<details> 
+    <summary><b>Pipeline Simulation</b> — Execute pipelines against sample events and inspect transformations step-by-step</summary> 
+    
+![Pipeline Simulation](/docs/images/simulate.gif) 
 </details>
 
 <details>
-<summary><b>Multi-Instance Management</b> — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management</summary>
-
+    <summary><b>Monitoring</b> — View metrics and performance for running pipelines and Logstash nodes</summary>
+    
+![Pipeline Monitoring](/docs/images/monitoring.png)
 </details>
 
 <details>
-<summary><b>Pipeline Monitoring</b> — View metrics and performance for running pipelines</summary>
+<summary><b>SNMP Pipeline Management</b> — Configure polling, traps, discovery, credentials, devices, networks, and profiles through the UI.</summary>
 
-![Pipeline Monitoring](docs/images/monitoring.png)
-
-</details>
-
-<details>
-<summary><b>SNMP Support</b> — Configure polling, traps, and discovery through a web interface</summary>
-
-![SNMP Support](docs/images/snmp.gif)
+![SNMP Support](/docs/images/snmp.png)
 
 </details>
 
+---
+
+## Documentation
+
+- **[LogstashUI Documentation](docs/docs/logstashui/index.md)** - Installation, configuration, and usage guides for LogstashUI
+- **[LogstashAgent Documentation](docs/docs/logstashagent/index.md)** - Setup and configuration for LogstashAgent
+
+---
 
 ## Requirements
 
@@ -60,7 +66,7 @@ Instead of editing configuration files manually, pipelines can be authored visua
 #### For Embedded mode (See Quick Start)
 - [Docker](https://www.docker.com/get-started/)
 
-#### For [Host mode](docs/host_mode.md) (If you have a simulation-heavy use case)
+#### For [Host mode](docs/docs/beta/PipelineEditor/host_mode.md) (If you have a simulation-heavy use case)
 - [Docker](https://www.docker.com/get-started/)
 - [Python 3.12+](https://www.python.org/downloads/)
 - [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
@@ -75,11 +81,11 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ## Quick Start - Embedded Mode
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](docs/host_mode.md). It's more performant.
+> If you plan on doing a lot of simulations, consider using [host mode](docs/docs/beta/PipelineEditor/host_mode.md). It's more performant.
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd LogstashUI/bin
+cd logstashui/bin
 ````
 
 ### Run LogstashUI
@@ -125,7 +131,7 @@ To update LogstashUI to the latest version:
 
 #### Linux
 ```bash
-cd LogstashUI/bin
+cd logstashui/bin
 ./start_logstashui.sh --update
 ```
 
@@ -146,13 +152,6 @@ input {
 }
 ```
 
-## Roadmap
-- Reusable grok and regex patterns
-- Git backups for configuration
-- Loggy AI Assistant for pipeline failure analysis
-- Management of Logstash Nodes via external agent
-- Logstash Keystore management
-- Expression editor for conditions
 
 ## Reporting Issues
 

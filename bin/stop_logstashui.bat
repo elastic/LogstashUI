@@ -31,13 +31,13 @@ REM Save current directory and change to project root
 pushd "%~dp0.."
 
 REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if exist "logstashui.yml" (
-    set CONFIG_FILE=logstashui.yml
-) else if exist "logstashui.example.yml" (
-    set CONFIG_FILE=logstashui.example.yml
+if exist "src\logstashui\logstashui.yml" (
+    set CONFIG_FILE=src\logstashui\logstashui.yml
+) else if exist "src\logstashui\logstashui.example.yml" (
+    set CONFIG_FILE=src\logstashui\logstashui.example.yml
 ) else (
     echo ERROR: No config file found!
-    echo Expected logstashui.yml or logstashui.example.yml in project root.
+    echo Expected logstashui.yml or logstashui.example.yml in src\logstashui\
     exit /b 1
 )
 
@@ -78,7 +78,9 @@ if /i "!MODE!"=="host" (
     
     echo.
     echo Stopping Docker containers (UI + Nginx)
+    cd docker
     %DOCKER_COMPOSE% down --remove-orphans
+    cd ..
     
     REM Force remove agent container if it exists
     echo Removing any stray agent containers
@@ -93,7 +95,9 @@ if /i "!MODE!"=="host" (
     REM Force remove logstashagent container first (prevents stale network references)
     docker rm -f logstashui-logstashagent-1 2>nul
     
+    cd docker
     %DOCKER_COMPOSE% down --remove-orphans
+    cd ..
 )
 
 echo.

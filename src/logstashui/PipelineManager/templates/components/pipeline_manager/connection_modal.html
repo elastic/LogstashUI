@@ -1,0 +1,1008 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+  <!-- Connection Form Flyout -->
+  <div id="connectionFormFlyout" class="hidden fixed inset-0 overflow-hidden" style="z-index: 80;">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeFlyout()"></div>
+    <div class="absolute inset-y-0 right-0 max-w-full flex">
+      <div class="w-[32rem] bg-base-200 shadow-xl flex flex-col h-full">
+        <div class="flex justify-between items-center p-6 border-b border-base-300">
+          <h2 class="text-xl font-bold">Add New Connection</h2>
+          <button onclick="closeFlyout()" class="btn btn-ghost btn-sm btn-circle">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6">
+          <!-- Error message container -->
+          <div id="connectionErrorContainer"></div>
+          
+          <form id="connectionForm"
+              hx-post="/ConnectionManager/AddConnection"
+              hx-swap="none"
+              hx-indicator=".loading"
+              hx-on::before-request="document.getElementById('connectionErrorContainer').innerHTML = '';"
+              hx-on::after-request="
+                  const errorContainer = document.getElementById('connectionErrorContainer');
+                  
+                  try {
+                      const response = JSON.parse(event.detail.xhr.responseText);
+                      
+                      if (response.success) {
+                          // Store the new connection ID for later use
+                          window.lastCreatedConnectionId = response.connection_id;
+                          
+                          // Show success toast
+                          showToast(response.message || 'Connection created and tested successfully!', 'success');
+                          
+                          // Close the modal
+                          closeFlyout();
+                          
+                          // Clear the form
+                          document.getElementById('connectionForm').reset();
+                          errorContainer.innerHTML = '';
+                      } else {
+                          // Display error message
+                          errorContainer.innerHTML = `
+                              <div class='p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg'>
+                                  <h3 class='font-bold mb-2 text-lg'>❌ Connection Test Failed</h3>
+                                  <p class='mb-3'>The connection could not be established. Please check your credentials and try again.</p>
+                                  <div class='mt-3 p-3 bg-red-50 border border-red-200 rounded'>
+                                      <p class='font-semibold mb-1 text-sm'>Error Details:</p>
+                                      <pre class='text-xs overflow-auto whitespace-pre-wrap break-words max-h-64'>${response.error || 'Unknown error'}</pre>
+                                  </div>
+                              </div>
+                          `;
+                          showToast('Connection test failed - check the error message above', 'error');
+                          errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      }
+                  } catch (e) {
+                      console.error('Error parsing response:', e);
+                      errorContainer.innerHTML = `
+                          <div class='p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg'>
+                              <h3 class='font-bold mb-2'>Error</h3>
+                              <p>Failed to process server response. Please try again.</p>
+                          </div>
+                      `;
+                      showToast('Failed to process server response', 'error');
+                  }
+              ">
+              {% csrf_token %}
+
+              <!-- Hidden connection type field -->
+              <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
+
+              <!-- Connection Name Field (only for centralized connections) -->
+              <div id="connectionNameField" class="mb-6">
+                <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                  Connection Name <span class="text-red-500">*</span>
+                </label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                  <p class="text-red-500 text-sm mt-1">{{ form.name.errors.0 }}</p>
+                {% endif %}
+                <p class="text-gray-400 text-xs mt-1">A descriptive name for this connection</p>
+              </div>
+
+              <!-- Centralized Connection Fields -->
+              <div id="centralizedFields">
+                <!-- Connection Mode Selection -->
+                <div class="mb-6">
+                  <label class="block text-sm font-medium text-gray-300 mb-3">
+                    Connection Mode
+                  </label>
+                  <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="connection_mode" value="cloud" class="radio radio-sm radio-primary" checked>
+                      <span class="text-sm text-gray-300">Cloud ID</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="connection_mode" value="url" class="radio radio-sm radio-primary">
+                      <span class="text-sm text-gray-300">Elastic Node URL</span>
+                    </label>
+                  </div>
+                  <p class="text-gray-400 text-xs mt-2">Choose how to connect to your Elasticsearch cluster</p>
+                </div>
+
+                <!-- Cloud ID Field -->
+                <div id="cloudIdField" class="mb-6">
+                  <label for="{{ form.cloud_id.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                    Cloud ID
+                  </label>
+                  {{ form.cloud_id }}
+                  <p class="text-gray-400 text-xs mt-1">Your Elastic Cloud deployment ID</p>
+                </div>
+
+                <!-- Node URL and Port Fields -->
+                <div id="nodeUrlField" class="hidden mb-6">
+                  <label class="block text-sm font-medium text-gray-300 mb-2">
+                    Elastic Node URL
+                  </label>
+                  <div class="flex gap-3">
+                    <div class="flex-1">
+                      {{ form.host }}
+                    </div>
+                    <div class="w-24">
+                      {{ form.port }}
+                    </div>
+                  </div>
+                  <p class="text-gray-400 text-xs mt-1">URL and port of your Elasticsearch node (e.g., https://elasticsearch.example.com:9200)</p>
+                </div>
+
+                <!-- Authentication Section -->
+                <div class="mb-6">
+                  <label class="block text-sm font-medium text-gray-300 mb-3">
+                    Authentication
+                  </label>
+                  <div class="flex gap-4 mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="auth_type" value="basic" class="radio radio-sm radio-primary" checked>
+                      <span class="text-sm text-gray-300">Username/Password</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="auth_type" value="apiKey" class="radio radio-sm radio-primary">
+                      <span class="text-sm text-gray-300">API Key</span>
+                    </label>
+                  </div>
+
+                  <!-- Username/Password Fields -->
+                  <div id="basicAuthFields">
+                    <div class="mb-4">
+                      <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                        Username
+                      </label>
+                      {{ form.username }}
+                      <p class="text-gray-400 text-xs mt-1">Elasticsearch username</p>
+                    </div>
+                    <div class="mb-4">
+                      <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                        Password
+                      </label>
+                      {{ form.password }}
+                      <p class="text-gray-400 text-xs mt-1">Elasticsearch password</p>
+                    </div>
+                  </div>
+
+                  <!-- API Key Field -->
+                  <div id="apiKeyField" class="hidden">
+                    <label for="{{ form.api_key.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                      API Key
+                    </label>
+                    {{ form.api_key }}
+                    <p class="text-gray-400 text-xs mt-1">Base64-encoded API key for authentication</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Logstash Agent Connection Fields -->
+              <div id="agentFields" class="hidden">
+                <!-- Notice -->
+                <div class="p-4 mb-4 bg-blue-900/20 border border-blue-600 rounded-lg">
+                  <p class="text-blue-300 text-sm">
+                    Enrolling LogstashAgent makes this Logstash instance fully managed by LogstashUI. Future applies may overwrite manual changes made directly on the host, including config files, pipelines, and keystore contents. Migrate any desired local configuration into an Agent Policy before enrolling production nodes.
+                  </p>
+                  <div class="mt-3 pt-3 border-t border-blue-600/30">
+                    <div class="group relative inline-block">
+                      <button type="button" class="text-xs text-blue-400 hover:text-blue-300 underline decoration-dotted cursor-help">
+                        What system level changes does LogstashAgent perform?
+                      </button>
+                      <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-96 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
+                        <h4 class="text-sm font-semibold text-white mb-3">System Changes Made by LogstashAgent</h4>
+                        
+                        <div class="mb-3">
+                          <p class="text-xs font-medium text-gray-300 mb-1">Ownership Changes:</p>
+                          <ul class="text-xs text-gray-400 space-y-1 ml-3">
+                            <li><code class="text-gray-300">/etc/logstash</code> → logstash:logstash (recursive)</li>
+                            <li><code class="text-gray-300">/var/log/logstash</code> → logstash:logstash (recursive)</li>
+                            <li><code class="text-gray-300">/usr/share/logstash/data</code> → logstash:logstash (recursive)</li>
+                          </ul>
+                        </div>
+                        
+                        <div class="mb-3">
+                          <p class="text-xs font-medium text-gray-300 mb-1">Sudo Permissions:</p>
+                          <p class="text-xs text-gray-400 ml-3"><code class="text-gray-300">/etc/sudoers.d/logstash-agent</code> - Grants logstash user sudo access for service management and file operations</p>
+                        </div>
+                        
+                        <div>
+                          <p class="text-xs font-medium text-gray-300 mb-1">Systemd:</p>
+                          <p class="text-xs text-gray-400 ml-3"><code class="text-gray-300">systemctl daemon-reload</code> - Reload systemd configuration</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Agent Policy Dropdown -->
+                <div class="mb-4">
+                  <label for="agentPolicy" class="block text-sm font-medium text-gray-300 mb-2">
+                    Agent Policy <span class="text-red-500">*</span>
+                  </label>
+                  <select id="agentPolicy" name="agent_policy" class="select select-bordered w-full">
+                    <option value="">Select a policy...</option>
+                    <option value="add_new" class="font-bold text-primary">+ Add Agent Policy</option>
+                  </select>
+                  <p class="text-gray-400 text-xs mt-1">Select the policy to apply to this agent</p>
+                </div>
+
+                <!-- Enrollment Token Dropdown -->
+                <div id="enrollmentTokenSection" class="mb-4">
+                  <label for="enrollmentToken" class="block text-sm font-medium text-gray-300 mb-2">
+                    Enrollment Token <span class="text-red-500">*</span>
+                  </label>
+                  <select id="enrollmentToken" name="enrollment_token" class="select select-bordered w-full">
+                    <option value="">Select a token...</option>
+                    <option value="add_new" class="font-bold text-primary">+ Add Token</option>
+                  </select>
+                  <p class="text-gray-400 text-xs mt-1">Select the enrollment token to use for this agent</p>
+                </div>
+
+                <!-- Linux Installation Commands -->
+                <div id="linuxCommandsSection" class="mb-4 hidden">
+                  <label class="form-label mb-2 block">Linux</label>
+                  
+                  <!-- Install Logstash Checkbox -->
+                  <div class="mb-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" id="installLogstashCheckbox" class="checkbox checkbox-sm">
+                      <span class="text-sm text-gray-300">Install Logstash</span>
+                    </label>
+                  </div>
+                  
+                  <!-- Package Manager Selection (shown when Install Logstash is checked) -->
+                  <div id="packageManagerSection" class="hidden mb-3 ml-6">
+                    <label class="block text-sm text-gray-400 mb-2">Package Manager:</label>
+                    <div class="flex gap-4">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="package_manager" value="apt" class="radio radio-sm" checked>
+                        <span class="text-sm text-gray-300">apt (Debian/Ubuntu)</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="package_manager" value="yum" class="radio radio-sm">
+                        <span class="text-sm text-gray-300">yum (RHEL/CentOS)</span>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <!-- Localhost Warning -->
+                  <div id="localhostWarning" class="hidden p-3 mb-3 bg-yellow-900/20 border border-yellow-600 rounded-lg">
+                    <p class="text-yellow-300 text-sm mb-2">
+                      ⚠️ It looks like you're hosting LogstashUI on your local machine.
+                    </p>
+                    <label class="block text-yellow-200 text-sm mb-2">
+                      Enter the hostname or IP address that LogstashAgent should use to reach this LogstashUI instance:
+                    </label>
+                    <input 
+                      type="text" 
+                      id="customLogstashUIUrl" 
+                      class="w-full px-3 py-2 bg-gray-900 border border-yellow-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent" 
+                      placeholder="e.g., https://logstash-ui.example.com or http://192.168.1.100:8000"
+                      oninput="updateLinuxCommandsUrl()"
+                    >
+                  </div>
+                  <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 font-mono text-sm">
+                    <div class="flex justify-between items-center mb-2">
+                      <span class="text-gray-400 text-xs">BASH</span>
+                      <button type="button" onclick="copyToClipboard('linuxCommands', event)" class="text-blue-400 hover:text-blue-300 text-xs">
+                        Copy
+                      </button>
+                    </div>
+                    <pre id="linuxCommands" class="text-green-400 whitespace-pre-wrap break-all"><code>curl -LO https://github.com/elastic/LogstashAgent/releases/download/v{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
+tar -xzf logstash-agent-linux-amd64.tar.gz
+sudo ./logstash-agent/logstash-agent install --enroll {enrollment_token} --logstash-ui-url {url} --yes
+sudo systemctl enable logstash-agent
+sudo systemctl start logstash-agent</code></pre>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+                  <button type="button" onclick="closeFlyout()" class="btn btn-secondary">
+                      Cancel
+                  </button>
+                  <button id="saveConnectionBtn" type="submit" class="btn btn-primary">
+                      Save Connection
+                  </button>
+              </div>
+              <div class="htmx-indicator loading">Saving...</div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openFlyout() {
+        document.getElementById('connectionFormFlyout').classList.remove('hidden');
+    }
+
+    function closeFlyout() {
+        document.getElementById('connectionFormFlyout').classList.add('hidden');
+    }
+
+
+
+
+  // Handle form submission and front end validation
+  document.getElementById('connectionForm').addEventListener('submit', function(e) {
+    // Only validate visible fields
+    if (document.getElementById('connectionTypeField').value === 'AGENT') {
+      // Validate agent policy is selected
+      const agentPolicy = document.querySelector('[name="agent_policy"]');
+      if (!agentPolicy || !agentPolicy.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        showToast('Please select an agent policy', 'error');
+        return;
+      }
+    } else {
+      // For centralized form, validate based on selected auth type
+      const authType = document.querySelector('input[name="auth_type"]:checked').value;
+      let isValid = true;
+
+      // Always validate username/password if basic auth is selected
+      if (authType === 'basic') {
+        const username = document.querySelector('[name="username"]');
+        const password = document.querySelector('[name="password"]');
+
+        if (!username.value.trim() || !password.value.trim()) {
+          isValid = false;
+          if (!username.value.trim()) username.reportValidity();
+          if (!password.value.trim()) password.reportValidity();
+        }
+      } else {
+        // Validate API key if API key auth is selected
+        const apiKey = document.querySelector('[name="api_key"]');
+        if (!apiKey.value.trim()) {
+          isValid = false;
+          apiKey.reportValidity();
+        }
+      }
+
+      if (!isValid) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  });
+
+
+
+  // Load policies from server and populate dropdown
+  async function loadAgentPolicies() {
+    try {
+      const response = await fetch('/ConnectionManager/GetPolicies/', {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.policies) {
+        const agentPolicySelect = document.getElementById('agentPolicy');
+        if (agentPolicySelect) {
+          // Clear existing options except "Select a policy..." and "+ Add Agent Policy"
+          const selectOption = agentPolicySelect.querySelector('option[value=""]');
+          const addNewOption = agentPolicySelect.querySelector('option[value="add_new"]');
+          agentPolicySelect.innerHTML = '';
+          
+          // Re-add the select and add new options
+          if (selectOption) agentPolicySelect.appendChild(selectOption);
+          if (addNewOption) agentPolicySelect.appendChild(addNewOption);
+          
+          // Add all policies from server
+          data.policies.forEach(policy => {
+            const option = document.createElement('option');
+            option.value = policy.name.toLowerCase();
+            option.textContent = policy.name;
+            option.dataset.policyId = policy.id;
+            
+            // Insert before "+ Add Agent Policy" option
+            agentPolicySelect.insertBefore(option, addNewOption);
+          });
+          
+          // Select first policy if available and load enrollment tokens
+          if (data.policies.length > 0) {
+            agentPolicySelect.value = data.policies[0].name.toLowerCase();
+            
+            // Load enrollment tokens for the selected policy
+            // Always load tokens even if agent fields are hidden - they'll be ready when user switches to Agent type
+            await loadEnrollmentTokens(data.policies[0].id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading agent policies:', error);
+    }
+  }
+  
+  // Load policies on page load
+  loadAgentPolicies();
+  
+  // Handle agent policy selection change
+  const agentPolicySelect = document.getElementById('agentPolicy');
+  const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+  const saveConnectionBtn = document.getElementById('saveConnectionBtn');
+  
+  if (agentPolicySelect) {
+    agentPolicySelect.addEventListener('change', async function(e) {
+      if (this.value === 'add_new') {
+        // Show prompt to add new policy
+        const policyName = await ConfirmationModal.prompt(
+          'Enter a name for the new policy:',
+          '',
+          'Add New Policy',
+          'e.g., Production Policy'
+        );
+        
+        if (policyName && policyName.trim()) {
+          const trimmedName = policyName.trim();
+          
+          // Create the policy
+          try {
+            const response = await fetch('/ConnectionManager/AddPolicy/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+              },
+              body: JSON.stringify({
+                name: trimmedName,
+                settings_path: '/etc/logstash/',
+                logs_path: '/var/log/logstash',
+                logstash_yml: '',
+                jvm_options: '',
+                log4j2_properties: ''
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              showToast(data.message || 'Policy created successfully', 'success');
+              
+              // Reload policies to include the new one
+              await loadAgentPolicies();
+              
+              // Select the newly created policy
+              const newPolicyValue = trimmedName.toLowerCase().replace(/\s+/g, '_');
+              agentPolicySelect.value = newPolicyValue;
+              
+              // Load enrollment tokens for the new policy
+              await loadEnrollmentTokens(data.policy_id);
+            } else {
+              showToast(data.error || 'Failed to create policy', 'error');
+              // Reset to empty selection
+              agentPolicySelect.value = '';
+            }
+          } catch (error) {
+            console.error('Error creating policy:', error);
+            showToast('Failed to create policy: ' + error.message, 'error');
+            // Reset to empty selection
+            agentPolicySelect.value = '';
+          }
+        } else {
+          // User cancelled, reset to empty selection
+          agentPolicySelect.value = '';
+        }
+      } else if (this.value && this.value !== '') {
+        // Load enrollment tokens for selected policy
+        const selectedOption = this.options[this.selectedIndex];
+        const policyId = selectedOption.dataset.policyId;
+        
+        if (policyId) {
+          await loadEnrollmentTokens(policyId);
+        }
+      } else {
+        // Clear enrollment token dropdown and hide Linux commands when no policy is selected
+        const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+        if (enrollmentTokenSelect) {
+          enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
+        }
+        if (linuxCommandsSection) {
+          linuxCommandsSection.classList.add('hidden');
+        }
+      }
+    });
+    
+    // Load enrollment tokens on page load if agent fields are visible and policy is selected
+    const agentFields = document.getElementById('agentFields');
+    if (agentFields && !agentFields.classList.contains('hidden') && agentPolicySelect.value && agentPolicySelect.value !== '' && agentPolicySelect.value !== 'add_new') {
+      // Get policy ID from selected option
+      const selectedOption = agentPolicySelect.options[agentPolicySelect.selectedIndex];
+      const policyId = selectedOption.dataset.policyId;
+      
+      if (policyId) {
+        loadEnrollmentTokens(policyId);
+      }
+    }
+  }
+  
+  // Function to load enrollment tokens for a policy
+  async function loadEnrollmentTokens(policyId) {
+    try {
+      const response = await fetch(`/ConnectionManager/GetEnrollmentTokens/?policy_id=${policyId}`, {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+      
+      const data = await response.json();
+      
+      const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+      const enrollmentTokenSection = document.getElementById('enrollmentTokenSection');
+      
+      if (data.success && data.tokens && data.tokens.length > 0) {
+        // Clear existing options and rebuild
+        enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
+        
+        // Add enrollment tokens
+        data.tokens.forEach(token => {
+          const option = document.createElement('option');
+          option.value = token.id;
+          option.textContent = token.name;
+          option.dataset.encodedToken = token.encoded_token;
+          enrollmentTokenSelect.appendChild(option);
+        });
+        
+        // Add the "+ Add Token" option at the end
+        const addNewOption = document.createElement('option');
+        addNewOption.value = 'add_new';
+        addNewOption.textContent = '+ Add Token';
+        addNewOption.className = 'font-bold text-primary';
+        enrollmentTokenSelect.appendChild(addNewOption);
+        
+        // Auto-select first token
+        if (data.tokens.length > 0) {
+          enrollmentTokenSelect.value = data.tokens[0].id;
+          enrollmentTokenSelect.dispatchEvent(new Event('change'));
+        }
+      } else {
+        // Clear enrollment token dropdown if no tokens, but keep "+ Add Token" option
+        enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
+        const addNewOption = document.createElement('option');
+        addNewOption.value = 'add_new';
+        addNewOption.textContent = '+ Add Token';
+        addNewOption.className = 'font-bold text-primary';
+        enrollmentTokenSelect.appendChild(addNewOption);
+      }
+    } catch (error) {
+      console.error('Error loading enrollment tokens:', error);
+      showToast('Failed to load enrollment tokens: ' + error.message, 'error');
+    }
+  }
+  
+  // Handle enrollment token selection change
+  const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+  if (enrollmentTokenSelect) {
+    enrollmentTokenSelect.addEventListener('change', async function() {
+      if (this.value === 'add_new') {
+        // Show prompt to add new enrollment token
+        const tokenName = await ConfirmationModal.prompt(
+          'Enter a name for the enrollment token:',
+          '',
+          'Add Enrollment Token',
+          'e.g., Production Token'
+        );
+        
+        if (tokenName && tokenName.trim()) {
+          const trimmedName = tokenName.trim();
+          
+          // Get current policy ID
+          const agentPolicySelect = document.getElementById('agentPolicy');
+          const selectedPolicyOption = agentPolicySelect.options[agentPolicySelect.selectedIndex];
+          const policyId = selectedPolicyOption.dataset.policyId;
+          
+          if (!policyId) {
+            showToast('Please select a policy first', 'error');
+            this.value = '';
+            return;
+          }
+          
+          // Create the enrollment token
+          try {
+            const response = await fetch('/ConnectionManager/AddEnrollmentToken/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+              },
+              body: JSON.stringify({
+                policy_id: policyId,
+                name: trimmedName
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              showToast(data.message || 'Enrollment token created successfully', 'success');
+              
+              // Reload enrollment tokens
+              await loadEnrollmentTokens(policyId);
+              
+              // Select the newly created token (it will be the last one added)
+              // We need to find it by name since we don't have the ID in the response
+              const options = Array.from(this.options);
+              const newTokenOption = options.find(opt => opt.textContent === trimmedName);
+              if (newTokenOption) {
+                this.value = newTokenOption.value;
+                this.dispatchEvent(new Event('change'));
+              }
+            } else {
+              showToast(data.error || 'Failed to create enrollment token', 'error');
+              // Reset to empty selection
+              this.value = '';
+            }
+          } catch (error) {
+            console.error('Error creating enrollment token:', error);
+            showToast('Failed to create enrollment token: ' + error.message, 'error');
+            // Reset to empty selection
+            this.value = '';
+          }
+        } else {
+          // User cancelled, reset to empty selection
+          this.value = '';
+        }
+      } else {
+        const selectedOption = this.options[this.selectedIndex];
+        const encodedToken = selectedOption.dataset.encodedToken;
+        
+        if (encodedToken) {
+          // Update Linux commands with the selected enrollment token
+          updateLinuxCommands(encodedToken);
+          
+          // Show Linux commands section
+          const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+          if (linuxCommandsSection) {
+            linuxCommandsSection.classList.remove('hidden');
+          }
+        } else {
+          // Hide Linux commands section when no token is selected
+          const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+          if (linuxCommandsSection) {
+            linuxCommandsSection.classList.add('hidden');
+          }
+        }
+      }
+    });
+  }
+  
+  // Function to update Linux commands with enrollment token
+  function updateLinuxCommands(encodedToken) {
+    const linuxCommandsElement = document.getElementById('linuxCommands');
+    const localhostWarning = document.getElementById('localhostWarning');
+    const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
+    const packageManagerRadio = document.querySelector('input[name="package_manager"]:checked');
+    const customUrlInput = document.getElementById('customLogstashUIUrl');
+    
+    if (linuxCommandsElement) {
+      // Get the URL to use - custom input takes precedence over browser URL
+      const browserUrl = window.location.origin;
+      const customUrl = customUrlInput ? customUrlInput.value.trim() : '';
+      const currentUrl = customUrl || browserUrl;
+      
+      // Check if the URL contains localhost or 127.0.0.1
+      const isLocalhost = browserUrl.includes('localhost') || browserUrl.includes('127.0.0.1');
+      
+      // Show or hide the localhost warning
+      if (localhostWarning) {
+        if (isLocalhost) {
+          localhostWarning.classList.remove('hidden');
+        } else {
+          localhostWarning.classList.add('hidden');
+        }
+      }
+      
+      // Build the commands
+      let commands = '';
+      
+      // Add Logstash installation commands if checkbox is checked
+      if (installLogstashCheckbox && installLogstashCheckbox.checked) {
+        const packageManager = packageManagerRadio ? packageManagerRadio.value : 'apt';
+        
+        if (packageManager === 'apt') {
+          commands += `# Install Logstash
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+sudo apt-get install apt-transport-https -y
+echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/9.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-9.x.list
+sudo apt-get update -y && sudo apt-get install logstash -y
+sudo systemctl enable logstash
+
+`;
+        } else if (packageManager === 'yum') {
+          commands += `# Install Logstash
+sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch
+echo '[logstash-9.x]
+name=Elastic repository for 9.x packages
+baseurl=https://artifacts.elastic.co/packages/9.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-md' | sudo tee /etc/yum.repos.d/logstash.repo
+sudo yum install logstash -y
+sudo systemctl enable logstash
+
+`;
+        }
+      }
+      
+      // Add LogstashAgent installation commands
+      commands += `# Install LogstashAgent
+curl -LO https://github.com/elastic/LogstashAgent/releases/download/v{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
+tar -xzf logstash-agent-linux-amd64.tar.gz
+sudo ./logstash-agent/logstash-agent install --enroll ${encodedToken} --logstash-ui-url ${currentUrl} --yes
+sudo systemctl enable logstash-agent
+sudo systemctl start logstash-agent`;
+      
+      // Update the commands
+      linuxCommandsElement.innerHTML = `<code>${commands}</code>`;
+    }
+  }
+  
+  // Function to update Linux commands when custom URL changes
+  function updateLinuxCommandsUrl() {
+    // Get the currently selected enrollment token
+    const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+    if (enrollmentTokenSelect && enrollmentTokenSelect.value && enrollmentTokenSelect.value !== 'add_new') {
+      const selectedOption = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+      const encodedToken = selectedOption.dataset.encodedToken;
+      if (encodedToken) {
+        updateLinuxCommands(encodedToken);
+      }
+    }
+  }
+  
+  // Function to generate enrollment token - make it globally accessible
+  window.generateEnrollmentToken = async function(policyName) {
+    try {
+      const response = await fetch('/ConnectionManager/GenerateEnrollmentToken/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+          policy_name: policyName
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update the enrollment token in the installation commands
+        updateEnrollmentToken(data.enrollment_token);
+      } else {
+        showToast(data.error || 'Failed to generate enrollment token', 'error');
+      }
+    } catch (error) {
+      console.error('Error generating enrollment token:', error);
+      showToast('Failed to generate enrollment token: ' + error.message, 'error');
+    }
+  }
+  
+  // Function to update enrollment token in installation commands
+  function updateEnrollmentToken(token) {
+    updateLinuxCommands(token);
+  }
+  
+  // Helper function to get CSRF token
+  function getCsrfToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  // Toggle between Cloud ID and Node URL fields (for centralized connections)
+  document.querySelectorAll('input[name="connection_mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      if (this.value === 'cloud') {
+        document.getElementById('cloudIdField').classList.remove('hidden');
+        document.getElementById('nodeUrlField').classList.add('hidden');
+      } else {
+        document.getElementById('cloudIdField').classList.add('hidden');
+        document.getElementById('nodeUrlField').classList.remove('hidden');
+      }
+    });
+  });
+
+
+
+// Toggle between Basic Auth and API Key fields (for centralized connections)
+  document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      document.getElementById('basicAuthFields').classList.toggle('hidden', this.value !== 'basic');
+      document.getElementById('apiKeyField').classList.toggle('hidden', this.value !== 'apiKey');
+    });
+  });
+
+  // Parse URL in host field to extract scheme and port
+  const hostInput = document.querySelector('input[name="host"]');
+  const portInput = document.querySelector('input[name="port"]');
+  
+  if (hostInput && portInput) {
+    hostInput.addEventListener('blur', function() {
+      let url = this.value.trim();
+      
+      // Only process if in URL mode (not Cloud ID mode)
+      if (!document.getElementById('nodeUrlField').classList.contains('hidden')) {
+        // Check if URL has a scheme
+        if (url && !url.match(/^https?:\/\//i)) {
+          // No scheme provided, show error
+          showToast('Please include http:// or https:// in the URL', 'warning');
+          return;
+        }
+        
+        if (url.match(/^https?:\/\//i)) {
+          try {
+            const urlObj = new URL(url);
+            
+            // Extract hostname (without port)
+            const hostname = urlObj.hostname;
+            
+            // Extract port if present, otherwise use default based on scheme
+            let port = urlObj.port;
+            if (!port) {
+              port = urlObj.protocol === 'https:' ? '443' : '80';
+            }
+            
+            // Update the host field with just the scheme and hostname
+            this.value = urlObj.protocol + '//' + hostname;
+            
+            // Update the port field
+            portInput.value = port;
+            
+          } catch (e) {
+            showToast('Invalid URL format. Please use http://hostname or https://hostname', 'error');
+          }
+        }
+      }
+    });
+    
+    // Also validate on form submit
+    const connectionForm = document.getElementById('connectionForm');
+    connectionForm.addEventListener('submit', function(e) {
+      const connectionMode = document.querySelector('input[name="connection_mode"]:checked');
+      
+      // Only validate if using Node URL mode (not Cloud ID)
+      if (connectionMode && connectionMode.value === 'url') {
+        const hostValue = hostInput.value.trim();
+        
+        if (hostValue && !hostValue.match(/^https?:\/\//i)) {
+          e.preventDefault();
+          e.stopPropagation();
+          showToast('Elastic Node URL must start with http:// or https://', 'error');
+          hostInput.focus();
+          return false;
+        }
+      }
+    });
+  }
+
+  // Copy to clipboard function for agent installation commands
+  function copyToClipboard(elementId, event) {
+    const element = document.getElementById(elementId);
+    const copyButton = event.target;
+    
+    if (!element) {
+      console.error('Could not find element:', elementId);
+      return;
+    }
+    
+    const text = element.textContent;
+    
+    // Function to update button state on success
+    function onSuccess() {
+      const originalText = copyButton.textContent;
+      copyButton.textContent = 'Copied!';
+      copyButton.classList.remove('text-blue-400', 'hover:text-blue-300');
+      copyButton.classList.add('text-green-400', 'hover:text-green-300');
+      
+      setTimeout(function() {
+        copyButton.textContent = originalText;
+        copyButton.classList.remove('text-green-400', 'hover:text-green-300');
+        copyButton.classList.add('text-blue-400', 'hover:text-blue-300');
+      }, 2000);
+    }
+    
+    // Function to update button state on failure
+    function onFailure(err) {
+      console.error('Failed to copy text: ', err);
+      copyButton.textContent = 'Failed!';
+      copyButton.classList.remove('text-blue-400', 'hover:text-blue-300');
+      copyButton.classList.add('text-red-400', 'hover:text-red-300');
+      
+      setTimeout(function() {
+        copyButton.textContent = 'Copy';
+        copyButton.classList.remove('text-red-400', 'hover:text-red-300');
+        copyButton.classList.add('text-blue-400', 'hover:text-blue-300');
+      }, 2000);
+    }
+    
+    // Try modern Clipboard API first (requires HTTPS or localhost)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onSuccess, onFailure);
+    } else {
+      // Fallback for non-secure contexts (HTTP)
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        if (successful) {
+          onSuccess();
+        } else {
+          onFailure(new Error('execCommand copy failed'));
+        }
+      } catch (err) {
+        onFailure(err);
+      }
+    }
+  }
+
+  // Handle Install Logstash checkbox change
+  const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
+  const packageManagerSection = document.getElementById('packageManagerSection');
+  
+  if (installLogstashCheckbox) {
+    installLogstashCheckbox.addEventListener('change', function() {
+      // Show/hide package manager selection
+      if (packageManagerSection) {
+        if (this.checked) {
+          packageManagerSection.classList.remove('hidden');
+        } else {
+          packageManagerSection.classList.add('hidden');
+        }
+      }
+      
+      // Update commands if enrollment token is already selected
+      const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+      if (enrollmentTokenSelect && enrollmentTokenSelect.value && enrollmentTokenSelect.value !== 'add_new') {
+        const selectedOption = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+        const encodedToken = selectedOption.dataset.encodedToken;
+        if (encodedToken) {
+          updateLinuxCommands(encodedToken);
+        }
+      }
+    });
+  }
+  
+  // Handle package manager radio button changes
+  const packageManagerRadios = document.querySelectorAll('input[name="package_manager"]');
+  packageManagerRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+      // Update commands if enrollment token is already selected
+      const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+      if (enrollmentTokenSelect && enrollmentTokenSelect.value && enrollmentTokenSelect.value !== 'add_new') {
+        const selectedOption = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+        const encodedToken = selectedOption.dataset.encodedToken;
+        if (encodedToken) {
+          updateLinuxCommands(encodedToken);
+        }
+      }
+    });
+  });
+
+  </script>

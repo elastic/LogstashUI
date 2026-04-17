@@ -1,0 +1,24 @@
+# WARNING: Enabling no_auth disables all authentication.
+# Only use in sandbox/development environments. Never enable in production.
+no_auth:
+  enabled: false  # true | false
+
+simulation:
+  # embedded - Runs in a local container (slower)
+  # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running. If you have pipelines or configuration it will overwrite / remove it)
+  mode: embedded # embedded | host
+
+  # This YML gets passed through to the simulation agent
+  # When running via start_logstashui.bat, the agent reads this config
+  logstash_agent:
+    mode: simulation
+
+    # Linux example, default
+    logstash_binary: /usr/share/logstash/bin/logstash
+    logstash_settings: /etc/logstash
+    logstash_log_path: /var/log/logstash
+
+    # Windows example
+    #logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
+    #logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
+    #logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs

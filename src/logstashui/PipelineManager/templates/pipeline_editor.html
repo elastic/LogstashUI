@@ -1,0 +1,1417 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!DOCTYPE html>
+{% extends "base.html" %}
+
+{% block content %}
+
+{% load static %}
+<script src="{% static 'js/d3.v7.js' %}"></script>
+<script src="{% static 'js/codemirror.min.js' %}"></script>
+<script src="{% static 'js/show-hint.min.js' %}"></script>
+
+<script src="{% static 'js/pipeline_editor.js' %}"></script>
+<script src="{% static 'js/pipeline_settings.js' %}"></script>
+<script src="{% static 'js/move_mode.js' %}"></script>
+<script src="{% static 'js/simulation_results.js' %}"></script>
+<script src="{% static 'js/pipeline_text_editor.js' %}"></script>
+<script src="{% static 'js/pipeline_graph_editor.js' %}"></script>
+<script src="{% static 'js/expression_editor.js' %}"></script>
+<script src="{% static 'js/stats_strip.js' %}"></script>
+
+<link rel="stylesheet" href="{% static 'css/move_mode.css' %}">
+<link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/monokai.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/show-hint.min.css' %}">
+{{ component_data|json_script:"component-data" }}
+{{ plugin_data|json_script:"plugin-data" }}
+{{ keystore_keys|default:"[]"|json_script:"keystore-keys" }}
+<script>
+    // Define components and pluginData early so HTMX hx-vals can reference them
+    const components = JSON.parse(document.getElementById('component-data').textContent);
+    const pluginData = JSON.parse(document.getElementById('plugin-data').textContent);
+    window.pluginData = pluginData; // Make globally accessible for text editor autocomplete
+    
+    // Global variable to store current slot ID for logs viewer
+    let currentSlotId = null;
+
+
+
+    /**
+     * View logs for the current pipeline slot
+     */
+    async function viewPipelineLogs() {
+        if (!currentSlotId) {
+            console.error('No slot ID available for logs');
+            alert('Unable to fetch logs - slot information not available');
+            return;
+        }
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'pipeline-logs-modal';
+        modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('pipeline-logs-modal').remove()"></div>
+            <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+                <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${currentSlotId}-filter1</h3>
+                    <button onclick="document.getElementById('pipeline-logs-modal').remove()" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow">
+                    <div id="pipeline-logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+                        <div class="flex items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                            <span class="ml-3">Loading logs...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Fetch logs from API
+        try {
+            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            const data = await response.json();
+            
+            const logsContent = document.getElementById('pipeline-logs-content');
+            
+            if (!data.logs || data.logs.length === 0) {
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                return;
+            }
+            
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
+            
+            data.logs.forEach((log, idx) => {
+                const level = log.level || 'INFO';
+                const levelColor = {
+                    'ERROR': 'text-red-400',
+                    'WARN': 'text-yellow-400',
+                    'INFO': 'text-blue-400',
+                    'DEBUG': 'text-gray-400'
+                }[level] || 'text-gray-400';
+                
+                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
+                const logEvent = log.logEvent || {};
+                const message = logEvent.message || log.message || 'No message';
+                const logger = log.loggerName || 'unknown';
+                
+                html += `
+                    <div class="mb-4 pb-4 border-b border-gray-700">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="${levelColor} font-bold">[${level}]</span>
+                            <span class="text-gray-500 text-xs">${timestamp}</span>
+                            <span class="text-gray-400 text-xs">${logger}</span>
+                        </div>
+                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
+                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            });
+            
+            logsContent.innerHTML = html;
+        } catch (error) {
+            const logsContent = document.getElementById('pipeline-logs-content');
+            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
+        }
+    }
+    
+    /**
+     * Check Logstash state (healthy, restarting, queued requests)
+     */
+    async function checkLogstashState() {
+        try {
+            const response = await fetch('/ConnectionManager/GetSimulationNodeHealth/');
+            const data = await response.json();
+            
+            const stateDiv = document.getElementById('logstashState');
+            const stateIcon = document.getElementById('logstashStateIcon');
+            const stateMessage = document.getElementById('logstashStateMessage');
+            
+            if (data.healthy) {
+                // Logstash is healthy
+                stateDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
+                stateIcon.outerHTML = `
+                    <svg id="logstashStateIcon" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                stateMessage.className = 'text-xs font-medium text-green-300';
+                stateMessage.textContent = 'Sim Node Healthy';
+            } else if (data.restarting) {
+                // Logstash is restarting
+                stateDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600 bg-yellow-900/30';
+                stateIcon.outerHTML = `
+                    <svg id="logstashStateIcon" class="w-4 h-4 text-yellow-400 animate-spin" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                `;
+                stateMessage.className = 'text-xs font-medium text-yellow-300';
+                const queuedCount = data.queued_requests || 0;
+                stateMessage.textContent = queuedCount > 0 ? `Restarting (${queuedCount} queued)` : 'Restarting';
+            }
+            // Note: If neither healthy nor restarting, don't update UI
+            // This prevents transient failures (e.g., during validation) from showing false "unhealthy" state
+            // The UI will keep showing the last known good state
+        } catch (error) {
+            console.error('Error checking Logstash state:', error);
+            // Don't update UI on network errors - keep last known state
+            // This prevents brief network issues from showing false "unhealthy" state
+        }
+    }
+    
+    /**
+     * Check logstashagent health status
+     */
+    async function checkAgentStatus() {
+        try {
+            const response = await fetch('/ConnectionManager/GetSimulationNodeStatus/');
+            const data = await response.json();
+            
+            const agentStatusDiv = document.getElementById('agentStatus');
+            const agentStatusIcon = document.getElementById('agentStatusIcon');
+            const agentStatusMessage = document.getElementById('agentStatusMessage');
+            
+            if (data.status === 'running') {
+                // Agent is running - show green checkmark
+                agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
+                agentStatusIcon.outerHTML = `
+                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                agentStatusMessage.className = 'text-xs font-medium text-green-300';
+                agentStatusMessage.textContent = data.message;
+            } else {
+                // Agent not responding - show red X
+                agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
+                agentStatusIcon.outerHTML = `
+                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                `;
+                agentStatusMessage.className = 'text-xs font-medium text-red-300';
+                agentStatusMessage.textContent = data.message;
+            }
+        } catch (error) {
+            console.error('Error checking agent status:', error);
+            const agentStatusDiv = document.getElementById('agentStatus');
+            const agentStatusIcon = document.getElementById('agentStatusIcon');
+            const agentStatusMessage = document.getElementById('agentStatusMessage');
+            
+            // Show error state
+            agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
+            agentStatusIcon.outerHTML = `
+                <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            `;
+            agentStatusMessage.className = 'text-xs font-medium text-red-300';
+            agentStatusMessage.textContent = 'Agent Not Responding';
+        }
+    }
+    
+    /**
+     * Validate pipeline configuration
+     */
+    async function validatePipelineConfig() {
+        const validateBtn = document.getElementById('validateConfigBtn');
+        const validateIcon = document.getElementById('validateIcon');
+        const validateStatus = document.getElementById('validateStatus');
+        const validationContent = document.getElementById('validationContent');
+        const validationTooltip = document.getElementById('validationTooltip');
+        
+        // Show loading state
+        validateIcon.outerHTML = `
+            <svg id="validateIcon" class="w-5 h-5 text-purple-400 animate-spin" fill="currentColor" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        `;
+        validateStatus.textContent = 'Validating...';
+        validationContent.innerHTML = 'Validating your pipeline configuration...';
+        
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pipelineName = urlParams.get('pipeline') || 'pipeline';
+            
+            const formData = new FormData();
+            formData.append('components', JSON.stringify(components));
+            formData.append('pipeline_name', pipelineName);
+            
+            const response = await fetch('/ConnectionManager/ValidateLogstashConfig/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            });
+            
+            const data = await response.json();
+            const notifications = data.notifications || {};
+            
+            // Determine severity based on log levels present
+            const hasFatal = 'FATAL' in notifications;
+            const hasError = 'ERROR' in notifications;
+            const hasWarn = 'WARN' in notifications;
+            const hasInfo = 'INFO' in notifications;
+            
+            let borderColor = 'border-purple-500';
+            let statusIcon = '';
+            let statusText = '';
+            let statusClass = '';
+            let contentHtml = '';
+            
+            if (hasFatal || hasError || data.status === 'ERROR') {
+                // FATAL or ERROR - show red X with "Invalid"
+                borderColor = 'border-red-500';
+                statusIcon = `
+                    <svg id="validateIcon" class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                `;
+                statusText = 'Invalid';
+                statusClass = 'text-xl font-bold text-red-400';
+                contentHtml = '<div class="text-red-400 font-semibold mb-2">✗ Configuration has errors</div>';
+            } else if (hasWarn) {
+                // WARN - show yellow caution symbol
+                borderColor = 'border-yellow-500';
+                statusIcon = `
+                    <svg id="validateIcon" class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                `;
+                statusText = 'Valid';
+                statusClass = 'text-xl font-bold text-yellow-400';
+                contentHtml = '<div class="text-yellow-400 font-semibold mb-2">⚠ Configuration is valid with warnings</div>';
+            } else {
+                // INFO only or no issues - show green checkmark with "Valid"
+                borderColor = 'border-green-500';
+                statusIcon = `
+                    <svg id="validateIcon" class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                `;
+                statusText = 'Valid';
+                statusClass = 'text-xl font-bold text-green-400';
+                contentHtml = '<div class="text-green-400 font-semibold mb-2">✓ Configuration is valid with no warnings</div>';
+            }
+            
+            // Build notification details by log level
+            const logLevelOrder = ['FATAL', 'ERROR', 'WARN', 'INFO'];
+            for (const level of logLevelOrder) {
+                if (level in notifications && notifications[level].length > 0) {
+                    const levelColor = {
+                        'FATAL': 'text-red-400',
+                        'ERROR': 'text-red-400',
+                        'WARN': 'text-yellow-400',
+                        'INFO': 'text-blue-400'
+                    }[level];
+                    
+                    contentHtml += `<div class="${levelColor} font-semibold mt-2 mb-1">${level} (${notifications[level].length}):</div>`;
+                    notifications[level].forEach(entry => {
+                        contentHtml += `<div class="text-gray-300 text-xs mb-1">
+                            <span class="text-gray-400">[${entry.plugin}]</span> ${entry.message}
+                        </div>`;
+                    });
+                }
+            }
+            
+            // Update UI
+            document.getElementById('validateIcon').outerHTML = statusIcon;
+            validateStatus.textContent = statusText;
+            validateStatus.className = statusClass;
+            validationContent.innerHTML = contentHtml;
+            
+            // Update tooltip border color
+            validationTooltip.className = validationTooltip.className.replace(/border-\w+-500/, borderColor);
+            
+            // Show tooltip - user can close it manually or by hovering away
+            validationTooltip.classList.remove('hidden');
+            
+        } catch (error) {
+            console.error('Error validating config:', error);
+            document.getElementById('validateIcon').outerHTML = `
+                <svg id="validateIcon" class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            `;
+            validateStatus.textContent = 'Error';
+            validateStatus.className = 'text-xl font-bold text-red-400';
+            validationContent.innerHTML = `<div class="text-red-400">Error: ${error.message}</div>`;
+            validationTooltip.className = validationTooltip.className.replace('border-purple-500', 'border-red-500');
+        }
+    }
+    
+    // Register htmx:afterSwap listener EARLY to catch the initial page load preallocation
+    // This must be done before the slotPreallocation element is parsed
+    document.addEventListener('DOMContentLoaded', function() {
+        const preallocationResult = document.getElementById('slotPreallocationResult');
+        const slotPreallocation = document.getElementById('slotPreallocation');
+        
+        if (preallocationResult) {
+            preallocationResult.addEventListener('htmx:afterSwap', function(event) {
+                // Small delay to ensure DOM is fully updated
+                setTimeout(checkPipelineLoadStatus, 100);
+            });
+        }
+        
+        // Listen for when preallocation request starts (for embedded mode)
+        if (slotPreallocation) {
+            slotPreallocation.addEventListener('htmx:beforeRequest', function(event) {
+                // Show 'Allocating pipeline slot...' when request starts
+                const statusContainer = document.getElementById('pipelineLoadStatus');
+                const statusIcon = document.getElementById('pipelineStatusIcon');
+                const statusMessage = document.getElementById('pipelineStatusMessage');
+                
+                if (statusContainer && statusIcon && statusMessage) {
+                    statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
+                    statusIcon.outerHTML = `
+                        <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    `;
+                    statusMessage.className = 'text-xs font-medium text-gray-300';
+                    statusMessage.textContent = 'Allocating pipeline slot...';
+                }
+            });
+        }
+        
+        // Check agent status once on page load
+        checkAgentStatus();
+        
+        // Check Logstash state once on page load
+        checkLogstashState();
+        
+        // Poll Logstash state every 5 seconds
+        setInterval(checkLogstashState, 5000);
+    });
+</script>
+<style>
+    .insertion-point {
+        position: relative;
+        height: 16px;
+        margin: 1px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    .component-container:hover > .insertion-point,
+    .insertion-point:hover {
+        opacity: 1;
+    }
+
+    .insertion-buttons {
+        display: flex;
+        position: absolute;
+        z-index: 10;
+        background: #374151;
+        border-radius: 3px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        padding: 2px;
+        gap: 2px;
+        opacity: 0;
+        transform: translateY(-2px);
+        transition: all 0.15s ease;
+    }
+
+    .insertion-point:hover .insertion-buttons {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .insertion-point:hover .insertion-buttons {
+        display: flex;
+    }
+
+    .insertion-button {
+        padding: 2px 6px;
+        border: none;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        height: 20px;
+    }
+
+    .insertion-button.add-plugin {
+        background-color: #3b82f6;
+        color: white;
+    }
+
+    .insertion-button.add-condition {
+        background-color: #f59e0b;
+        color: white;
+    }
+
+    .insertion-button:hover {
+        opacity: 0.9;
+    }
+
+    .component-container {
+        position: relative;
+    }
+
+    .component-container:hover .insertion-point {
+        display: flex;
+    }
+
+    .empty-section .insertion-point {
+        display: flex !important;
+    }
+
+    .empty-section .insertion-buttons {
+        position: static;
+        display: flex !important;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
+        margin-top: 8px;
+    }
+
+    /* Always visible insertion points (for end of sections and empty blocks) */
+    .insertion-point.always-visible {
+        opacity: 1;
+        display: flex !important;
+    }
+
+    .insertion-point.always-visible .insertion-buttons {
+        position: static;
+        opacity: 1;
+        transform: translateY(0);
+        display: flex;
+        margin-top: 4px;
+    }
+
+    /* Newly added plugin animation */
+    @keyframes glowPulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
+            border-color: rgba(59, 130, 246, 0.8);
+        }
+        50% {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.3);
+            border-color: rgba(59, 130, 246, 1);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0), 0 0 0 rgba(59, 130, 246, 0);
+            border-color: transparent;
+        }
+    }
+
+    .newly-added {
+        animation: glowPulse 2s ease-out;
+        border: 2px solid rgba(59, 130, 246, 0.8);
+        scroll-margin-top: 100px;
+    }
+
+    .newly-added::before {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        border-radius: inherit;
+        background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+        z-index: -1;
+        opacity: 0;
+        animation: fadeOut 2s ease-out;
+    }
+
+    @keyframes fadeOut {
+        0% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
+
+    /* Simulation badge pop animation */
+    @keyframes badgePop {
+        0% {
+            transform: scale(0);
+            opacity: 0;
+        }
+        50% {
+            transform: scale(1.2);
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    /* Green glow animation for mode toggle */
+    .mode-toggle-active {
+        animation: pulse-glow-green 2s ease-in-out forwards;
+        border-radius: 0.375rem;
+        box-shadow: 0 0 6px 1px rgba(34, 197, 94, 0.3);
+    }
+
+    @keyframes pulse-glow-green {
+        0% {
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+        }
+        50% {
+            box-shadow: 0 0 12px 3px rgba(34, 197, 94, 0.6);
+        }
+        100% {
+            box-shadow: 0 0 6px 1px rgba(34, 197, 94, 0.3);
+        }
+    }
+
+    /* Failure pulse animation for parsing failure badges */
+    @keyframes failurePulse {
+        0%, 100% {
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.8), 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: scale(1);
+        }
+        50% {
+            box-shadow: 0 0 30px rgba(220, 38, 38, 1), 0 0 40px rgba(220, 38, 38, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: scale(1.05);
+        }
+    }
+
+    /* Dim non-executed plugins during simulation */
+    .simulation-dimmed {
+        opacity: 0.3;
+        filter: blur(1px) grayscale(50%);
+        transition: opacity 0.3s ease, filter 0.3s ease;
+        pointer-events: none;
+    }
+
+    /* Collapsible conditional blocks */
+    .conditional-content {
+        max-height: none;
+        overflow: visible;
+        transition: opacity 0.3s ease-out;
+        opacity: 1;
+    }
+
+    .conditional-content.collapsed {
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 0.3s ease-in, opacity 0.3s ease-in;
+    }
+
+    .collapse-toggle svg {
+        transition: transform 0.3s ease;
+    }
+
+    /* Simulation selection styles */
+    .simulation-selected {
+        border: 2px solid #10b981 !important;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+    }
+
+    .simulation-selected-checkbox {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #10b981;
+        border-radius: 4px;
+        background-color: #10b981;
+    }
+
+    .simulation-selected-checkbox svg {
+        width: 14px;
+        height: 14px;
+        color: white;
+    }
+
+    /* Floating Simulate Subset button container */
+    #simulateSubsetContainer {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        z-index: 40;
+        transition: all 0.3s ease;
+    }
+
+    #simulateSubsetContainer.hidden {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(20px);
+    }
+
+    #simulateSubsetBtn {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(139, 92, 246, 0.2);
+        transition: all 0.3s ease;
+    }
+
+    #simulateSubsetBtn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(139, 92, 246, 0.3);
+    }
+
+    #clearSelectionsBtn {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+    }
+
+    #clearSelectionsBtn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Comment plugin special styling */
+    .comment-plugin {
+        border: 2px solid #4b5563 !important;
+        border-left: 4px solid #6b7280 !important;
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-style: italic;
+        opacity: 0.85;
+        transition: all 0.2s ease;
+    }
+
+    .comment-plugin:hover {
+        opacity: 1;
+        border-color: #6b7280 !important;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .comment-plugin .font-medium {
+        color: #9ca3af !important;
+        font-weight: 400 !important;
+    }
+
+    .comment-plugin .text-gray-400 {
+        color: #6b7280 !important;
+    }
+
+    /* Toggle button flash animation */
+    @keyframes flash-sweep {
+        0% {
+            left: -100%;
+            opacity: 0;
+        }
+        50% {
+            opacity: 1;
+        }
+        100% {
+            left: 100%;
+            opacity: 0;
+        }
+    }
+
+    .toggle-flash::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.6), transparent);
+        animation: flash-sweep 0.6s ease-out;
+        z-index: 5;
+        pointer-events: none;
+    }
+    
+</style>
+<!--- Pipeline Component Layout-->
+<div class="p-6">
+    
+    <!-- Parsing Error Alert -->
+    {% if parsing_error %}
+    <div class="mb-6 p-6 bg-yellow-900/30 border-2 border-yellow-600 rounded-lg" id="parsingErrorBanner">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <div class="ml-4 flex-1">
+                <h3 class="text-lg font-semibold text-yellow-400 mb-2">
+                    ⚠️ Your pipeline failed to be converted to UI components
+                </h3>
+                <p class="text-yellow-200 mb-3">
+                    LogstashUI couldn't parse your pipeline configuration. The pipeline is still saved in Elasticsearch, but you won't be able to edit it visually until the syntax is fixed.
+                </p>
+                <details class="mb-4">
+                    <summary class="cursor-pointer text-yellow-300 hover:text-yellow-200 font-medium mb-2">
+                        📋 View Error Details
+                    </summary>
+                    <div class="mt-3 p-4 bg-gray-900/50 border border-yellow-700/50 rounded">
+                        <pre class="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-auto max-h-64">{{ parsing_error }}</pre>
+                    </div>
+                </details>
+                <div class="flex items-center gap-4">
+                    <a href="https://github.com/elastic/LogstashUI/issues/new?template=issue.md"
+                       target="_blank"
+                       class="inline-flex items-center px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md font-medium transition-colors">
+                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                        Report Issue on GitHub
+                    </a>
+                    <p class="text-sm text-yellow-300">
+                        Please help us improve by reporting this error!
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="mb-6 pt-5 pb-0">
+        <!-- Row 1: Pipeline Name -->
+        <div class="flex items-center mb-4 gap-3">
+            {% if ls_id %}
+            <img src="{% static 'images/LogstashIcon.png' %}" alt="Logstash" class="w-8 h-8">
+            {% elif es_id %}
+            <img src="{% static 'images/ElasticIcon.png' %}" alt="Elastic" class="w-8 h-8">
+            {% endif %}
+            <h1 class="text-3xl font-semibold text-white leading-none">{{ pipeline_name }}</h1>
+            {% if ls_id and policy_name %}
+            <span class="text-gray-500 text-2xl font-thin select-none">/</span>
+            <a href="/ConnectionManager/AgentPolicies?policy_id={{ ls_id }}"
+               class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-900/40 border border-purple-500/50 hover:bg-purple-900/70 hover:border-purple-400 transition-colors group">
+                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span class="text-xs text-purple-300 font-medium uppercase tracking-wide">Policy</span>
+                <span class="text-sm text-purple-100 font-semibold group-hover:text-white transition-colors">{{ policy_name }}</span>
+            </a>
+            {% elif es_id and connection_name %}
+            <span class="text-gray-500 text-2xl font-thin select-none">/</span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/50">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                <span class="text-xs text-blue-300 font-medium uppercase tracking-wide">Connection</span>
+                <span class="text-sm text-blue-100 font-semibold">{{ connection_name }}</span>
+            </span>
+            {% endif %}
+        </div>
+        
+        <!-- Row 2: Status + Centered Toggle + Actions (Responsive Layout) -->
+        <div class="flex flex-col 2xl:flex-row 2xl:justify-between 2xl:items-center gap-4 relative">
+            <!-- Left: Status Chip + Logs -->
+            <div class="flex items-center gap-4 flex-wrap">
+                <!-- logstashagent Status Chip -->
+                <div id="agentStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
+                    <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="agentStatusMessage" class="text-xs font-medium text-gray-300">Checking agent...</span>
+                </div>
+                
+                <!-- Logstash State Chip -->
+                <div id="logstashState" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
+                    <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="logstashStateMessage" class="text-xs font-medium text-gray-300">Checking sim node...</span>
+                </div>
+                
+                <!-- Pipeline Status Chip -->
+                {% if simulation_mode == 'embedded' %}
+                <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
+                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                    </svg>
+                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400">Slot unallocated</span>
+                </div>
+                {% else %}
+                <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
+                    <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-300">Allocating pipeline slot...</span>
+                </div>
+                {% endif %}
+                
+                <!-- Simulation Logs Button -->
+                <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
+                        class="text-xs px-3 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white underline">
+                    Simulation Logs
+                </button>
+            </div>
+            
+            <!-- Center: Presentation Mode Toggle -->
+            <div class="2xl:absolute 2xl:left-1/2 2xl:transform 2xl:-translate-x-1/2 flex items-center gap-2 bg-gray-700 rounded-lg p-1 w-fit">
+                <button id="uiModeBtn" class="w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
+                    UI
+                </button>
+                <button id="textModeBtn" class="w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()">
+                    Text
+                </button>
+                <button id="graphModeBtn" class="w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()">
+                    Graph
+                </button>
+            </div>
+            
+            <!-- Right: Action Buttons -->
+            <div class="flex items-center gap-4 flex-wrap">
+                <form onsubmit="return false;" class="flex items-center gap-4">
+                    {% csrf_token %}
+                    
+                    <!-- Utility Button: View Code -->
+                    <button type="button"
+                            id="viewCode"
+                            class="w-36 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors text-sm font-medium"
+                            onclick="viewGeneratedCode()">
+                        View Code
+                    </button>
+                    
+                    <!-- Secondary Button: Simulate -->
+                    <button type="button"
+                            id="simulatePipeline"
+                            class="w-36 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+                            onclick="openSimulateModal()">
+                        Simulate
+                    </button>
+                    
+                    <!-- Primary Button: Save -->
+                    <button type="button"
+                            id="savePipeline"
+                            class="w-36 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-semibold shadow-lg hover:shadow-xl"
+                            hx-post="/ConnectionManager/SavePipeline/"
+                            hx-include="#pipelineForm"
+                            hx-trigger="none"
+                            hx-target="#saveStatus"
+                            hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "ls_id": new URLSearchParams(window.location.search).get("ls_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
+                            onclick="prepareDiffModal()">
+                        Save Pipeline
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Subtle Divider -->
+        <div class="mt-4 border-b border-gray-700/50"></div>
+    </div>
+
+    <!-- Stats Strip -->
+    <div class="py-3">
+        {% include 'components/pipeline_editor/stats_strip.html' %}
+    </div>
+
+    <!-- Pipeline Settings Collapsible Section -->
+    <div class="mb-6">
+        <div class="bg-gray-800 rounded-lg overflow-hidden">
+            <!-- Collapsible Header -->
+            <button
+                    id="pipelineSettingsToggle"
+                    class="w-full flex items-center justify-between p-4 text-white hover:bg-gray-700 transition-colors"
+                    onclick="togglePipelineSettings()">
+                <div class="flex items-center">
+                    <svg id="toggleIcon" class="w-5 h-5 mr-2 transform transition-transform" fill="none"
+                         stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <h2 class="text-lg font-semibold">Pipeline Settings</h2>
+                </div>
+                <span class="text-sm text-gray-400">Configure pipeline parameters</span>
+            </button>
+
+            <!-- Collapsible Content -->
+            <div id="pipelineSettingsContent" class="hidden border-t border-gray-700">
+                <form id="pipelineSettingsForm" class="p-6 space-y-6">
+                    {% csrf_token %}
+                    <input type="hidden" name="es_id" id="hiddenEsId" value="">
+                    <input type="hidden" name="ls_id" id="hiddenLsId" value="">
+                    <input type="hidden" name="pipeline" id="hiddenPipelineName" value="">
+                    <!-- Description -->
+                    <div>
+                        <label for="pipelineDescription" class="block text-sm font-medium text-gray-300 mb-2">
+                            Description
+                        </label>
+                        <input
+                                type="text"
+                                id="pipelineDescription"
+                                name="description"
+                                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Enter pipeline description"
+                                value="{{ pipeline_settings.description|default:'' }}">
+                    </div>
+
+                    <!-- Grid Layout for Settings -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-4">
+                        <!-- Pipeline Workers -->
+                        <div class="pb-2">
+                            <label for="pipelineWorkers" class="block text-sm font-medium text-gray-300 mb-2">
+                                Pipeline Workers
+                            </label>
+                            <input
+                                    type="number"
+                                    id="pipelineWorkers"
+                                    name="pipeline_workers"
+                                    min="1"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Number of workers"
+                                    value="{{ pipeline_settings.pipeline_workers|default:1 }}">
+                        </div>
+
+                        <!-- Pipeline Batch Size -->
+                        <div class="pb-2">
+                            <label for="pipelineBatchSize" class="block text-sm font-medium text-gray-300 mb-2">
+                                Pipeline Batch Size
+                            </label>
+                            <input
+                                    type="number"
+                                    id="pipelineBatchSize"
+                                    name="pipeline_batch_size"
+                                    min="1"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Batch size"
+                                    value="{{ pipeline_settings.pipeline_batch_size|default:128 }}">
+                        </div>
+
+                        <!-- Pipeline Batch Delay -->
+                        <div class="pb-2">
+                            <label for="pipelineBatchDelay" class="block text-sm font-medium text-gray-300 mb-2">
+                                Pipeline Batch Delay (ms)
+                            </label>
+                            <input
+                                    type="number"
+                                    id="pipelineBatchDelay"
+                                    name="pipeline_batch_delay"
+                                    min="0"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Delay in milliseconds"
+                                    value="{{ pipeline_settings.pipeline_batch_delay|default:50 }}">
+                        </div>
+
+                        <!-- Queue Type -->
+                        <div class="pb-2">
+                            <label for="queueType" class="block text-sm font-medium text-gray-300 mb-2">
+                                Queue Type
+                            </label>
+                            <select
+                                    id="queueType"
+                                    name="queue_type"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="">Select queue type</option>
+                                <option value="memory" {% if pipeline_settings.queue_type == 'memory' %}selected{% endif %}>Memory</option>
+                                <option value="persisted" {% if pipeline_settings.queue_type == 'persisted' %}selected{% endif %}>Persisted</option>
+                            </select>
+                        </div>
+
+                        <!-- Queue Max Bytes -->
+                        <div class="pb-2">
+                            <label for="queueMaxBytes" class="block text-sm font-medium text-gray-300 mb-2">
+                                Queue Max Bytes
+                            </label>
+                            <div class="flex gap-2">
+                                <input
+                                        type="number"
+                                        id="queueMaxBytes"
+                                        name="queue_max_bytes"
+                                        min="0"
+                                        class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="Max bytes"
+                                        value="{{ pipeline_settings.queue_max_bytes_value|default:1 }}">
+                                <select
+                                        id="queueMaxBytesUnit"
+                                        name="queue_max_bytes_unit"
+                                        class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="b" {% if pipeline_settings.queue_max_bytes_unit == 'b' %}selected{% endif %}>Bytes</option>
+                                    <option value="kb" {% if pipeline_settings.queue_max_bytes_unit == 'kb' %}selected{% endif %}>KB</option>
+                                    <option value="mb" {% if pipeline_settings.queue_max_bytes_unit == 'mb' %}selected{% endif %}>MB</option>
+                                    <option value="gb" {% if pipeline_settings.queue_max_bytes_unit == 'gb' %}selected{% endif %}>GB</option>
+                                    <option value="tb" {% if pipeline_settings.queue_max_bytes_unit == 'tb' %}selected{% endif %}>TB</option>
+                                    <option value="pb" {% if pipeline_settings.queue_max_bytes_unit == 'pb' %}selected{% endif %}>PB</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Queue Checkpoint Writes -->
+                        <div class="pb-2">
+                            <label for="queueCheckpointWrites" class="block text-sm font-medium text-gray-300 mb-2">
+                                Queue Checkpoint Writes
+                            </label>
+                            <input
+                                    type="number"
+                                    id="queueCheckpointWrites"
+                                    name="queue_checkpoint_writes"
+                                    min="1"
+                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Checkpoint writes"
+                                    value="{{ pipeline_settings.queue_checkpoint_writes|default:1024 }}">
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end pt-4 border-t border-gray-700">
+                        <button
+                                type="submit"
+                                id="applySettingsBtn"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            Apply Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex h-[calc(100vh-180px)] gap-4">
+        <!-- Main Content Area -->
+        <div class="flex-1">
+            <!-- UI Mode Container -->
+            <div id="uiModeContainer" class="flex-1 bg-gray-800 rounded-lg p-6 overflow-y-auto">
+                <div id="pipelineCanvas" class="min-h-full space-y-8">
+                    <!-- Input Section -->
+                    <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                </svg>
+                            </div>
+                            <div class="ml-6" style="margin-left:10px;">
+                                <h2 class="text-xl font-bold text-white">Input</h2>
+                                <p class="text-xs text-gray-400">Define data sources and how data enters the
+                                    pipeline</p>
+                            </div>
+                        </div>
+                        <div id="inputComponents"
+                             class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
+                             data-type="input">
+                            <div class="insertion-point">
+                                <div class="insertion-buttons">
+                                    <button class="insertion-button add-plugin" data-type="input">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                        </svg>
+                                        Add Plugin
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-center py-8">No input components added</p>
+                        </div>
+                    </div>
+
+                    <!-- Filter Section -->
+                    <div id="filterSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-purple-600">
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center justify-center w-10 h-10 bg-purple-600 rounded-lg">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                                </svg>
+                            </div>
+                            <div class="ml-6">
+                                <h2 class="text-xl font-bold text-white">Filter</h2>
+                                <p class="text-xs text-gray-400">Transform, enrich, and process data with conditions</p>
+                            </div>
+                        </div>
+                        <div id="filterComponents"
+                             class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
+                             data-type="filter">
+                            <div class="insertion-point">
+                                <div class="insertion-buttons">
+                                    <button class="insertion-button add-plugin" data-type="filter">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                        </svg>
+                                        Add Plugin
+                                    </button>
+                                    <button class="insertion-button add-condition" data-type="filter">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M19 9l-7 7-7-7"/>
+                                        </svg>
+                                        Add Condition
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-center py-8">No filter components added</p>
+                        </div>
+                    </div>
+
+                    <!-- Output Section -->
+                    <div id="outputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500">
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center justify-center w-10 h-10 bg-green-600 rounded-lg">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+                                </svg>
+                            </div>
+                            <div class="ml-6" style="margin-left:10px;">
+                                <h2 class="text-xl font-bold text-white">Output</h2>
+                                <p class="text-xs text-gray-400">Send processed data to destinations</p>
+                            </div>
+                        </div>
+                        <div id="outputComponents"
+                             class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
+                             data-type="output">
+                            <div class="insertion-point">
+                                <div class="insertion-buttons">
+                                    <button class="insertion-button add-plugin" data-type="output">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                        </svg>
+                                        Add Plugin
+                                    </button>
+                                    <button class="insertion-button add-condition" data-type="output">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M19 9l-7 7-7-7"/>
+                                        </svg>
+                                        Add Condition
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 text-center py-8">No output components added</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Text Mode Container (hidden by default) -->
+            <div id="textModeContainer" class="hidden flex-1 bg-gray-800 rounded-lg overflow-hidden">
+                {% include 'pipeline_text_editor.html' %}
+            </div>
+            
+            <!-- Graph Mode Container (hidden by default) -->
+            <div id="graphModeContainer" class="hidden flex-1 bg-gray-800 rounded-lg overflow-hidden">
+                {% include 'pipeline_graph_editor.html' %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Floating Simulate Subset and Clear Buttons -->
+<div id="simulateSubsetContainer" class="hidden fixed bottom-30px right-30px z-40 flex gap-3">
+    <button id="clearSelectionsBtn" 
+            class="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2 font-semibold"
+            onclick="clearAllSelections()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        <span>Clear</span>
+    </button>
+    <button id="simulateSubsetBtn" 
+            class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-3 font-semibold"
+            onclick="openSimulateSubsetModal()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Simulate Subset</span>
+        <span id="selectedCount" class="px-2 py-0.5 bg-purple-800 rounded-full text-xs">0</span>
+    </button>
+</div>
+
+<!--- Simulation modal -->
+{% include 'components/pipeline_editor/simulation_modal.html' %}
+
+<!-- Add Plugin Modal -->
+{% include 'components/pipeline_editor/plugin_modal.html' %}
+
+<!-- Add Plugin Config Modal -->
+{% include 'components/pipeline_editor/plugin_config_modal.html' %}
+
+<!-- Expression Editor Modal -->
+{% include 'components/pipeline_editor/expression_editor.html' %}
+
+<!--- Diff modal -->
+{% include 'components/pipeline_editor/diff_modal.html' %}
+
+<!-- Confirmation Modal -->
+{% include 'popup.html' %}
+
+<!-- Slot preallocation - warm up a slot when page loads so simulations are fast -->
+<!-- Empty log_text means only allocate slot, don't run simulation -->
+<!-- For 'host' mode: triggers on load, pipelineChanged, and simulationModalOpened -->
+<!-- For 'embedded' mode: only triggers on simulationModalOpened -->
+<div id="slotPreallocation"
+     hx-post="/ConnectionManager/SimulatePipeline/"
+     hx-target="#slotPreallocationResult"
+     hx-swap="innerHTML"
+     hx-vals="js:{components: components, log_text: ''}"
+     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+     hx-trigger="{% if simulation_mode == 'host' %}load, pipelineChanged, simulationModalOpened{% else %}simulationModalOpened{% endif %}"
+     class="hidden">
+</div>
+<div id="slotPreallocationResult" class="hidden"></div>
+
+<script>
+    const pipelineName = "{{ pipeline_name }}";
+    const simulationMode = "{{ simulation_mode }}";
+    // currentSlotId is declared in the early script block above
+    
+    // Store original pipeline text for Text mode
+    originalPipelineText = "{{ pipeline_text|escapejs }}";
+    
+    // Set up change tracking for UI mode
+    // Track when components are added, modified, or deleted
+    function markUIAsChanged() {
+        if (!uiHasChanges) {
+            uiHasChanges = true;
+        }
+    }
+    
+    // Listen for component changes via HTMX events
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        // Check if the swap was related to component modifications
+        if (event.detail.target && (
+            event.detail.target.id === 'uiModeContainer' ||
+            event.detail.target.closest('#uiModeContainer')
+        )) {
+            markUIAsChanged();
+        }
+    });
+    
+    // Listen for component additions/deletions
+    document.body.addEventListener('componentAdded', markUIAsChanged);
+    document.body.addEventListener('componentDeleted', markUIAsChanged);
+    document.body.addEventListener('componentModified', markUIAsChanged);
+    
+    // Auto-switch to Text mode if parsing error is present
+    // Wait for all scripts to load before attempting to switch modes
+    window.addEventListener('load', function() {
+        const parsingErrorBanner = document.getElementById('parsingErrorBanner');
+        if (parsingErrorBanner) {
+            // Parsing error detected - automatically switch to Text mode
+            if (typeof switchToTextMode === 'function') {
+                switchToTextMode();
+            } else {
+                console.error('switchToTextMode function not available');
+            }
+        }
+    });
+    
+    // Check if there are any filter components
+    const hasFilters = components && components.filter && components.filter.length > 0;
+    
+    // Hide status banner and skip preallocation if no filters
+    if (!hasFilters) {
+        const statusBanner = document.getElementById('pipelineLoadStatus');
+        if (statusBanner) {
+            statusBanner.style.display = 'none';
+        }
+        
+        // Prevent slot preallocation by removing the hx-trigger
+        const slotPreallocation = document.getElementById('slotPreallocation');
+        if (slotPreallocation) {
+            slotPreallocation.removeAttribute('hx-trigger');
+        }
+    }
+    
+    /**
+     * View logs for the current pipeline slot
+     */
+    async function viewPipelineLogs() {
+        if (!currentSlotId) {
+            console.error('No slot ID available for logs');
+            alert('Unable to fetch logs - slot information not available');
+            return;
+        }
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'pipeline-logs-modal';
+        modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('pipeline-logs-modal').remove()"></div>
+            <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+                <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${currentSlotId}-filter1</h3>
+                    <button onclick="document.getElementById('pipeline-logs-modal').remove()" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow">
+                    <div id="pipeline-logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+                        <div class="flex items-center justify-center py-8">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                            <span class="ml-3">Loading logs...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Fetch logs from API
+        try {
+            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            const data = await response.json();
+            
+            const logsContent = document.getElementById('pipeline-logs-content');
+            
+            if (!data.logs || data.logs.length === 0) {
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                return;
+            }
+            
+            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
+            
+            data.logs.forEach((log, idx) => {
+                const level = log.level || 'INFO';
+                const levelColor = {
+                    'ERROR': 'text-red-400',
+                    'WARN': 'text-yellow-400',
+                    'INFO': 'text-blue-400',
+                    'DEBUG': 'text-gray-400'
+                }[level] || 'text-gray-400';
+                
+                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
+                const logEvent = log.logEvent || {};
+                const message = logEvent.message || log.message || 'No message';
+                const logger = log.loggerName || 'unknown';
+                
+                html += `
+                    <div class="mb-4 pb-4 border-b border-gray-700">
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="${levelColor} font-bold">[${level}]</span>
+                            <span class="text-gray-500 text-xs">${timestamp}</span>
+                            <span class="text-gray-400 text-xs">${logger}</span>
+                        </div>
+                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
+                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            });
+            
+            logsContent.innerHTML = html;
+        } catch (error) {
+            const logsContent = document.getElementById('pipeline-logs-content');
+            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
+        }
+    }
+
+</script>
+
+{% endblock %}

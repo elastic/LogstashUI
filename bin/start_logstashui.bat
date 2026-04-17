@@ -12,6 +12,42 @@ REM   start_logstashui.bat --update  - Pull latest code and images, then start
 REM IMPORTANT: Don't enable delayed expansion yet - it breaks paths with exclamation marks
 setlocal disabledelayedexpansion
 
+REM Check for required dependencies
+echo Checking dependencies...
+set MISSING_DEPS=
+
+REM Check for Docker
+docker --version >nul 2>&1
+if errorlevel 1 (
+    set MISSING_DEPS=%MISSING_DEPS% docker
+)
+
+REM Check for Git
+git --version >nul 2>&1
+if errorlevel 1 (
+    set MISSING_DEPS=%MISSING_DEPS% git
+)
+
+if not "%MISSING_DEPS%"=="" (
+    echo.
+    echo ERROR: Missing required dependencies:%MISSING_DEPS%
+    echo.
+    echo Please install the following:
+    echo %MISSING_DEPS% | findstr "docker" >nul
+    if not errorlevel 1 (
+        echo   - Docker Desktop: https://www.docker.com/get-started/
+    )
+    echo %MISSING_DEPS% | findstr "git" >nul
+    if not errorlevel 1 (
+        echo   - Git: https://git-scm.com/download/win
+    )
+    echo.
+    pause
+    exit /b 1
+)
+echo Dependencies check passed.
+echo.
+
 REM Detect docker-compose command (hyphen vs space)
 docker-compose version >nul 2>&1
 if %errorlevel% equ 0 (
@@ -45,6 +81,18 @@ if %UPDATE_MODE%==1 (
     echo ========================================
     echo UPDATE MODE
     echo ========================================
+    echo Switching to main branch...
+    echo.
+    
+    git checkout main
+    if errorlevel 1 (
+        echo WARNING: Failed to switch to main branch. Continuing anyway...
+        echo.
+    ) else (
+        echo Switched to main branch successfully!
+        echo.
+    )
+    
     echo Pulling latest code from git...
     echo.
     
@@ -95,25 +143,25 @@ echo.
 
 REM Ensure logstashui.yml exists (required for Docker volume mount)
 REM If it doesn't exist, create a copy from logstashui.example.yml
-if not exist "logstashui.yml" (
-    if exist "logstashui.example.yml" (
+if not exist "src\logstashui\logstashui.yml" (
+    if exist "src\logstashui\logstashui.example.yml" (
         echo Creating logstashui.yml copy from logstashui.example.yml
-        copy logstashui.example.yml logstashui.yml >nul
+        copy src\logstashui\logstashui.example.yml src\logstashui\logstashui.yml >nul
     ) else (
-        echo ERROR: logstashui.example.yml not found!
+        echo ERROR: src\logstashui\logstashui.example.yml not found!
         echo Current directory: %CD%
         exit /b 1
     )
 )
 
 REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if exist "logstashui.yml" (
-    set CONFIG_FILE=logstashui.yml
-) else if exist "logstashui.example.yml" (
-    set CONFIG_FILE=logstashui.example.yml
+if exist "src\logstashui\logstashui.yml" (
+    set CONFIG_FILE=src\logstashui\logstashui.yml
+) else if exist "src\logstashui\logstashui.example.yml" (
+    set CONFIG_FILE=src\logstashui\logstashui.example.yml
 ) else (
     echo ERROR: No config file found!
-    echo Expected logstashui.yml or logstashui.example.yml in project root.
+    echo Expected logstashui.yml or logstashui.example.yml in src\logstashui\
     echo Current directory: %CD%
     echo.
     echo Directory contents:
@@ -156,56 +204,58 @@ echo Starting LogstashAgent natively on Windows
 echo This allows the agent to control your host Logstash instance.
 echo.
 
-REM Check if Python is available
-python --version >nul 2>&1
+REM Check if uv is available
+uv --version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Python not found in PATH!
-    echo Please install Python 3.9+ and ensure it's in your PATH.
+    echo ERROR: uv not found in PATH!
+    echo Please install uv from: https://docs.astral.sh/uv/getting-started/installation/
+    echo.
+    echo Quick install: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 ^| iex"
     exit /b 1
 )
 
-REM Setup virtual environment for LogstashAgent
-if not exist "LogstashAgent\.venv" (
-    echo Creating virtual environment in LogstashAgent\.venv
-    python -m venv LogstashAgent\.venv
+REM Clone LogstashAgent if it doesn't exist
+if not exist "LogstashAgent" (
+    echo LogstashAgent directory not found, cloning from GitHub...
+    echo.
+    git clone https://github.com/elastic/LogstashAgent.git
     if errorlevel 1 (
-        echo ERROR: Failed to create virtual environment!
-        echo Please ensure Python venv module is available
+        echo ERROR: Failed to clone LogstashAgent repository!
+        echo Please check your internet connection and Git installation.
         exit /b 1
     )
+    echo LogstashAgent cloned successfully!
+    echo.
+) else (
+    echo LogstashAgent directory found.
+    echo.
 )
 
-echo Activating virtual environment
-call LogstashAgent\.venv\Scripts\activate.bat
-
-REM Install/update Python dependencies for LogstashAgent
-echo Installing Python dependencies for LogstashAgent
-pip install -r LogstashAgent\requirements.txt
+echo.
+echo Preparing LogstashAgent configuration
+REM Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+python bin\sync_config.py
 if errorlevel 1 (
-    echo ERROR: Failed to install dependencies!
-    echo Please check that Python and pip are working correctly.
-    call LogstashAgent\.venv\Scripts\deactivate.bat
+    echo WARNING: Could not update agent config automatically
+    echo Please ensure LogstashAgent\src\logstashagent\logstashagent.yml has correct paths
+)
+
+REM Install/update Python dependencies for LogstashAgent using uv
+echo Installing Python dependencies for LogstashAgent with uv
+cd LogstashAgent
+uv sync
+if errorlevel 1 (
+    echo ERROR: Failed to install dependencies with uv!
+    echo Please check that uv is working correctly.
     exit /b 1
 )
 echo Dependencies installed successfully
 
-echo.
-echo Preparing LogstashAgent configuration
-REM Copy logstash_agent config from logstashui.yml to LogstashAgent/logstashagent.yml
-python bin\sync_config.py
-if errorlevel 1 (
-    echo WARNING: Could not update agent config automatically
-    echo Please ensure LogstashAgent\logstashagent.yml has correct paths
-)
-
 echo Starting LogstashAgent on port 9501 (localhost only)
 cd LogstashAgent
-REM Start uvicorn using the virtual environment's Python
-start "LogstashAgent" cmd /K ".venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 9501"
+REM Start uvicorn using uv run
+start "LogstashAgent" cmd /K "uv run uvicorn logstashagent.main:app --host 127.0.0.1 --port 9501"
 cd ..
-
-REM Deactivate virtual environment (agent is running in separate window)
-call LogstashAgent\.venv\Scripts\deactivate.bat
 
 echo Waiting 5 seconds for agent to initialize
 ping 127.0.0.1 -n 6 >nul
@@ -220,12 +270,14 @@ echo.
 
 REM Ensure agent container is stopped in host mode
 echo Stopping any existing containers
+cd docker
 %DOCKER_COMPOSE% stop logstashagent 2>nul
 %DOCKER_COMPOSE% rm -f logstashagent 2>nul
 
 REM Start only logstashui and nginx in detached mode
 REM Nginx will detect host mode and proxy to host.docker.internal:9501
 %DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
+cd ..
 goto END_MODE_SELECTION
 
 :EMBEDDED_MODE
@@ -237,7 +289,9 @@ echo Logstash will run inside the agent container.
 echo.
 
 REM Start all containers in detached mode with embedded profile
+cd docker
 %DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
+cd ..
 goto END_MODE_SELECTION
 
 :END_MODE_SELECTION

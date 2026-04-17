@@ -1,0 +1,238 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% load static %}
+<script src="{% static 'js/policy_deploy_modal.js' %}"></script>
+
+<style>
+  /* File tab styling - matching agent_policies.html */
+  .deploy-diff-tab {
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+  }
+  
+  .deploy-diff-tab:hover:not(.active) {
+    background-color: #374151;
+  }
+  
+  .deploy-diff-tab:hover:not(.active) span {
+    color: #d1d5db;
+  }
+  
+  .deploy-diff-tab:hover:not(.active) svg {
+    opacity: 0.6;
+  }
+  
+  .deploy-diff-tab.active {
+    border-bottom-color: #3b82f6;
+    background-color: #1a1f2e;
+    box-shadow: inset 0 1px 0 rgba(59, 130, 246, 0.1);
+    margin-bottom: -1px;
+    z-index: 1;
+  }
+  
+  .deploy-diff-tab.active span {
+    font-weight: 600;
+  }
+  
+  .deploy-diff-tab.active svg {
+    opacity: 0.8;
+  }
+  
+  /* Tab change indicator - purple circle */
+  .deploy-diff-tab.has-changes::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 6px;
+    height: 6px;
+    background-color: #a855f7;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);
+  }
+  
+  /* Warning indicator for pipelines tab */
+  .deploy-diff-tab.has-warnings::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 6px;
+    height: 6px;
+    background-color: #f59e0b;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+  }
+  
+  /* Pipeline warning banner styles */
+  .pipeline-warning-banner {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background-color: rgb(55, 65, 81);
+    border-left: 4px solid;
+  }
+  
+  .pipeline-warning-banner.no-input {
+    border-left-color: rgb(59, 130, 246);
+  }
+  
+  .pipeline-warning-banner.non-reloadable {
+    border-left-color: rgb(245, 158, 11);
+  }
+</style>
+
+<!-- Policy Deploy Diff Modal -->
+<div id="deployDiffModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="hideDeployDiffModal()"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
+    <!-- Header -->
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Deploy Policy: <span id="deployPolicyName"></span></h3>
+        <p class="text-gray-400 text-sm mt-1">
+          <span class="font-semibold">Version:</span> 
+          <span id="currentRevisionNum" class="text-blue-400"></span>
+          <span class="mx-2">→</span>
+          <span id="newRevisionNum" class="text-green-400"></span>
+        </p>
+      </div>
+      <button onclick="hideDeployDiffModal()" class="text-gray-400 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex items-center bg-gray-900 border-b border-gray-700 flex-shrink-0">
+      <div class="flex items-center">
+        <!-- Config Files Section -->
+        <div class="deploy-diff-tab active" data-section="logstash_yml">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="text-white text-sm font-semibold">logstash.yml</span>
+        </div>
+        <div class="deploy-diff-tab" data-section="jvm_options">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="text-gray-500 text-sm">jvm.options</span>
+        </div>
+        <div class="deploy-diff-tab" data-section="log4j2_properties">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="text-gray-500 text-sm">log4j2.properties</span>
+        </div>
+        
+        <!-- Visual Separator -->
+        <div class="h-6 w-px bg-gradient-to-b from-transparent via-gray-600/50 to-transparent mx-3 self-center"></div>
+        
+        <!-- Pipeline & Keystore Section -->
+        <div class="deploy-diff-tab" data-section="pipelines">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+          <span class="text-gray-500 text-sm">Pipelines</span>
+        </div>
+        <div class="deploy-diff-tab" data-section="keystore">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+          <span class="text-gray-500 text-sm">Keystore</span>
+        </div>
+        
+        <!-- Visual Separator -->
+        <div class="h-6 w-px bg-gradient-to-b from-transparent via-gray-600/50 to-transparent mx-3 self-center"></div>
+        
+        <!-- Policy Settings Section -->
+        <div class="deploy-diff-tab" data-section="global_settings">
+          <svg class="w-3.5 h-3.5 mr-1.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="text-gray-500 text-sm">Policy Settings</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restart Warning Banner (hidden by default) -->
+    <div id="restartWarningBanner" class="hidden mx-4 mt-4 p-3 bg-orange-900/20 border border-orange-500/40 rounded-lg flex items-center gap-3">
+      <svg class="w-5 h-5 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <div class="flex-1">
+        <span class="text-sm text-orange-300 font-semibold">Logstash Restart Required</span>
+        <p class="text-xs text-orange-200 mt-1" id="restartWarningText">By deploying this policy we will restart <span id="agentCount" class="font-bold">0</span> instance(s) of Logstash as soon as they check in and update their configuration.</p>
+      </div>
+    </div>
+
+    <!-- No Changes Banner (hidden by default) -->
+    <div id="noChangesBanner" class="hidden mx-4 mt-4 p-3 bg-blue-900/20 border border-blue-500/40 rounded-lg flex items-center gap-3">
+      <svg class="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span class="text-sm text-blue-300">No changes to this file are included in this deploy.</span>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
+    <div class="p-4 flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
+      <!-- Loading state -->
+      <div id="deployDiffLoading" class="flex-1 flex items-center justify-center" style="min-height: 0;">
+        <div class="text-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p class="text-gray-400">Loading diff...</p>
+        </div>
+      </div>
+
+      <!-- Diff containers for each section -->
+      <div id="deployDiffContainer" class="flex-1 overflow-hidden hidden" style="min-height: 0;">
+        <!-- Text file diffs (side-by-side) -->
+        <div id="diff-logstash_yml" class="deploy-diff-section h-full"></div>
+        <div id="diff-jvm_options" class="deploy-diff-section h-full hidden"></div>
+        <div id="diff-log4j2_properties" class="deploy-diff-section h-full hidden"></div>
+        
+        <!-- Pipelines diff -->
+        <div id="diff-pipelines" class="deploy-diff-section h-full hidden overflow-auto"></div>
+        
+        <!-- Keystore diff -->
+        <div id="diff-keystore" class="deploy-diff-section h-full hidden overflow-auto"></div>
+        
+        <!-- Global Settings diff -->
+        <div id="diff-global_settings" class="deploy-diff-section h-full hidden overflow-auto"></div>
+      </div>
+    </div>
+    </div>
+
+    <!-- Footer with actions -->
+    <div class="p-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+      <div class="text-sm text-gray-400">
+        <span id="deployDiffStats"></span>
+      </div>
+      <div class="flex space-x-3">
+        <button onclick="hideDeployDiffModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+          Cancel
+        </button>
+        <button id="confirmDeployBtn" onclick="confirmDeployPolicy()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+          Confirm Deploy
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

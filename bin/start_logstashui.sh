@@ -1,5 +1,5 @@
 #!/bin/bash
-# LogstashUI Startup Script
+# logstashui Startup Script
 # Detects mode from logstashui.example.yml and starts accordingly
 # - Host mode: Starts native Python agent on Linux, then containers (without agent container)
 # - Embedded mode: Starts all containers including agent
@@ -10,6 +10,40 @@
 #   ./start_logstashui.sh --update  - Pull latest code and images, then start
 
 set -e  # Exit on error
+
+# Check for required dependencies
+check_dependencies() {
+    local missing_deps=()
+    
+    # Check for Docker
+    if ! command -v docker &> /dev/null; then
+        missing_deps+=("docker")
+    fi
+    
+    # Check for Git
+    if ! command -v git &> /dev/null; then
+        missing_deps+=("git")
+    fi
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo "ERROR: Missing required dependencies: ${missing_deps[*]}"
+        echo ""
+        echo "Please install the following:"
+        for dep in "${missing_deps[@]}"; do
+            if [ "$dep" == "docker" ]; then
+                echo "  - Docker: https://docs.docker.com/engine/install/"
+                echo "    (For Debian/Ubuntu: apt-get install docker.io)"
+                echo "    (For RHEL/CentOS: yum install docker)"
+            elif [ "$dep" == "git" ]; then
+                echo "  - Git: apt-get install git | yum install git"
+            fi
+        done
+        exit 1
+    fi
+}
+
+# Run dependency check
+check_dependencies
 
 # Detect docker-compose command (hyphen vs space)
 if command -v docker-compose &> /dev/null; then
@@ -44,6 +78,18 @@ if [ $UPDATE_MODE -eq 1 ]; then
     echo "========================================"
     echo "UPDATE MODE"
     echo "========================================"
+    echo "Switching to main branch..."
+    echo ""
+    
+    git checkout main
+    if [ $? -ne 0 ]; then
+        echo "WARNING: Failed to switch to main branch. Continuing anyway..."
+        echo ""
+    else
+        echo "Switched to main branch successfully!"
+        echo ""
+    fi
+    
     echo "Pulling latest code from git..."
     echo ""
     
@@ -97,25 +143,25 @@ echo ""
 
 # Ensure logstashui.yml exists (required for Docker volume mount)
 # If it doesn't exist, create a symlink to logstashui.example.yml
-if [ ! -f "logstashui.yml" ]; then
-    if [ -f "logstashui.example.yml" ]; then
+if [ ! -f "src/logstashui/logstashui.yml" ]; then
+    if [ -f "src/logstashui/logstashui.example.yml" ]; then
         echo "Creating logstashui.yml symlink to logstashui.example.yml"
-        ln -s logstashui.example.yml logstashui.yml
+        ln -s logstashui.example.yml src/logstashui/logstashui.yml
     else
-        echo "ERROR: logstashui.example.yml not found!"
+        echo "ERROR: src/logstashui/logstashui.example.yml not found!"
         echo "Current directory: $(pwd)"
         exit 1
     fi
 fi
 
 # Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if [ -f "logstashui.yml" ]; then
-    CONFIG_FILE="logstashui.yml"
-elif [ -f "logstashui.example.yml" ]; then
-    CONFIG_FILE="logstashui.example.yml"
+if [ -f "src/logstashui/logstashui.yml" ]; then
+    CONFIG_FILE="src/logstashui/logstashui.yml"
+elif [ -f "src/logstashui/logstashui.example.yml" ]; then
+    CONFIG_FILE="src/logstashui/logstashui.example.yml"
 else
     echo "ERROR: No config file found!"
-    echo "Expected logstashui.yml or logstashui.example.yml in project root."
+    echo "Expected logstashui.yml or logstashui.example.yml in src/logstashui/"
     echo "Current directory: $(pwd)"
     echo ""
     echo "Directory contents:"
@@ -145,47 +191,53 @@ if [ "$MODE" == "host" ]; then
     echo "This allows the agent to control your host Logstash instance."
     echo ""
     
-    # Check if Python is available
-    if ! command -v python3 &> /dev/null; then
-        echo "ERROR: Python3 not found in PATH!"
-        echo "Please install Python 3.9+ and ensure it's in your PATH."
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "ERROR: uv not found in PATH!"
+        echo "Please install uv from: https://docs.astral.sh/uv/getting-started/installation/"
+        echo ""
+        echo "Quick install: curl -LsSf https://astral.sh/uv/install.sh | sh"
         exit 1
     fi
     
-    # Setup virtual environment for LogstashAgent
-    VENV_PATH="$PROJECT_ROOT/LogstashAgent/.venv"
-    if [ ! -d "$VENV_PATH" ]; then
-        echo "Creating virtual environment in $VENV_PATH"
-        python3 -m venv "$VENV_PATH"
+    # Clone LogstashAgent if it doesn't exist
+    if [ ! -d "$PROJECT_ROOT/LogstashAgent" ]; then
+        echo "LogstashAgent directory not found, cloning from GitHub..."
+        echo ""
+        cd "$PROJECT_ROOT"
+        git clone https://github.com/elastic/LogstashAgent.git
         if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to create virtual environment!"
-            echo "Please ensure python3-venv is installed (apt-get install python3.12-venv)"
+            echo "ERROR: Failed to clone LogstashAgent repository!"
+            echo "Please check your internet connection and Git installation."
             exit 1
         fi
+        echo "LogstashAgent cloned successfully!"
+        echo ""
+    else
+        echo "LogstashAgent directory found."
+        echo ""
     fi
-    
-    echo "Activating virtual environment"
-    source "$VENV_PATH/bin/activate"
-    
-    # Install/update Python dependencies for LogstashAgent
-    echo "Installing Python dependencies for LogstashAgent"
-    pip install -r LogstashAgent/requirements.txt
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to install dependencies!"
-        echo "Please check that Python and pip are working correctly."
-        deactivate
-        exit 1
-    fi
-    echo "Dependencies installed successfully"
     
     echo ""
     echo "Preparing LogstashAgent configuration"
-    # Copy logstash_agent config from logstashui.example.yml to LogstashAgent/logstashagent.yml
+    # Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+    cd "$PROJECT_ROOT"
     python3 bin/sync_config.py
     if [ $? -ne 0 ]; then
         echo "WARNING: Could not update agent config automatically"
-        echo "Please ensure LogstashAgent/logstashagent.yml has correct paths"
+        echo "Please ensure LogstashAgent/src/logstashagent/logstashagent.yml has correct paths"
     fi
+    
+    # Install/update Python dependencies for logstashagent using uv
+    echo "Installing Python dependencies for LogstashAgent with uv"
+    cd "$PROJECT_ROOT/LogstashAgent"
+    uv sync
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to install dependencies with uv!"
+        echo "Please check that uv is working correctly."
+        exit 1
+    fi
+    echo "Dependencies installed successfully"
     
     echo ""
     echo "Setting Logstash directory ownership for logstash user"
@@ -225,15 +277,11 @@ if [ "$MODE" == "host" ]; then
     
     echo "Starting LogstashAgent on port 9501 (accessible remotely)"
     cd "$PROJECT_ROOT/LogstashAgent"
-    # Start in background using nohup - bind to 0.0.0.0 for remote access
-    # Run uvicorn in the activated virtual environment context
-    nohup "$VENV_PATH/bin/python" -m uvicorn main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
+    # Start in background using nohup with uv run - bind to 0.0.0.0 for remote access
+    nohup uv run uvicorn logstashagent.main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
     AGENT_PID=$!
     echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
     cd "$PROJECT_ROOT"
-    
-    # Deactivate virtual environment (agent is running in background)
-    deactivate
     
     echo "LogstashAgent started with PID: $AGENT_PID"
     echo "Waiting 5 seconds for agent to initialize"
@@ -249,6 +297,7 @@ if [ "$MODE" == "host" ]; then
     
     # Ensure agent container is stopped in host mode
     echo "Stopping any existing containers"
+    cd "$PROJECT_ROOT/docker"
     $DOCKER_COMPOSE stop logstashagent 2>/dev/null || true
     $DOCKER_COMPOSE rm -f logstashagent 2>/dev/null || true
     
@@ -259,6 +308,7 @@ if [ "$MODE" == "host" ]; then
     else
         $DOCKER_COMPOSE up -d logstashui nginx
     fi
+    cd "$PROJECT_ROOT"
     
 else
     echo "========================================"
@@ -270,6 +320,9 @@ else
     
     # Force remove any existing logstashagent container to prevent stale network references
     docker rm -f logstashui-logstashagent-1 2>/dev/null || true
+    
+    # Change to docker directory for docker-compose commands
+    cd "$PROJECT_ROOT/docker"
     
     # Start all containers in detached mode with embedded profile
     # Retry once if network failure occurs
@@ -290,6 +343,7 @@ else
             $DOCKER_COMPOSE --profile embedded up -d
         }
     fi
+    cd "$PROJECT_ROOT"
 fi
 
 echo ""

@@ -1,4 +1,4 @@
-name: Build & Push Docker Images
+name: Build & Push LogstashUI Docker Image
 
 on:
   push:
@@ -26,32 +26,19 @@ jobs:
         id: vars
         run: |
           USER="${{ secrets.DOCKERHUB_USERNAME }}"
-          APP_IMAGE="$USER/logstashui"
-          SIM_IMAGE="$USER/logstashagent"
+          IMAGE="$USER/logstashui"
 
-          echo "app_image=$APP_IMAGE" >> $GITHUB_OUTPUT
-          echo "sim_image=$SIM_IMAGE" >> $GITHUB_OUTPUT
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-          echo "app_tags=$APP_IMAGE:$VERSION,$APP_IMAGE:latest" >> $GITHUB_OUTPUT
-          echo "sim_tags=$SIM_IMAGE:$VERSION,$SIM_IMAGE:latest" >> $GITHUB_OUTPUT
+          echo "tags=$IMAGE:$VERSION,$IMAGE:latest" >> $GITHUB_OUTPUT
 
-      # ---- Image 1: Django app (LogstashUI)
-      - name: Build and push (LogstashUI)
+      - name: Build and push LogstashUI
         uses: docker/build-push-action@v6
         with:
-          context: ./LogstashUI
-          file: ./LogstashUI/Dockerfile
+          context: .
+          file: ./docker/Dockerfile
           push: true
-          tags: ${{ steps.vars.outputs.app_tags }}
-
-      # ---- Image 2: Logstash + FastAPI sidecar (LogstashAgent)
-      - name: Build and push (LogstashAgent)
-        uses: docker/build-push-action@v6
-        with:
-          context: ./LogstashAgent
-          file: ./LogstashAgent/Dockerfile
-          push: true
-          tags: ${{ steps.vars.outputs.sim_tags }}
+          tags: ${{ steps.vars.outputs.tags }}

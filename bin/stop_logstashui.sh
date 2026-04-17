@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================
-# LogstashUI Shutdown Script
+# logstashui Shutdown Script
 # ========================================
 
 # Note: We don't use 'set -e' here because we want to attempt all cleanup steps
@@ -28,13 +28,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 # Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if [ -f "logstashui.yml" ]; then
-    CONFIG_FILE="logstashui.yml"
-elif [ -f "logstashui.example.yml" ]; then
-    CONFIG_FILE="logstashui.example.yml"
+if [ -f "src/logstashui/logstashui.yml" ]; then
+    CONFIG_FILE="src/logstashui/logstashui.yml"
+elif [ -f "src/logstashui/logstashui.example.yml" ]; then
+    CONFIG_FILE="src/logstashui/logstashui.example.yml"
 else
     echo "ERROR: No config file found!"
-    echo "Expected logstashui.yml or logstashui.example.yml in project root."
+    echo "Expected logstashui.yml or logstashui.example.yml in src/logstashui/"
     exit 1
 fi
 
@@ -100,7 +100,9 @@ if [ "$MODE" == "host" ]; then
     
     echo ""
     echo "Stopping Docker containers (UI + Nginx)"
+    cd docker
     $DOCKER_COMPOSE down --remove-orphans
+    cd ..
     
     # Force remove agent container if it exists
     echo "Removing any stray agent containers"
@@ -115,7 +117,9 @@ else
     # Force remove logstashagent container first (prevents stale network references)
     docker rm -f logstashui-logstashagent-1 2>/dev/null || true
     
+    cd docker
     $DOCKER_COMPOSE down --remove-orphans
+    cd ..
 fi
 
 echo ""

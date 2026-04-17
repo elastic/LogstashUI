@@ -1,6 +1,0 @@
-mode: simulation
-simulation_mode: embedded
-# Linux example, default
-logstash_binary: /usr/share/logstash/bin/logstash
-logstash_settings: /etc/logstash
-logstash_log_path: /var/log/logstash

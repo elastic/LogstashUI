@@ -1,0 +1,127 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+
+{% load static %}
+<script src="{% static 'js/diff_modal.js' %}"></script>
+
+<!-- Diff Modal -->
+<div id="diffModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="hideDiffModal()"></div>
+    <div class="bg-gray-800 rounded-lg w-full max-w-7xl flex flex-col relative z-10" style="height: 90vh; max-height: 90vh;">
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+            <h3 id="diffModalTitle" class="text-lg font-semibold text-white">Review Pipeline Changes</h3>
+            <div class="flex space-x-2">
+                <button id="copyCodeButton"
+                        class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                        onclick="copyDiffCodeToClipboard()">
+                    Copy to Clipboard
+                </button>
+                <button onclick="hideDiffModal()" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="p-4 flex-1 overflow-hidden flex flex-col" style="min-height: 0;">
+            <!-- Agent policy notice: shown only when editing via ls_id -->
+            <div id="agentPolicyNotice" class="hidden mb-4 flex-shrink-0 p-3 bg-yellow-900/30 border border-yellow-600/50 rounded-lg flex items-start gap-3">
+                <svg class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <p class="text-sm text-yellow-200">You are editing a pipeline that belongs to a Logstash Agent Policy. Saving here does not deploy that policy. You must go deploy the policy for these pipeline changes to take effect.</p>
+            </div>
+            <div id="diffDescription" class="mb-4 flex-shrink-0">
+                <div class="flex items-center gap-2">
+                    <p class="text-gray-300 text-sm">Review the changes below before saving your pipeline.</p>
+                    <div class="relative group inline-block">
+                        <div class="p-1 rounded-full hover:bg-gray-700 transition-colors">
+                            <svg class="w-4 h-4 text-gray-400 hover:text-blue-400 cursor-help transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="hidden group-hover:block absolute z-50 w-80 p-4 mt-2 left-0 bg-gray-900 border border-gray-600 rounded-lg shadow-xl text-sm text-gray-300">
+                            <p class="font-semibold text-white mb-2">How this works:</p>
+                            <ul class="list-disc pl-5 space-y-1.5">
+                                <li>If you are using spaces, it will be converted into tabs.</li>
+                                <li>As of right now, comments are removed.</li>
+                                <li>Space is added in the editor to generally keep changes close together.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quote Mixing Warning -->
+            <div id="quoteWarningContainer" class="mb-4 flex-shrink-0 hidden"></div>
+
+            <!-- Validation Errors Warning -->
+            <div id="validationErrorsContainer" class="mb-4 flex-shrink-0 hidden">
+                <div class="bg-red-900/30 border border-red-600/50 rounded-lg p-4">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        <div class="flex-1">
+                            <p class="text-sm text-red-200 font-medium mb-2">Cannot Save Pipeline: Validation Errors Detected</p>
+                            <div id="validationErrorsContent" class="text-sm text-red-300 space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading state -->
+            <div id="diffLoading" class="flex-1 flex items-center justify-center" style="min-height: 0;">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p class="text-gray-400">Loading diff...</p>
+                </div>
+            </div>
+
+            <!-- Side-by-side diff view -->
+            <div id="diffContainer" class="flex-1 overflow-hidden hidden" style="min-height: 0;"></div>
+        </div>
+
+        <!-- Footer with actions -->
+        <div class="p-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="text-sm text-gray-400">
+                    <span id="diffStats"></span>
+                </div>
+                <div id="addIdsContainer" class="flex items-center gap-2">
+                    <input type="checkbox" id="addIdsCheckbox" onchange="handleAddIdsChange()"
+                           class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="addIdsCheckbox" class="text-sm text-gray-300">Add IDs to Plugins</label>
+                    <div class="relative group inline-block">
+                        <div class="p-1 rounded-full hover:bg-gray-700 transition-colors cursor-help">
+                            <svg class="w-4 h-4 text-gray-400 hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="hidden group-hover:block absolute z-50 w-96 p-4 bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 border border-gray-600 rounded-lg shadow-xl text-sm text-gray-300">
+                            <p class="font-semibold text-white mb-2">Add IDs to Plugins:</p>
+                            <p>This will add an ID to all of your plugins. If you have monitoring setup in your Elastic cluster, we'll be able to give you detailed information about the execution of your pipeline on a per-plugin basis. If you already have an ID for a plugin, checking this box won't do anything.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="hideDiffModal()" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
+                    Close
+                </button>
+                <button id="confirmSaveButton" onclick="confirmSavePipeline()"
+                        class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Confirm & Save Pipeline
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
