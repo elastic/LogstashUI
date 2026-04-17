@@ -48,3 +48,46 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// Scroll to top functionality
+document.addEventListener('DOMContentLoaded', function() {
+  const scrollButton = document.getElementById('scroll-to-top');
+  const mainContent = document.querySelector('main');
+  const sidebar = document.querySelector('aside');
+  const scrollThreshold = 500;
+
+  if (!scrollButton || !mainContent) return;
+
+  // Position button relative to sidebar width
+  function positionButton() {
+    if (sidebar) {
+      const sidebarWidth = sidebar.offsetWidth;
+      scrollButton.style.left = `${sidebarWidth + 24}px`; // sidebar width + 1.5rem (24px)
+    }
+  }
+
+  // Set initial position
+  positionButton();
+
+  // Update position on window resize
+  window.addEventListener('resize', positionButton);
+
+  // Show/hide button based on scroll position
+  mainContent.addEventListener('scroll', function() {
+    if (mainContent.scrollTop > scrollThreshold) {
+      scrollButton.classList.remove('opacity-0', 'pointer-events-none');
+      scrollButton.classList.add('opacity-100', 'pointer-events-auto');
+    } else {
+      scrollButton.classList.remove('opacity-100', 'pointer-events-auto');
+      scrollButton.classList.add('opacity-0', 'pointer-events-none');
+    }
+  });
+
+  // Scroll to top on button click
+  scrollButton.addEventListener('click', function() {
+    mainContent.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  });
+});

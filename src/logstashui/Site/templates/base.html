@@ -29,11 +29,18 @@
     {% include 'navigation.html' %}
 
     <!-- Main Content -->
-    <main class="flex-1 p-6 bg-base-100 overflow-y-auto">
+    <main class="flex-1 p-6 bg-base-100 overflow-y-auto relative">
       {% block content %}
 
 
       {% endblock %}
+      
+      <!-- Scroll to Top Button -->
+      <button id="scroll-to-top" class="fixed bottom-6 bg-primary text-primary-content p-3 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 hover:bg-primary-focus z-40" aria-label="Scroll to top">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+        </svg>
+      </button>
     </main>
   </div>
   <div id="toast-container" class="toast toast-end toast-bottom z-50"></div>
