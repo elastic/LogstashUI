@@ -1,3 +1,39 @@
+## [0.4.0] - Logstash Agent - 04/18/2026
+
+### Added
+
+- Added centralized Logstash Agent management, including policy creation, enrollment, and agent-aware connection workflows.
+- Added support for managing pipelines through Logstash Agent, including pipeline settings and policy-level pipeline organization.
+- Added keystore management improvements, including password management, clearer visibility into sensitive fields, and support for deploying keystore-related changes independently.
+- Added agent operational controls such as restart support, upgrade support, health reporting, and richer status details.
+- Added live status and log streaming improvements to make troubleshooting and monitoring easier.
+- Added validation to help catch missing Logstash installations, invalid paths, and other configuration issues earlier.
+- Added clearer deployment feedback, including indicators for undeployed changes and warnings for situations that require special handling.
+- Added an in-app documentation experience.
+- Added expanded automated testing and coverage reporting.
+
+### Changed
+
+- Improved the overall Logstash Agent experience across enrollment, policy management, deployment workflows, and health visibility.
+- Improved the safety of deployments so failed changes are handled more cleanly and unnecessary restarts are reduced.
+- Improved the UI across connection management, policy views, agent health/status displays, and navigation.
+- Improved security for communication between LogstashUI and Logstash Agent.
+- Reworked packaging and project structure to support the ongoing evolution of Logstash Agent.
+- Moved documentation into the application for a more integrated user experience.
+- Updated SNMP-related UI flows and made minor usability improvements.
+
+### Fixed
+
+- Fixed navigation state so collapsed navigation sections now persist more reliably.
+- Fixed several deployment and keystore edge cases that could cause failed or blocked changes.
+- Fixed pipeline change detection issues so edits are recognized more reliably.
+- Fixed agent status and health display issues.
+- Fixed several policy, pipeline, and configuration UI bugs.
+- Fixed monitoring behavior to better align with centralized connection workflows.
+- Fixed documentation image/link issues.
+- Fixed a number of packaging, path, logging, and platform-specific issues introduced during refactoring.
+
+
 ## [0.3.5] - 03/23/2026
 ### Changed
 - Disabled light mode entirely

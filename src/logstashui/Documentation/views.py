@@ -11,6 +11,7 @@ import yaml
 
 DOCS_BASE_DIR = settings.PROJECT_ROOT
 DOCS_DIR = DOCS_BASE_DIR / "docs" / "docs"
+CHANGELOG_PATH = DOCS_BASE_DIR / "CHANGELOG.md"
 
 # Manual title overrides for specific files/folders
 TITLE_OVERRIDES = {
@@ -231,6 +232,14 @@ def documentation_home(request):
     # Build navigation tree
     nav_tree = build_nav_tree(DOCS_DIR)
     
+    # Add CHANGELOG as the last item
+    nav_tree.append({
+        'title': 'Changelog',
+        'url': '/Documentation/changelog/',
+        'children': [],
+        'is_folder': False
+    })
+    
     context = {
         'content': html_content,
         'title': 'Documentation Home',
@@ -245,7 +254,51 @@ def render_documentation(request, doc_path):
     Examples:
     - /Documentation/logstashagent/configuration/ -> docs/docs/logstashagent/configuration/index.md
     - /Documentation/logstashui/general/build/ -> docs/docs/logstashui/general/build.md
+    - /Documentation/changelog/ -> CHANGELOG.md
     """
+    # Special case for CHANGELOG
+    if doc_path == "changelog":
+        if CHANGELOG_PATH.exists():
+            with open(CHANGELOG_PATH, 'r', encoding='utf-8') as f:
+                markdown_content = f.read()
+            
+            md = markdown.Markdown(extensions=[
+                'markdown.extensions.fenced_code',
+                'markdown.extensions.tables',
+                'markdown.extensions.toc',
+            ])
+            html_content = md.convert(markdown_content)
+            html_content = convert_github_alerts(html_content)
+            
+            nav_tree = build_nav_tree(DOCS_DIR)
+            nav_tree.append({
+                'title': 'Changelog',
+                'url': '/Documentation/changelog/',
+                'children': [],
+                'is_folder': False
+            })
+            
+            return render(request, 'documentation.html', {
+                'content': html_content,
+                'title': 'Changelog',
+                'nav_tree': nav_tree,
+            })
+        else:
+            html_content = "<p>CHANGELOG.md not found</p>"
+            title = "Changelog Not Found"
+            nav_tree = build_nav_tree(DOCS_DIR)
+            nav_tree.append({
+                'title': 'Changelog',
+                'url': '/Documentation/changelog/',
+                'children': [],
+                'is_folder': False
+            })
+            return render(request, 'documentation.html', {
+                'content': html_content,
+                'title': title,
+                'nav_tree': nav_tree,
+            })
+    
     # Try to find the markdown file
     # First try: path/index.md (for folders)
     md_path = DOCS_DIR / doc_path / "index.md"
@@ -292,6 +345,14 @@ def render_documentation(request, doc_path):
     
     # Build navigation tree
     nav_tree = build_nav_tree(DOCS_DIR)
+    
+    # Add CHANGELOG as the last item
+    nav_tree.append({
+        'title': 'Changelog',
+        'url': '/Documentation/changelog/',
+        'children': [],
+        'is_folder': False
+    })
     
     context = {
         'content': html_content,

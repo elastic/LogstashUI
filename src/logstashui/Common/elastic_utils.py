@@ -41,9 +41,12 @@ def _get_creds(connection_id):
     if connection.cloud_id:
         connection_data['cloud_id'] = connection.cloud_id
     else:
-        # For CENTRALIZED connections, host already includes the full URL with port
-        # (e.g., https://localhost:9200), so we don't append the port field
-        connection_data['hosts'] = connection.host
+        # For CENTRALIZED connections, combine host and port fields
+        # The frontend stores them separately, so we need to recombine them
+        if connection.port:
+            connection_data['hosts'] = f"{connection.host}:{connection.port}"
+        else:
+            connection_data['hosts'] = connection.host
 
     if connection.api_key:
         connection_data['api_key'] = connection.get_api_key()
