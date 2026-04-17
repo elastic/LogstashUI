@@ -12,8 +12,6 @@ It enrolls with LogstashUI, persists local agent state, checks in for policy and
 
 ---
 
-## Features
-
 ### Enrollment + Reconciliation Loop
 Enroll with LogstashUI and continuously reconcile desired state to the local Logstash instance.
 

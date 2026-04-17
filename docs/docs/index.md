@@ -12,14 +12,13 @@ This documentation covers two complementary projects for managing and simulating
 
 LogstashUI provides a web-based platform for authoring pipelines visually, simulating them against sample events, and deploying them to multiple Logstash nodes from a single interface.
 
-### Key Features
+- **Control Plane for Logstash** - Centrally manage Logstash nodes with Centralized Pipeline Management and Logstash Agent
 - **Visual Pipeline Editor** - Author pipelines in three modes: graphical interface, text editor, and visual graph
-- **Pipeline Simulation** - Test pipelines against sample events and inspect transformations step-by-step
-- **Multi-Instance Management** - Deploy and manage pipelines across multiple Logstash nodes
-- **Pipeline Monitoring** - View metrics and performance for running pipelines
-- **SNMP Support** - Configure SNMP polling, traps, and discovery
+- **Pipeline Simulation** - Execute pipelines against sample events and inspect transformations step-by-step
+- **Monitoring** - View metrics and performance for running pipelines and Logstash nodes
+- **SNMP Pipeline Management** - Configure polling, traps, discovery, credentials, devices, networks, and profiles through the UI
 
-![LogstashUI Simulation](docs/images/simulate.png)
+![LogstashUI Simulation](/docs/images/simulate.png)
 
 **📖 [View LogstashUI Documentation →](logstashui/index.md)**
 
@@ -31,7 +30,6 @@ LogstashUI provides a web-based platform for authoring pipelines visually, simul
 
 LogstashAgent is installed on your Logstash nodes and provides complete control over the instance through policy-based management. It handles pipeline deployment, configuration management, and high-performance simulation capabilities.
 
-### Key Features
 - **Policy-Based Management** - Control Logstash instances through centralized policies
 - **Pipeline Deployment** - Automatically deploy and update pipeline configurations
 - **High-Performance Simulation** - Native execution for fast, reliable pipeline testing

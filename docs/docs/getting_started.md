@@ -23,9 +23,9 @@
 - [Elasticsearch 8.x or later](https://cloud.elastic.co)
 - [Docker](https://www.docker.com/get-started/)
 
-## Quick Start - Embedded Mode
-
-> **Tip:** If you plan on doing a lot of simulations, consider using [host mode](logstashui/configuration/host_mode.md). It's more performant.
+## Quick Start
+> [!TIP]
+> If you plan on doing a lot of simulations, consider using [host mode](logstashui/configuration/host_mode.md). It's more performant.
 
 ### Download LogstashUI
 ```bash
@@ -58,15 +58,15 @@ And that's it!
 ## Add Your First Connection
 
 ### 1. Create an initial user
-![Login](docs/images/login.png)
+![Login](/docs/images/login.png)
 
 ### 2. Add a connection
-![New Connection](docs/images/new_connection.gif)
+![New Connection](/docs/images/new_connection.gif)
 
 ### 3. Start managing pipelines!
-![Simulate](docs/images/simulate.gif)
+![Simulate](/docs/images/simulate.gif)
 
 ### Optional: Add monitoring to your connections
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. Once Logstash monitoring data is indexed into Elasticsearch, metrics and logs will appear in the UI.
 
-![Monitoring](docs/images/monitoring.png)
+![Monitoring](/docs/images/monitoring.png)

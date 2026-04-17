@@ -1,6 +1,6 @@
 # LogstashUI
 
-> A visual tool for authoring, simulating, and managing Logstash pipelines.
+> A control plane and visual editor for Logstash, built for managing Logstash nodes and authoring, simulating, and deploying pipelines.
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 
@@ -15,35 +15,33 @@ Instead of editing configuration files manually, pipelines can be authored visua
 ## Features
 
 <details>
-<summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
+    <summary><b>Control Plane for Logstash</b> — Centrally manage Logstash nodes with Centralized Pipeline Management and Logstash Agent</summary> 
 
-![Visual Pipeline Editor](docs/images/graph.gif)
-
+![Control Plane for Logstash](/docs/images/control_plane.png) 
 </details>
 
 <details>
-<summary><b>Pipeline Simulation</b> — Execute pipelines against sample events and inspect transformations step-by-step</summary>
+    <summary><b>Visual Pipeline Editor</b> — Author pipelines in three modes: an inline graphical interface, raw text editor, and a full visual graph for building pipelines by connecting nodes. Switch between modes seamlessly on any pipeline.</summary>
 
-![Pipeline Simulation](docs/images/simulate.gif)
+![Visual Pipeline Editor](/docs/images/graph.gif) 
+</details> 
 
+<details> 
+    <summary><b>Pipeline Simulation</b> — Execute pipelines against sample events and inspect transformations step-by-step</summary> 
+    
+![Pipeline Simulation](/docs/images/simulate.gif) 
 </details>
 
 <details>
-<summary><b>Multi-Instance Management</b> — Manage pipelines across multiple Logstash nodes using Centralized Pipeline Management</summary>
-
+    <summary><b>Monitoring</b> — View metrics and performance for running pipelines and Logstash nodes</summary>
+    
+![Pipeline Monitoring](/docs/images/monitoring.png)
 </details>
 
 <details>
-<summary><b>Pipeline Monitoring</b> — View metrics and performance for running pipelines</summary>
+<summary><b>SNMP Pipeline Management</b> — Configure polling, traps, discovery, credentials, devices, networks, and profiles through the UI.</summary>
 
-![Pipeline Monitoring](docs/images/monitoring.png)
-
-</details>
-
-<details>
-<summary><b>SNMP Support</b> — Configure polling, traps, and discovery through a web interface</summary>
-
-![SNMP Support](docs/images/snmp.gif)
+![SNMP Support](/docs/images/snmp.png)
 
 </details>
 
@@ -154,11 +152,6 @@ input {
 }
 ```
 
-## Roadmap
-- Reusable grok and regex patterns
-- Git backups for configuration
-- Loggy AI Assistant for pipeline failure analysis
-- Expression editor for conditions
 
 ## Reporting Issues
 
