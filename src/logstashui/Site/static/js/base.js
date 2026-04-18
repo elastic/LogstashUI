@@ -91,3 +91,46 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 });
+
+// Global ESC key handler to close any open modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    // Find any modal that's currently visible (not hidden)
+    // Only select elements that end with Modal or Flyout (not child elements)
+    const allModals = document.querySelectorAll('[id$="Modal"], [id$="Flyout"]');
+    
+    const visibleModals = Array.from(allModals).filter(modal => {
+      return !modal.classList.contains('hidden');
+    });
+    
+    if (visibleModals.length > 0) {
+      // Close the topmost modal (last in the array if multiple open)
+      const modalToClose = visibleModals[visibleModals.length - 1];
+      const modalId = modalToClose.id;
+      
+      // Build possible close function names
+      // Examples: credentialFormModal -> closeCredentialFormModal, closeCredentialModal
+      const baseName = modalId.replace(/Modal$|Flyout$/, '');
+      const possibleCloseFunctions = [
+        'close' + modalId.charAt(0).toUpperCase() + modalId.slice(1),
+        'close' + baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Modal',
+        'close' + baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Flyout',
+        'close' + baseName.charAt(0).toUpperCase() + baseName.slice(1)
+      ];
+      
+      let functionCalled = false;
+      for (const funcName of possibleCloseFunctions) {
+        if (typeof window[funcName] === 'function') {
+          window[funcName]();
+          functionCalled = true;
+          break;
+        }
+      }
+      
+      // If no close function found, just hide the modal
+      if (!functionCalled) {
+        modalToClose.classList.add('hidden');
+      }
+    }
+  }
+});

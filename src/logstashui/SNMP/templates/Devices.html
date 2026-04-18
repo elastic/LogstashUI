@@ -43,7 +43,12 @@
           Click here for setup instructions
         </button>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
+        <!-- Undeployed changes indicator -->
+        <div id="snmpUndeployedIndicator" class="hidden flex items-center gap-1 px-2 py-1 bg-orange-500/20 border border-orange-500/40 rounded-full">
+          <div class="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse"></div>
+          <span class="text-xs text-orange-300 font-medium whitespace-nowrap">Undeployed changes</span>
+        </div>
         <button id="commitBtn" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -260,6 +265,9 @@
 <!-- Device Visual Preview Component -->
 {% include 'components/snmp_device_visual_preview.html' %}
 
+<!-- Popup Modal -->
+{% include 'popup.html' %}
+
 <script src="{% static 'js/devices_table.js' %}"></script>
 <script src="{% static 'js/snmp_device_visual_preview.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
@@ -268,6 +276,7 @@
 <script src="{% static 'js/snmp_commit_modal.js' %}"></script>
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
 <script src="{% static 'js/discovered_devices.js' %}"></script>
+<script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
 
 <script>
 // Setup Instructions Modal Functions

@@ -295,8 +295,14 @@ function sortTable(field) {
 }
 
 // Delete device
-function deleteDevice(deviceId, deviceName) {
-  if (!confirm(`Are you sure you want to delete device "${deviceName}"?`)) {
+async function deleteDevice(deviceId, deviceName) {
+  const confirmed = await ConfirmationModal.show(
+    `Are you sure you want to delete device "${deviceName}"?`,
+    'Confirm Delete',
+    'OK'
+  );
+  
+  if (!confirmed) {
     return;
   }
   
