@@ -132,3 +132,12 @@ The Dockerfile:
 - Sets `PYTHONPATH=/app/src` for module imports
 
 Build time is approximately 5-10 minutes due to Python compilation.
+
+---
+
+## Related Documentation
+
+- **[Configuration](/docs/docs/logstashagent/configuration/index.md)** - Configure LogstashAgent settings
+- **[General Overview](/docs/docs/logstashagent/general/index.md)** - Return to general guides index
+- **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Return to LogstashAgent documentation
+- **[LogstashUI Documentation](/docs/docs/logstashui/index.md)** - Main LogstashUI documentation

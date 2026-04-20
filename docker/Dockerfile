@@ -23,6 +23,10 @@ RUN uv pip install --system --no-cache -r pyproject.toml
 # Copy the entire src directory
 COPY src/ /app/src/
 
+# Copy documentation and changelog
+COPY docs/ /app/docs/
+COPY CHANGELOG.md /app/CHANGELOG.md
+
 # Set PYTHONPATH so Django can find LogstashUI module
 ENV PYTHONPATH=/app/src/logstashui
 

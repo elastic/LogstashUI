@@ -12,7 +12,7 @@
 #### For Embedded mode (See Quick Start)
 - [Docker](https://www.docker.com/get-started/)
 
-#### For [Host mode](logstashui/configuration/host_mode.md) (If you have a simulation-heavy use case)
+#### For [Host mode](/docs/docs/logstashui/configuration/host_mode.md) (If you have a simulation-heavy use case)
 - [Docker](https://www.docker.com/get-started/)
 - [Python 3.12+](https://www.python.org/downloads/)
 - [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
@@ -25,7 +25,7 @@
 
 ## Quick Start
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](logstashui/configuration/host_mode.md). It's more performant.
+> If you plan on doing a lot of simulations, consider using [host mode](/docs/docs/logstashui/configuration/host_mode.md). It's more performant.
 
 ### Download LogstashUI
 ```bash
@@ -70,3 +70,11 @@ And that's it!
 Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-elastic-agent) to set up the Elastic Agent's Logstash integration. Once Logstash monitoring data is indexed into Elasticsearch, metrics and logs will appear in the UI.
 
 ![Monitoring](/docs/images/monitoring.png)
+
+---
+
+## Next Steps
+
+- **[LogstashUI Documentation](/docs/docs/logstashui/index.md)** - Learn about features and configuration
+- **[LogstashAgent Documentation](/docs/docs/logstashagent/index.md)** - Set up agents on your Logstash nodes
+- **[Documentation Home](/docs/docs/index.md)** - Return to documentation overview

@@ -39,8 +39,8 @@ Configure polling, traps, and discovery through a web interface.
 
 ## Documentation
 
-- **[LogstashUI Documentation](logstashui/index.md)** - Installation, configuration, and usage guides for LogstashUI
-- **[LogstashAgent Documentation](logstashagent/index.md)** - Setup and configuration for LogstashAgent
+- **[Configuration](/docs/docs/logstashui/configuration/index.md)** - Configuration options and settings for LogstashUI
+- **[General](/docs/docs/logstashui/general/index.md)** - Build, update, and deployment guides
 
 ---
 

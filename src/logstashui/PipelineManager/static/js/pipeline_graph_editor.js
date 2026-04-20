@@ -186,6 +186,102 @@ function panToNode(nodeId) {
 }
 
 /**
+ * Navigate to the Input section
+ */
+function goToInput() {
+    const svg = document.querySelector('#graphSvg');
+    if (!svg || !zoomBehavior) {
+        console.warn('[goToInput] SVG or zoomBehavior not available');
+        return;
+    }
+    
+    // Find the INPUT section label
+    const inputLabel = Array.from(svg.querySelectorAll('text')).find(text => text.textContent === 'INPUT');
+    if (!inputLabel) {
+        console.warn('[goToInput] INPUT section label not found');
+        return;
+    }
+    
+    // Get the label's position
+    const labelX = parseFloat(inputLabel.getAttribute('x'));
+    const labelY = parseFloat(inputLabel.getAttribute('y'));
+    
+    // Get SVG viewport dimensions
+    const svgRect = svg.getBoundingClientRect();
+    const svgWidth = svgRect.width;
+    const svgHeight = svgRect.height;
+    
+    // Get current zoom transform to preserve the zoom level
+    const svgElement = d3.select(svg);
+    const currentZoomTransform = d3.zoomTransform(svg);
+    const scale = currentZoomTransform.k;
+    
+    // Calculate the transform needed to center the section horizontally and position it near the top
+    // Position the section about 100px from the top of the viewport
+    const targetY = 100;
+    const translateX = (svgWidth / 2) - (labelX * scale);
+    const translateY = targetY - (labelY * scale);
+    
+    // Create new transform
+    const newTransform = d3.zoomIdentity
+        .scale(scale)
+        .translate(translateX / scale, translateY / scale);
+    
+    // Apply smooth transition to the new position
+    svgElement.transition()
+        .duration(750)
+        .call(zoomBehavior.transform, newTransform);
+}
+
+/**
+ * Navigate to the Output section
+ */
+function goToOutput() {
+    const svg = document.querySelector('#graphSvg');
+    if (!svg || !zoomBehavior) {
+        console.warn('[goToOutput] SVG or zoomBehavior not available');
+        return;
+    }
+    
+    // Find the OUTPUT section label
+    const outputLabel = Array.from(svg.querySelectorAll('text')).find(text => text.textContent === 'OUTPUT');
+    if (!outputLabel) {
+        console.warn('[goToOutput] OUTPUT section label not found');
+        return;
+    }
+    
+    // Get the label's position
+    const labelX = parseFloat(outputLabel.getAttribute('x'));
+    const labelY = parseFloat(outputLabel.getAttribute('y'));
+    
+    // Get SVG viewport dimensions
+    const svgRect = svg.getBoundingClientRect();
+    const svgWidth = svgRect.width;
+    const svgHeight = svgRect.height;
+    
+    // Get current zoom transform to preserve the zoom level
+    const svgElement = d3.select(svg);
+    const currentZoomTransform = d3.zoomTransform(svg);
+    const scale = currentZoomTransform.k;
+    
+    // Calculate the transform needed to center the section horizontally and position it near the top
+    // Position the section about 100px from the top of the viewport
+    const targetY = 100;
+    const translateX = (svgWidth / 2) - (labelX * scale);
+    const translateY = targetY - (labelY * scale);
+    
+    // Create new transform
+    const newTransform = d3.zoomIdentity
+        .scale(scale)
+        .translate(translateX / scale, translateY / scale);
+    
+    // Apply smooth transition to the new position
+    svgElement.transition()
+        .duration(750)
+        .call(zoomBehavior.transform, newTransform);
+}
+
+/**
  * Make a node draggable with snap-back physics
  * Note: Individual node dragging is disabled - use canvas pan/zoom instead
  */

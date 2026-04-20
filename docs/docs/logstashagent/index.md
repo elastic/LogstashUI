@@ -110,6 +110,13 @@ python src/logstashagent/main.py --run
 
 ---
 
+## Documentation
+
+- **[Configuration](/docs/docs/logstashagent/configuration/index.md)** - Configuration options and settings for LogstashAgent
+- **[General](/docs/docs/logstashagent/general/index.md)** - Build and deployment guides
+
+---
+
 ## Updating
 
 Pull latest source and resync dependencies:

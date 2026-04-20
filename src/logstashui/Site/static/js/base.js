@@ -48,3 +48,89 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// Scroll to top functionality
+document.addEventListener('DOMContentLoaded', function() {
+  const scrollButton = document.getElementById('scroll-to-top');
+  const mainContent = document.querySelector('main');
+  const sidebar = document.querySelector('aside');
+  const scrollThreshold = 500;
+
+  if (!scrollButton || !mainContent) return;
+
+  // Position button relative to sidebar width
+  function positionButton() {
+    if (sidebar) {
+      const sidebarWidth = sidebar.offsetWidth;
+      scrollButton.style.left = `${sidebarWidth + 24}px`; // sidebar width + 1.5rem (24px)
+    }
+  }
+
+  // Set initial position
+  positionButton();
+
+  // Update position on window resize
+  window.addEventListener('resize', positionButton);
+
+  // Show/hide button based on scroll position
+  mainContent.addEventListener('scroll', function() {
+    if (mainContent.scrollTop > scrollThreshold) {
+      scrollButton.classList.remove('opacity-0', 'pointer-events-none');
+      scrollButton.classList.add('opacity-100', 'pointer-events-auto');
+    } else {
+      scrollButton.classList.remove('opacity-100', 'pointer-events-auto');
+      scrollButton.classList.add('opacity-0', 'pointer-events-none');
+    }
+  });
+
+  // Scroll to top on button click
+  scrollButton.addEventListener('click', function() {
+    mainContent.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  });
+});
+
+// Global ESC key handler to close any open modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    // Find any modal that's currently visible (not hidden)
+    // Only select elements that end with Modal or Flyout (not child elements)
+    const allModals = document.querySelectorAll('[id$="Modal"], [id$="Flyout"]');
+    
+    const visibleModals = Array.from(allModals).filter(modal => {
+      return !modal.classList.contains('hidden');
+    });
+    
+    if (visibleModals.length > 0) {
+      // Close the topmost modal (last in the array if multiple open)
+      const modalToClose = visibleModals[visibleModals.length - 1];
+      const modalId = modalToClose.id;
+      
+      // Build possible close function names
+      // Examples: credentialFormModal -> closeCredentialFormModal, closeCredentialModal
+      const baseName = modalId.replace(/Modal$|Flyout$/, '');
+      const possibleCloseFunctions = [
+        'close' + modalId.charAt(0).toUpperCase() + modalId.slice(1),
+        'close' + baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Modal',
+        'close' + baseName.charAt(0).toUpperCase() + baseName.slice(1) + 'Flyout',
+        'close' + baseName.charAt(0).toUpperCase() + baseName.slice(1)
+      ];
+      
+      let functionCalled = false;
+      for (const funcName of possibleCloseFunctions) {
+        if (typeof window[funcName] === 'function') {
+          window[funcName]();
+          functionCalled = true;
+          break;
+        }
+      }
+      
+      // If no close function found, just hide the modal
+      if (!functionCalled) {
+        modalToClose.classList.add('hidden');
+      }
+    }
+  }
+});

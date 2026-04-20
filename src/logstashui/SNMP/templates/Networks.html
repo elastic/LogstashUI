@@ -37,7 +37,12 @@
     <!-- Header with Add Button -->
     <div class="page-header flex justify-between items-center mb-2">
       <h1 class="text-2xl font-bold text-white">SNMP Networks (Polling Zones)</h1>
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
+        <!-- Undeployed changes indicator -->
+        <div id="snmpUndeployedIndicator" class="hidden flex items-center gap-1 px-2 py-1 bg-orange-500/20 border border-orange-500/40 rounded-full">
+          <div class="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse"></div>
+          <span class="text-xs text-orange-300 font-medium whitespace-nowrap">Undeployed changes</span>
+        </div>
         <button id="commitBtn" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -163,6 +168,9 @@
   <!-- SNMP Diff Modal -->
   {% include 'components/snmp_diff_modal.html' %}
 
+  <!-- Popup Modal -->
+  {% include 'popup.html' %}
+
 </div>
 
 <script src="{% static 'js/networks_table.js' %}"></script>
@@ -170,6 +178,7 @@
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>
 <script src="{% static 'js/snmp_commit_modal.js' %}"></script>
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
+<script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
 <script>
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
@@ -222,19 +231,21 @@
   }
 
   // Delete network function with pipeline warning
-  function deleteNetwork(networkId, networkName) {
+  async function deleteNetwork(networkId, networkName) {
     // First, fetch the pipeline name
     fetch(`/SNMP/GetNetworkPipelineName/${networkId}/`)
       .then(response => response.json())
-      .then(data => {
+      .then(async data => {
         if (data.success) {
           const pipelineName = data.pipeline_name;
           
           // Show confirmation dialog with pipeline name
-          const confirmed = confirm(
+          const confirmed = await ConfirmationModal.show(
             `Are you sure you want to delete the network "${networkName}"?\n\n` +
             `The underlying pipeline "${pipelineName}" will also be deleted.\n\n` +
-            `This action cannot be undone.`
+            `This action cannot be undone.`,
+            'Confirm Delete',
+            'OK'
           );
           
           if (confirmed) {
@@ -265,9 +276,11 @@
           }
         } else {
           // If we can't get pipeline name, still allow deletion but with simpler message
-          const confirmed = confirm(
+          const confirmed = await ConfirmationModal.show(
             `Are you sure you want to delete the network "${networkName}"?\n\n` +
-            `This action cannot be undone.`
+            `This action cannot be undone.`,
+            'Confirm Delete',
+            'OK'
           );
           
           if (confirmed) {
