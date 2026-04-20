@@ -339,7 +339,7 @@ LOGGING = {
         },
         'file': {
             'level': 'INFO',
-            'class': 'concurrent_log_handler.ConcurrentRotatingFileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': LOGS_DIR / 'logstashui.log',
             'maxBytes': 1024 * 1024 * 10,  # 10 MB
             'backupCount': 5,
