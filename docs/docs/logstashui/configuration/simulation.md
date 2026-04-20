@@ -29,3 +29,11 @@ simulation.mode: "embedded" # (embedded | host)
     logstash_binary: /usr/share/logstash/bin/logstash
     logstash_settings: /etc/logstash/
 ```
+
+---
+
+## Related Documentation
+
+- **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - Complete guide to setting up host mode
+- **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)** - Full configuration reference
+- **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)** - Return to configuration index

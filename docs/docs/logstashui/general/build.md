@@ -45,3 +45,11 @@ python manage.py runserver 0.0.0.0:8080
 
 LogstashAgent is now a separate project. See `LogstashAgent/docs/build.md` for build and run instructions.
 
+---
+
+## Related Documentation
+
+- **[Updating LogstashUI](/docs/docs/logstashui/general/updating.md)** - How to update to the latest version
+- **[Configuration](/docs/docs/logstashui/configuration/index.md)** - Configure LogstashUI settings
+- **[General Overview](/docs/docs/logstashui/general/index.md)** - Return to general guides index
+- **[Getting Started](/docs/docs/getting_started.md)** - Quick start guide

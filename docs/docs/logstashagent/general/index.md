@@ -4,7 +4,7 @@ General guides for building, running, and deploying LogstashAgent.
 
 ---
 
-## **[Building and Running](build.md)**
+## **[Building and Running](/docs/docs/logstashagent/general/build.md)**
 
 Instructions for running LogstashAgent in different modes.
 
@@ -14,12 +14,12 @@ Instructions for running LogstashAgent in different modes.
 - Enrollment and controller modes
 - Development setup
 
-**📖 [View build guide →](build.md)**
+**📖 [View build guide →](/docs/docs/logstashagent/general/build.md)**
 
 ---
 
 ## Quick Links
 
-- **[LogstashAgent Overview](../index.md)** - Feature overview and introduction
-- **[Configuration](../configuration/index.md)** - Configure LogstashAgent settings
-- **[LogstashUI Documentation](../../logstashui/index.md)** - Main LogstashUI documentation
+- **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Feature overview and introduction
+- **[Configuration](/docs/docs/logstashagent/configuration/index.md)** - Configure LogstashAgent settings
+- **[LogstashUI Documentation](/docs/docs/logstashui/index.md)** - Main LogstashUI documentation

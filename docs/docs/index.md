@@ -20,7 +20,7 @@ LogstashUI provides a web-based platform for authoring pipelines visually, simul
 
 ![LogstashUI Simulation](/docs/images/simulate.png)
 
-**📖 [View LogstashUI Documentation →](logstashui/index.md)**
+**📖 [View LogstashUI Documentation →](/docs/docs/logstashui/index.md)**
 
 ---
 
@@ -35,7 +35,7 @@ LogstashAgent is installed on your Logstash nodes and provides complete control 
 - **High-Performance Simulation** - Native execution for fast, reliable pipeline testing
 - **Complete Instance Control** - Manages Logstash process, configuration, and monitoring
 
-**📖 [View LogstashAgent Documentation →](logstashagent/index.md)**
+**📖 [View LogstashAgent Documentation →](/docs/docs/logstashagent/index.md)**
 
 ---
 
@@ -43,7 +43,39 @@ LogstashAgent is installed on your Logstash nodes and provides complete control 
 
 New to LogstashUI? Start here:
 
-**[Getting Started Guide →](getting_started.md)**
+**[Getting Started Guide →](/docs/docs/getting_started.md)**
+
+---
+
+## Documentation Tree
+
+### 📚 Getting Started
+- **[Getting Started Guide](/docs/docs/getting_started.md)** - Installation and first steps
+
+### 🎨 LogstashUI
+- **[LogstashUI Overview](/docs/docs/logstashui/index.md)** - Features and introduction
+
+#### Configuration
+- **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)**
+  - **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)** - Main configuration file reference
+  - **[Simulation Modes](/docs/docs/logstashui/configuration/simulation.md)** - Embedded vs Host mode
+  - **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - High-performance simulation setup
+
+#### General
+- **[General Overview](/docs/docs/logstashui/general/index.md)**
+  - **[Building and Running](/docs/docs/logstashui/general/build.md)** - Docker Compose and local development
+  - **[Updating LogstashUI](/docs/docs/logstashui/general/updating.md)** - How to update to latest version
+
+### 🤖 LogstashAgent
+- **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Features and introduction
+
+#### Configuration
+- **[Configuration Overview](/docs/docs/logstashagent/configuration/index.md)**
+  - **[logstashagent.yml](/docs/docs/logstashagent/configuration/logstashagent.yml.md)** - Agent configuration file reference
+
+#### General
+- **[General Overview](/docs/docs/logstashagent/general/index.md)**
+  - **[Building and Running](/docs/docs/logstashagent/general/build.md)** - Docker, enrollment, and controller modes
 
 ---
 

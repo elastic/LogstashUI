@@ -232,3 +232,12 @@ This means that sub-ms plugin execution get rounded to 0.0ms, resulting in timin
 This still allows us to see the relative performance of plugins, but it does not provide accurate sub-millisecond timing like you get in every mode other than Windows Host mode.
 
 For accurate sub-millisecond timing during development on Windows, use Embedded mode or Host mode on Linux.
+
+---
+
+## Related Documentation
+
+- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - Overview of simulation modes
+- **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)** - Full configuration reference
+- **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)** - Return to configuration index
+- **[Getting Started](/docs/docs/getting_started.md)** - Quick start guide
