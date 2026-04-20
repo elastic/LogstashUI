@@ -1,3 +1,25 @@
+## [0.4.1] - Post 0.4.0 Polish - 04/20/2026
+
+### Added
+
+- Added an undeployed-changes indicator across SNMP-related pages to make pending SNMP changes more visible.
+- Added goto input and goto output navigation buttons in the graph editor.
+- Added a global scroll-to-top control that appears after scrolling far enough down a page.
+- Added support for closing modals globally by pressing `Esc`.
+- Added a `CONTRIBUTING.md` guide for project contributors.
+
+### Changed
+
+- Replaced browser-native confirmation and dialog boxes with the application's native popup experience.
+- Centralized toast handling in `base.js` and removed older SNMP-specific `showToast` usage.
+- Improved documentation structure and organization to make it easier to navigate.
+- Updated automation for generating NOTICE content and license headers.
+- Removed concurrent rotating file handlers to avoid ongoing complexity from an inconvenient transitive dependency.
+
+### Fixed
+
+- Fixed Docker packaging so the `/docs/` directory is copied into the image and the in-app documentation feature works as expected.
+
 ## [0.4.0] - Logstash Agent - 04/18/2026
 
 ### Added
