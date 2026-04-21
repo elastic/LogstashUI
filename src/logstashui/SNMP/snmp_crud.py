@@ -42,7 +42,11 @@ def GetCredentials(request):
 def GetNetworks(request):
     """Get all SNMP networks"""
     try:
-        networks = Network.objects.select_related('connection').all()
+        from django.db.models import Count
+        
+        networks = Network.objects.select_related('connection').annotate(
+            device_count=Count('devices')
+        ).all()
         networks_data = []
         for network in networks:
             networks_data.append({
@@ -54,7 +58,8 @@ def GetNetworks(request):
                 'traps_enabled': network.traps_enabled,
                 'discovery_credential': network.discovery_credential_id,
                 'connection': network.connection_id,
-                'connection_name': network.connection.name if network.connection else None
+                'connection_name': network.connection.name if network.connection else None,
+                'device_count': network.device_count
             })
         return JsonResponse(networks_data, safe=False, status=200)
     except Exception as e:
