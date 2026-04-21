@@ -119,6 +119,16 @@ function sortNetworks() {
       bVal = b.connection ? b.connection.name : '';
     }
     
+    // Handle numeric fields (device_count)
+    if (sortField === 'device_count') {
+      aVal = a[sortField] || 0;
+      bVal = b[sortField] || 0;
+      // Numeric comparison
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    }
+    
     // Convert to lowercase for case-insensitive sorting
     if (typeof aVal === 'string') aVal = aVal.toLowerCase();
     if (typeof bVal === 'string') bVal = bVal.toLowerCase();
@@ -188,6 +198,9 @@ function createNetworkRow(network) {
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
       <span class="font-mono">${escapeHtml(network.network_range)}</span>
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${network.device_count > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">${network.device_count || 0}</span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${escapeHtml(network.logstash_name || '')}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
