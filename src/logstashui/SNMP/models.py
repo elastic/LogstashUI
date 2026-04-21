@@ -488,3 +488,107 @@ class Profile(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
 
+
+class DeviceTemplate(models.Model):
+    """
+    Device Template model for grouping profiles and auto-matching devices
+    Templates define which profiles should be applied to devices based on matching rules
+    """
+    
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Unique name for this device template"
+    )
+    
+    description = models.TextField(
+        blank=True,
+        help_text="Optional description of what this template is for"
+    )
+    
+    vendor = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Vendor or manufacturer this template is designed for (e.g., Cisco, Juniper, Generic)"
+    )
+    
+    type = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Type/category of devices this template is for (e.g., Router, Switch, Firewall)"
+    )
+    
+    model = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Specific model identifier (e.g., Catalyst 9300, ASR 1000)"
+    )
+    
+    matching_rules = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of substrings to match against device sysDescr or other identifying fields for auto-assignment"
+    )
+    
+    official = models.BooleanField(
+        default=False,
+        help_text="Whether this is an official/built-in template (official templates cannot be edited or deleted)"
+    )
+    
+    profiles = models.ManyToManyField(
+        'Profile',
+        blank=True,
+        related_name='device_templates',
+        help_text="SNMP profiles to apply when this template is assigned to a device"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Device Template'
+        verbose_name_plural = 'Device Templates'
+    
+    def __str__(self):
+        return self.name
+    
+    def clean(self):
+        """
+        Validate template fields
+        """
+        super().clean()
+        
+        # Validate matching_rules is a list
+        if self.matching_rules is not None:
+            if not isinstance(self.matching_rules, list):
+                raise ValidationError({
+                    'matching_rules': 'Matching rules must be a list of strings'
+                })
+            
+            # Ensure all items in the list are strings
+            if not all(isinstance(rule, str) for rule in self.matching_rules):
+                raise ValidationError({
+                    'matching_rules': 'All matching rules must be strings'
+                })
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
+    def matches_device(self, device_info):
+        """
+        Check if this template matches the given device information
+        
+        Args:
+            device_info (str): Device identification string (e.g., sysDescr)
+        
+        Returns:
+            bool: True if any matching rule is found in device_info
+        """
+        if not self.matching_rules or not device_info:
+            return False
+        
+        device_info_lower = device_info.lower()
+        return any(rule.lower() in device_info_lower for rule in self.matching_rules)
+
