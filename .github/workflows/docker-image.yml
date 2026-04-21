@@ -42,3 +42,4 @@ jobs:
           file: ./docker/Dockerfile
           push: true
           tags: ${{ steps.vars.outputs.tags }}
+          platforms: linux/amd64,linux/arm64
