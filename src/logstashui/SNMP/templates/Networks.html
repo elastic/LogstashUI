@@ -197,14 +197,44 @@
         if (m !== menu) m.classList.add('hidden');
       });
       
-      // Position the menu at the cursor
+      // Position the menu with smart positioning to avoid going off-screen
       if (isHidden) {
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
+        // First show the menu to get its dimensions
+        menu.classList.remove('hidden');
+        
+        const menuRect = menu.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let left = e.clientX;
+        let top = e.clientY;
+        
+        // Check if menu would go off the right edge
+        if (left + menuRect.width > viewportWidth) {
+          left = viewportWidth - menuRect.width - 10; // 10px padding from edge
+        }
+        
+        // Check if menu would go off the bottom edge
+        if (top + menuRect.height > viewportHeight) {
+          top = viewportHeight - menuRect.height - 10; // 10px padding from edge
+        }
+        
+        // Ensure menu doesn't go off the left edge
+        if (left < 10) {
+          left = 10;
+        }
+        
+        // Ensure menu doesn't go off the top edge
+        if (top < 10) {
+          top = 10;
+        }
+        
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+      } else {
+        // Toggle to hidden
+        menu.classList.add('hidden');
       }
-      
-      // Toggle current menu
-      menu.classList.toggle('hidden', !isHidden);
     } else if (!e.target.closest('.action-menu')) {
       // Close all open action menus when clicking anywhere else
       document.querySelectorAll('.action-menu-items').forEach(menu => {
