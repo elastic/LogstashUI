@@ -1,8 +1,9 @@
 {
-  "name": "cdp_adjacency_cisco",
-  "description": "[Cisco] CDP adjacency (neighbors per local interface) via CISCO-CDP-MIB",
+  "name": "cisco_cdp",
+  "description": "CDP adjacency (neighbors per local interface) via CISCO-CDP-MIB",
+  "product": "Any",
   "vendor": "Cisco",
-  "pinned": true,
+  "model": "Any",
   "get": {},
   "walk": {},
   "table": {

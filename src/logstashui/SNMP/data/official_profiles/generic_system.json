@@ -1,8 +1,9 @@
 {
-  "name": "system",
+  "name": "generic_system",
   "description": "[Official] Generic details you would want to gather from most/all systems",
+  "product": "Any",
   "vendor": "Any",
-  "pinned": true,
+  "model": "Any",
   "get": {
     "host.description": "1.3.6.1.2.1.1.1.0",
     "host.name": "1.3.6.1.2.1.1.5.0",

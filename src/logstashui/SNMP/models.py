@@ -459,6 +459,12 @@ class Profile(models.Model):
         help_text="Vendor or manufacturer this profile is designed for (e.g., Cisco, Generic, Any)"
     )
     
+    product = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Product line or series (e.g., iDRAC, Catalyst, ASR)"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -516,7 +522,13 @@ class DeviceTemplate(models.Model):
     model = models.CharField(
         max_length=100,
         blank=True,
-        help_text="Specific model identifier (e.g., Catalyst 9300, ASR 1000)"
+        help_text="Specific model number (e.g., 9300, 1000)"
+    )
+    
+    product = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Product line or series (e.g., iDRAC, Catalyst, ASR)"
     )
     
     matching_rules = models.JSONField(

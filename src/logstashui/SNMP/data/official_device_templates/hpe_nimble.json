@@ -1,0 +1,15 @@
+{
+  "name": "hpe_nimble",
+  "description": "Storage-admin core: per-volume capacity + IOPS/throughput + avg latency inputs + cache hits + minimal latency distribution + global stats",
+  "vendor": "HPE Nimble",
+  "product": "Nimble",
+  "model": "Any",
+  "profiles": [
+    "hpe_nimble_volumes",
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "Nimble Storage"
+  ]
+}

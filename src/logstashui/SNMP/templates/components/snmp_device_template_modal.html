@@ -48,8 +48,17 @@
             <label for="deviceTemplateVendor" class="block text-sm font-medium text-gray-300 mb-2">
               Vendor <span class="text-red-500">*</span>
             </label>
-            <input type="text" id="deviceTemplateVendor" name="vendor" class="input input-bordered w-full" required placeholder="e.g., Cisco, Juniper, Generic">
+            <input type="text" id="deviceTemplateVendor" name="vendor" class="input input-bordered w-full" required placeholder="e.g., Cisco, Juniper, Dell">
             <p class="text-gray-400 text-xs mt-1">Manufacturer or vendor name</p>
+          </div>
+
+          <!-- Product -->
+          <div class="mb-4">
+            <label for="deviceTemplateProduct" class="block text-sm font-medium text-gray-300 mb-2">
+              Product
+            </label>
+            <input type="text" id="deviceTemplateProduct" name="product" class="input input-bordered w-full" placeholder="e.g., iDRAC, Catalyst, ASR">
+            <p class="text-gray-400 text-xs mt-1">Product line or series</p>
           </div>
 
           <!-- Model -->
@@ -57,8 +66,8 @@
             <label for="deviceTemplateModel" class="block text-sm font-medium text-gray-300 mb-2">
               Model
             </label>
-            <input type="text" id="deviceTemplateModel" name="model" class="input input-bordered w-full" placeholder="e.g., Catalyst 9300, ASR 1000">
-            <p class="text-gray-400 text-xs mt-1">Specific model identifier</p>
+            <input type="text" id="deviceTemplateModel" name="model" class="input input-bordered w-full" placeholder="e.g., 9300, 1000">
+            <p class="text-gray-400 text-xs mt-1">Specific model number</p>
           </div>
 
           <!-- Matching Rules -->
@@ -94,15 +103,6 @@
               Select Profiles
             </button>
             <p class="text-gray-400 text-xs mt-1">Select which profiles to apply when this template is assigned</p>
-          </div>
-
-          <!-- Official Toggle (only shown in edit mode for official templates) -->
-          <div id="officialSection" class="mb-4 hidden">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" id="deviceTemplateOfficial" name="official" class="checkbox checkbox-primary" disabled>
-              <span class="text-gray-300">Official Template</span>
-            </label>
-            <p class="text-gray-400 text-xs mt-1">Official templates cannot be edited or deleted</p>
           </div>
 
           <div class="form-actions pt-6 mt-6 border-t border-gray-700">

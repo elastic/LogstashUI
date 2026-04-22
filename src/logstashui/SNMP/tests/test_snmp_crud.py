@@ -127,7 +127,7 @@ def test_device(db, test_network, test_credential_v2c):
     )
     # Add system profile
     system_profile, _ = Profile.objects.get_or_create(
-        name='system.json',
+        name='generic_system.json',
         defaults={
             'profile_data': {'is_official_placeholder': True},
             'description': 'Official profile'
@@ -499,7 +499,7 @@ class TestDeviceCRUD:
         # Verify device was created
         device = Device.objects.get(name='New Device')
         assert device.ip_address == '192.168.1.101'
-        assert device.profiles.filter(name='system.json').exists()
+        assert device.profiles.filter(name='generic_system.json').exists()
 
     def test_add_device_auto_adds_system_profile(self, authenticated_client, test_network, test_credential_v2c):
         """Test that system profile is automatically added to devices"""
@@ -513,7 +513,7 @@ class TestDeviceCRUD:
         
         # Verify system profile was added
         device = Device.objects.get(name='Device Without Profiles')
-        assert device.profiles.filter(name='system.json').exists()
+        assert device.profiles.filter(name='generic_system.json').exists()
 
     def test_add_device_invalid_ip(self, authenticated_client, test_network, test_credential_v2c):
         """Test adding a device with invalid IP address"""

@@ -55,7 +55,8 @@ urlpatterns = [
 
     # SNMP Device Template endpoints
     path("GetDeviceTemplates/", snmp_crud.GetDeviceTemplates, name="GetDeviceTemplates"),
-    path("GetDeviceTemplate/<int:template_id>/", snmp_crud.GetDeviceTemplate, name="GetDeviceTemplate"),
+    path("GetOfficialDeviceTemplate/<str:template_name>/", snmp_crud.GetOfficialDeviceTemplate, name="GetOfficialDeviceTemplate"),
+    path("GetDeviceTemplate/<str:template_id>/", snmp_crud.GetDeviceTemplate, name="GetDeviceTemplate"),
     path("AddDeviceTemplate/", snmp_crud.AddDeviceTemplate, name="AddDeviceTemplate"),
     path("UpdateDeviceTemplate/<int:template_id>/", snmp_crud.UpdateDeviceTemplate, name="UpdateDeviceTemplate"),
     path("DeleteDeviceTemplate/<int:template_id>/", snmp_crud.DeleteDeviceTemplate, name="DeleteDeviceTemplate"),

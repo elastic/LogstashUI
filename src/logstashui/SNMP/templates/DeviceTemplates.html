@@ -49,211 +49,373 @@
 
   <!-- Device Templates Tab Content -->
   <div id="deviceTemplatesContent">
-    <div class="mt-6">
-      <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-        <table class="table w-full">
-          <thead>
-            <tr class="bg-gray-700 border-b border-gray-600">
-              <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Official</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Template Name</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Description</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Vendor</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Model</th>
-              <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Devices</th>
-              <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="bg-gray-800 divide-y divide-gray-700">
-            {% for template in device_templates %}
-            <tr class="hover:bg-base-300 transition-colors">
-              <!-- Official Column -->
-              <td class="px-6 py-4 whitespace-nowrap text-center">
-                {% if template.official %}
-                <div class="flex flex-col items-center">
-                  <svg class="w-5 h-5 text-yellow-400 mb-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                  <span class="text-xs text-gray-400">Official</span>
-                </div>
-                {% else %}
-                <span class="text-xs text-gray-500">-</span>
-                {% endif %}
-              </td>
-              
-              <!-- Template Name -->
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                {{ template.name }}
-              </td>
-              
-              <!-- Description -->
-              <td class="px-6 py-4 text-sm text-gray-300">
-                <div class="max-w-md truncate" title="{{ template.description }}">
-                  {{ template.description|default:"-" }}
-                </div>
-              </td>
-              
-              <!-- Vendor -->
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                {{ template.vendor|default:"-" }}
-              </td>
-              
-              <!-- Model -->
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                {{ template.model|default:"-" }}
-              </td>
-              
-              <!-- Devices Count -->
-              <td class="px-6 py-4 whitespace-nowrap text-center text-sm">
-                <span class="inline-flex items-center justify-center px-2 py-1 text-xs font-semibold rounded-full {% if template.device_count > 0 %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-400{% endif %}">
-                  {{ template.device_count|default:0 }}
-                </span>
-              </td>
-              
-              <!-- Actions -->
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div class="action-menu relative">
-                  <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                    </svg>
-                  </button>
+    <!-- Search and Filter Bar for Device Templates -->
+    <div class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
+      <div class="flex gap-4 items-end">
+        <!-- Search (48%) -->
+        <div style="flex: 0 0 48%;">
+          <label for="templateSearchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input type="text" id="templateSearchInput" placeholder="Search by name or description..." class="input input-bordered w-full">
+        </div>
+        
+        <!-- Vendor Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="templateVendorFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Vendor</label>
+          <select id="templateVendorFilter" class="select select-bordered w-full">
+            <option value="">All Vendors</option>
+          </select>
+        </div>
+        
+        <!-- Product Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="templateProductFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Product</label>
+          <select id="templateProductFilter" class="select select-bordered w-full">
+            <option value="">All Products</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-                  <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
-                    <div class="px-1 py-1">
-                      <button onclick="viewTemplate({{ template.id }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        View
-                      </button>
-                      {% if not template.official %}
-                      <button onclick="editTemplate({{ template.id }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        Edit
-                      </button>
-                      <button onclick="deleteTemplate({{ template.id }}, '{{ template.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Delete
-                      </button>
-                      {% endif %}
-                    </div>
+    <div class="mt-6">
+      {% if device_templates %}
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+        {% for template in device_templates %}
+        <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-shadow border border-gray-700"
+             data-template-name="{{ template.name|lower }}"
+             data-template-description="{{ template.description|lower }}"
+             data-template-vendor="{{ template.vendor|default:'Unknown' }}"
+             data-template-product="{{ template.product|default:'' }}">
+          <!-- Card Header with Logo and Actions -->
+          <div class="relative p-4 bg-gradient-to-br from-gray-700 to-gray-800 border-b border-gray-600">
+            <!-- 3-dot menu in top-right corner -->
+            <div class="absolute top-2 right-2">
+              <div class="action-menu relative">
+                <button class="action-menu-button p-1 hover:bg-gray-600 rounded transition-colors">
+                  <svg class="h-5 w-5 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                  </svg>
+                </button>
+
+                <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700" role="menu">
+                  <div class="px-1 py-1">
+                    <button onclick="viewTemplate('{{ template.id|default:template.name }}', {{ template.official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View
+                    </button>
+                    {% if not template.official %}
+                    <button onclick="editTemplate({{ template.id }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                    <button onclick="deleteTemplate({{ template.id }}, '{{ template.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                    {% endif %}
                   </div>
                 </div>
-              </td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="7" class="px-6 py-8 text-center text-gray-400">
-                No device templates found. Add your first template to get started!
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+              </div>
+            </div>
+            
+            <!-- Centered Logo -->
+            <div class="flex flex-col items-center">
+              <!-- Vendor Logo -->
+              <div class="flex-shrink-0 w-20 h-20 bg-white rounded-lg p-2.5 flex items-center justify-center">
+                {% if template.vendor|lower == 'cisco' %}
+                  <img src="{% static 'images/cisco.png' %}" alt="Cisco" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'dell' %}
+                  <img src="{% static 'images/dell.png' %}" alt="Dell" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'brocade' %}
+                  <img src="{% static 'images/brocade.png' %}" alt="Brocade" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'hpe' or template.vendor|lower == 'hpe nimble' %}
+                  <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
+                {% else %}
+                  <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Card Body -->
+          <div class="p-4">
+            <!-- Template Name -->
+            <h3 class="text-lg font-semibold text-white mb-2 line-clamp-2 min-h-[3.5rem]" title="{{ template.display_name }}">
+              {{ template.display_name }}
+            </h3>
+            
+            <!-- Description -->
+            <p class="text-sm text-gray-400 mb-3 line-clamp-2 min-h-[2.5rem]" title="{{ template.description }}">
+              {{ template.description|default:"No description provided" }}
+            </p>
+            
+            <!-- Metadata with Official Badge -->
+            <div class="flex items-center gap-2 text-xs mb-3">
+              {% if template.official %}
+              <div class="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full flex-shrink-0" title="Official Template - Provided by the system and cannot be edited or deleted">
+                <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </div>
+              {% endif %}
+              <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span class="text-gray-300 truncate">
+                <span class="font-medium">{{ template.vendor|default:"Unknown" }}</span>
+                {% if template.product %}
+                <span class="text-gray-500">•</span>
+                <span class="text-gray-400">{{ template.product }}</span>
+                {% endif %}
+              </span>
+            </div>
+            
+            <!-- Stats: Model and Devices -->
+            <div class="flex items-center justify-between text-xs pt-2 border-t border-gray-700">
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span class="text-gray-400">Model:</span>
+                <span class="text-white font-medium truncate">{{ template.model|default:"-" }}</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span class="text-gray-400">Devices:</span>
+                <span class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full {% if template.device_count > 0 %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-400{% endif %}">
+                  {{ template.device_count|default:0 }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
       </div>
+      {% else %}
+      <div class="bg-gray-800 rounded-lg shadow-xl p-12 text-center">
+        <svg class="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <p class="text-gray-400 text-lg">No device templates found. Add your first template to get started!</p>
+      </div>
+      {% endif %}
     </div>
   </div>
 
   <!-- Profiles Tab Content -->
   <div id="profilesContent" class="hidden">
-    <div class="mt-6">
-      <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-        <table class="table w-full">
-          <thead>
-            <tr class="bg-gray-700 border-b border-gray-600">
-              <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Official</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profile Name</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Description</th>
-              <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Vendor</th>
-              <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="bg-gray-800 divide-y divide-gray-700">
-            {% for profile in profiles %}
-            <tr class="{% if profile.pinned %}bg-primary/10 border-l-4 border-primary{% endif %} hover:bg-base-300 transition-colors">
-              <!-- Official Column -->
-              <td class="px-6 py-4 whitespace-nowrap text-center">
-                {% if profile.is_official %}
-                <div class="flex flex-col items-center">
-                  <svg class="w-5 h-5 text-yellow-400 mb-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                  <span class="text-xs text-gray-400">Official</span>
-                </div>
-                {% else %}
-                <span class="text-xs text-gray-500">-</span>
-                {% endif %}
-              </td>
-              
-              <!-- Profile Name -->
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                {{ profile.display_name }}
-              </td>
-              
-              <!-- Description -->
-              <td class="px-6 py-4 text-sm text-gray-300">
-                <div class="max-w-md truncate" title="{{ profile.description }}">
-                  {{ profile.description|default:"-" }}
-                </div>
-              </td>
-              
-              <!-- Vendor -->
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                {{ profile.vendor|default:"-" }}
-              </td>
-              
-              <!-- Actions -->
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div class="action-menu relative">
-                  <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                    </svg>
-                  </button>
+    <!-- Search and Filter Bar for Profiles -->
+    <div class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
+      <div class="flex gap-4 items-end">
+        <!-- Search (48%) -->
+        <div style="flex: 0 0 48%;">
+          <label for="profileSearchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input type="text" id="profileSearchInput" placeholder="Search by name or description..." class="input input-bordered w-full">
+        </div>
+        
+        <!-- Vendor Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="profileVendorFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Vendor</label>
+          <select id="profileVendorFilter" class="select select-bordered w-full">
+            <option value="">All Vendors</option>
+          </select>
+        </div>
+        
+        <!-- Product Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="profileProductFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Product</label>
+          <select id="profileProductFilter" class="select select-bordered w-full">
+            <option value="">All Products</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-                  <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
-                    <div class="px-1 py-1">
-                      <button onclick="viewProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        View
-                      </button>
-                      {% if not profile.is_official and profile.name != 'system' and profile.name != 'system.json' %}
-                      <button onclick="editProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        Edit
-                      </button>
-                      <button onclick="deleteProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Delete
-                      </button>
-                      {% endif %}
-                    </div>
+    <div class="mt-6">
+      {% if profiles %}
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+        {% for profile in profiles %}
+        <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-shadow border border-gray-700" 
+             data-profile-name="{{ profile.display_name|lower }}" 
+             data-profile-description="{{ profile.description|lower }}" 
+             data-profile-vendor="{{ profile.vendor|default:'Unknown' }}" 
+             data-profile-product="{{ profile.product|default:'' }}">
+          <!-- Card Header with Logo and Actions -->
+          <div class="relative p-4 bg-gradient-to-br from-gray-700 to-gray-800 border-b border-gray-600">
+            <!-- 3-dot menu in top-right corner -->
+            <div class="absolute top-2 right-2">
+              <div class="action-menu relative">
+                <button class="action-menu-button p-1 hover:bg-gray-600 rounded transition-colors">
+                  <svg class="h-5 w-5 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                  </svg>
+                </button>
+
+                <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700" role="menu">
+                  <div class="px-1 py-1">
+                    <button onclick="viewProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View
+                    </button>
+                    {% if not profile.is_official and profile.name != 'system' and profile.name != 'generic_system.json' %}
+                    <button onclick="editProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                    <button onclick="deleteProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                    {% endif %}
                   </div>
                 </div>
-              </td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="6" class="px-6 py-8 text-center text-gray-400">
-                No profiles found. Add your first custom profile to get started!
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+              </div>
+            </div>
+            
+            <!-- Centered Logo -->
+            <div class="flex flex-col items-center">
+              <!-- Vendor Logo -->
+              <div class="flex-shrink-0 w-20 h-20 bg-white rounded-lg p-2.5 flex items-center justify-center">
+                {% if profile.vendor|lower == 'cisco' %}
+                  <img src="{% static 'images/cisco.png' %}" alt="Cisco" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'dell' %}
+                  <img src="{% static 'images/dell.png' %}" alt="Dell" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'brocade' %}
+                  <img src="{% static 'images/brocade.png' %}" alt="Brocade" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'hpe' or profile.vendor|lower == 'hpe nimble' %}
+                  <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
+                {% else %}
+                  <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Card Body -->
+          <div class="p-4">
+            <!-- Profile Name -->
+            <h3 class="text-lg font-semibold text-white mb-2 line-clamp-2 min-h-[3.5rem]" title="{{ profile.display_name }}">
+              {{ profile.display_name }}
+            </h3>
+            
+            <!-- Description -->
+            <p class="text-sm text-gray-400 mb-3 line-clamp-2 min-h-[2.5rem]" title="{{ profile.description }}">
+              {{ profile.description|default:"No description provided" }}
+            </p>
+            
+            <!-- Metadata with Official Badge -->
+            <div class="flex items-center gap-2 text-xs">
+              {% if profile.is_official %}
+              <div class="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full flex-shrink-0" title="Official Profile - Provided by the system and cannot be edited or deleted">
+                <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </div>
+              {% endif %}
+              <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span class="text-gray-300 truncate">
+                <span class="font-medium">{{ profile.vendor|default:"Unknown" }}</span>
+                {% if profile.product %}
+                <span class="text-gray-500">•</span>
+                <span class="text-gray-400">{{ profile.product }}</span>
+                {% endif %}
+              </span>
+            </div>
+            
+            <!-- Stats: Get, Tables, and Columns -->
+            <div class="flex items-center gap-3 text-xs pt-2 mt-2 border-t border-gray-700">
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span class="text-gray-400">Get:</span>
+                <span class="text-white font-medium" id="get-count-profiles-{{ forloop.counter }}">-</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span class="text-gray-400">Tables:</span>
+                <span class="text-white font-medium" id="table-count-profiles-{{ forloop.counter }}">-</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                <span class="text-gray-400">Columns:</span>
+                <span class="text-white font-medium" id="column-count-profiles-{{ forloop.counter }}">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Store profile data for stats calculation -->
+        <script>
+          (function() {
+            try {
+              const profileDataStr = {{ profile.profile_data|safe }};
+              const profileData = profileDataStr || {};
+              const getCount = profileData && profileData.get ? Object.keys(profileData.get).length : 0;
+              const tableCount = profileData && profileData.table ? Object.keys(profileData.table).length : 0;
+              
+              // Calculate total columns across all tables
+              let columnCount = 0;
+              if (profileData && profileData.table) {
+                Object.values(profileData.table).forEach(table => {
+                  if (table.columns) {
+                    columnCount += Object.keys(table.columns).length;
+                  }
+                });
+              }
+              
+              document.addEventListener('DOMContentLoaded', function() {
+                const getEl = document.getElementById('get-count-profiles-{{ forloop.counter }}');
+                const tableEl = document.getElementById('table-count-profiles-{{ forloop.counter }}');
+                const columnEl = document.getElementById('column-count-profiles-{{ forloop.counter }}');
+                if (getEl) getEl.textContent = getCount;
+                if (tableEl) tableEl.textContent = tableCount;
+                if (columnEl) columnEl.textContent = columnCount;
+              });
+            } catch(e) {
+              console.error('Error parsing profile data:', e);
+              document.addEventListener('DOMContentLoaded', function() {
+                const getEl = document.getElementById('get-count-profiles-{{ forloop.counter }}');
+                const tableEl = document.getElementById('table-count-profiles-{{ forloop.counter }}');
+                const columnEl = document.getElementById('column-count-profiles-{{ forloop.counter }}');
+                if (getEl) getEl.textContent = '0';
+                if (tableEl) tableEl.textContent = '0';
+                if (columnEl) columnEl.textContent = '0';
+              });
+            }
+          })();
+        </script>
+        {% endfor %}
       </div>
+      {% else %}
+      <div class="bg-gray-800 rounded-lg shadow-xl p-12 text-center">
+        <svg class="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <p class="text-gray-400 text-lg">No profiles found. Add your first custom profile to get started!</p>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -320,6 +482,12 @@
     
     // Update add button text
     addItemBtnText.textContent = 'Add Profile';
+    
+    // Initialize profile filters if not already done
+    if (!window.profileFiltersInitialized) {
+      initializeProfileFilters();
+      window.profileFiltersInitialized = true;
+    }
   });
 
   // Add button functionality
@@ -401,12 +569,12 @@
   }, true);
 
   // Device Template action functions
-  function viewTemplate(templateId) {
-    openDeviceTemplateModal(templateId, true);
+  function viewTemplate(templateId, isOfficial) {
+    openDeviceTemplateModal(templateId, true, isOfficial);
   }
 
   function editTemplate(templateId) {
-    openDeviceTemplateModal(templateId, false);
+    openDeviceTemplateModal(templateId, false, false);
   }
 
   async function deleteTemplate(templateId, templateName) {
@@ -474,6 +642,203 @@
         showToast('Error deleting profile: ' + error, 'error');
       });
     }
+  }
+
+  // Device Template Search and Filter Functionality
+  function initializeTemplateFilters() {
+    const templateSearchInput = document.getElementById('templateSearchInput');
+    const templateVendorFilter = document.getElementById('templateVendorFilter');
+    const templateProductFilter = document.getElementById('templateProductFilter');
+    
+    // Get all template cards using data attributes
+    const templateCards = document.querySelectorAll('#deviceTemplatesContent [data-template-vendor]');
+    
+    // Extract unique vendors and products from data attributes
+    const vendors = new Set();
+    const products = new Set();
+    
+    templateCards.forEach(card => {
+      const vendor = card.dataset.templateVendor;
+      const product = card.dataset.templateProduct;
+      
+      if (vendor && vendor !== 'Unknown') {
+        vendors.add(vendor);
+      }
+      
+      if (product && product.trim() !== '') {
+        products.add(product);
+      }
+    });
+    
+    // Clear existing options (except "All" option)
+    templateVendorFilter.innerHTML = '<option value="">All Vendors</option>';
+    templateProductFilter.innerHTML = '<option value="">All Products</option>';
+    
+    // Populate vendor dropdown
+    Array.from(vendors).sort().forEach(vendor => {
+      const option = document.createElement('option');
+      option.value = vendor;
+      option.textContent = vendor;
+      templateVendorFilter.appendChild(option);
+    });
+    
+    // Populate product dropdown
+    Array.from(products).sort().forEach(product => {
+      const option = document.createElement('option');
+      option.value = product;
+      option.textContent = product;
+      templateProductFilter.appendChild(option);
+    });
+    
+    // Filter function
+    function filterTemplates() {
+      const searchTerm = templateSearchInput.value.toLowerCase();
+      const selectedVendor = templateVendorFilter.value;
+      const selectedProduct = templateProductFilter.value;
+      
+      templateCards.forEach(card => {
+        // Get card data from data attributes
+        const name = card.dataset.templateName || '';
+        const description = card.dataset.templateDescription || '';
+        const vendor = card.dataset.templateVendor || '';
+        const product = card.dataset.templateProduct || '';
+        
+        // Check search term
+        const matchesSearch = !searchTerm || 
+          name.includes(searchTerm) || 
+          description.includes(searchTerm) ||
+          vendor.toLowerCase().includes(searchTerm) ||
+          product.toLowerCase().includes(searchTerm);
+        
+        // Check vendor filter
+        const matchesVendor = !selectedVendor || vendor === selectedVendor;
+        
+        // Check product filter
+        const matchesProduct = !selectedProduct || product === selectedProduct;
+        
+        // Show/hide card
+        if (matchesSearch && matchesVendor && matchesProduct) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+    
+    // Add event listeners
+    if (templateSearchInput) {
+      templateSearchInput.addEventListener('input', filterTemplates);
+    }
+    if (templateVendorFilter) {
+      templateVendorFilter.addEventListener('change', filterTemplates);
+    }
+    if (templateProductFilter) {
+      templateProductFilter.addEventListener('change', filterTemplates);
+    }
+  }
+
+  // Initialize template filters on page load
+  initializeTemplateFilters();
+
+  // Profile Search and Filter Functionality
+  function initializeProfileFilters() {
+    // Add a small delay to ensure DOM is fully rendered
+    setTimeout(() => {
+      const profileSearchInput = document.getElementById('profileSearchInput');
+      const profileVendorFilter = document.getElementById('profileVendorFilter');
+      const profileProductFilter = document.getElementById('profileProductFilter');
+      
+      // Get all profile cards using data attributes
+      const profileCards = document.querySelectorAll('#profilesContent [data-profile-vendor]');
+      
+      console.log('Found profile cards:', profileCards.length);
+      
+      // Extract unique vendors and products from data attributes
+      const vendors = new Set();
+      const products = new Set();
+      
+      profileCards.forEach(card => {
+        const vendor = card.dataset.profileVendor;
+        const product = card.dataset.profileProduct;
+        
+        if (vendor && vendor !== 'Unknown') {
+          vendors.add(vendor);
+        }
+        
+        if (product && product.trim() !== '') {
+          products.add(product);
+        }
+      });
+      
+      console.log('Found vendors:', Array.from(vendors));
+      console.log('Found products:', Array.from(products));
+    
+      // Clear existing options (except "All" option)
+      profileVendorFilter.innerHTML = '<option value="">All Vendors</option>';
+      profileProductFilter.innerHTML = '<option value="">All Products</option>';
+      
+      // Populate vendor dropdown
+      Array.from(vendors).sort().forEach(vendor => {
+        const option = document.createElement('option');
+        option.value = vendor;
+        option.textContent = vendor;
+        profileVendorFilter.appendChild(option);
+      });
+      
+      // Populate product dropdown
+      Array.from(products).sort().forEach(product => {
+        const option = document.createElement('option');
+        option.value = product;
+        option.textContent = product;
+        profileProductFilter.appendChild(option);
+      });
+      
+      // Filter function
+      function filterProfiles() {
+        const searchTerm = profileSearchInput.value.toLowerCase();
+        const selectedVendor = profileVendorFilter.value;
+        const selectedProduct = profileProductFilter.value;
+        
+        profileCards.forEach(card => {
+          // Get card data from data attributes
+          const name = card.dataset.profileName || '';
+          const description = card.dataset.profileDescription || '';
+          const vendor = card.dataset.profileVendor || '';
+          const product = card.dataset.profileProduct || '';
+          
+          // Check search term
+          const matchesSearch = !searchTerm || 
+            name.includes(searchTerm) || 
+            description.includes(searchTerm) ||
+            vendor.toLowerCase().includes(searchTerm) ||
+            product.toLowerCase().includes(searchTerm);
+          
+          // Check vendor filter
+          const matchesVendor = !selectedVendor || vendor === selectedVendor;
+          
+          // Check product filter
+          const matchesProduct = !selectedProduct || product === selectedProduct;
+          
+          // Show/hide card
+          if (matchesSearch && matchesVendor && matchesProduct) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      }
+      
+      // Add event listeners
+      if (profileSearchInput) {
+        profileSearchInput.addEventListener('input', filterProfiles);
+      }
+      if (profileVendorFilter) {
+        profileVendorFilter.addEventListener('change', filterProfiles);
+      }
+      if (profileProductFilter) {
+        profileProductFilter.addEventListener('change', filterProfiles);
+      }
+    }, 100); // 100ms delay
   }
 </script>
 

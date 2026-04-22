@@ -59,12 +59,7 @@ function openDeviceTemplateModal(templateId = null, viewMode = false) {
         document.getElementById('deviceTemplateDescription').value = data.description || '';
         document.getElementById('deviceTemplateVendor').value = data.vendor || '';
         document.getElementById('deviceTemplateModel').value = data.model || '';
-
-        // Show official section if template is official
-        if (data.official) {
-          document.getElementById('officialSection').classList.remove('hidden');
-          document.getElementById('deviceTemplateOfficial').checked = true;
-        }
+        document.getElementById('deviceTemplateProduct').value = data.product || '';
 
         // Load matching rules
         if (data.matching_rules && data.matching_rules.length > 0) {
@@ -91,7 +86,6 @@ function openDeviceTemplateModal(templateId = null, viewMode = false) {
     saveBtn.classList.remove('hidden');
     saveBtn.textContent = 'Save Template';
     document.getElementById('deviceTemplateId').value = '';
-    document.getElementById('officialSection').classList.add('hidden');
     disableFormInputs(false);
     
     // Add one empty matching rule by default
@@ -118,6 +112,20 @@ function disableFormInputs(disabled) {
     } else {
       addRuleBtn.classList.remove('btn-disabled');
     }
+  }
+  
+  // Disable remove buttons for matching rules
+  const matchingRulesContainer = document.getElementById('matchingRulesContainer');
+  if (matchingRulesContainer) {
+    const removeButtons = matchingRulesContainer.querySelectorAll('button');
+    removeButtons.forEach(btn => {
+      btn.disabled = disabled;
+      if (disabled) {
+        btn.classList.add('btn-disabled', 'opacity-50', 'cursor-not-allowed');
+      } else {
+        btn.classList.remove('btn-disabled', 'opacity-50', 'cursor-not-allowed');
+      }
+    });
   }
 }
 
@@ -174,6 +182,12 @@ function closeProfileSelectorModal() {
   
   // Reset temp selection
   tempSelectedProfiles = [];
+  
+  // Clear search input
+  const searchInput = document.getElementById('profileSelectorSearchInput');
+  if (searchInput) {
+    searchInput.value = '';
+  }
 }
 
 // Apply profile selection from modal
@@ -188,6 +202,9 @@ function applyProfileSelection() {
   closeProfileSelectorModal();
 }
 
+// Store all profiles for filtering
+let allProfilesData = [];
+
 // Load profiles for selector modal
 function loadProfilesForSelector() {
   const container = document.getElementById('profileSelectorContainer');
@@ -195,9 +212,10 @@ function loadProfilesForSelector() {
   fetch('/SNMP/GetAllProfiles/')
     .then(response => response.json())
     .then(data => {
-      container.innerHTML = '';
-      
       const profiles = data.profiles || [];
+      
+      // Store profiles globally for filtering
+      allProfilesData = profiles;
       
       // Populate cache
       profiles.forEach(profile => {
@@ -209,46 +227,87 @@ function loadProfilesForSelector() {
         return;
       }
 
-      // Separate official and custom profiles
-      const officialProfiles = profiles.filter(p => p.is_official);
-      const customProfiles = profiles.filter(p => !p.is_official);
-
-      // Add official profiles section
-      if (officialProfiles.length > 0) {
-        const officialHeader = document.createElement('div');
-        officialHeader.className = 'text-sm font-semibold text-gray-300 mb-2';
-        officialHeader.textContent = 'Official Profiles';
-        container.appendChild(officialHeader);
-
-        officialProfiles.forEach(profile => {
-          const label = createProfileCheckbox(profile);
-          container.appendChild(label);
-        });
-      }
-
-      // Add custom profiles section
-      if (customProfiles.length > 0) {
-        if (officialProfiles.length > 0) {
-          const divider = document.createElement('div');
-          divider.className = 'border-t border-gray-600 my-3';
-          container.appendChild(divider);
-        }
-
-        const customHeader = document.createElement('div');
-        customHeader.className = 'text-sm font-semibold text-gray-300 mb-2';
-        customHeader.textContent = 'Custom Profiles';
-        container.appendChild(customHeader);
-
-        customProfiles.forEach(profile => {
-          const label = createProfileCheckbox(profile);
-          container.appendChild(label);
-        });
-      }
+      // Render profiles
+      renderProfilesByVendor(profiles);
     })
     .catch(error => {
       console.error('Error loading profiles:', error);
       container.innerHTML = '<div class="text-red-400 text-sm">Error loading profiles</div>';
     });
+}
+
+// Render profiles organized by vendor
+function renderProfilesByVendor(profiles) {
+  const container = document.getElementById('profileSelectorContainer');
+  container.innerHTML = '';
+  
+  if (profiles.length === 0) {
+    container.innerHTML = '<div class="text-gray-400 text-sm">No profiles found</div>';
+    return;
+  }
+  
+  // Group profiles by vendor
+  const profilesByVendor = {};
+  profiles.forEach(profile => {
+    const vendor = profile.vendor || 'Unknown';
+    if (!profilesByVendor[vendor]) {
+      profilesByVendor[vendor] = [];
+    }
+    profilesByVendor[vendor].push(profile);
+  });
+  
+  // Sort vendors alphabetically
+  const sortedVendors = Object.keys(profilesByVendor).sort();
+  
+  // Render each vendor section
+  sortedVendors.forEach((vendor, index) => {
+    // Add divider between sections (except before first)
+    if (index > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'border-t border-gray-600 my-4';
+      container.appendChild(divider);
+    }
+    
+    // Vendor header
+    const vendorHeader = document.createElement('div');
+    vendorHeader.className = 'text-sm font-semibold text-gray-300 mb-2 px-2';
+    vendorHeader.textContent = vendor;
+    container.appendChild(vendorHeader);
+    
+    // Render profiles for this vendor
+    profilesByVendor[vendor].forEach(profile => {
+      const label = createProfileCheckbox(profile);
+      container.appendChild(label);
+    });
+  });
+}
+
+// Filter profiles based on search
+function filterProfiles(searchTerm) {
+  const term = searchTerm.toLowerCase();
+  
+  if (!term) {
+    // No search term, show all profiles
+    renderProfilesByVendor(allProfilesData);
+    return;
+  }
+  
+  // Filter profiles
+  const filtered = allProfilesData.filter(profile => {
+    const name = (profile.display_name || profile.name || '').toLowerCase();
+    const description = (profile.description || '').toLowerCase();
+    const vendor = (profile.vendor || '').toLowerCase();
+    const product = (profile.product || '').toLowerCase();
+    const model = (profile.model || '').toLowerCase();
+    
+    return name.includes(term) || 
+           description.includes(term) || 
+           vendor.includes(term) || 
+           product.includes(term) ||
+           model.includes(term);
+  });
+  
+  renderProfilesByVendor(filtered);
 }
 
 // Store profile data for display
@@ -391,16 +450,41 @@ function createProfileCheckbox(profile) {
   const textDiv = document.createElement('div');
   textDiv.className = 'flex-1';
   
-  const nameSpan = document.createElement('div');
+  // Name row with official badge
+  const nameRow = document.createElement('div');
+  nameRow.className = 'flex items-center gap-2';
+  
+  // Official star badge
+  if (profile.is_official) {
+    const starBadge = document.createElement('div');
+    starBadge.className = 'flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full flex-shrink-0';
+    starBadge.title = 'Official Profile';
+    starBadge.innerHTML = `
+      <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+      </svg>
+    `;
+    nameRow.appendChild(starBadge);
+  }
+  
+  const nameSpan = document.createElement('span');
   nameSpan.className = 'text-sm font-medium text-gray-200';
   nameSpan.textContent = profile.display_name || profile.name;
+  nameRow.appendChild(nameSpan);
   
-  const detailsSpan = document.createElement('div');
-  detailsSpan.className = 'text-xs text-gray-400';
-  detailsSpan.textContent = profile.vendor || 'No vendor specified';
+  // Metadata row
+  const metadataRow = document.createElement('div');
+  metadataRow.className = 'text-xs text-gray-400 mt-1';
   
-  textDiv.appendChild(nameSpan);
-  textDiv.appendChild(detailsSpan);
+  const metadataParts = [];
+  if (profile.vendor) metadataParts.push(profile.vendor);
+  if (profile.product) metadataParts.push(profile.product);
+  if (profile.model) metadataParts.push(`Model: ${profile.model}`);
+  
+  metadataRow.textContent = metadataParts.length > 0 ? metadataParts.join(' • ') : 'No metadata';
+  
+  textDiv.appendChild(nameRow);
+  textDiv.appendChild(metadataRow);
   
   label.appendChild(checkbox);
   label.appendChild(textDiv);

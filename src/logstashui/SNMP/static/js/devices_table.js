@@ -148,14 +148,12 @@ function renderDevices(devices) {
       year: 'numeric'
     });
     
-    // Render profile pills
-    let profilesHtml = '';
-    if (device.profiles && device.profiles.length > 0) {
-      profilesHtml = device.profiles.map(profile => 
-        `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-1 mb-1">${escapeHtml(profile)}</span>`
-      ).join('');
+    // Render device template badge
+    let templateHtml = '';
+    if (device.device_template_name) {
+      templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(device.device_template_name)}</span>`;
     } else {
-      profilesHtml = '<span class="text-gray-500 italic">None</span>';
+      templateHtml = '<span class="text-gray-500 italic">None</span>';
     }
     
     row.innerHTML = `
@@ -188,8 +186,8 @@ function renderDevices(devices) {
           </div>
         ` : '<span class="text-gray-500 italic">None</span>'}
       </td>
-      <td class="px-6 py-4 text-sm text-gray-300">
-        <div class="flex flex-wrap">${profilesHtml}</div>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+        ${templateHtml}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${createdDate}</td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

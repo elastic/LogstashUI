@@ -1,8 +1,9 @@
 {
   "name": "network_interfaces",
   "description": "[Official] Generic profile for collecting network interfaces",
-  "vendor": "Generic",
-  "pinned": true,
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
   "get": {},
   "walk": {},
   "table": {

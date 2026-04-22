@@ -574,15 +574,21 @@ def _get_device_profiles(device, profile_cache=None):
     Returns a tuple: (profile_ids_tuple, merged_oids_dict)
 
     Args:
-        device: Device object with prefetched profiles
+        device: Device object with prefetched device_template and its profiles
         profile_cache: Optional dict to cache loaded profile data
     """
 
     if profile_cache is None:
         profile_cache = _OFFICIAL_PROFILE_CACHE
 
-    # Get all profiles for this device (should already be prefetched)
-    profiles = list(device.profiles.all())
+    # Get all profiles from the device's template (should already be prefetched)
+    # If no template is assigned, fall back to direct profiles (deprecated)
+    if device.device_template:
+        profiles = list(device.device_template.profiles.all())
+        logger.debug(f"Device '{device.name}' using template '{device.device_template.name}' with {len(profiles)} profiles")
+    else:
+        profiles = list(device.profiles.all())
+        logger.debug(f"Device '{device.name}' has no template, using {len(profiles)} direct profiles")
 
     if not profiles:
         return (tuple(), {'get': {}, 'walk': {}, 'table': {}})
@@ -847,7 +853,7 @@ def _load_system_profile_oids():
     Load the System profile OIDs for discovery.
     Returns a dictionary with 'get', 'walk', 'table' keys.
     """
-    system_profile_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles', 'system.json')
+    system_profile_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles', 'generic_system.json')
 
     try:
         with open(system_profile_path, 'r') as f:
@@ -1308,7 +1314,10 @@ def GetDeployDiff(request):
         networks = Network.objects.select_related('connection', 'credential', 'discovery_credential').prefetch_related(
             Prefetch(
                 'devices',
-                queryset=Device.objects.select_related('credential').prefetch_related('profiles')
+                queryset=Device.objects.select_related('credential', 'device_template').prefetch_related(
+                    'device_template__profiles',  # Prefetch profiles from device template
+                    'profiles'  # Keep for backward compatibility with devices without templates
+                )
             )
         ).all()
 
@@ -1619,8 +1628,13 @@ def DeployConfiguration(request):
                     "connection": network.connection
                 }
 
-                # Get all devices for this network
-                devices = Device.objects.filter(network=network).select_related('credential')
+                # Get all devices for this network with device template and profiles prefetched
+                devices = Device.objects.filter(network=network).select_related(
+                    'credential', 'device_template'
+                ).prefetch_related(
+                    'device_template__profiles',  # Prefetch profiles from device template
+                    'profiles'  # Keep for backward compatibility with devices without templates
+                )
 
                 for device in devices:
                     if not device.credential:
@@ -2035,10 +2049,11 @@ def GetDevices(request):
         sort_by = request.GET.get('sort_by', '-created_at')
 
         # Start with all devices - only fetch needed fields for performance
-        queryset = Device.objects.select_related('credential', 'network').prefetch_related('profiles').only(
+        queryset = Device.objects.select_related('credential', 'network', 'device_template').prefetch_related('profiles').only(
             'id', 'name', 'ip_address', 'port', 'retries', 'timeout', 'created_at',
             'credential__id', 'credential__name',
-            'network__id', 'network__name'
+            'network__id', 'network__name',
+            'device_template__id', 'device_template__name'
         )
 
         # Apply search filter (name or IP address)
@@ -2096,6 +2111,8 @@ def GetDevices(request):
                 'credential_name': device.credential.name if device.credential else None,
                 'network_id': device.network.id if device.network else None,
                 'network_name': device.network.name if device.network else None,
+                'device_template_id': device.device_template.id if device.device_template else None,
+                'device_template_name': device.device_template.name if device.device_template else None,
                 'profiles': profile_names,
                 'created_at': device.created_at.isoformat(),
             })
@@ -2149,30 +2166,8 @@ def AddDevice(request):
         # Save (this will trigger validation)
         device.save()
 
-        # Ensure 'system' profile is always included
-        if not profile_names:
-            profile_names = []
-        if 'system' not in profile_names:
-            profile_names.insert(0, 'system')  # Add system as first profile
-
-        # Add profiles (ManyToMany must be set after save)
-        for profile_name in profile_names:
-            # Check if this is an official profile (exists as JSON file)
-            official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-            is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
-
-            # Determine the stored name: official profiles get .json extension, custom profiles don't
-            stored_name = f"{profile_name}.json" if is_official else profile_name
-
-            # Get or create the profile entry
-            profile, created = Profile.objects.get_or_create(
-                name=stored_name,
-                defaults={
-                    'profile_data': {'is_official_placeholder': is_official},
-                    'description': f'{"Official" if is_official else "Custom"} profile'
-                }
-            )
-            device.profiles.add(profile)
+        # Note: Profiles are now managed through device templates, not directly on devices
+        # The device_template relationship handles profile assignment
 
         return JsonResponse({'id': device.id, 'message': 'Device created successfully!'}, status=200)
 
@@ -2226,33 +2221,8 @@ def UpdateDevice(request, device_id):
         # Save (this will trigger validation)
         device.save()
 
-        # Update profiles (ManyToMany)
-        profile_names = request.POST.getlist('profiles')
-
-        # Ensure 'system' profile is always included
-        if not profile_names:
-            profile_names = []
-        if 'system' not in profile_names:
-            profile_names.insert(0, 'system')  # Add system as first profile
-
-        device.profiles.clear()  # Clear existing profiles
-        for profile_name in profile_names:
-            # Check if this is an official profile (exists as JSON file)
-            official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-            is_official = os.path.exists(os.path.join(official_profiles_dir, f"{profile_name}.json"))
-
-            # Determine the stored name: official profiles get .json extension, custom profiles don't
-            stored_name = f"{profile_name}.json" if is_official else profile_name
-
-            # Get or create the profile entry
-            profile, created = Profile.objects.get_or_create(
-                name=stored_name,
-                defaults={
-                    'profile_data': {'is_official_placeholder': is_official},
-                    'description': f'{"Official" if is_official else "Custom"} profile'
-                }
-            )
-            device.profiles.add(profile)
+        # Note: Profiles are now managed through device templates, not directly on devices
+        # The device_template relationship handles profile assignment
 
         return JsonResponse({'id': device.id, 'message': 'Device updated successfully!'}, status=200)
 
@@ -2344,9 +2314,8 @@ def GetOfficialProfile(request, profile_name):
             'success': True,
             'name': profile_data.get('name', profile_name),
             'description': profile_data.get('description', ''),
-            'type': profile_data.get('type', ''),
             'vendor': profile_data.get('vendor', ''),
-            'pinned': profile_data.get('pinned', False),
+            'product': profile_data.get('product', ''),
             'profile_data': profile_data
         }, status=200)
 
@@ -2362,8 +2331,8 @@ def GetProfile(request, profile_name):
             'success': True,
             'name': profile.name,
             'description': profile.description,
-            'type': profile.type,
             'vendor': profile.vendor,
+            'product': profile.product,
             'profile_data': profile.profile_data
         }, status=200)
 
@@ -2381,8 +2350,8 @@ def AddProfile(request):
 
         name = data.get('name')
         description = data.get('description', '')
-        profile_type = data.get('type', '')
         vendor = data.get('vendor', '')
+        product = data.get('product', '')
         profile_data = data.get('profile_data', {})
 
         # Validate required fields
@@ -2397,8 +2366,8 @@ def AddProfile(request):
         profile = Profile(
             name=name,
             description=description,
-            type=profile_type,
             vendor=vendor,
+            product=product,
             profile_data=profile_data
         )
         profile.save()
@@ -2427,8 +2396,8 @@ def UpdateProfile(request, profile_name):
         # Update fields
         new_name = data.get('name', profile.name)
         profile.description = data.get('description', profile.description)
-        profile.type = data.get('type', profile.type)
         profile.vendor = data.get('vendor', profile.vendor)
+        profile.product = data.get('product', profile.product)
         profile.profile_data = data.get('profile_data', profile.profile_data)
 
         # If name changed, check for conflicts
@@ -2458,7 +2427,7 @@ def DeleteProfile(request, profile_name):
     """Delete a user profile"""
     try:
         # Prevent deletion of the system profile
-        if profile_name in ['system', 'system.json']:
+        if profile_name in ['system', 'generic_system.json']:
             return JsonResponse({
                 'success': False,
                 'message': 'The system profile cannot be deleted as it is required for all devices'
@@ -3213,18 +3182,59 @@ def decide_visualizations(device, es):
 
 # Device Template CRUD Operations
 
-def GetDeviceTemplates(request):
-    """Get all device templates for dropdown selection"""
+def GetOfficialDeviceTemplate(request, template_name):
+    """Get an official device template from JSON file"""
     try:
-        templates = DeviceTemplate.objects.all().order_by('name')
-        
+        official_templates_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_device_templates')
+        template_path = os.path.join(official_templates_dir, f"{template_name}.json")
+
+        if not os.path.exists(template_path):
+            return JsonResponse({'error': 'Device template not found'}, status=404)
+
+        with open(template_path, 'r') as f:
+            template_data = json.load(f)
+
+        # Get profile names and convert to IDs if they exist in the database
+        profile_names = template_data.get('profiles', [])
+        profile_ids = []
+        for profile_name in profile_names:
+            try:
+                # Try to find the profile by name (could be official or user profile)
+                profile = Profile.objects.get(name=profile_name)
+                profile_ids.append(profile.id)
+            except Profile.DoesNotExist:
+                # If profile doesn't exist in DB, it's likely an official profile
+                # We'll just use the name as-is
+                profile_ids.append(profile_name)
+
+        return JsonResponse({
+            'name': template_data.get('name', template_name),
+            'description': template_data.get('description', ''),
+            'vendor': template_data.get('vendor', ''),
+            'model': template_data.get('model', ''),
+            'product': template_data.get('product', ''),
+            'matching_rules': template_data.get('matching_rules', []),
+            'official': True,
+            'profiles': profile_ids
+        })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def GetDeviceTemplates(request):
+    """Get all device templates for dropdown selection (official templates are synced to database)"""
+    try:
         templates_list = []
-        for template in templates:
+        
+        # Load all templates from database (including synced official templates)
+        for template in DeviceTemplate.objects.all().order_by('name'):
             templates_list.append({
                 'id': template.id,
                 'name': template.name,
                 'vendor': template.vendor,
                 'model': template.model,
+                'product': template.product,
                 'official': template.official
             })
         
@@ -3234,25 +3244,29 @@ def GetDeviceTemplates(request):
 
 
 def GetDeviceTemplate(request, template_id):
-    """Get a specific device template by ID"""
+    """Get a specific device template by ID (or name for official templates)"""
     try:
-        template = DeviceTemplate.objects.get(id=template_id)
-        
-        # Get profile IDs
-        profile_ids = list(template.profiles.values_list('id', flat=True))
-        
-        return JsonResponse({
-            'id': template.id,
-            'name': template.name,
-            'description': template.description,
-            'vendor': template.vendor,
-            'model': template.model,
-            'matching_rules': template.matching_rules,
-            'official': template.official,
-            'profiles': profile_ids
-        })
-    except DeviceTemplate.DoesNotExist:
-        return JsonResponse({'error': 'Device template not found'}, status=404)
+        # First, try to get from database by ID
+        try:
+            template = DeviceTemplate.objects.get(id=int(template_id))
+            
+            # Get profile IDs
+            profile_ids = list(template.profiles.values_list('id', flat=True))
+            
+            return JsonResponse({
+                'id': template.id,
+                'name': template.name,
+                'description': template.description,
+                'vendor': template.vendor,
+                'model': template.model,
+                'product': template.product,
+                'matching_rules': template.matching_rules,
+                'official': template.official,
+                'profiles': profile_ids
+            })
+        except (ValueError, DeviceTemplate.DoesNotExist):
+            # If not found by ID, try to load as official template by name
+            return GetOfficialDeviceTemplate(request, template_id)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -3269,6 +3283,7 @@ def AddDeviceTemplate(request):
         description = request.POST.get('description', '')
         vendor = request.POST.get('vendor')
         model = request.POST.get('model', '')
+        product = request.POST.get('product', '')
         matching_rules_json = request.POST.get('matching_rules', '[]')
         profiles_json = request.POST.get('profiles', '[]')
         
@@ -3288,6 +3303,7 @@ def AddDeviceTemplate(request):
             description=description,
             vendor=vendor,
             model=model,
+            product=product,
             matching_rules=matching_rules,
             official=False
         )
@@ -3335,6 +3351,7 @@ def UpdateDeviceTemplate(request, template_id):
         template.description = request.POST.get('description', template.description)
         template.vendor = request.POST.get('vendor', template.vendor)
         template.model = request.POST.get('model', template.model)
+        template.product = request.POST.get('product', template.product)
         
         # Update matching rules
         matching_rules_json = request.POST.get('matching_rules')

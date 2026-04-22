@@ -1,0 +1,18 @@
+{
+  "name": "dell_idrac_power_supply",
+  "description": "Power Supply details",
+  "product": "iDRAC",
+  "vendor": "Dell",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "idracPowerSupplyTable": {
+      "columns": {
+        "psuIndex": "1.3.6.1.4.1.674.10892.5.4.600.12.1.1",
+        "psuLocation": "1.3.6.1.4.1.674.10892.5.4.600.12.1.7",
+        "psuStatus": "1.3.6.1.4.1.674.10892.5.4.600.12.1.5"
+      }
+    }
+  }
+}

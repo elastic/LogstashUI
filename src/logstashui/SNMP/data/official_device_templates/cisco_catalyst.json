@@ -1,0 +1,18 @@
+{
+  "name": "cisco_catalyst",
+  "description": "Hardware health and adjacency",
+  "vendor": "Cisco",
+  "product": "Catalyst",
+  "model": "Any",
+  "profiles": [
+    "cisco_cdp",
+    "cisco_fans",
+    "cisco_sensors",
+    "cisco_system_metrics",
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "catalyst"
+  ]
+}

@@ -29,6 +29,17 @@
         <!-- Pills will be added here dynamically -->
       </div>
       
+      <!-- Search Bar -->
+      <div class="mb-4">
+        <input 
+          type="text" 
+          id="profileSelectorSearchInput" 
+          placeholder="Search profiles by name, description, vendor, product, or model..." 
+          class="input input-bordered w-full"
+          oninput="filterProfiles(this.value)"
+        />
+      </div>
+      
       <!-- Profiles Selection Container -->
       <div id="profileSelectorContainer" class="border border-gray-600 rounded-lg p-4 max-h-96 overflow-y-auto bg-gray-700/30">
         <!-- Profiles checkboxes will be loaded here -->

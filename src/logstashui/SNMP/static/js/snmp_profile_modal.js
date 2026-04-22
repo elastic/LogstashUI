@@ -43,6 +43,7 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     document.getElementById('profileName').readOnly = isReadOnly;
     document.getElementById('profileDescription').readOnly = isReadOnly;
     document.getElementById('profileVendor').readOnly = isReadOnly;
+    document.getElementById('profileProduct').readOnly = isReadOnly;
     
     // Hide/disable save button for official profiles or view mode
     if (isReadOnly) {
@@ -73,6 +74,7 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     document.getElementById('profileName').readOnly = false;
     document.getElementById('profileDescription').readOnly = false;
     document.getElementById('profileVendor').readOnly = false;
+    document.getElementById('profileProduct').readOnly = false;
     saveBtn.style.display = '';
     
     // Enable add buttons
@@ -113,6 +115,7 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       document.getElementById('profileName').value = data.name || profileName;
       document.getElementById('profileDescription').value = data.description || '';
       document.getElementById('profileVendor').value = data.vendor || '';
+      document.getElementById('profileProduct').value = data.product || '';
       
       // Load Get section
       if (data.profile_data && data.profile_data.get) {
@@ -496,8 +499,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const profileData = {
         name: profileName,
         description: formData.get('description'),
-        type: formData.get('type'),
         vendor: formData.get('vendor'),
+        product: formData.get('product'),
         profile_data: {}
       };
       
