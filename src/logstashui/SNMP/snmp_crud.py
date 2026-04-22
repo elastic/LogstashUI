@@ -1296,7 +1296,7 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
     return output_components
 
 
-def GetCommitDiff(request):
+def GetDeployDiff(request):
     """Get diff for all network pipeline configurations"""
     try:
         # Clear the official profile cache to ensure we load fresh data from disk
@@ -1579,13 +1579,13 @@ def GetCommitDiff(request):
         })
 
     except Exception as e:
-        logger.error(f"Error in GetCommitDiff: {str(e)}", exc_info=True)
+        logger.error(f"Error in GetDeployDiff: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @require_admin_role
-def CommitConfiguration(request):
-    """Commit SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
+def DeployConfiguration(request):
+    """Deploy SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
     try:
         # Clear the official profile cache to ensure we load fresh data from disk
         # This is important when profile JSON files have been edited
@@ -1921,7 +1921,7 @@ def CommitConfiguration(request):
             if errors:
                 return JsonResponse({
                     'success': False,
-                    'error': 'Failed to commit any pipelines. Errors: ' + '; '.join(errors)
+                    'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
                 }, status=500)
             else:
                 # No changes needed - all pipelines are already up to date
@@ -1942,7 +1942,7 @@ def CommitConfiguration(request):
         if pipelines_deleted > 0:
             message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
 
-        message = "Successfully committed: " + ", ".join(message_parts)
+        message = "Successfully deployed: " + ", ".join(message_parts)
 
         if errors:
             message += f". Warnings: {'; '.join(errors)}"
@@ -1957,7 +1957,7 @@ def CommitConfiguration(request):
         })
 
     except Exception as e:
-        logger.error(f"Unexpected error in CommitConfiguration: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error in DeployConfiguration: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': f'Unexpected error: {str(e)}'
@@ -1965,8 +1965,8 @@ def CommitConfiguration(request):
 
 
 @require_admin_role
-def GenerateCommitConfiguration(request):
-    """Commit SNMP configuration - builds and deploys Logstash pipelines"""
+def GenerateDeployConfiguration(request):
+    """Deploy SNMP configuration - builds and deploys Logstash pipelines"""
     try:
         # Query all networks
         networks = Network.objects.all()
@@ -2013,7 +2013,7 @@ def GenerateCommitConfiguration(request):
 
         return JsonResponse({
             'success': True,
-            'message': f'Configuration commit initiated for {networks.count()} network(s).'
+            'message': f'Configuration deployment initiated for {networks.count()} network(s).'
         })
 
     except Exception as e:

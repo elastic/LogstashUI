@@ -118,16 +118,16 @@ async function prepareSnmpDiffModal() {
     document.getElementById('snmpDiffLoading').classList.remove('hidden');
     document.getElementById('snmpDiffContainer').classList.add('hidden');
     
-    // Reset the commit button to enabled state (in case it was disabled from a previous commit)
-    const confirmButton = document.getElementById('confirmCommitButton');
+    // Reset the deploy button to enabled state (in case it was disabled from a previous deployment)
+    const confirmButton = document.getElementById('confirmDeployButton');
     confirmButton.classList.remove('hidden');
     confirmButton.disabled = false;
-    confirmButton.textContent = 'Confirm & Commit Changes';
+    confirmButton.textContent = 'Confirm & Deploy Changes';
     confirmButton.classList.remove('opacity-50', 'cursor-not-allowed');
 
     try {
         // Fetch diff data from the server
-        const response = await fetch('/SNMP/GetCommitDiff/', {
+        const response = await fetch('/SNMP/GetDeployDiff/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -357,7 +357,7 @@ function displayNetworkDiffs(networks) {
                         </div>
                         <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
                             <div class="mb-2" style="flex-shrink: 0;">
-                                <h5 class="text-sm font-semibold text-white">New Pipeline (After Commit)</h5>
+                                <h5 class="text-sm font-semibold text-white">New Pipeline (After Deploy)</h5>
                             </div>
                             <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
                                 <div class="p-2 text-sm text-gray-300 font-mono">${newHtml}</div>
@@ -530,7 +530,7 @@ function displayNetworkDiffs(networks) {
                         </div>
                         <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
                             <div class="mb-2" style="flex-shrink: 0;">
-                                <h5 class="text-sm font-semibold text-white">${trapPipeline.action === 'delete' ? 'Pipeline Will Be Deleted' : 'New Trap Pipeline (After Commit)'}</h5>
+                                <h5 class="text-sm font-semibold text-white">${trapPipeline.action === 'delete' ? 'Pipeline Will Be Deleted' : 'New Trap Pipeline (After Deploy)'}</h5>
                             </div>
                             <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
                                 <div class="p-2 text-sm text-gray-300 font-mono">${trapNewHtml}</div>
@@ -704,7 +704,7 @@ function displayNetworkDiffs(networks) {
                             </div>
                             <div class="p-4 bg-gray-700" style="display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0;">
                                 <div class="mb-2" style="flex-shrink: 0;">
-                                    <h5 class="text-sm font-semibold text-white">${discoveryPipeline.action === 'delete' ? 'Pipeline Will Be Deleted' : 'New Discovery Pipeline (After Commit)'}</h5>
+                                    <h5 class="text-sm font-semibold text-white">${discoveryPipeline.action === 'delete' ? 'Pipeline Will Be Deleted' : 'New Discovery Pipeline (After Deploy)'}</h5>
                                 </div>
                                 <div class="bg-gray-800 rounded border border-gray-600 network-diff-scroll-panel" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; min-width: 0;">
                                     <div class="p-2 text-sm text-gray-300 font-mono">${discoveryNewHtml}</div>
@@ -727,15 +727,15 @@ function displayNetworkDiffs(networks) {
                     </svg>
                 </div>
                 <h3 class="text-xl font-semibold text-white mb-2">No Changes Detected</h3>
-                <p class="text-gray-400">All network pipelines are up to date. No changes need to be committed.</p>
+                <p class="text-gray-400">All network pipelines are up to date. No changes need to be deployed.</p>
             </div>
         `;
 
-        // Disable the commit button since there's nothing to commit
-        const commitButton = document.getElementById('confirmCommitButton');
-        if (commitButton) {
-            commitButton.disabled = true;
-            commitButton.classList.add('opacity-50', 'cursor-not-allowed');
+        // Disable the deploy button since there's nothing to deploy
+        const deployButton = document.getElementById('confirmDeployButton');
+        if (deployButton) {
+            deployButton.disabled = true;
+            deployButton.classList.add('opacity-50', 'cursor-not-allowed');
         }
         return;
     }
@@ -806,19 +806,19 @@ function displayNetworkDiffs(networks) {
 }
 
 /**
- * Confirm and commit the SNMP configuration
+ * Confirm and deploy the SNMP configuration
  */
-async function confirmCommitConfiguration() {
-    const confirmButton = document.getElementById('confirmCommitButton');
+async function confirmDeployConfiguration() {
+    const confirmButton = document.getElementById('confirmDeployButton');
     const originalText = confirmButton.textContent;
 
     // Disable button and show loading state
     confirmButton.disabled = true;
-    confirmButton.textContent = 'Committing...';
+    confirmButton.textContent = 'Deploying...';
     confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
 
     try {
-        const response = await fetch('/SNMP/CommitConfiguration/', {
+        const response = await fetch('/SNMP/DeployConfiguration/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -828,14 +828,14 @@ async function confirmCommitConfiguration() {
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Failed to commit configuration: ${response.status} - ${errorText}`);
+            throw new Error(`Failed to deploy configuration: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
 
         if (result.success) {
             // Show success toast
-            let message = result.message || 'Configuration committed successfully!';
+            let message = result.message || 'Configuration deployed successfully!';
             showToast(message, 'success');
 
             // Show warnings as separate toasts if any
@@ -855,8 +855,8 @@ async function confirmCommitConfiguration() {
         }
 
     } catch (error) {
-        console.error('Error committing configuration:', error);
-        showToast('Failed to commit configuration: ' + error.message, 'error');
+        console.error('Error deploying configuration:', error);
+        showToast('Failed to deploy configuration: ' + error.message, 'error');
     } finally {
         // Re-enable button
         confirmButton.disabled = false;

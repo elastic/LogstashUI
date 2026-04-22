@@ -14,8 +14,8 @@ async function checkForUndeployedSNMPChanges() {
     if (!indicator) return;
 
     try {
-        // Fetch diff data from the server (same endpoint used by the commit modal)
-        const response = await fetch('/SNMP/GetCommitDiff/', {
+        // Fetch diff data from the server (same endpoint used by the deploy modal)
+        const response = await fetch('/SNMP/GetDeployDiff/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,

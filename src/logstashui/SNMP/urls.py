@@ -29,10 +29,10 @@ urlpatterns = [
     path("GetNetworkPipelineName/<int:network_id>/", snmp_crud.GetNetworkPipelineName,
          name="GetNetworkPipelineName"),
 
-    # SNMP Commit endpoints
-    path("GetCommitDiff/", snmp_crud.GetCommitDiff, name="GetCommitDiff"),
-    path("GenerateCommitConfiguration/", snmp_crud.GenerateCommitConfiguration, name="CommitConfiguration"),
-    path("CommitConfiguration/", snmp_crud.CommitConfiguration, name="CommitConfiguration"),
+    # SNMP Deploy endpoints
+    path("GetDeployDiff/", snmp_crud.GetDeployDiff, name="GetDeployDiff"),
+    path("GenerateDeployConfiguration/", snmp_crud.GenerateDeployConfiguration, name="DeployConfiguration"),
+    path("DeployConfiguration/", snmp_crud.DeployConfiguration, name="DeployConfiguration"),
 
     # SNMP Device endpoints
     path("GetDevices/", snmp_crud.GetDevices, name="GetSNMPDevices"),

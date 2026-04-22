@@ -706,48 +706,48 @@ class TestProfileCRUD:
 
 
 # ============================================================================
-# Commit Configuration Tests
+# Deploy Configuration Tests
 # ============================================================================
 
 @pytest.mark.django_db
-class TestCommitConfiguration:
-    """Test configuration commit operations"""
+class TestDeployConfiguration:
+    """Test configuration deployment operations"""
 
-    def test_get_commit_diff(self, authenticated_client, test_network, test_device):
-        """Test getting commit diff"""
+    def test_get_deploy_diff(self, authenticated_client, test_network, test_device):
+        """Test getting deploy diff"""
         with patch('SNMP.snmp_crud.get_elastic_connection') as mock_es_conn:
             mock_es = MagicMock()
             mock_es.logstash.get_pipeline.return_value = {}
             mock_es_conn.return_value = mock_es
             
-            response = authenticated_client.get('/SNMP/GetCommitDiff/')
+            response = authenticated_client.get('/SNMP/GetDeployDiff/')
             assert response.status_code == 200
             data = json.loads(response.content)
             assert data['success'] is True
             assert 'networks' in data
 
-    def test_commit_configuration_requires_admin(self, readonly_client):
-        """Test that committing configuration requires admin role"""
-        response = readonly_client.post('/SNMP/CommitConfiguration/')
+    def test_deploy_configuration_requires_admin(self, readonly_client):
+        """Test that deploying configuration requires admin role"""
+        response = readonly_client.post('/SNMP/DeployConfiguration/')
         assert response.status_code == 403
 
     @patch('SNMP.snmp_crud.get_elastic_connection')
-    def test_commit_configuration_success(self, mock_es_conn, authenticated_client, test_network, test_device):
-        """Test successfully committing configuration"""
+    def test_deploy_configuration_success(self, mock_es_conn, authenticated_client, test_network, test_device):
+        """Test successfully deploying configuration"""
         mock_es = MagicMock()
         mock_es.logstash.get_pipeline.return_value = {}
         mock_es.logstash.put_pipeline.return_value = {'acknowledged': True}
         mock_es_conn.return_value = mock_es
         
-        response = authenticated_client.post('/SNMP/CommitConfiguration/')
+        response = authenticated_client.post('/SNMP/DeployConfiguration/')
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data['success'] is True
 
     @patch('SNMP.snmp_crud.get_elastic_connection')
-    def test_commit_configuration_no_networks(self, mock_es_conn, authenticated_client):
-        """Test committing with no networks configured"""
-        response = authenticated_client.post('/SNMP/CommitConfiguration/')
+    def test_deploy_configuration_no_networks(self, mock_es_conn, authenticated_client):
+        """Test deploying with no networks configured"""
+        response = authenticated_client.post('/SNMP/DeployConfiguration/')
         assert response.status_code == 400
         data = json.loads(response.content)
         assert 'No networks configured' in data['error']
@@ -934,11 +934,11 @@ class TestEdgeCasesAndErrors:
         assert response.status_code == 200
 
     @patch('SNMP.snmp_crud.get_elastic_connection')
-    def test_commit_handles_elasticsearch_errors(self, mock_es_conn, authenticated_client, test_network, test_device):
-        """Test that commit handles Elasticsearch errors gracefully"""
+    def test_deploy_handles_elasticsearch_errors(self, mock_es_conn, authenticated_client, test_network, test_device):
+        """Test that deploy handles Elasticsearch errors gracefully"""
         mock_es_conn.side_effect = Exception("Connection failed")
         
-        response = authenticated_client.post('/SNMP/CommitConfiguration/')
+        response = authenticated_client.post('/SNMP/DeployConfiguration/')
         # Should return error but not crash
         assert response.status_code in [400, 500]
 
