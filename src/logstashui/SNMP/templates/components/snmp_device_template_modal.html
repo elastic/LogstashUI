@@ -1,0 +1,120 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- SNMP Device Template Form Modal -->
+<div id="deviceTemplateFormModal" class="hidden fixed inset-0 overflow-hidden" style="z-index: 60;">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDeviceTemplateModal()"></div>
+  <div class="absolute inset-y-0 right-0 max-w-full flex">
+    <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 id="deviceTemplateModalTitle" class="text-xl font-bold">Add Device Template</h2>
+        <button onclick="closeDeviceTemplateModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Error message container -->
+        <div id="deviceTemplateErrorContainer"></div>
+        
+        <form id="deviceTemplateForm">
+          <input type="hidden" id="deviceTemplateId" name="template_id">
+          <input type="hidden" id="deviceTemplateViewMode" value="false">
+          
+          <!-- Template Name -->
+          <div class="mb-4">
+            <label for="deviceTemplateName" class="block text-sm font-medium text-gray-300 mb-2">
+              Template Name <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="deviceTemplateName" name="name" class="input input-bordered w-full" required placeholder="e.g., Cisco Catalyst">
+            <p class="text-gray-400 text-xs mt-1">A descriptive name for this device template</p>
+          </div>
+
+          <!-- Description -->
+          <div class="mb-4">
+            <label for="deviceTemplateDescription" class="block text-sm font-medium text-gray-300 mb-2">
+              Description
+            </label>
+            <textarea id="deviceTemplateDescription" name="description" class="textarea textarea-bordered w-full" rows="3" placeholder="Optional description of this template"></textarea>
+            <p class="text-gray-400 text-xs mt-1">Describe what devices this template is for</p>
+          </div>
+
+          <!-- Vendor -->
+          <div class="mb-4">
+            <label for="deviceTemplateVendor" class="block text-sm font-medium text-gray-300 mb-2">
+              Vendor <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="deviceTemplateVendor" name="vendor" class="input input-bordered w-full" required placeholder="e.g., Cisco, Juniper, Generic">
+            <p class="text-gray-400 text-xs mt-1">Manufacturer or vendor name</p>
+          </div>
+
+          <!-- Model -->
+          <div class="mb-4">
+            <label for="deviceTemplateModel" class="block text-sm font-medium text-gray-300 mb-2">
+              Model
+            </label>
+            <input type="text" id="deviceTemplateModel" name="model" class="input input-bordered w-full" placeholder="e.g., Catalyst 9300, ASR 1000">
+            <p class="text-gray-400 text-xs mt-1">Specific model identifier</p>
+          </div>
+
+          <!-- Matching Rules -->
+          <div class="mb-4">
+            <label for="deviceTemplateMatchingRules" class="block text-sm font-medium text-gray-300 mb-2">
+              Matching Rules
+            </label>
+            <div id="matchingRulesContainer" class="space-y-2 mb-2">
+              <!-- Matching rules will be added here dynamically -->
+            </div>
+            <button type="button" onclick="addMatchingRule()" class="btn btn-sm btn-outline btn-primary">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add Matching Rule
+            </button>
+            <p class="text-gray-400 text-xs mt-1">Substrings to match against device sysDescr for auto-assignment</p>
+          </div>
+
+          <!-- Profiles Selection -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Profiles
+            </label>
+            <!-- Selected Profiles Pills Container -->
+            <div id="selectedProfilesChipsContainer" class="mb-3 flex flex-wrap gap-2 min-h-[32px]">
+              <!-- Pills will be added here dynamically -->
+            </div>
+            <button type="button" onclick="openProfileSelectorModal()" class="btn btn-outline btn-primary w-full">
+              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Select Profiles
+            </button>
+            <p class="text-gray-400 text-xs mt-1">Select which profiles to apply when this template is assigned</p>
+          </div>
+
+          <!-- Official Toggle (only shown in edit mode for official templates) -->
+          <div id="officialSection" class="mb-4 hidden">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="deviceTemplateOfficial" name="official" class="checkbox checkbox-primary" disabled>
+              <span class="text-gray-300">Official Template</span>
+            </label>
+            <p class="text-gray-400 text-xs mt-1">Official templates cannot be edited or deleted</p>
+          </div>
+
+          <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeDeviceTemplateModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" id="deviceTemplateSaveBtn" class="btn btn-primary">
+              Save Template
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

@@ -38,12 +38,8 @@ function openDeviceModal(deviceData = null) {
     document.getElementById('deviceRetries').value = deviceData.retries !== undefined ? deviceData.retries : 2;
     document.getElementById('deviceTimeout').value = deviceData.timeout || 1000;
 
-    // Set selected profiles BEFORE loading dropdowns
-    if (deviceData.profiles && Array.isArray(deviceData.profiles)) {
-      selectedProfiles = [...deviceData.profiles];
-    } else {
-      selectedProfiles = [];
-    }
+    // Set device template if exists
+    // (template will be loaded in the dropdown)
   } else if (deviceData) {
     // Add mode with pre-filled data (e.g., from discovered devices)
     modalTitle.textContent = 'Add SNMP Device';
@@ -55,12 +51,7 @@ function openDeviceModal(deviceData = null) {
     document.getElementById('deviceRetries').value = deviceData.retries !== undefined ? deviceData.retries : 2;
     document.getElementById('deviceTimeout').value = deviceData.timeout || 1000;
 
-    // Set selected profiles BEFORE loading dropdowns
-    if (deviceData.profiles && Array.isArray(deviceData.profiles)) {
-      selectedProfiles = [...deviceData.profiles];
-    } else {
-      selectedProfiles = ['system']; // Default to system profile
-    }
+    // Device template will be loaded in the dropdown
   } else {
     // Add mode - completely new device
     modalTitle.textContent = 'Add SNMP Device';
@@ -68,16 +59,12 @@ function openDeviceModal(deviceData = null) {
     document.getElementById('devicePort').value = 161;
     document.getElementById('deviceRetries').value = 2;
     document.getElementById('deviceTimeout').value = 1000;
-    selectedProfiles = ['system']; // Pre-select system profile by default
   }
 
-  // Render selected profiles
-  renderSelectedProfiles();
-
-  // Load credentials, networks, and profiles into dropdowns
+  // Load credentials, networks, and device templates into dropdowns
   loadCredentialsForDevice(deviceData ? deviceData.credential : null);
   loadNetworksForDevice(deviceData ? deviceData.network : null);
-  loadProfilesForDevice();
+  loadDeviceTemplatesForDevice(deviceData ? deviceData.device_template : null);
 
   modal.classList.remove('hidden');
 }
@@ -202,97 +189,37 @@ function refreshNetworks() {
   loadNetworksForDevice(currentValue);
 }
 
-// Track selected profiles
-let selectedProfiles = [];
+// Load device templates into dropdown
+function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
+  const templateSelect = document.getElementById('deviceTemplateSelect');
 
-// Load profiles into dropdown
-function loadProfilesForDevice() {
-  const profileSelect = document.getElementById('deviceProfilesSelect');
-
-  fetch('/SNMP/GetAllProfiles/')
+  fetch('/SNMP/GetDeviceTemplates/')
     .then(response => response.json())
     .then(data => {
-      // Clear existing options
-      profileSelect.innerHTML = '<option value="">Select a profile to add...</option>';
+      // Clear existing options except placeholder
+      templateSelect.innerHTML = '<option value="">Select a template...</option>';
 
-      // Add profiles to dropdown (exclude already selected ones)
-      data.profiles.forEach(profile => {
-        if (!selectedProfiles.includes(profile.name)) {
-          const option = document.createElement('option');
-          option.value = profile.name;
-          option.textContent = profile.display_name;
-          profileSelect.appendChild(option);
+      // Add templates to dropdown
+      const templates = data.templates || [];
+      templates.forEach(template => {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        if (selectedTemplateId && template.id == selectedTemplateId) {
+          option.selected = true;
         }
+        templateSelect.appendChild(option);
       });
     })
     .catch(error => {
-      console.error('Error loading profiles:', error);
+      console.error('Error loading device templates:', error);
     });
 }
 
-// Refresh profiles dropdown
-function refreshProfiles() {
-  loadProfilesForDevice();
-}
-
-// Add profile when selected from dropdown
-document.addEventListener('DOMContentLoaded', function () {
-  const profileSelect = document.getElementById('deviceProfilesSelect');
-  if (profileSelect) {
-    profileSelect.addEventListener('change', function () {
-      const selectedProfile = this.value;
-      if (selectedProfile && !selectedProfiles.includes(selectedProfile)) {
-        selectedProfiles.push(selectedProfile);
-        renderSelectedProfiles();
-        loadProfilesForDevice(); // Refresh dropdown to remove selected profile
-      }
-      this.value = ''; // Reset dropdown
-    });
-  }
-});
-
-// Render selected profiles as pills
-function renderSelectedProfiles() {
-  const container = document.getElementById('selectedProfilesContainer');
-  container.innerHTML = '';
-
-  selectedProfiles.forEach(profileName => {
-    const pill = document.createElement('div');
-    const isSystemProfile = profileName === 'system' || profileName === 'system.json';
-    pill.className = `inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${isSystemProfile ? 'bg-green-600' : 'bg-blue-600'} text-white`;
-
-    // System profile gets a lock icon instead of X button
-    if (isSystemProfile) {
-      pill.innerHTML = `
-        <span>${profileName.replace('_', ' ')}</span>
-        <svg class="ml-2 w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-      `;
-    } else {
-      pill.innerHTML = `
-        <span>${profileName.replace('_', ' ')}</span>
-        <button type="button" onclick="removeProfile('${profileName}')" class="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-700 focus:outline-none">
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      `;
-    }
-    container.appendChild(pill);
-  });
-}
-
-// Remove profile from selection
-function removeProfile(profileName) {
-  // Prevent removal of system profile
-  if (profileName === 'system' || profileName === 'system.json') {
-    showToast('The system profile is required and cannot be removed', 'error');
-    return;
-  }
-  selectedProfiles = selectedProfiles.filter(p => p !== profileName);
-  renderSelectedProfiles();
-  loadProfilesForDevice(); // Refresh dropdown to add profile back
+// Refresh device templates dropdown
+function refreshDeviceTemplates() {
+  const currentValue = document.getElementById('deviceTemplateSelect').value;
+  loadDeviceTemplatesForDevice(currentValue);
 }
 
 // Track if device modal is open to prevent it from closing
@@ -368,11 +295,6 @@ if (deviceForm) {
     const formData = new FormData(this);
     const deviceId = document.getElementById('deviceId').value;
     const url = deviceId ? `/SNMP/UpdateDevice/${deviceId}/` : '/SNMP/AddDevice/';
-
-    // Add selected profiles to form data
-    selectedProfiles.forEach(profile => {
-      formData.append('profiles', profile);
-    });
 
     // Get CSRF token
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;

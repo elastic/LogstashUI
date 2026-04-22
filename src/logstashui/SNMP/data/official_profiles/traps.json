@@ -1,7 +1,6 @@
 {
   "name": "traps",
   "description": "[Official] Traps conversion pipeline",
-  "type": "Any",
   "vendor": "Any",
   "pinned": true,
   "get": {

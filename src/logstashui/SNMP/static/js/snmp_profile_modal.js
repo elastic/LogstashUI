@@ -42,7 +42,6 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     const isReadOnly = isOfficial || viewMode;
     document.getElementById('profileName').readOnly = isReadOnly;
     document.getElementById('profileDescription').readOnly = isReadOnly;
-    document.getElementById('profileType').disabled = isReadOnly;
     document.getElementById('profileVendor').readOnly = isReadOnly;
     
     // Hide/disable save button for official profiles or view mode
@@ -73,7 +72,6 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     modalTitle.textContent = 'Add SNMP Profile';
     document.getElementById('profileName').readOnly = false;
     document.getElementById('profileDescription').readOnly = false;
-    document.getElementById('profileType').disabled = false;
     document.getElementById('profileVendor').readOnly = false;
     saveBtn.style.display = '';
     
@@ -114,7 +112,6 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       // Set basic fields
       document.getElementById('profileName').value = data.name || profileName;
       document.getElementById('profileDescription').value = data.description || '';
-      document.getElementById('profileType').value = data.type || '';
       document.getElementById('profileVendor').value = data.vendor || '';
       
       // Load Get section

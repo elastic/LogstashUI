@@ -1,0 +1,49 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- Device Template Profile Selector Modal -->
+<div id="deviceTemplateProfileSelectorModal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 100;">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeProfileSelectorModal()"></div>
+  <div class="bg-gray-800 rounded-lg w-full max-w-3xl max-h-[80vh] flex flex-col relative border border-gray-700" style="z-index: 101;">
+    
+    <!-- Modal Header -->
+    <div class="p-4 border-b border-gray-700">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-gray-200">Select Profiles</h2>
+        <button onclick="closeProfileSelectorModal()" class="text-gray-400 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <p class="text-sm text-gray-400 mt-2">Select which profiles to apply when this template is assigned to devices</p>
+    </div>
+    
+    <!-- Modal Body -->
+    <div class="p-6 overflow-y-auto flex-grow">
+      <!-- Selected Profiles Pills Container -->
+      <div id="profileSelectorChipsContainer" class="mb-4 flex flex-wrap gap-2 min-h-[32px]">
+        <!-- Pills will be added here dynamically -->
+      </div>
+      
+      <!-- Profiles Selection Container -->
+      <div id="profileSelectorContainer" class="border border-gray-600 rounded-lg p-4 max-h-96 overflow-y-auto bg-gray-700/30">
+        <!-- Profiles checkboxes will be loaded here -->
+        <div class="text-gray-400 text-sm">Loading profiles...</div>
+      </div>
+    </div>
+    
+    <!-- Modal Footer -->
+    <div class="p-4 border-t border-gray-700 flex justify-end gap-3">
+      <button type="button" onclick="closeProfileSelectorModal()" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors">
+        Cancel
+      </button>
+      <button type="button" onclick="applyProfileSelection()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors">
+        Apply Selection
+      </button>
+    </div>
+  </div>
+</div>

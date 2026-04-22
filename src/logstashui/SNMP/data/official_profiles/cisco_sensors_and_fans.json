@@ -1,7 +1,6 @@
 {
   "name": "cisco_sensors_and_fans",
   "description": "[Official] Sensors and Fans for Cisco devices",
-  "type": "Network",
   "vendor": "Cisco",
   "pinned": false,
   "get": {},

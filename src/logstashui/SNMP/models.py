@@ -159,6 +159,15 @@ class Device(models.Model):
         help_text="SNMP profiles to apply to this device"
     )
     
+    device_template = models.ForeignKey(
+        'DeviceTemplate',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='devices',
+        help_text="Device template assigned to this device"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -445,15 +454,8 @@ class Profile(models.Model):
         help_text="Optional description of what this profile is for"
     )
     
-    type = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Type/category of devices this profile is for (e.g., Network, Server, Any)"
-    )
-    
     vendor = models.CharField(
         max_length=100,
-        blank=True,
         help_text="Vendor or manufacturer this profile is designed for (e.g., Cisco, Generic, Any)"
     )
     
@@ -508,14 +510,7 @@ class DeviceTemplate(models.Model):
     
     vendor = models.CharField(
         max_length=100,
-        blank=True,
         help_text="Vendor or manufacturer this template is designed for (e.g., Cisco, Juniper, Generic)"
-    )
-    
-    type = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Type/category of devices this template is for (e.g., Router, Switch, Firewall)"
     )
     
     model = models.CharField(

@@ -9,6 +9,7 @@ from . import snmp_crud
 urlpatterns = [
     path("Networks/", views.Networks, name="Networks"),
     path("Devices/", views.Devices, name="Devices"),
+    path("DeviceTemplates/", views.DeviceTemplates, name="DeviceTemplates"),
     path("Profiles/", views.Profiles, name="Profiles"),
     path("Credentials/", views.Credentials, name="Credentials"),
 
@@ -51,5 +52,12 @@ urlpatterns = [
     path("AddProfile/", snmp_crud.AddProfile, name="AddSNMPProfile"),
     path("UpdateProfile/<str:profile_name>/", snmp_crud.UpdateProfile, name="UpdateSNMPProfile"),
     path("DeleteProfile/<str:profile_name>/", snmp_crud.DeleteProfile, name="DeleteSNMPProfile"),
+
+    # SNMP Device Template endpoints
+    path("GetDeviceTemplates/", snmp_crud.GetDeviceTemplates, name="GetDeviceTemplates"),
+    path("GetDeviceTemplate/<int:template_id>/", snmp_crud.GetDeviceTemplate, name="GetDeviceTemplate"),
+    path("AddDeviceTemplate/", snmp_crud.AddDeviceTemplate, name="AddDeviceTemplate"),
+    path("UpdateDeviceTemplate/<int:template_id>/", snmp_crud.UpdateDeviceTemplate, name="UpdateDeviceTemplate"),
+    path("DeleteDeviceTemplate/<int:template_id>/", snmp_crud.DeleteDeviceTemplate, name="DeleteDeviceTemplate"),
 
 ]

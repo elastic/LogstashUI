@@ -1,7 +1,6 @@
 {
   "name": "cisco_system_metrics",
   "description": "[Official] CPU and Memory for Cisco devices",
-  "type": "Network",
   "vendor": "Cisco",
   "pinned": false,
   "get": {

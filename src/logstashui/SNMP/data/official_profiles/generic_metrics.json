@@ -1,7 +1,6 @@
 {
   "name": "system",
   "description": "[Official] Generic performance metrics",
-  "type": "Any",
   "vendor": "Any",
   "pinned": true,
   "get": {

@@ -1,7 +1,6 @@
 {
   "name": "fibrechannel_switch_broadcom_brocade_extensions",
   "description": "[Broadcom/Brocade] FabricOS vendor MIBs for FC port physical state + SFP optics telemetry",
-  "type": "Network",
   "vendor": "Broadcom/Brocade",
   "pinned": true,
   "get": {

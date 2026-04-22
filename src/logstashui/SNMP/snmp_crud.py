@@ -15,7 +15,7 @@ from Common.formatters import _sanitize_pipeline_name_component
 
 from PipelineManager.models import Connection
 
-from .models import Credential, Network, Profile, Device
+from .models import Credential, Network, Profile, Device, DeviceTemplate
 
 from datetime import datetime, timedelta, timezone
 
@@ -2126,6 +2126,7 @@ def AddDevice(request):
         timeout = request.POST.get('timeout', 1000)
         credential_id = request.POST.get('credential')
         network_id = request.POST.get('network')
+        device_template_id = request.POST.get('device_template')
         profile_names = request.POST.getlist('profiles')  # Get list of profile names
 
         # Create device object
@@ -2142,6 +2143,8 @@ def AddDevice(request):
             device.credential_id = credential_id
         if network_id:
             device.network_id = network_id
+        if device_template_id:
+            device.device_template_id = device_template_id
 
         # Save (this will trigger validation)
         device.save()
@@ -2214,6 +2217,12 @@ def UpdateDevice(request, device_id):
         else:
             device.network = None
 
+        device_template_id = request.POST.get('device_template')
+        if device_template_id:
+            device.device_template_id = device_template_id
+        else:
+            device.device_template = None
+
         # Save (this will trigger validation)
         device.save()
 
@@ -2281,6 +2290,7 @@ def GetDevice(request, device_id):
             'timeout': device.timeout,
             'credential': device.credential_id if device.credential else None,
             'network': device.network_id if device.network else None,
+            'device_template': device.device_template_id if device.device_template else None,
             'profiles': profile_names,
         }
 
@@ -2480,10 +2490,23 @@ def GetAllProfiles(request):
                 if filename.endswith('.json'):
                     profile_name = filename[:-5]
                     display_name = profile_name.replace('_', ' ').title()
+                    
+                    # Load the JSON file to get vendor
+                    profile_path = os.path.join(official_profiles_dir, filename)
+                    vendor = ''
+                    try:
+                        with open(profile_path, 'r') as f:
+                            profile_data = json.load(f)
+                            vendor = profile_data.get('vendor', '')
+                    except Exception:
+                        pass
+                    
                     all_profiles.append({
+                        'id': profile_name,  # Use name as ID for official profiles
                         'name': profile_name,
                         'display_name': display_name,
-                        'is_official': True
+                        'is_official': True,
+                        'vendor': vendor
                     })
 
         # Load user profiles from database (exclude placeholders)
@@ -2492,9 +2515,11 @@ def GetAllProfiles(request):
             if profile.profile_data.get('is_official_placeholder'):
                 continue
             all_profiles.append({
+                'id': profile.id,
                 'name': profile.name,
                 'display_name': profile.name.replace('_', ' ').title(),
-                'is_official': False
+                'is_official': False,
+                'vendor': profile.vendor or ''
             })
 
         # Sort by display name
@@ -3184,3 +3209,189 @@ def decide_visualizations(device, es):
             'error': str(e),
             'has_data': False
         }
+
+
+# Device Template CRUD Operations
+
+def GetDeviceTemplates(request):
+    """Get all device templates for dropdown selection"""
+    try:
+        templates = DeviceTemplate.objects.all().order_by('name')
+        
+        templates_list = []
+        for template in templates:
+            templates_list.append({
+                'id': template.id,
+                'name': template.name,
+                'vendor': template.vendor,
+                'model': template.model,
+                'official': template.official
+            })
+        
+        return JsonResponse({'templates': templates_list})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def GetDeviceTemplate(request, template_id):
+    """Get a specific device template by ID"""
+    try:
+        template = DeviceTemplate.objects.get(id=template_id)
+        
+        # Get profile IDs
+        profile_ids = list(template.profiles.values_list('id', flat=True))
+        
+        return JsonResponse({
+            'id': template.id,
+            'name': template.name,
+            'description': template.description,
+            'vendor': template.vendor,
+            'model': template.model,
+            'matching_rules': template.matching_rules,
+            'official': template.official,
+            'profiles': profile_ids
+        })
+    except DeviceTemplate.DoesNotExist:
+        return JsonResponse({'error': 'Device template not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def AddDeviceTemplate(request):
+    """Add a new device template"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        
+        name = request.POST.get('name')
+        description = request.POST.get('description', '')
+        vendor = request.POST.get('vendor')
+        model = request.POST.get('model', '')
+        matching_rules_json = request.POST.get('matching_rules', '[]')
+        profiles_json = request.POST.get('profiles', '[]')
+        
+        # Validate required fields
+        if not name:
+            return JsonResponse({'error': 'Template name is required'}, status=400)
+        if not vendor:
+            return JsonResponse({'error': 'Vendor is required'}, status=400)
+        
+        # Parse JSON fields
+        matching_rules = json.loads(matching_rules_json)
+        profile_ids = json.loads(profiles_json)
+        
+        # Create the template
+        template = DeviceTemplate.objects.create(
+            name=name,
+            description=description,
+            vendor=vendor,
+            model=model,
+            matching_rules=matching_rules,
+            official=False
+        )
+        
+        # Add profiles (handle both ID and name formats)
+        if profile_ids:
+            for profile_id in profile_ids:
+                try:
+                    # Try to get by ID first (for database profiles)
+                    if isinstance(profile_id, int) or profile_id.isdigit():
+                        profile = Profile.objects.get(id=int(profile_id))
+                        template.profiles.add(profile)
+                    else:
+                        # Try to get by name (for official profiles that might be referenced by name)
+                        profile = Profile.objects.get(name=profile_id)
+                        template.profiles.add(profile)
+                except Profile.DoesNotExist:
+                    pass  # Skip profiles that don't exist
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Device template created successfully',
+            'template_id': template.id
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def UpdateDeviceTemplate(request, template_id):
+    """Update an existing device template"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        
+        template = DeviceTemplate.objects.get(id=template_id)
+        
+        # Don't allow editing official templates
+        if template.official:
+            return JsonResponse({'error': 'Cannot edit official templates'}, status=403)
+        
+        # Update fields
+        template.name = request.POST.get('name', template.name)
+        template.description = request.POST.get('description', template.description)
+        template.vendor = request.POST.get('vendor', template.vendor)
+        template.model = request.POST.get('model', template.model)
+        
+        # Update matching rules
+        matching_rules_json = request.POST.get('matching_rules')
+        if matching_rules_json:
+            template.matching_rules = json.loads(matching_rules_json)
+        
+        template.save()
+        
+        # Update profiles
+        profiles_json = request.POST.get('profiles')
+        if profiles_json:
+            profile_ids = json.loads(profiles_json)
+            template.profiles.clear()
+            
+            for profile_id in profile_ids:
+                try:
+                    # Try to get by ID first (for database profiles)
+                    if isinstance(profile_id, int) or str(profile_id).isdigit():
+                        profile = Profile.objects.get(id=int(profile_id))
+                        template.profiles.add(profile)
+                    else:
+                        # Try to get by name (for official profiles)
+                        profile = Profile.objects.get(name=profile_id)
+                        template.profiles.add(profile)
+                except Profile.DoesNotExist:
+                    pass  # Skip profiles that don't exist
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Device template updated successfully'
+        })
+    except DeviceTemplate.DoesNotExist:
+        return JsonResponse({'error': 'Device template not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def DeleteDeviceTemplate(request, template_id):
+    """Delete a device template"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        template = DeviceTemplate.objects.get(id=template_id)
+        
+        # Don't allow deleting official templates
+        if template.official:
+            return JsonResponse({'error': 'Cannot delete official templates'}, status=403)
+        
+        template_name = template.name
+        template.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Device template "{template_name}" deleted successfully'
+        })
+    except DeviceTemplate.DoesNotExist:
+        return JsonResponse({'error': 'Device template not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

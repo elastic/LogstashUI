@@ -1,7 +1,6 @@
 {
   "name": "cdp_adjacency_cisco",
   "description": "[Cisco] CDP adjacency (neighbors per local interface) via CISCO-CDP-MIB",
-  "type": "Network",
   "vendor": "Cisco",
   "pinned": true,
   "get": {},

@@ -1,7 +1,6 @@
 {
   "name": "lldp_mib_vendor_neutral",
   "description": "[Standards] LLDP-MIB local system + local ports + remote neighbors + remote mgmt addresses",
-  "type": "Network",
   "vendor": "Generic",
   "pinned": true,
   "get": {

@@ -42,29 +42,12 @@
             <textarea id="profileDescription" name="description" class="textarea textarea-bordered w-full" rows="2" placeholder="Optional description of what this profile monitors"></textarea>
           </div>
 
-          <!-- Type -->
-          <div class="mb-6">
-            <label for="profileType" class="block text-sm font-medium text-gray-300 mb-2">
-              Type
-            </label>
-            <select id="profileType" name="type" class="select select-bordered w-full">
-              <option value="">Select type...</option>
-              <option value="Any">Any</option>
-              <option value="Network">Network</option>
-              <option value="Server">Server</option>
-              <option value="Storage">Storage</option>
-              <option value="Security">Security</option>
-              <option value="Other">Other</option>
-            </select>
-            <p class="text-gray-400 text-xs mt-1">Category of devices this profile is designed for</p>
-          </div>
-
           <!-- Vendor -->
           <div class="mb-6">
             <label for="profileVendor" class="block text-sm font-medium text-gray-300 mb-2">
-              Vendor
+              Vendor <span class="text-red-500">*</span>
             </label>
-            <input type="text" id="profileVendor" name="vendor" class="input input-bordered w-full" placeholder="e.g., Cisco, Generic, Any">
+            <input type="text" id="profileVendor" name="vendor" class="input input-bordered w-full" required placeholder="e.g., Cisco, Generic, Any">
             <p class="text-gray-400 text-xs mt-1">Vendor or manufacturer this profile is designed for</p>
           </div>
 

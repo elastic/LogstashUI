@@ -1,7 +1,6 @@
 {
   "name": "system",
   "description": "[Official] Generic details you would want to gather from most/all systems",
-  "type": "Any",
   "vendor": "Any",
   "pinned": true,
   "get": {
