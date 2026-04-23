@@ -91,6 +91,19 @@ function populateDiscoveredDevicesTable(devices) {
         }
         window.discoveredDevicesData[index] = device;
         
+        // Format suggested profile display
+        let suggestedProfileHtml = '<span class="text-gray-500 text-xs">None</span>';
+        if (device.suggested_template_name) {
+            suggestedProfileHtml = `
+                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    ${escapeHtml(device.suggested_template_name)}
+                </span>
+            `;
+        }
+        
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(device.host_name || 'N/A')}
@@ -99,13 +112,16 @@ function populateDiscoveredDevicesTable(devices) {
                 ${escapeHtml(ipOrHostname)}
             </td>
             <td class="px-6 py-4 text-sm text-gray-300">
-                ${escapeHtml(device.host_os_full || 'N/A')}
+                ${escapeHtml(device.host_description || 'N/A')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(device.network_name || 'N/A')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                 ${escapeHtml(device.connection_name || 'N/A')}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${suggestedProfileHtml}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                 <button 
@@ -142,7 +158,7 @@ function addDiscoveredDevice(deviceIndex) {
             ip_address: ipOrHostname,
             credential: device.credential_id,
             network: device.network_id,
-            profiles: ['system']  // Pre-select system profile
+            device_template: device.suggested_template_id  // Pre-select suggested template
         });
     } else {
         console.error('openDeviceModal function not found');

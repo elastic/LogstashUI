@@ -152,13 +152,6 @@ class Device(models.Model):
         help_text="Network this device belongs to"
     )
     
-    profiles = models.ManyToManyField(
-        'Profile',
-        blank=True,
-        related_name='devices',
-        help_text="SNMP profiles to apply to this device"
-    )
-    
     device_template = models.ForeignKey(
         'DeviceTemplate',
         on_delete=models.SET_NULL,

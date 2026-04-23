@@ -2689,7 +2689,6 @@ def GetDiscoveredDevices(request):
                                             "includes": [
                                                 "host.name",
                                                 "host.hostname",
-                                                "host.os.full",
                                                 "host.ip",
                                                 "network.name",
                                                 "@timestamp",
@@ -2745,17 +2744,37 @@ def GetDiscoveredDevices(request):
                                     except Exception as e:
                                         logger.warning(f"Could not query network '{network_name}': {str(e)}")
 
+                                # Get suggested device template based on host.description (sysDescr)
+                                host_description = source.get('host', {}).get('description', '')
+                                suggested_template_ids = []
+                                suggested_template_name = None
+                                
+                                if host_description:
+                                    from .views import suggest_device_template
+                                    suggested_template_ids = suggest_device_template(host_description)
+                                    
+                                    # Get the name of the first (best) suggested template
+                                    if suggested_template_ids:
+                                        try:
+                                            from .models import DeviceTemplate
+                                            best_template = DeviceTemplate.objects.get(id=suggested_template_ids[0])
+                                            suggested_template_name = best_template.name.replace('_', ' ').title()
+                                        except DeviceTemplate.DoesNotExist:
+                                            pass
+                                
                                 device = {
                                     'host_name': source.get('host', {}).get('name', 'Unknown'),
                                     'host_hostname': source.get('host', {}).get('hostname', ''),
-                                    'host_os_full': source.get('host', {}).get('os', {}).get('full', ''),
+                                    'host_description': host_description,
                                     'host_ip': source.get('host', {}).get('ip', ''),
                                     'network_name': network_name,
                                     'network_id': network_id,
                                     'credential_id': credential_id,
                                     'timestamp': source.get('@timestamp', ''),
                                     'connection_name': connection.name,
-                                    'connection_id': connection.id
+                                    'connection_id': connection.id,
+                                    'suggested_template_id': suggested_template_ids[0] if suggested_template_ids else None,
+                                    'suggested_template_name': suggested_template_name
                                 }
                                 all_discovered_devices.append(device)
 

@@ -1,8 +1,8 @@
 {
-  "name": "cisco_catalyst",
+  "name": "cisco_ios",
   "description": "Hardware health and adjacency",
   "vendor": "Cisco",
-  "product": "Catalyst",
+  "product": "IOS",
   "model": "Any",
   "profiles": [
     "cisco_cdp",
@@ -13,6 +13,6 @@
     "generic_system"
   ],
   "matching_rules": [
-    "catalyst"
+    "Cisco IOS Software"
   ]
 }

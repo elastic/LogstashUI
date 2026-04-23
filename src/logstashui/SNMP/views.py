@@ -290,4 +290,56 @@ def Credentials(request):
     return render(request, 'Credentials.html', {'credentials': credentials})
 
 
+def suggest_device_template(device_info):
+    """
+    Suggest device templates based on matching rules against device information.
+    
+    Args:
+        device_info (str): Device identification string (e.g., sysDescr or sysObject)
+    
+    Returns:
+        list: List of DeviceTemplate IDs ranked by match quality:
+              - First: Templates where ALL matching rules match
+              - Second: Templates where SOME matching rules match
+              - Templates with null/empty matching_rules are excluded
+    """
+    if not device_info:
+        return []
+    
+    device_info_lower = device_info.lower()
+    
+    # Get all device templates with matching rules
+    templates = DeviceTemplate.objects.exclude(matching_rules__isnull=True).exclude(matching_rules=[])
+    
+    all_matches = []  # Templates where ALL rules match
+    partial_matches = []  # Templates where SOME rules match
+    
+    for template in templates:
+        if not template.matching_rules:
+            continue
+        
+        # Check how many rules match
+        matching_count = 0
+        total_rules = len(template.matching_rules)
+        
+        for rule in template.matching_rules:
+            if rule.lower() in device_info_lower:
+                matching_count += 1
+        
+        # Categorize based on match quality
+        if matching_count == total_rules and total_rules > 0:
+            # All rules matched
+            all_matches.append(template.id)
+        elif matching_count > 0:
+            # Some rules matched - sort by match percentage
+            partial_matches.append((template.id, matching_count / total_rules))
+    
+    # Sort partial matches by match percentage (descending)
+    partial_matches.sort(key=lambda x: x[1], reverse=True)
+    partial_match_ids = [template_id for template_id, _ in partial_matches]
+    
+    # Return all matches first, then partial matches
+    return all_matches + partial_match_ids
+
+
 
