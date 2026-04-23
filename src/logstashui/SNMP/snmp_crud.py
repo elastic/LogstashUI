@@ -2593,8 +2593,8 @@ def GetDeviceVisualization(request, device_id):
             'profiles': [
                 {
                     'name': profile.name,
-                    'type': profile.type,
                     'vendor': profile.vendor,
+                    'product': profile.product,
                 }
                 for profile in device.profiles.all()
             ],
@@ -2692,7 +2692,8 @@ def GetDiscoveredDevices(request):
                                                 "host.os.full",
                                                 "host.ip",
                                                 "network.name",
-                                                "@timestamp"
+                                                "@timestamp",
+                                                "host.description"
                                             ]
                                         }
                                     }

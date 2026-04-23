@@ -144,9 +144,12 @@ def DeviceTemplates(request):
     
     # Load all device templates from database (includes synced official templates)
     device_templates = []
-    for template in DeviceTemplate.objects.annotate(device_count=Count('devices')).order_by('-official', 'name'):
+    for template in DeviceTemplate.objects.annotate(device_count=Count('devices')).prefetch_related('profiles').order_by('-official', 'name'):
         # Create a friendly display name from the template name
         display_name = template.name.replace('_', ' ').title()
+        
+        # Count the number of profiles associated with this template
+        profile_count = template.profiles.count()
         
         device_templates.append({
             'name': template.name,
@@ -157,6 +160,7 @@ def DeviceTemplates(request):
             'model': template.model,
             'product': template.product,
             'device_count': template.device_count,
+            'profile_count': profile_count,
             'id': template.id
         })
     

@@ -8,7 +8,8 @@
     "brocade_fc_switch_system_metrics",
     "brocade_fc_switch_fc_ports",
     "brocade_fc_switch_name_server",
-    "generic_system"
+    "generic_system",
+    "generic_interfaces"
   ],
   "matching_rules": [
 
