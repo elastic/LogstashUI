@@ -72,7 +72,14 @@ function openDeviceTemplateModal(templateId = null, viewMode = false) {
 
         // Load and select profiles
         if (data.profiles && data.profiles.length > 0) {
-          selectedTemplateProfiles = data.profiles.map(String);
+          // Profiles now come as objects with {id, name, display_name}
+          // Populate the profile cache
+          data.profiles.forEach(profile => {
+            profileDataCache[profile.id] = profile;
+          });
+          
+          // Extract profile IDs for selection
+          selectedTemplateProfiles = data.profiles.map(p => String(p.id));
           renderSelectedProfileChips();
         }
       })
@@ -354,11 +361,34 @@ function renderSelectedProfileChipsWithData() {
 
   selectedTemplateProfiles.forEach(profileId => {
     const profile = profileDataCache[profileId];
-    const displayName = profile ? (profile.display_name || profile.name) : profileId;
+    
+    // Get display name and check if official
+    let displayName = profileId;
+    let isOfficial = false;
+    
+    if (profile) {
+      const rawName = profile.name || '';
+      isOfficial = rawName.endsWith('.json');
+      
+      if (isOfficial) {
+        // Remove .json and convert to title case
+        displayName = rawName.slice(0, -5).replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      } else {
+        displayName = profile.display_name || profile.name || profileId;
+      }
+    }
+    
+    // Star badge for official profiles
+    const starBadge = isOfficial ? `
+      <svg class="w-3 h-3 text-yellow-400 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+      </svg>
+    ` : '';
     
     const chip = document.createElement('div');
     chip.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white';
     chip.innerHTML = `
+      ${starBadge}
       <span>${displayName}</span>
       <button type="button" onclick="removeTemplateProfile('${profileId}')" class="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-700 focus:outline-none">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -427,7 +457,7 @@ function createProfileCheckbox(profile) {
   checkbox.type = 'checkbox';
   checkbox.className = 'checkbox checkbox-primary mt-0.5';
   checkbox.name = 'profiles';
-  checkbox.value = profile.id || profile.name;
+  checkbox.value = String(profile.id); // Always use ID as string
   
   // Check if already selected
   if (tempSelectedProfiles.includes(checkbox.value)) {
@@ -522,6 +552,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Use the tracked selected profiles array
       const selectedProfiles = selectedTemplateProfiles;
+      
+      // Debug logging
+      console.log('Submitting device template with profiles:', selectedProfiles);
 
       // Build form data
       const formData = new FormData(this);
@@ -537,10 +570,14 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Add profiles as JSON
       formData.append('profiles', JSON.stringify(selectedProfiles));
+      
+      console.log('Profiles JSON:', JSON.stringify(selectedProfiles));
 
       // Get CSRF token
       const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
+      console.log('Sending request to:', url);
+      
       fetch(url, {
         method: 'POST',
         headers: {
@@ -549,23 +586,27 @@ document.addEventListener('DOMContentLoaded', function() {
         body: formData
       })
         .then(response => {
+          console.log('Response status:', response.status);
           if (!response.ok) {
             return response.text().then(text => {
+              console.error('Error response:', text);
               throw new Error(text || 'Failed to save device template');
             });
           }
           return response.json();
         })
         .then(data => {
+          console.log('Success response:', data);
           showToast(templateId ? 'Device template updated successfully!' : 'Device template created successfully!', 'success');
           closeDeviceTemplateModal();
           
-          // Reload page to show updated templates
-          setTimeout(() => {
-            window.location.reload();
-          }, 500);
+          // Refresh templates data without page reload
+          if (typeof refreshDeviceTemplatesData === 'function') {
+            refreshDeviceTemplatesData();
+          }
         })
         .catch(error => {
+          console.error('Fetch error:', error);
           errorContainer.innerHTML = `
             <div class="p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg">
               <h3 class="font-bold mb-2">Error</h3>

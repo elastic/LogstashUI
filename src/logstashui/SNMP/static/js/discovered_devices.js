@@ -91,10 +91,10 @@ function populateDiscoveredDevicesTable(devices) {
         }
         window.discoveredDevicesData[index] = device;
         
-        // Format suggested profile display
-        let suggestedProfileHtml = '<span class="text-gray-500 text-xs">None</span>';
+        // Format suggested template display
+        let suggestedTemplateHtml = '<span class="text-gray-500 text-xs">None</span>';
         if (device.suggested_template_name) {
-            suggestedProfileHtml = `
+            suggestedTemplateHtml = `
                 <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/40">
                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -104,15 +104,18 @@ function populateDiscoveredDevicesTable(devices) {
             `;
         }
         
+        // Prepare OS description for tooltip
+        const hostDescription = device.host_description || 'No description available';
+        const hostName = device.host_name || 'N/A';
+        
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                ${escapeHtml(device.host_name || 'N/A')}
+                <span class="cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" title="OS: ${escapeHtml(hostDescription)}">
+                    ${escapeHtml(hostName)}
+                </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(ipOrHostname)}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-300">
-                ${escapeHtml(device.host_description || 'N/A')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(device.network_name || 'N/A')}
@@ -121,7 +124,7 @@ function populateDiscoveredDevicesTable(devices) {
                 ${escapeHtml(device.connection_name || 'N/A')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${suggestedProfileHtml}
+                ${suggestedTemplateHtml}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                 <button 

@@ -35,6 +35,23 @@ async function fetchNetworks() {
   }
 }
 
+// Update networks data without full page reload (called after add/edit/delete)
+function updateNetworksData(networks) {
+  allNetworks = networks;
+  totalNetworksCount = networks.length;
+  
+  // Populate filter dropdowns
+  populateFilters();
+  
+  // Apply filters and render
+  applyFiltersAndRender();
+  
+  // Show/hide appropriate states
+  updateUIState();
+  
+  console.log('Networks table updated with new data');
+}
+
 // Populate filter dropdowns with unique values
 function populateFilters() {
   // Get unique logstash nodes

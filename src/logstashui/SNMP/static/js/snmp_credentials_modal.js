@@ -194,10 +194,10 @@ document.getElementById('credentialForm').addEventListener('submit', function (e
         // Don't reload - let network modal handle the refresh
       } else {
         closeCredentialModal();
-        // Reload page to show updated credentials
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // Refresh credentials data without page reload
+        if (typeof refreshCredentialsData === 'function') {
+          refreshCredentialsData();
+        }
       }
     })
     .catch(error => {

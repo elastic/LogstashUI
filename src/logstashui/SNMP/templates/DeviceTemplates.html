@@ -78,7 +78,7 @@
 
     <div class="mt-6">
       {% if device_templates %}
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+      <div id="templatesGridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
         {% for template in device_templates %}
         <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-shadow border border-gray-700"
              data-template-name="{{ template.name|lower }}"
@@ -136,6 +136,8 @@
                   <img src="{% static 'images/brocade.png' %}" alt="Brocade" class="w-full h-full object-contain">
                 {% elif template.vendor|lower == 'hpe' or template.vendor|lower == 'hpe nimble' %}
                   <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'epson' %}
+                  <img src="{% static 'images/epson.png' %}" alt="Epson" class="w-full h-full object-contain">
                 {% else %}
                   <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
                 {% endif %}
@@ -177,22 +179,22 @@
             </div>
             
             <!-- Stats: Profiles, Model, and Devices -->
-            <div class="flex items-center gap-3 text-xs pt-2 border-t border-gray-700">
-              <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-700">
+              <div class="flex items-center gap-1 whitespace-nowrap">
                 <svg class="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span class="text-gray-400">Profiles:</span>
                 <span class="text-white font-medium">{{ template.profile_count|default:0 }}</span>
               </div>
-              <div class="flex items-center gap-1">
+              <div class="flex items-center gap-1 whitespace-nowrap">
                 <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                 </svg>
                 <span class="text-gray-400">Model:</span>
-                <span class="text-white font-medium truncate">{{ template.model|default:"-" }}</span>
+                <span class="text-white font-medium">{{ template.model|default:"-" }}</span>
               </div>
-              <div class="flex items-center gap-1">
+              <div class="flex items-center gap-1 whitespace-nowrap">
                 <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
@@ -248,7 +250,7 @@
 
     <div class="mt-6">
       {% if profiles %}
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+      <div id="profilesGridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
         {% for profile in profiles %}
         <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-shadow border border-gray-700" 
              data-profile-name="{{ profile.display_name|lower }}" 
@@ -306,6 +308,8 @@
                   <img src="{% static 'images/brocade.png' %}" alt="Brocade" class="w-full h-full object-contain">
                 {% elif profile.vendor|lower == 'hpe' or profile.vendor|lower == 'hpe nimble' %}
                   <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'epson' %}
+                  <img src="{% static 'images/epson.png' %}" alt="Epson" class="w-full h-full object-contain">
                 {% else %}
                   <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
                 {% endif %}
@@ -575,6 +579,64 @@
     });
   }, true);
 
+  // Refresh device templates data without full page reload
+  function refreshDeviceTemplatesData() {
+    console.log('Refreshing device templates...');
+    
+    fetch('/SNMP/DeviceTemplates/')
+      .then(response => response.text())
+      .then(html => {
+        // Parse the HTML response
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract the templates grid
+        const newGrid = doc.querySelector('#templatesGridContainer');
+        const currentGrid = document.querySelector('#templatesGridContainer');
+        
+        if (newGrid && currentGrid) {
+          // Replace the grid content
+          currentGrid.innerHTML = newGrid.innerHTML;
+          console.log('Device templates refreshed successfully');
+        } else {
+          console.error('Could not find templates grid');
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing templates:', error);
+        showToast('Error refreshing templates', 'error');
+      });
+  }
+
+  // Refresh profiles data without full page reload  
+  function refreshProfilesData() {
+    console.log('Refreshing profiles...');
+    
+    fetch('/SNMP/DeviceTemplates/')
+      .then(response => response.text())
+      .then(html => {
+        // Parse the HTML response
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract the profiles grid
+        const newGrid = doc.querySelector('#profilesGridContainer');
+        const currentGrid = document.querySelector('#profilesGridContainer');
+        
+        if (newGrid && currentGrid) {
+          // Replace the grid content
+          currentGrid.innerHTML = newGrid.innerHTML;
+          console.log('Profiles refreshed successfully');
+        } else {
+          console.error('Could not find profiles grid');
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing profiles:', error);
+        showToast('Error refreshing profiles', 'error');
+      });
+  }
+
   // Device Template action functions
   function viewTemplate(templateId, isOfficial) {
     openDeviceTemplateModal(templateId, true, isOfficial);
@@ -602,7 +664,7 @@
       .then(data => {
         if (data.success) {
           showToast('Device template deleted successfully!', 'success');
-          setTimeout(() => window.location.reload(), 500);
+          refreshDeviceTemplatesData();
         } else {
           showToast(data.message || 'Failed to delete template', 'error');
         }
@@ -640,7 +702,7 @@
       .then(data => {
         if (data.success) {
           showToast('Profile deleted successfully!', 'success');
-          setTimeout(() => window.location.reload(), 500);
+          refreshProfilesData();
         } else {
           showToast(data.message || 'Failed to delete profile', 'error');
         }

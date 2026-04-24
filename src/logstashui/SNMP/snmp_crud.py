@@ -217,19 +217,16 @@ def DeleteCredential(request, credential_id):
         credential = Credential.objects.get(pk=credential_id)
         credential.delete()
 
-        return HttpResponse("""
-            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
-                Credential deleted successfully!
-                <script>
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
-                </script>
-            </div>
-        """)
+        return JsonResponse({
+            'success': True,
+            'message': 'Credential deleted successfully!'
+        })
 
     except Credential.DoesNotExist:
-        return HttpResponse("Credential not found", status=404)
+        return JsonResponse({
+            'success': False,
+            'message': 'Credential not found'
+        }, status=404)
     except Exception as e:
         return HttpResponse(f"Error deleting credential: {str(e)}", status=500)
 
@@ -582,13 +579,13 @@ def _get_device_profiles(device, profile_cache=None):
         profile_cache = _OFFICIAL_PROFILE_CACHE
 
     # Get all profiles from the device's template (should already be prefetched)
-    # If no template is assigned, fall back to direct profiles (deprecated)
     if device.device_template:
         profiles = list(device.device_template.profiles.all())
         logger.debug(f"Device '{device.name}' using template '{device.device_template.name}' with {len(profiles)} profiles")
     else:
-        profiles = list(device.profiles.all())
-        logger.debug(f"Device '{device.name}' has no template, using {len(profiles)} direct profiles")
+        # No template assigned - device has no profiles
+        profiles = []
+        logger.debug(f"Device '{device.name}' has no template assigned")
 
     if not profiles:
         return (tuple(), {'get': {}, 'walk': {}, 'table': {}})
@@ -1315,8 +1312,7 @@ def GetDeployDiff(request):
             Prefetch(
                 'devices',
                 queryset=Device.objects.select_related('credential', 'device_template').prefetch_related(
-                    'device_template__profiles',  # Prefetch profiles from device template
-                    'profiles'  # Keep for backward compatibility with devices without templates
+                    'device_template__profiles'  # Prefetch profiles from device template
                 )
             )
         ).all()
@@ -1632,8 +1628,7 @@ def DeployConfiguration(request):
                 devices = Device.objects.filter(network=network).select_related(
                     'credential', 'device_template'
                 ).prefetch_related(
-                    'device_template__profiles',  # Prefetch profiles from device template
-                    'profiles'  # Keep for backward compatibility with devices without templates
+                    'device_template__profiles'  # Prefetch profiles from device template
                 )
 
                 for device in devices:
@@ -2049,7 +2044,7 @@ def GetDevices(request):
         sort_by = request.GET.get('sort_by', '-created_at')
 
         # Start with all devices - only fetch needed fields for performance
-        queryset = Device.objects.select_related('credential', 'network', 'device_template').prefetch_related('profiles').only(
+        queryset = Device.objects.select_related('credential', 'network', 'device_template').only(
             'id', 'name', 'ip_address', 'port', 'retries', 'timeout', 'created_at',
             'credential__id', 'credential__name',
             'network__id', 'network__name',
@@ -2094,12 +2089,6 @@ def GetDevices(request):
         # Serialize devices
         devices = []
         for device in devices_page:
-            # Strip .json extension from profile names for display (using list comprehension for speed)
-            profile_names = [
-                p.name[:-5] if p.name.endswith('.json') else p.name
-                for p in device.profiles.all()
-            ]
-
             devices.append({
                 'id': device.id,
                 'name': device.name,
@@ -2113,7 +2102,6 @@ def GetDevices(request):
                 'network_name': device.network.name if device.network else None,
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
-                'profiles': profile_names,
                 'created_at': device.created_at.isoformat(),
             })
 
@@ -2242,15 +2230,6 @@ def GetDevice(request, device_id):
     try:
         device = Device.objects.get(pk=device_id)
 
-        # Strip .json extension from profile names for display
-        profile_names = []
-        for profile in device.profiles.all():
-            name = profile.name
-            # Remove .json extension if present (official profiles)
-            if name.endswith('.json'):
-                name = name[:-5]
-            profile_names.append(name)
-
         data = {
             'id': device.id,
             'name': device.name,
@@ -2261,7 +2240,6 @@ def GetDevice(request, device_id):
             'credential': device.credential_id if device.credential else None,
             'network': device.network_id if device.network else None,
             'device_template': device.device_template_id if device.device_template else None,
-            'profiles': profile_names,
         }
 
         return JsonResponse(data)
@@ -2452,42 +2430,22 @@ def GetAllProfiles(request):
     try:
         all_profiles = []
 
-        # Load official profiles from JSON files
-        official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-        if os.path.exists(official_profiles_dir):
-            for filename in os.listdir(official_profiles_dir):
-                if filename.endswith('.json'):
-                    profile_name = filename[:-5]
-                    display_name = profile_name.replace('_', ' ').title()
-                    
-                    # Load the JSON file to get vendor
-                    profile_path = os.path.join(official_profiles_dir, filename)
-                    vendor = ''
-                    try:
-                        with open(profile_path, 'r') as f:
-                            profile_data = json.load(f)
-                            vendor = profile_data.get('vendor', '')
-                    except Exception:
-                        pass
-                    
-                    all_profiles.append({
-                        'id': profile_name,  # Use name as ID for official profiles
-                        'name': profile_name,
-                        'display_name': display_name,
-                        'is_official': True,
-                        'vendor': vendor
-                    })
-
-        # Load user profiles from database (exclude placeholders)
+        # Load ALL profiles from database (both official and user-created)
         for profile in Profile.objects.all():
-            # Skip placeholder profiles (those with is_official_placeholder flag)
-            if profile.profile_data.get('is_official_placeholder'):
-                continue
+            # Determine if it's an official profile (name ends with .json)
+            is_official = profile.name.endswith('.json')
+            
+            # Create friendly display name for official profiles
+            if is_official:
+                display_name = profile.name[:-5].replace('_', ' ').title()
+            else:
+                display_name = profile.name
+            
             all_profiles.append({
-                'id': profile.id,
+                'id': profile.id,  # Always use database ID
                 'name': profile.name,
-                'display_name': profile.name.replace('_', ' ').title(),
-                'is_official': False,
+                'display_name': display_name,
+                'is_official': is_official,
                 'vendor': profile.vendor or ''
             })
 
@@ -2596,7 +2554,7 @@ def GetDeviceVisualization(request, device_id):
                     'vendor': profile.vendor,
                     'product': profile.product,
                 }
-                for profile in device.profiles.all()
+                for profile in (device.device_template.profiles.all() if device.device_template else [])
             ],
             'created_at': device.created_at.isoformat(),
             'updated_at': device.updated_at.isoformat(),
@@ -3270,8 +3228,19 @@ def GetDeviceTemplate(request, template_id):
         try:
             template = DeviceTemplate.objects.get(id=int(template_id))
             
-            # Get profile IDs
-            profile_ids = list(template.profiles.values_list('id', flat=True))
+            # Get profile data with names for display
+            profiles_data = [
+                {
+                    'id': profile.id,
+                    'name': profile.name,
+                    'display_name': profile.name.replace('_', ' ').title() if profile.name.endswith('.json') else profile.name
+                }
+                for profile in template.profiles.all()
+            ]
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"GetDeviceTemplate {template_id}: Returning {len(profiles_data)} profiles: {profiles_data}")
             
             return JsonResponse({
                 'id': template.id,
@@ -3282,7 +3251,7 @@ def GetDeviceTemplate(request, template_id):
                 'product': template.product,
                 'matching_rules': template.matching_rules,
                 'official': template.official,
-                'profiles': profile_ids
+                'profiles': profiles_data
             })
         except (ValueError, DeviceTemplate.DoesNotExist):
             # If not found by ID, try to load as official template by name
@@ -3332,15 +3301,22 @@ def AddDeviceTemplate(request):
         if profile_ids:
             for profile_id in profile_ids:
                 try:
+                    # Convert to string for consistent handling
+                    profile_id_str = str(profile_id)
+                    
                     # Try to get by ID first (for database profiles)
-                    if isinstance(profile_id, int) or profile_id.isdigit():
-                        profile = Profile.objects.get(id=int(profile_id))
+                    if profile_id_str.isdigit():
+                        profile = Profile.objects.get(id=int(profile_id_str))
                         template.profiles.add(profile)
                     else:
                         # Try to get by name (for official profiles that might be referenced by name)
-                        profile = Profile.objects.get(name=profile_id)
+                        profile = Profile.objects.get(name=profile_id_str)
                         template.profiles.add(profile)
                 except Profile.DoesNotExist:
+                    # Log which profile failed to add
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Profile with ID/name '{profile_id}' not found, skipping")
                     pass  # Skip profiles that don't exist
         
         return JsonResponse({
@@ -3383,20 +3359,33 @@ def UpdateDeviceTemplate(request, template_id):
         # Update profiles
         profiles_json = request.POST.get('profiles')
         if profiles_json:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Received profiles JSON: {profiles_json}")
+            
             profile_ids = json.loads(profiles_json)
+            logger.info(f"Parsed profile IDs: {profile_ids} (types: {[type(p).__name__ for p in profile_ids]})")
+            
             template.profiles.clear()
             
             for profile_id in profile_ids:
                 try:
+                    # Convert to string for consistent handling
+                    profile_id_str = str(profile_id)
+                    
                     # Try to get by ID first (for database profiles)
-                    if isinstance(profile_id, int) or str(profile_id).isdigit():
-                        profile = Profile.objects.get(id=int(profile_id))
+                    if profile_id_str.isdigit():
+                        profile = Profile.objects.get(id=int(profile_id_str))
                         template.profiles.add(profile)
                     else:
                         # Try to get by name (for official profiles)
-                        profile = Profile.objects.get(name=profile_id)
+                        profile = Profile.objects.get(name=profile_id_str)
                         template.profiles.add(profile)
                 except Profile.DoesNotExist:
+                    # Log which profile failed to add
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Profile with ID/name '{profile_id}' not found, skipping")
                     pass  # Skip profiles that don't exist
         
         return JsonResponse({

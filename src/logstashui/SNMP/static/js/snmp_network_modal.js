@@ -466,10 +466,10 @@ document.getElementById('networkForm').addEventListener('submit', function (e) {
         // Don't reload - let device modal handle the refresh
       } else {
         closeNetworkModal();
-        // Reload page to show updated networks
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // Refresh networks data without page reload
+        if (typeof refreshNetworksData === 'function') {
+          refreshNetworksData();
+        }
       }
     })
     .catch(error => {

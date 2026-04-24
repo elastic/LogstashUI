@@ -183,6 +183,31 @@
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
 <script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
 <script>
+  // Refresh networks data without page reload
+  function refreshNetworksData() {
+    console.log('Refreshing networks data...');
+    
+    // Fetch updated networks data
+    fetch('/SNMP/GetNetworks/')
+      .then(response => response.json())
+      .then(networks => {
+        // GetNetworks returns a plain array, not {success: true, networks: [...]}
+        if (Array.isArray(networks)) {
+          // Update the networks data in the table
+          if (typeof updateNetworksData === 'function') {
+            updateNetworksData(networks);
+          }
+          console.log('Networks data refreshed successfully:', networks.length, 'networks');
+        } else {
+          console.error('Unexpected response format:', networks);
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing networks:', error);
+        showToast('Error refreshing networks data', 'error');
+      });
+  }
+
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
     const actionButton = e.target.closest('.action-menu-button');
@@ -296,9 +321,8 @@
             .then(data => {
               if (data.success) {
                 showToast(data.message, 'success');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 1000);
+                // Refresh networks data without page reload
+                refreshNetworksData();
               } else {
                 throw new Error(data.error || 'Failed to delete network');
               }
@@ -329,9 +353,8 @@
             .then(data => {
               if (data.success) {
                 showToast(data.message, 'success');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 1000);
+                // Refresh networks data without page reload
+                refreshNetworksData();
               } else {
                 throw new Error(data.error || 'Failed to delete network');
               }

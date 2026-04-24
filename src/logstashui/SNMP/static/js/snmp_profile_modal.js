@@ -550,7 +550,11 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast(isEdit ? 'Profile updated successfully!' : 'Profile created successfully!', 'success');
           }
           closeProfileModal();
-          setTimeout(() => window.location.reload(), 500);
+          
+          // Refresh profiles data without page reload
+          if (typeof refreshProfilesData === 'function') {
+            refreshProfilesData();
+          }
         } else {
           showErrorInModal(data.message || 'Failed to save profile');
         }
