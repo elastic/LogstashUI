@@ -110,7 +110,7 @@ function populateDiscoveredDevicesTable(devices) {
         
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                <span class="cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" title="OS: ${escapeHtml(hostDescription)}">
+                <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(hostDescription)}">
                     ${escapeHtml(hostName)}
                 </span>
             </td>
@@ -168,6 +168,40 @@ function addDiscoveredDevice(deviceIndex) {
     }
 }
 
+
+// Instant tooltip handler for device names
+let tooltipElement = null;
+
+document.addEventListener('mouseover', function(e) {
+    const target = e.target.closest('.device-name-tooltip');
+    if (target && target.dataset.tooltip) {
+        // Create tooltip if it doesn't exist
+        if (!tooltipElement) {
+            tooltipElement = document.createElement('div');
+            tooltipElement.className = 'fixed px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg border border-gray-700 pointer-events-none';
+            tooltipElement.style.zIndex = '10000';
+            tooltipElement.style.maxWidth = '400px';
+            tooltipElement.style.whiteSpace = 'pre-wrap';
+            document.body.appendChild(tooltipElement);
+        }
+        
+        // Set content and show
+        tooltipElement.textContent = target.dataset.tooltip;
+        tooltipElement.style.display = 'block';
+        
+        // Position below the element
+        const rect = target.getBoundingClientRect();
+        tooltipElement.style.left = rect.left + (rect.width / 2) - (tooltipElement.offsetWidth / 2) + 'px';
+        tooltipElement.style.top = rect.bottom + 8 + 'px';
+    }
+});
+
+document.addEventListener('mouseout', function(e) {
+    const target = e.target.closest('.device-name-tooltip');
+    if (target && tooltipElement) {
+        tooltipElement.style.display = 'none';
+    }
+});
 
 // Attach event listener to discovered devices button
 document.addEventListener('DOMContentLoaded', function() {

@@ -7,11 +7,15 @@ from . import views
 from . import snmp_crud
 
 urlpatterns = [
+    path("Overview/", views.Overview, name="SNMPOverview"),
     path("Networks/", views.Networks, name="Networks"),
     path("Devices/", views.Devices, name="Devices"),
     path("DeviceTemplates/", views.DeviceTemplates, name="DeviceTemplates"),
     path("Profiles/", views.Profiles, name="Profiles"),
     path("Credentials/", views.Credentials, name="Credentials"),
+    
+    # Overview API endpoints
+    path("GetOverviewMetrics/", views.GetOverviewMetrics, name="GetOverviewMetrics"),
 
     # SNMP Credential endpoints
     path("GetCredentials/", snmp_crud.GetCredentials, name="GetSNMPCredentials"),

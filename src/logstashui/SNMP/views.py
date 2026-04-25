@@ -4,9 +4,11 @@
 
 from django.shortcuts import render
 from django.conf import settings
+from django.http import JsonResponse
 
 from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
+from .overview import get_discovered_devices_count, get_device_data_quality, get_high_resource_usage
 
 import os
 import json
@@ -288,6 +290,56 @@ def Profiles(request):
 def Credentials(request):
     credentials = Credential.objects.all()
     return render(request, 'Credentials.html', {'credentials': credentials})
+
+def Overview(request):
+    """SNMP Overview page with metrics and statistics"""
+    return render(request, 'Overview.html')
+
+def GetOverviewMetrics(request):
+    """API endpoint to get overview metrics"""
+    try:
+        # Get total devices from database
+        total_devices = Device.objects.count()
+        
+        # Get discovered devices count from Elasticsearch
+        discovered_result = get_discovered_devices_count()
+        
+        # Get device data quality
+        data_quality_result = get_device_data_quality()
+        
+        # Get high resource usage
+        high_usage_result = get_high_resource_usage()
+        
+        # Combine errors from all queries
+        all_errors = []
+        if discovered_result.get('errors'):
+            all_errors.extend(discovered_result.get('errors'))
+        if data_quality_result.get('errors'):
+            all_errors.extend(data_quality_result.get('errors'))
+        if high_usage_result.get('errors'):
+            all_errors.extend(high_usage_result.get('errors'))
+        
+        return JsonResponse({
+            'success': True,
+            'metrics': {
+                'total_devices': total_devices,
+                'discovered_devices': discovered_result.get('count', 0)
+            },
+            'data_quality': {
+                'devices': data_quality_result.get('devices', [])
+            },
+            'high_usage': {
+                'high_cpu': high_usage_result.get('high_cpu', []),
+                'high_memory': high_usage_result.get('high_memory', [])
+            },
+            'errors': all_errors if all_errors else None
+        }, status=200)
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 
 def suggest_device_template(device_info):

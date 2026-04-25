@@ -9,6 +9,21 @@
 
 {% block content %}
 
+<style>
+  @keyframes deployButtonGlow {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(147, 51, 234, 0.5), 0 0 20px rgba(147, 51, 234, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 15px rgba(147, 51, 234, 0.7), 0 0 30px rgba(147, 51, 234, 0.4);
+    }
+  }
+
+  .deploy-button-glow {
+    animation: deployButtonGlow 2s ease-in-out infinite;
+  }
+</style>
+
 <div class="p-6">
   <!-- Empty State (No devices at all) - Shown by JavaScript when totalDevicesCount === 0 -->
   <div id="initialEmptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-12rem)]">
@@ -55,7 +70,7 @@
           </svg>
           Discovered Devices
         </button>
-        <button id="commitBtn" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
+        <button id="deployChangesBtn" class="btn bg-green-600 hover:bg-green-700 text-white px-4 py-2.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>

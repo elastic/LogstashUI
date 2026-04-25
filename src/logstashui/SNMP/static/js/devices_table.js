@@ -114,20 +114,33 @@ function checkDeviceStatuses(devices) {
       if (data.success && data.statuses) {
         // Update status circles for all devices
         Object.entries(data.statuses).forEach(([deviceId, status]) => {
-          if (status.is_online) {
-            const statusCircle = document.getElementById(`status-circle-${deviceId}`);
-            if (statusCircle) {
-              statusCircle.classList.remove('bg-gray-500');
-              statusCircle.classList.add('bg-green-500');
-              statusCircle.title = 'Device online (data received in last 15 minutes)';
+          const statusContainer = document.getElementById(`status-circle-${deviceId}`);
+          if (statusContainer) {
+            if (status.is_online) {
+              // Replace spinner with green dot
+              statusContainer.innerHTML = '';
+              statusContainer.className = 'w-3 h-3 rounded-full bg-green-500';
+              statusContainer.title = 'Device online (data received in last 15 minutes)';
+            } else {
+              // Replace spinner with gray dot
+              statusContainer.innerHTML = '';
+              statusContainer.className = 'w-3 h-3 rounded-full bg-gray-500';
+              statusContainer.title = 'Device offline (no recent data)';
             }
           }
-          // If not online, leave the circle gray (default state)
         });
       }
     })
     .catch(error => {
-      // Silently fail - leave status circles gray
+      // On error, replace all spinners with gray dots
+      devices.forEach(device => {
+        const statusContainer = document.getElementById(`status-circle-${device.id}`);
+        if (statusContainer) {
+          statusContainer.innerHTML = '';
+          statusContainer.className = 'w-3 h-3 rounded-full bg-gray-500';
+          statusContainer.title = 'Device status unknown';
+        }
+      });
       console.debug('Could not check device statuses:', error);
     });
 }
@@ -164,7 +177,12 @@ function renderDevices(devices) {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          <div class="w-3 h-3 rounded-full bg-gray-500" id="status-circle-${device.id}" title="Device status"></div>
+          <div id="status-circle-${device.id}" class="w-3 h-3" title="Checking device status...">
+            <svg class="animate-spin h-3 w-3 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
         </div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>

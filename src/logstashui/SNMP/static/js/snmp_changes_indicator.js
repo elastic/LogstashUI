@@ -85,10 +85,20 @@ async function checkForUndeployedSNMPChanges() {
         }
 
         // Show or hide the indicator based on whether there are changes
+        const deployBtn = document.getElementById('deployChangesBtn') || document.getElementById('commitBtn');
+        
         if (hasChanges) {
             indicator.classList.remove('hidden');
+            // Add purple glow to Deploy button
+            if (deployBtn) {
+                deployBtn.classList.add('deploy-button-glow');
+            }
         } else {
             indicator.classList.add('hidden');
+            // Remove purple glow from Deploy button
+            if (deployBtn) {
+                deployBtn.classList.remove('deploy-button-glow');
+            }
         }
 
     } catch (error) {
