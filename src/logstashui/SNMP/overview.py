@@ -209,19 +209,78 @@ def get_device_data_quality():
                                             "field": "system.memory.actual.used.bytes"
                                         }
                                     }
+                                },
+                                "has_uptime": {
+                                    "filter": {
+                                        "exists": {
+                                            "field": "host.uptime"
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 
-                # Execute search
+                # Execute search for CPU/Memory/Uptime
                 response = es.search(
                     index="metrics-snmp*",
                     body=query
                 )
                 
-                # Process results
+                # Build separate query for interfaces (stored in separate documents with event.kind: "interfaces")
+                interface_query = {
+                    "size": 0,
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {
+                                    "range": {
+                                        "@timestamp": {
+                                            "gte": fifteen_minutes_ago.isoformat(),
+                                            "lte": now.isoformat()
+                                        }
+                                    }
+                                },
+                                {
+                                    "terms": {
+                                        "host.hostname": device_ips
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "event.kind": "interfaces"
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "aggs": {
+                        "devices": {
+                            "terms": {
+                                "field": "host.hostname",
+                                "size": 1000
+                            }
+                        }
+                    }
+                }
+                
+                # Execute search for interfaces
+                interface_response = es.search(
+                    index="metrics-snmp*",
+                    body=interface_query
+                )
+                
+                # Build set of devices with interface data
+                devices_with_interfaces = set()
+                if 'aggregations' in interface_response and 'devices' in interface_response['aggregations']:
+                    interface_buckets = interface_response['aggregations']['devices']['buckets']
+                    for bucket in interface_buckets:
+                        devices_with_interfaces.add(bucket['key'])
+                
+                # Process results from CPU/Memory/Uptime query
+                device_metrics = {}  # Store metrics status for each device
+                
                 if 'aggregations' in response and 'devices' in response['aggregations']:
                     buckets = response['aggregations']['devices']['buckets']
                     
@@ -234,9 +293,18 @@ def get_device_data_quality():
                         
                         has_cpu = bucket['has_cpu']['doc_count'] > 0
                         has_memory = bucket['has_memory']['doc_count'] > 0
+                        has_uptime = bucket['has_uptime']['doc_count'] > 0
+                        has_interfaces = device_ip in devices_with_interfaces
                         
-                        # Only add to issues list if missing CPU or memory
-                        if not has_cpu or not has_memory:
+                        device_metrics[device_ip] = {
+                            'has_cpu': has_cpu,
+                            'has_memory': has_memory,
+                            'has_uptime': has_uptime,
+                            'has_interfaces': has_interfaces
+                        }
+                        
+                        # Only add to issues list if missing any metric
+                        if not has_cpu or not has_memory or not has_uptime or not has_interfaces:
                             device_info = device_lookup.get(device_ip, {})
                             devices_with_issues.append({
                                 'device_id': device_info.get('id'),
@@ -245,12 +313,17 @@ def get_device_data_quality():
                                 'network_name': device_info.get('network_name'),
                                 'network_id': device_info.get('network_id'),
                                 'has_cpu': has_cpu,
-                                'has_memory': has_memory
+                                'has_memory': has_memory,
+                                'has_uptime': has_uptime,
+                                'has_interfaces': has_interfaces
                             })
                     
                     # Check for devices with no data at all
                     for device_ip in device_ips:
                         if device_ip not in found_devices:
+                            # Still check if they have interface data
+                            has_interfaces = device_ip in devices_with_interfaces
+                            
                             device_info = device_lookup.get(device_ip, {})
                             devices_with_issues.append({
                                 'device_id': device_info.get('id'),
@@ -259,7 +332,9 @@ def get_device_data_quality():
                                 'network_name': device_info.get('network_name'),
                                 'network_id': device_info.get('network_id'),
                                 'has_cpu': False,
-                                'has_memory': False
+                                'has_memory': False,
+                                'has_uptime': False,
+                                'has_interfaces': has_interfaces
                             })
                 
             except Exception as e:

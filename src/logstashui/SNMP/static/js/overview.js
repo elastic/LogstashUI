@@ -191,6 +191,14 @@ function updateDataQualityTable(devices) {
       ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
       : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
     
+    const uptimeIcon = device.has_uptime
+      ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
+      : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+    
+    const interfacesIcon = device.has_interfaces
+      ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
+      : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+    
     row.innerHTML = `
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
@@ -198,6 +206,8 @@ function updateDataQualityTable(devices) {
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${cpuIcon}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${memoryIcon}</td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${uptimeIcon}</td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${interfacesIcon}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.network_name ? escapeHtml(device.network_name) : '<span class="text-gray-500 italic">None</span>'}
       </td>
