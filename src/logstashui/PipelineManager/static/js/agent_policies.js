@@ -1048,12 +1048,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const enrollmentTokensView = document.getElementById('enrollmentTokensView');
                 const pipelinesView = document.getElementById('pipelinesView');
                 const keystoreView = document.getElementById('keystoreView');
+                const nodesView = document.getElementById('nodesView');
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
                 document.getElementById('jvmFormView')?.classList.add('hidden');
                 if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
                 if (keystoreView) keystoreView.classList.add('hidden');
+                if (nodesView) nodesView.classList.add('hidden');
                 if (pipelinesView) {
                     pipelinesView.classList.remove('hidden');
                     // Load pipelines for current policy
@@ -1079,16 +1081,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 const enrollmentTokensView = document.getElementById('enrollmentTokensView');
                 const pipelinesView = document.getElementById('pipelinesView');
                 const keystoreView = document.getElementById('keystoreView');
+                const nodesView = document.getElementById('nodesView');
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
                 document.getElementById('jvmFormView')?.classList.add('hidden');
                 if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
                 if (pipelinesView) pipelinesView.classList.add('hidden');
+                if (nodesView) nodesView.classList.add('hidden');
                 if (keystoreView) {
                     keystoreView.classList.remove('hidden');
                     // Load keystore for current policy
                     loadPolicyKeystore();
+                }
+                return;
+            }
+            
+            // Handle nodes tab
+            if (file === 'nodes') {
+                const modeToggleContainer = document.getElementById('modeToggleContainer');
+                modeToggleContainer.classList.add('hidden');
+                
+                // Hide notifications container
+                const notificationsContainer = document.getElementById('notificationsContainer');
+                if (notificationsContainer) {
+                    notificationsContainer.classList.add('hidden');
+                }
+                
+                // Hide other views
+                const formModeEditor = document.getElementById('formModeEditor');
+                const codeModeEditor = document.getElementById('codeModeEditor');
+                const enrollmentTokensView = document.getElementById('enrollmentTokensView');
+                const pipelinesView = document.getElementById('pipelinesView');
+                const keystoreView = document.getElementById('keystoreView');
+                const nodesView = document.getElementById('nodesView');
+                
+                if (formModeEditor) formModeEditor.classList.add('hidden');
+                if (codeModeEditor) codeModeEditor.classList.add('hidden');
+                document.getElementById('jvmFormView')?.classList.add('hidden');
+                if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
+                if (pipelinesView) pipelinesView.classList.add('hidden');
+                if (keystoreView) keystoreView.classList.add('hidden');
+                if (nodesView) {
+                    nodesView.classList.remove('hidden');
+                    // Load nodes for current policy
+                    loadPolicyNodes();
                 }
                 return;
             }
@@ -1111,12 +1148,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const enrollmentTokensView = document.getElementById('enrollmentTokensView');
                 const pipelinesView = document.getElementById('pipelinesView');
                 const keystoreView = document.getElementById('keystoreView');
+                const nodesView = document.getElementById('nodesView');
                 
                 if (formModeEditor) formModeEditor.classList.add('hidden');
                 if (codeModeEditor) codeModeEditor.classList.add('hidden');
                 document.getElementById('jvmFormView')?.classList.add('hidden');
                 if (pipelinesView) pipelinesView.classList.add('hidden');
                 if (keystoreView) keystoreView.classList.add('hidden');
+                if (nodesView) nodesView.classList.add('hidden');
                 if (enrollmentTokensView) {
                     enrollmentTokensView.classList.remove('hidden');
                     // Load enrollment tokens for current policy
@@ -1130,10 +1169,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const enrollmentTokensView = document.getElementById('enrollmentTokensView');
             const pipelinesView = document.getElementById('pipelinesView');
             const keystoreView = document.getElementById('keystoreView');
+            const nodesView = document.getElementById('nodesView');
 
             if (enrollmentTokensView) enrollmentTokensView.classList.add('hidden');
             if (pipelinesView) pipelinesView.classList.add('hidden');
             if (keystoreView) keystoreView.classList.add('hidden');
+            if (nodesView) nodesView.classList.add('hidden');
 
             if (file === 'logstash.yml') {
                 modeToggleContainer.classList.remove('hidden');
@@ -3039,6 +3080,86 @@ function validateJvmHeapSettings() {
 }
 
 // Note: All guide-related functions have been moved to logstashyml_guides.js
+
+// Load nodes for the current policy
+function loadPolicyNodes() {
+    const policySelect = document.getElementById('policySelect');
+    const selectedOption = policySelect.options[policySelect.selectedIndex];
+    const policyId = selectedOption.dataset.policyId;
+    
+    if (!policyId) {
+        console.error('No policy ID available');
+        return;
+    }
+
+    fetch(`/ConnectionManager/GetPolicyNodes/?policy_id=${policyId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderPolicyNodes(data.nodes);
+            } else {
+                console.error('Error loading nodes:', data.error);
+                showToast(data.error || 'Failed to load nodes', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading nodes:', error);
+            showToast('Failed to load nodes', 'error');
+        });
+}
+
+// Render nodes in the table
+function renderPolicyNodes(nodes) {
+    const tbody = document.getElementById('nodesTableBody');
+    if (!tbody) return;
+
+    if (!nodes || nodes.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                    <div class="flex flex-col items-center gap-2">
+                        <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                        </svg>
+                        <p>No nodes found</p>
+                        <p class="text-sm">Nodes will appear here when agents enroll with this policy</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = nodes.map(node => `
+        <tr class="hover:bg-gray-700/50 transition-colors">
+            <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
+                <div class="flex flex-col items-center">
+                    <div class="rounded-lg p-2" style="background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.05) 70%, transparent 100%);">
+                        <img src="/static/images/LogstashIcon.png" alt="Agent" width="52" height="52" class="inline-block">
+                    </div>
+                    <span class="text-xs text-gray-500 mt-1">LogstashAgent</span>
+                </div>
+            </td>
+            <td class="px-4 py-4 text-sm font-medium text-white">
+                <div class="flex flex-col">
+                    <span>${node.name}</span>
+                    ${node.agent_version ? `
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span class="text-xs text-gray-500">v${node.agent_version}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            </td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${node.host || '—'}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${node.status_class}">
+                    ${node.status.charAt(0).toUpperCase() + node.status.slice(1)}
+                    
+                </span>
+            </td>
+        </tr>
+    `).join('');
+}
 
 // ---------------------------------------------------------------------------
 // Unsaved-changes navigation guard

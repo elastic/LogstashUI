@@ -57,6 +57,7 @@ urlpatterns = [
     path("UpdateKeystoreEntry/", agent_policies.update_keystore_entry, name="UpdateKeystoreEntry"),
     path("DeleteKeystoreEntry/", agent_policies.delete_keystore_entry, name="DeleteKeystoreEntry"),
     path("SetKeystorePassword/", agent_policies.set_keystore_password, name="SetKeystorePassword"),
+    path("GetPolicyNodes/", agent_policies.get_policy_nodes, name="GetPolicyNodes"),
 
     path("GetCurrentPipelineCode/", editor_views.GetCurrentPipelineCode, name="GetCurrentPipelineCode"),
     path("GetDiff/", editor_views.GetDiff, name="GetDiff"),

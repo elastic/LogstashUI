@@ -525,3 +525,83 @@ def delete_keystore_entry(request):
     except Exception as e:
         logger.error(f"Error deleting keystore entry: {str(e)}")
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_admin_role
+def get_policy_nodes(request):
+    """
+    Get all nodes (connections) associated with a specific policy.
+    """
+    try:
+        policy_id = request.GET.get('policy_id')
+
+        if not policy_id:
+            return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
+
+        # Get the policy
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+        # Get all active agent connections for this policy
+        nodes = ConnectionTable.objects.filter(
+            policy=policy,
+            connection_type=ConnectionTable.ConnectionType.AGENT,
+            is_active=True
+        ).order_by('name')
+
+        # Serialize nodes
+        nodes_data = []
+        now = datetime.now(timezone.utc)
+        
+        for node in nodes:
+            # Compute is_online based on last_check_in (within 10 minutes)
+            is_online = False
+            if node.last_check_in:
+                time_diff = now - node.last_check_in
+                is_online = time_diff.total_seconds() < 600  # 10 minutes = 600 seconds
+            
+            # Determine status
+            status = 'offline'
+            status_class = 'bg-red-100 text-red-800'
+            
+            if node.status_blob and node.status_blob.get('logwatcher', {}).get('is_restarting'):
+                status = 'restarting'
+                status_class = 'bg-blue-100 text-blue-800'
+            elif not is_online:
+                status = 'offline'
+                status_class = 'bg-red-100 text-red-800'
+            elif node.status_blob and (
+                node.status_blob.get('settings_path_found') == False or
+                node.status_blob.get('logs_path_found') == False or
+                node.status_blob.get('binary_path_found') == False or
+                node.status_blob.get('logstash_api', {}).get('accessible') == False or
+                node.status_blob.get('logstash_api', {}).get('status') == 'red' or
+                node.status_blob.get('last_policy_apply', {}).get('success') == False):
+                status = 'unhealthy'
+                status_class = 'bg-yellow-100 text-yellow-800'
+            else:
+                status = 'healthy'
+                status_class = 'bg-green-100 text-green-800'
+
+            nodes_data.append({
+                "id": node.id,
+                "name": node.name,
+                "host": node.host or '',
+                "connection_type": node.connection_type,
+                "status": status,
+                "status_class": status_class,
+                "last_check_in": node.last_check_in.isoformat() if node.last_check_in else None,
+                "agent_version": node.status_blob.get('agent_version') if node.status_blob else None
+            })
+
+        return JsonResponse({
+            "success": True,
+            "nodes": nodes_data,
+            "policy_name": policy.name
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting policy nodes: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
