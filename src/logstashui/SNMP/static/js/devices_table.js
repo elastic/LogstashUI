@@ -215,14 +215,22 @@ function renderDevices(devices) {
               <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
             </svg>
           </button>
-          <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+          <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
             <div class="px-1 py-1">
+              <button onclick="cloneDevice(${device.id})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Clone
+              </button>
+              <hr class="my-1 border-gray-700">
               <button onclick="editDevice(${device.id})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 Edit
               </button>
+              <hr class="my-1 border-gray-700">
               <button onclick="deleteDevice(${device.id}, '${escapeHtml(device.name)}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -341,6 +349,23 @@ async function deleteDevice(deviceId, deviceName) {
   .catch(error => {
     showToast('Error deleting device: ' + error.message, 'error');
   });
+}
+
+// Clone device
+function cloneDevice(deviceId) {
+  fetch(`/SNMP/GetDevice/${deviceId}/`)
+    .then(response => response.json())
+    .then(data => {
+      // Remove the ID so it creates a new device
+      delete data.id;
+      // Append " (Copy)" to the name
+      data.name = data.name + ' (Copy)';
+      // Open modal in add mode with cloned data
+      openDeviceModal(data);
+    })
+    .catch(error => {
+      showToast('Error loading device: ' + error.message, 'error');
+    });
 }
 
 // Edit device (defined in snmp_devices_modal.js)

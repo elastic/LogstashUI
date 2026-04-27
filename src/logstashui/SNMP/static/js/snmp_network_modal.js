@@ -34,12 +34,28 @@ function openNetworkModal(networkData = null) {
   loadNetworkCredentials(networkData ? networkData.credential : null);
 
   if (networkData) {
-    // Edit mode
-    modalTitle.textContent = 'Edit SNMP Network';
-    document.getElementById('networkId').value = networkData.id;
+    // Check if this is edit mode (has ID) or clone mode (no ID)
+    const isEditMode = networkData.id !== undefined;
+    
+    if (isEditMode) {
+      // Edit mode
+      modalTitle.textContent = 'Edit SNMP Network';
+      document.getElementById('networkId').value = networkData.id;
+    } else {
+      // Clone mode - has data but no ID
+      modalTitle.textContent = 'Add SNMP Network';
+      document.getElementById('networkId').value = '';
+    }
+    
+    // Fill in the form fields
     document.getElementById('networkName').value = networkData.name;
     document.getElementById('networkRange').value = networkData.network_range;
     document.getElementById('logstashName').value = networkData.logstash_name || '';
+    
+    // Set polling interval if present
+    if (networkData.interval !== undefined) {
+      document.getElementById('pollingInterval').value = networkData.interval;
+    }
 
     // Set discovery enabled radio
     const discoveryValue = networkData.discovery_enabled ? 'true' : 'false';

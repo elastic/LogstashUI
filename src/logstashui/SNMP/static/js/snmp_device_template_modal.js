@@ -16,7 +16,7 @@ let selectedTemplateProfiles = [];
 let tempSelectedProfiles = [];
 
 // Open device template modal (for add, edit, or view)
-function openDeviceTemplateModal(templateId = null, viewMode = false) {
+function openDeviceTemplateModal(templateId = null, viewMode = false, isOfficial = false, clonedData = null) {
   const modal = document.getElementById('deviceTemplateFormModal');
   const form = document.getElementById('deviceTemplateForm');
   const modalTitle = document.getElementById('deviceTemplateModalTitle');
@@ -35,7 +35,42 @@ function openDeviceTemplateModal(templateId = null, viewMode = false) {
   // Set view mode
   viewModeInput.value = viewMode ? 'true' : 'false';
 
-  if (templateId) {
+  if (clonedData) {
+    // Clone mode - populate with cloned data
+    modalTitle.textContent = 'Add Device Template';
+    saveBtn.classList.remove('hidden');
+    saveBtn.textContent = 'Save Template';
+    document.getElementById('deviceTemplateId').value = '';
+    disableFormInputs(false);
+
+    // Populate form with cloned data
+    document.getElementById('deviceTemplateName').value = clonedData.name;
+    document.getElementById('deviceTemplateDescription').value = clonedData.description || '';
+    document.getElementById('deviceTemplateVendor').value = clonedData.vendor || '';
+    document.getElementById('deviceTemplateModel').value = clonedData.model || '';
+    document.getElementById('deviceTemplateProduct').value = clonedData.product || '';
+
+    // Load matching rules
+    if (clonedData.matching_rules && clonedData.matching_rules.length > 0) {
+      clonedData.matching_rules.forEach(rule => {
+        addMatchingRule(rule);
+      });
+    } else {
+      addMatchingRule(); // Add one empty rule
+    }
+
+    // Load and select profiles
+    if (clonedData.profiles && clonedData.profiles.length > 0) {
+      // Profiles come as objects with {id, name, display_name}
+      clonedData.profiles.forEach(profile => {
+        profileDataCache[profile.id] = profile;
+      });
+      
+      // Extract profile IDs for selection
+      selectedTemplateProfiles = clonedData.profiles.map(p => String(p.id));
+      renderSelectedProfileChips();
+    }
+  } else if (templateId) {
     // Fetch template data
     fetch(`/SNMP/GetDeviceTemplate/${templateId}/`)
       .then(response => response.json())

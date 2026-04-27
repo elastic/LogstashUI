@@ -290,6 +290,24 @@
     });
   }, true);
 
+  // Clone network function
+  function cloneNetwork(networkId) {
+    // Load network data and open modal with cloned values
+    fetch(`/SNMP/GetNetwork/${networkId}/`)
+      .then(response => response.json())
+      .then(data => {
+        // Remove the ID so it creates a new network
+        delete data.id;
+        // Append " (Copy)" to the name
+        data.name = data.name + ' (Copy)';
+        // Open modal in add mode with cloned data
+        openNetworkModal(data);
+      })
+      .catch(error => {
+        showToast('Error loading network: ' + error, 'error');
+      });
+  }
+
   // Edit network function
   function editNetwork(networkId) {
     // Load network data and open modal in edit mode

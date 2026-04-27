@@ -28,30 +28,28 @@ function openDeviceModal(deviceData = null) {
   form.reset();
   document.getElementById('deviceErrorContainer').innerHTML = '';
 
-  if (deviceData && deviceData.id) {
-    // Edit mode - existing device
-    modalTitle.textContent = 'Edit SNMP Device';
-    document.getElementById('deviceId').value = deviceData.id;
-    document.getElementById('deviceName').value = deviceData.name;
-    document.getElementById('deviceIpAddress').value = deviceData.ip_address;
-    document.getElementById('devicePort').value = deviceData.port || 161;
-    document.getElementById('deviceRetries').value = deviceData.retries !== undefined ? deviceData.retries : 2;
-    document.getElementById('deviceTimeout').value = deviceData.timeout || 1000;
-
-    // Set device template if exists
-    // (template will be loaded in the dropdown)
-  } else if (deviceData) {
-    // Add mode with pre-filled data (e.g., from discovered devices)
-    modalTitle.textContent = 'Add SNMP Device';
-    document.getElementById('deviceForm').reset();
-    document.getElementById('deviceId').value = '';
+  if (deviceData) {
+    // Check if this is edit mode (has ID) or clone/add mode (no ID)
+    const isEditMode = deviceData.id !== undefined;
+    
+    if (isEditMode) {
+      // Edit mode - existing device
+      modalTitle.textContent = 'Edit SNMP Device';
+      document.getElementById('deviceId').value = deviceData.id;
+    } else {
+      // Clone/Add mode - has data but no ID
+      modalTitle.textContent = 'Add SNMP Device';
+      document.getElementById('deviceId').value = '';
+    }
+    
+    // Fill in the form fields
     document.getElementById('deviceName').value = deviceData.name || '';
     document.getElementById('deviceIpAddress').value = deviceData.ip_address || '';
     document.getElementById('devicePort').value = deviceData.port || 161;
     document.getElementById('deviceRetries').value = deviceData.retries !== undefined ? deviceData.retries : 2;
     document.getElementById('deviceTimeout').value = deviceData.timeout || 1000;
 
-    // Device template will be loaded in the dropdown
+    // Device template, credential, and network will be loaded in the dropdowns
   } else {
     // Add mode - completely new device
     modalTitle.textContent = 'Add SNMP Device';
