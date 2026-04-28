@@ -1,7 +1,9 @@
 {
-  "name": "lldp_mib_vendor_neutral",
-  "description": "[Standards] LLDP-MIB local system + local ports + remote neighbors + remote mgmt addresses",
-  "vendor": "Generic",
+  "name": "generic_lldp",
+  "description": "LLDP-MIB local system + local ports + remote neighbors + remote mgmt addresses",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
   "get": {
     "lldpLocChassisIdSubtype": "1.0.8802.1.1.2.1.3.1.0",
     "lldpLocChassisId": "1.0.8802.1.1.2.1.3.2.0",

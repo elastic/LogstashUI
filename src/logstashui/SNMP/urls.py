@@ -5,6 +5,7 @@
 from django.urls import path
 from . import views
 from . import snmp_crud
+from . import network_map
 
 urlpatterns = [
     path("Overview/", views.Overview, name="SNMPOverview"),
@@ -16,6 +17,9 @@ urlpatterns = [
     
     # Overview API endpoints
     path("GetOverviewMetrics/", views.GetOverviewMetrics, name="GetOverviewMetrics"),
+    
+    # Network Map API endpoints
+    path("GetNetworkMapData/", network_map.get_network_map_data, name="GetNetworkMapData"),
 
     # SNMP Credential endpoints
     path("GetCredentials/", snmp_crud.GetCredentials, name="GetSNMPCredentials"),

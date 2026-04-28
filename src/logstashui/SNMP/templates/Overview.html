@@ -9,6 +9,8 @@
 
 {% block content %}
 
+<script src="{% static 'js/d3.v7.js' %}"></script>
+
 <div class="p-6">
   <!-- Page Header -->
   <div class="page-header mb-6">
@@ -199,6 +201,9 @@
       <p class="text-gray-400">All monitored devices are reporting CPU, memory, uptime, and interface metrics.</p>
     </div>
   </div>
+
+  <!-- Network Topology Map -->
+  {% include 'components/network_map.html' %}
 
 </div>
 
