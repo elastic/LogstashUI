@@ -2602,7 +2602,8 @@ def GetDiscoveredDevices(request):
 
         # Calculate time range (last 2 hours)
         now = datetime.now(timezone.utc)
-        two_hours_ago = now - timedelta(hours=2)
+        ten_minutes_ago = now - timedelta(minutes=10)
+        #two_hours_ago = now - timedelta(hours=2)
 
         # Query each connection for discovered devices
         for connection in connections:
@@ -2618,7 +2619,7 @@ def GetDiscoveredDevices(request):
                                 {
                                     "range": {
                                         "@timestamp": {
-                                            "gte": two_hours_ago.isoformat(),
+                                            "gte": ten_minutes_ago.isoformat(),
                                             "lte": now.isoformat()
                                         }
                                     }
