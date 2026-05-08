@@ -69,13 +69,13 @@ Instead of editing configuration files manually, pipelines can be authored visua
 #### For [Host mode](docs/docs/beta/PipelineEditor/host_mode.md) (If you have a simulation-heavy use case)
 - [Docker](https://www.docker.com/get-started/)
 - [Python 3.12+](https://www.python.org/downloads/)
-- [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
 
 
 ### For Local Development
 - [Python 3.12+](https://www.python.org/downloads/)
 - [Node.js & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
-- [Elasticsearch 8.x or later](https://cloud.elastic.co)
+- [Elasticsearch 9.x or later](https://cloud.elastic.co)
 - [Docker](https://www.docker.com/get-started/)
 
 
