@@ -2,5 +2,9 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+from django.urls import path
+from . import views
+
 urlpatterns = [
+    path("IntegrationFactory/", views.IntegrationFactory, name="IntegrationFactory"),
 ]

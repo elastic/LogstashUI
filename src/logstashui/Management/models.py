@@ -28,3 +28,20 @@ def create_user_profile(sender, instance, created, **kwargs):
     """Automatically create a UserProfile when a User is created"""
     if created:
         UserProfile.objects.create(user=instance, role='admin')
+
+class Settings(models.Model):
+    experimental_mode = models.BooleanField(default=False)
+    
+    class Meta:
+        db_table = 'settings'
+        verbose_name = 'Settings'
+        verbose_name_plural = 'Settings'
+    
+    def __str__(self):
+        return f"Experimental Mode: {self.experimental_mode}"
+    
+    @classmethod
+    def get_settings(cls):
+        """Get or create the singleton settings instance"""
+        settings, created = cls.objects.get_or_create(pk=1)
+        return settings

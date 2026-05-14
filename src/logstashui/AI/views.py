@@ -2,3 +2,7 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+from django.shortcuts import render
+
+def IntegrationFactory(request):
+    return render(request, 'integration_factory.html')

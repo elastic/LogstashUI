@@ -128,6 +128,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'Common.context_processors.version_update_info',
                 'Common.context_processors.navigation_highlight',
+                'Common.context_processors.experimental_mode',
             ],
         },
     },

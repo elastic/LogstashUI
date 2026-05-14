@@ -1,0 +1,140 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+
+{% block content %}
+<script>
+  // Configure HTMX to include CSRF token in all requests
+  document.body.addEventListener('htmx:configRequest', (event) => {
+    event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+  });
+</script>
+<div class="p-6">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-white">Settings</h1>
+    <p class="text-gray-400">Configure application settings</p>
+  </div>
+
+  <form method="post" id="settings-form" class="space-y-6">
+    {% csrf_token %}
+    
+    <!-- Settings List -->
+    <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+      <div class="divide-y divide-gray-700">
+        <!-- Experimental Mode Setting -->
+        <div class="flex items-start justify-between p-6">
+          <div class="flex-1 pr-8">
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="text-lg font-semibold text-white">Experimental Mode</h3>
+            </div>
+            <p class="text-sm text-gray-400 mb-2">
+              Enable access to experimental features that are under active development. 
+              These features may be unstable and are subject to change.
+            </p>
+            <div class="text-xs text-gray-500 font-mono">
+              Default: false
+            </div>
+          </div>
+          <div class="flex items-center">
+            <label class="swap swap-flip text-2xl">
+              <input type="checkbox" name="experimental_mode" id="experimental_mode" 
+                     {% if app_settings.experimental_mode %}checked{% endif %}
+                     onchange="markAsModified()">
+              <div class="swap-on">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div class="swap-off">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="flex items-center justify-between bg-gray-800 rounded-lg p-6 shadow-xl">
+      <div class="text-sm text-gray-400">
+        <span id="unsaved-changes" class="hidden text-warning font-semibold">You have unsaved changes</span>
+      </div>
+      <button type="submit" id="save-button" class="btn btn-primary" disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+        </svg>
+        Save Changes
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+    let originalExperimentalMode = {{ app_settings.experimental_mode|lower }};
+    
+    function markAsModified() {
+        const currentExperimentalMode = document.getElementById('experimental_mode').checked;
+        const isModified = originalExperimentalMode !== currentExperimentalMode;
+        
+        // Update UI
+        const saveButton = document.getElementById('save-button');
+        const unsavedChanges = document.getElementById('unsaved-changes');
+        
+        if (isModified) {
+            saveButton.disabled = false;
+            unsavedChanges.classList.remove('hidden');
+        } else {
+            saveButton.disabled = true;
+            unsavedChanges.classList.add('hidden');
+        }
+    }
+    
+    // Handle form submission
+    document.getElementById('settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const saveButton = document.getElementById('save-button');
+        const originalText = saveButton.innerHTML;
+        
+        // Show loading state
+        saveButton.disabled = true;
+        saveButton.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Saving...';
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message || 'Settings saved successfully', 'success');
+                // Update original state and reload page to update nav
+                originalExperimentalMode = document.getElementById('experimental_mode').checked;
+                markAsModified();
+                // Reload page after 1 second to update navigation
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(data.message || 'Failed to save settings', 'error');
+                saveButton.innerHTML = originalText;
+                saveButton.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('An error occurred while saving settings', 'error');
+            saveButton.innerHTML = originalText;
+            saveButton.disabled = false;
+        });
+    });
+</script>
+{% endblock %}
