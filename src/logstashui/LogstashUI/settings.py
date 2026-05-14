@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'Monitoring',
     'Site',
     'Documentation',
+    'AI',
 
     # Frameworks
     'django_htmx',

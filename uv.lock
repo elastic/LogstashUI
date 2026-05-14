@@ -576,6 +576,7 @@ dependencies = [
     { name = "markdown" },
     { name = "packaging" },
     { name = "pygrok" },
+    { name = "pysnmp" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "whitenoise" },
@@ -604,6 +605,7 @@ requires-dist = [
     { name = "markdown", specifier = ">=3.10.2" },
     { name = "packaging", specifier = ">=26.0" },
     { name = "pygrok", specifier = ">=1.0.0" },
+    { name = "pysnmp", specifier = ">=7.1.26" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "whitenoise", specifier = ">=6.12.0" },
@@ -679,6 +681,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyasn1"
+version = "0.6.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/5f/6583902b6f79b399c9c40674ac384fd9cd77805f9e6205075f828ef11fb2/pyasn1-0.6.3.tar.gz", hash = "sha256:697a8ecd6d98891189184ca1fa05d1bb00e2f84b5977c481452050549c8a72cf", size = 148685, upload-time = "2026-03-17T01:06:53.382Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/a0/7d793dce3fa811fe047d6ae2431c672364b462850c6235ae306c0efd025f/pyasn1-0.6.3-py3-none-any.whl", hash = "sha256:a80184d120f0864a52a073acc6fc642847d0be408e7c7252f31390c0f4eadcde", size = 83997, upload-time = "2026-03-17T01:06:52.036Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -704,6 +715,18 @@ dependencies = [
     { name = "regex" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/a5/963d78c4eda7edb0ea827679dbcf5f77e4d767562b59681bd23ea5913af6/pygrok-1.0.0.tar.gz", hash = "sha256:ae635e3c0ba0eab76aec9d86ae1bab70883e8e71505ec2d6cb8989e66f5810af", size = 18997, upload-time = "2016-09-24T08:32:38.164Z" }
+
+[[package]]
+name = "pysnmp"
+version = "7.1.26"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/6c/f27377a0b223b0ef7b59fddac9c0432d43b84f08ac255426c23663c638dc/pysnmp-7.1.26.tar.gz", hash = "sha256:d6d28a338221418b7e9c5caaed671a3d89182f9e691d5798949565380934c71a", size = 260082, upload-time = "2026-04-26T21:28:35.804Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/86/c16ccef6919cac40de63d118a663ecc157879f094e501f19b37618599141/pysnmp-7.1.26-py3-none-any.whl", hash = "sha256:1438f0a2c585ff59386e5d09153e752a7047a6e04efc977ebfddf3b47c8011c4", size = 344221, upload-time = "2026-04-26T21:28:34.463Z" },
+]
 
 [[package]]
 name = "pytailwindcss"

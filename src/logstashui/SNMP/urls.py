@@ -6,6 +6,7 @@ from django.urls import path
 from . import views
 from . import snmp_crud
 from . import network_map
+from . import snmp_test
 
 urlpatterns = [
     path("Overview/", views.Overview, name="SNMPOverview"),
@@ -68,5 +69,8 @@ urlpatterns = [
     path("AddDeviceTemplate/", snmp_crud.AddDeviceTemplate, name="AddDeviceTemplate"),
     path("UpdateDeviceTemplate/<int:template_id>/", snmp_crud.UpdateDeviceTemplate, name="UpdateDeviceTemplate"),
     path("DeleteDeviceTemplate/<int:template_id>/", snmp_crud.DeleteDeviceTemplate, name="DeleteDeviceTemplate"),
+
+    # SNMP Test endpoints
+    path("RunSNMPTest/", snmp_test.RunSNMPTest, name="RunSNMPTest"),
 
 ]

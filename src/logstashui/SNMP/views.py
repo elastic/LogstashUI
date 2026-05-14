@@ -26,9 +26,10 @@ def Devices(request):
     # Sync official device templates to database
     sync_official_device_templates()
     
-    devices = Device.objects.all().select_related('credential', 'network')
+    devices = Device.objects.all().select_related('credential', 'network', 'device_template')
+    templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     form = ConnectionForm()
-    return render(request, 'Devices.html', {'devices': devices, 'form': form})
+    return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'form': form})
 
 def sync_official_profiles():
     """Sync official profiles from JSON files to database as placeholders"""
