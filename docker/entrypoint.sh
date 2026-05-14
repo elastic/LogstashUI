@@ -1,4 +1,8 @@
 #!/bin/bash
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 set -e
 
 # Change to Django project directory
@@ -57,6 +61,12 @@ echo ""
 
 # Run migrations
 python manage.py migrate --noinput
+
+# Sync SNMP official profiles and device templates
+echo ""
+echo "Syncing SNMP official data..."
+python manage.py sync_snmp_official_data --cleanup || echo "Warning: SNMP sync encountered an error but continuing startup"
+echo ""
 
 # Display welcome message
 echo ""

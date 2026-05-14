@@ -1,0 +1,20 @@
+{
+  "name": "dell_idrac",
+  "description": "Hardware health: system status, PSU, fans, temperature, memory, CPU, RAID",
+  "vendor": "Dell",
+  "product": "iDRAC",
+  "model": "Any",
+  "profiles": [
+    "dell_idrac_power_supply",
+    "dell_idrac_fans",
+    "dell_idrac_memory",
+    "dell_idrac_raid_controller",
+    "dell_idrac_cpu",
+    "dell_idrac_global_status",
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "idrac"
+  ]
+}

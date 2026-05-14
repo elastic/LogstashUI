@@ -9,20 +9,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
-
-    <style>
-        @keyframes fan-spin {
-            from {
-                transform: rotate(0deg);
-            }
-            to {
-                transform: rotate(360deg);
-            }
-        }
-        .fan-spin {
-            animation: fan-spin 2s linear infinite;
-        }
-    </style>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/snmp.css' %}">
 </head>
 <body>
   <!-- Device Visual Preview Component -->

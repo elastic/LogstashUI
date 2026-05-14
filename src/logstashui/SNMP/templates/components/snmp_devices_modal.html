@@ -80,26 +80,22 @@
             <p class="text-gray-400 text-xs mt-1">Select the network this device belongs to</p>
           </div>
 
-          <!-- Profiles Selection -->
+          <!-- Device Template Selection -->
           <div class="mb-4">
-            <label for="deviceProfilesSelect" class="block text-sm font-medium text-gray-300 mb-2">
-              Profiles
+            <label for="deviceTemplateSelect" class="block text-sm font-medium text-gray-300 mb-2">
+              Device Template
             </label>
             <div class="flex gap-2">
-              <select id="deviceProfilesSelect" class="select select-bordered w-full">
-                <option value="">Select a profile to add...</option>
+              <select id="deviceTemplateSelect" name="device_template" class="select select-bordered w-full">
+                <option value="">Select a template...</option>
               </select>
-              <button type="button" onclick="refreshProfiles()" class="btn btn-square btn-ghost" title="Refresh profiles">
+              <button type="button" onclick="refreshDeviceTemplates()" class="btn btn-square btn-ghost" title="Refresh templates">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
             </div>
-            <!-- Selected Profiles Pills Container -->
-            <div id="selectedProfilesContainer" class="mt-2 flex flex-wrap gap-2 min-h-[32px]">
-              <!-- Pills will be added here dynamically -->
-            </div>
-            <p class="text-gray-400 text-xs mt-1">Select one or more profiles to apply to this device</p>
+            <p class="text-gray-400 text-xs mt-1">Select a device template to automatically apply profiles and matching rules</p>
           </div>
 
           <!-- SNMP Configuration (Port, Retries, Timeout) - Side by Side -->

@@ -1,0 +1,33 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ */
+
+/* Animations */
+@keyframes deployButtonGlow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(147, 51, 234, 0.5), 0 0 20px rgba(147, 51, 234, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(147, 51, 234, 0.7), 0 0 30px rgba(147, 51, 234, 0.4);
+  }
+}
+
+@keyframes fan-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Animation utility classes */
+.deploy-button-glow {
+  animation: deployButtonGlow 2s ease-in-out infinite;
+}
+
+.fan-spin {
+  animation: fan-spin 2s linear infinite;
+}

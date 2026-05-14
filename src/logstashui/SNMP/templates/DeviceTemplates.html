@@ -1,0 +1,1009 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/snmp.css' %}">
+
+<div class="p-6">
+  <!-- Header with Add Button -->
+  <div class="page-header flex justify-between items-center mb-6">
+    <div class="flex items-center gap-2">
+      <h1 class="text-2xl font-bold text-white">Device Templates & Profiles</h1>
+      <div class="group relative inline-block">
+        <svg class="w-5 h-5 text-gray-400 hover:text-blue-400 cursor-help transition-colors" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+        </svg>
+        <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-96 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
+          <h4 class="text-sm font-semibold text-white mb-2">Device Templates & Profiles</h4>
+          <p class="text-xs text-gray-300 mb-2"><strong>Device Templates</strong> define which SNMP metrics to collect from devices. They include vendor/model information, matching rules for auto-assignment, and associated profiles.</p>
+          <p class="text-xs text-gray-300"><strong>Profiles</strong> define the actual SNMP OIDs and metrics to collect, including GET operations for scalar values and TABLE operations for tabular data.</p>
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <!-- Undeployed changes indicator -->
+      <div id="snmpUndeployedIndicator" class="hidden flex items-center gap-1 px-2 py-1 bg-orange-500/20 border border-orange-500/40 rounded-full">
+        <div class="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse"></div>
+        <span class="text-xs text-orange-300 font-medium whitespace-nowrap">Undeployed changes</span>
+      </div>
+      <button id="commitBtn" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Deploy Changes
+      </button>
+      <button id="addItemBtn" class="btn btn-primary flex items-center justify-center gap-x-2 w-56">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        <span id="addItemBtnText">Add Device Template</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="mb-6">
+    <div class="border-b border-gray-700">
+      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <button id="deviceTemplatesTab" class="tab-button active border-b-2 border-primary py-4 px-1 text-sm font-medium text-primary">
+          Device Templates
+        </button>
+        <button id="profilesTab" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-400 hover:text-gray-300 hover:border-gray-300">
+          Profiles
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Device Templates Tab Content -->
+  <div id="deviceTemplatesContent">
+    <!-- Search and Filter Bar for Device Templates -->
+    <div class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
+      <div class="flex gap-4 items-end">
+        <!-- Search (48%) -->
+        <div style="flex: 0 0 48%;">
+          <label for="templateSearchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input type="text" id="templateSearchInput" placeholder="Search by name or description..." class="input input-bordered w-full">
+        </div>
+        
+        <!-- Vendor Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="templateVendorFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Vendor</label>
+          <select id="templateVendorFilter" class="select select-bordered w-full">
+            <option value="">All Vendors</option>
+          </select>
+        </div>
+        
+        <!-- Product Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="templateProductFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Product</label>
+          <select id="templateProductFilter" class="select select-bordered w-full">
+            <option value="">All Products</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6">
+      {% if device_templates %}
+      <div id="templatesGridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+        {% for template in device_templates %}
+        <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-shadow border border-gray-700"
+             data-template-name="{{ template.name|lower }}"
+             data-template-description="{{ template.description|lower }}"
+             data-template-vendor="{{ template.vendor|default:'Unknown' }}"
+             data-template-product="{{ template.product|default:'' }}">
+          <!-- Card Header with Logo and Actions -->
+          <div class="relative p-4 bg-gradient-to-br from-gray-700 to-gray-800 border-b border-gray-600">
+            <!-- 3-dot menu in top-right corner -->
+            <div class="absolute top-2 right-2">
+              <div class="action-menu relative">
+                <button class="action-menu-button p-1 hover:bg-gray-600 rounded transition-colors">
+                  <svg class="h-5 w-5 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                  </svg>
+                </button>
+
+                <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700" role="menu">
+                  <div class="px-1 py-1">
+                    <button onclick="cloneTemplate('{{ template.id|default:template.name }}', {{ template.official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Clone
+                    </button>
+                    <hr class="my-1 border-gray-700">
+                    <button onclick="viewTemplate('{{ template.id|default:template.name }}', {{ template.official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View
+                    </button>
+                    {% if not template.official %}
+                    <hr class="my-1 border-gray-700">
+                    <button onclick="editTemplate({{ template.id }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                    <hr class="my-1 border-gray-700">
+                    <button onclick="deleteTemplate({{ template.id }}, '{{ template.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Centered Logo -->
+            <div class="flex flex-col items-center">
+              <!-- Vendor Logo -->
+              <div class="flex-shrink-0 w-20 h-20 bg-white rounded-lg p-2.5 flex items-center justify-center">
+                {% if template.vendor|lower == 'cisco' %}
+                  <img src="{% static 'images/cisco.png' %}" alt="Cisco" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'dell' %}
+                  <img src="{% static 'images/dell.png' %}" alt="Dell" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'brocade' %}
+                  <img src="{% static 'images/brocade.png' %}" alt="Brocade" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'hpe' or template.vendor|lower == 'hpe nimble' %}
+                  <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'epson' %}
+                  <img src="{% static 'images/epson.png' %}" alt="Epson" class="w-full h-full object-contain">
+                {% else %}
+                  <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Card Body -->
+          <div class="p-4">
+            <!-- Template Name -->
+            <h3 class="text-lg font-semibold text-white mb-2 line-clamp-2 min-h-[3.5rem]" title="{{ template.display_name }}">
+              {{ template.display_name }}
+            </h3>
+            
+            <!-- Description -->
+            <p class="text-sm text-gray-400 mb-3 line-clamp-2 min-h-[2.5rem]" title="{{ template.description }}">
+              {{ template.description|default:"No description provided" }}
+            </p>
+            
+            <!-- Metadata with Official Badge -->
+            <div class="flex items-center gap-2 text-xs mb-3">
+              {% if template.official %}
+              <div class="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full flex-shrink-0" title="Official Template - Provided by the system and cannot be edited or deleted">
+                <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </div>
+              {% endif %}
+              <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span class="text-gray-300 truncate">
+                <span class="font-medium">{{ template.vendor|default:"Unknown" }}</span>
+                {% if template.product %}
+                <span class="text-gray-500">•</span>
+                <span class="text-gray-400">{{ template.product }}</span>
+                {% endif %}
+              </span>
+            </div>
+            
+            <!-- Stats: Profiles, Model, and Devices -->
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-700">
+              <div class="flex items-center gap-1 whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-gray-400">Profiles:</span>
+                <span class="text-white font-medium">{{ template.profile_count|default:0 }}</span>
+              </div>
+              <div class="flex items-center gap-1 whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span class="text-gray-400">Model:</span>
+                <span class="text-white font-medium">{{ template.model|default:"-" }}</span>
+              </div>
+              <div class="flex items-center gap-1 whitespace-nowrap">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span class="text-gray-400">Devices:</span>
+                <span class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full {% if template.device_count > 0 %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-400{% endif %}">
+                  {{ template.device_count|default:0 }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="bg-gray-800 rounded-lg shadow-xl p-12 text-center">
+        <svg class="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <p class="text-gray-400 text-lg">No device templates found. Add your first template to get started!</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Profiles Tab Content -->
+  <div id="profilesContent" class="hidden">
+    <!-- Search and Filter Bar for Profiles -->
+    <div class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
+      <div class="flex gap-4 items-end">
+        <!-- Search (48%) -->
+        <div style="flex: 0 0 48%;">
+          <label for="profileSearchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input type="text" id="profileSearchInput" placeholder="Search by name or description..." class="input input-bordered w-full">
+        </div>
+        
+        <!-- Vendor Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="profileVendorFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Vendor</label>
+          <select id="profileVendorFilter" class="select select-bordered w-full">
+            <option value="">All Vendors</option>
+          </select>
+        </div>
+        
+        <!-- Product Filter (24%) -->
+        <div style="flex: 0 0 24%;">
+          <label for="profileProductFilter" class="block text-sm font-medium text-gray-300 mb-2">Filter by Product</label>
+          <select id="profileProductFilter" class="select select-bordered w-full">
+            <option value="">All Products</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6">
+      {% if profiles %}
+      <div id="profilesGridContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+        {% for profile in profiles %}
+        <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-shadow border border-gray-700" 
+             data-profile-name="{{ profile.display_name|lower }}" 
+             data-profile-description="{{ profile.description|lower }}" 
+             data-profile-vendor="{{ profile.vendor|default:'Unknown' }}" 
+             data-profile-product="{{ profile.product|default:'' }}">
+          <!-- Card Header with Logo and Actions -->
+          <div class="relative p-4 bg-gradient-to-br from-gray-700 to-gray-800 border-b border-gray-600">
+            <!-- 3-dot menu in top-right corner -->
+            <div class="absolute top-2 right-2">
+              <div class="action-menu relative">
+                <button class="action-menu-button p-1 hover:bg-gray-600 rounded transition-colors">
+                  <svg class="h-5 w-5 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                  </svg>
+                </button>
+
+                <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700" role="menu">
+                  <div class="px-1 py-1">
+                    <button onclick="cloneProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Clone
+                    </button>
+                    <hr class="my-1 border-gray-700">
+                    <button onclick="viewProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View
+                    </button>
+                    {% if not profile.is_official and profile.name != 'system' and profile.name != 'generic_system.json' %}
+                    <hr class="my-1 border-gray-700">
+                    <button onclick="editProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                    <hr class="my-1 border-gray-700">
+                    <button onclick="deleteProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Centered Logo -->
+            <div class="flex flex-col items-center">
+              <!-- Vendor Logo -->
+              <div class="flex-shrink-0 w-20 h-20 bg-white rounded-lg p-2.5 flex items-center justify-center">
+                {% if profile.vendor|lower == 'cisco' %}
+                  <img src="{% static 'images/cisco.png' %}" alt="Cisco" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'dell' %}
+                  <img src="{% static 'images/dell.png' %}" alt="Dell" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'brocade' %}
+                  <img src="{% static 'images/brocade.png' %}" alt="Brocade" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'hpe' or profile.vendor|lower == 'hpe nimble' %}
+                  <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'epson' %}
+                  <img src="{% static 'images/epson.png' %}" alt="Epson" class="w-full h-full object-contain">
+                {% else %}
+                  <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Card Body -->
+          <div class="p-4">
+            <!-- Profile Name -->
+            <h3 class="text-lg font-semibold text-white mb-2 line-clamp-2 min-h-[3.5rem]" title="{{ profile.display_name }}">
+              {{ profile.display_name }}
+            </h3>
+            
+            <!-- Description -->
+            <p class="text-sm text-gray-400 mb-3 line-clamp-2 min-h-[2.5rem]" title="{{ profile.description }}">
+              {{ profile.description|default:"No description provided" }}
+            </p>
+            
+            <!-- Metadata with Official Badge -->
+            <div class="flex items-center gap-2 text-xs">
+              {% if profile.is_official %}
+              <div class="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full flex-shrink-0" title="Official Profile - Provided by the system and cannot be edited or deleted">
+                <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </div>
+              {% endif %}
+              <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span class="text-gray-300 truncate">
+                <span class="font-medium">{{ profile.vendor|default:"Unknown" }}</span>
+                {% if profile.product %}
+                <span class="text-gray-500">•</span>
+                <span class="text-gray-400">{{ profile.product }}</span>
+                {% endif %}
+              </span>
+            </div>
+            
+            <!-- Stats: Get, Tables, and Columns -->
+            <div class="flex items-center gap-3 text-xs pt-2 mt-2 border-t border-gray-700">
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span class="text-gray-400">Get:</span>
+                <span class="text-white font-medium" id="get-count-profiles-{{ forloop.counter }}">-</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span class="text-gray-400">Tables:</span>
+                <span class="text-white font-medium" id="table-count-profiles-{{ forloop.counter }}">-</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                <span class="text-gray-400">Columns:</span>
+                <span class="text-white font-medium" id="column-count-profiles-{{ forloop.counter }}">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Store profile data for stats calculation -->
+        <script>
+          (function() {
+            try {
+              const profileDataStr = {{ profile.profile_data|safe }};
+              const profileData = profileDataStr || {};
+              const getCount = profileData && profileData.get ? Object.keys(profileData.get).length : 0;
+              const tableCount = profileData && profileData.table ? Object.keys(profileData.table).length : 0;
+              
+              // Calculate total columns across all tables
+              let columnCount = 0;
+              if (profileData && profileData.table) {
+                Object.values(profileData.table).forEach(table => {
+                  if (table.columns) {
+                    columnCount += Object.keys(table.columns).length;
+                  }
+                });
+              }
+              
+              document.addEventListener('DOMContentLoaded', function() {
+                const getEl = document.getElementById('get-count-profiles-{{ forloop.counter }}');
+                const tableEl = document.getElementById('table-count-profiles-{{ forloop.counter }}');
+                const columnEl = document.getElementById('column-count-profiles-{{ forloop.counter }}');
+                if (getEl) getEl.textContent = getCount;
+                if (tableEl) tableEl.textContent = tableCount;
+                if (columnEl) columnEl.textContent = columnCount;
+              });
+            } catch(e) {
+              console.error('Error parsing profile data:', e);
+              document.addEventListener('DOMContentLoaded', function() {
+                const getEl = document.getElementById('get-count-profiles-{{ forloop.counter }}');
+                const tableEl = document.getElementById('table-count-profiles-{{ forloop.counter }}');
+                const columnEl = document.getElementById('column-count-profiles-{{ forloop.counter }}');
+                if (getEl) getEl.textContent = '0';
+                if (tableEl) tableEl.textContent = '0';
+                if (columnEl) columnEl.textContent = '0';
+              });
+            }
+          })();
+        </script>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="bg-gray-800 rounded-lg shadow-xl p-12 text-center">
+        <svg class="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <p class="text-gray-400 text-lg">No profiles found. Add your first custom profile to get started!</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Device Template Form Modal (for Device Templates tab) -->
+  {% include 'components/snmp_device_template_modal.html' %}
+
+  <!-- Device Template Profile Selector Modal -->
+  {% include 'components/device_template_profile_modal.html' %}
+
+  <!-- Profile Form Modal (for Profiles tab) -->
+  {% include 'components/snmp_profile_modal.html' %}
+
+  <!-- Commit Configuration Modal -->
+  {% include 'components/snmp_commit_modal.html' %}
+
+  <!-- SNMP Diff Modal -->
+  {% include 'components/snmp_diff_modal.html' %}
+
+  <!-- Popup Modal -->
+  {% include 'popup.html' %}
+
+</div>
+
+<script src="{% static 'js/snmp_device_template_modal.js' %}"></script>
+<script src="{% static 'js/snmp_profile_modal_helpers.js' %}"></script>
+<script src="{% static 'js/snmp_profile_modal.js' %}"></script>
+<script src="{% static 'js/snmp_commit_modal.js' %}"></script>
+<script src="{% static 'js/snmp_diff_modal.js' %}"></script>
+<script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
+<script>
+  // Tab switching functionality
+  const deviceTemplatesTab = document.getElementById('deviceTemplatesTab');
+  const profilesTab = document.getElementById('profilesTab');
+  const deviceTemplatesContent = document.getElementById('deviceTemplatesContent');
+  const profilesContent = document.getElementById('profilesContent');
+  const addItemBtn = document.getElementById('addItemBtn');
+  const addItemBtnText = document.getElementById('addItemBtnText');
+
+  deviceTemplatesTab.addEventListener('click', () => {
+    // Update tab styles
+    deviceTemplatesTab.classList.add('active', 'border-primary', 'text-primary');
+    deviceTemplatesTab.classList.remove('border-transparent', 'text-gray-400');
+    profilesTab.classList.remove('active', 'border-primary', 'text-primary');
+    profilesTab.classList.add('border-transparent', 'text-gray-400');
+    
+    // Show/hide content
+    deviceTemplatesContent.classList.remove('hidden');
+    profilesContent.classList.add('hidden');
+    
+    // Update add button text
+    addItemBtnText.textContent = 'Add Device Template';
+  });
+
+  profilesTab.addEventListener('click', () => {
+    // Update tab styles
+    profilesTab.classList.add('active', 'border-primary', 'text-primary');
+    profilesTab.classList.remove('border-transparent', 'text-gray-400');
+    deviceTemplatesTab.classList.remove('active', 'border-primary', 'text-primary');
+    deviceTemplatesTab.classList.add('border-transparent', 'text-gray-400');
+    
+    // Show/hide content
+    profilesContent.classList.remove('hidden');
+    deviceTemplatesContent.classList.add('hidden');
+    
+    // Update add button text
+    addItemBtnText.textContent = 'Add Profile';
+    
+    // Initialize profile filters if not already done
+    if (!window.profileFiltersInitialized) {
+      initializeProfileFilters();
+      window.profileFiltersInitialized = true;
+    }
+  });
+
+  // Add button functionality
+  addItemBtn.addEventListener('click', () => {
+    if (deviceTemplatesContent.classList.contains('hidden')) {
+      // Profiles tab is active
+      openProfileModal(null, false, false);
+    } else {
+      // Device Templates tab is active
+      openDeviceTemplateModal();
+    }
+  });
+
+  // Handle action menu (3-dot icon) functionality using event delegation
+  document.addEventListener('click', function(e) {
+    const actionButton = e.target.closest('.action-menu-button');
+    
+    if (actionButton) {
+      e.stopPropagation();
+      const menu = actionButton.nextElementSibling;
+      const isHidden = menu.classList.contains('hidden');
+      
+      // Close all other open menus
+      document.querySelectorAll('.action-menu-items').forEach(m => {
+        if (m !== menu) m.classList.add('hidden');
+      });
+      
+      // Position the menu with smart positioning to avoid going off-screen
+      if (isHidden) {
+        // First show the menu to get its dimensions
+        menu.classList.remove('hidden');
+        
+        const menuRect = menu.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let left = e.clientX;
+        let top = e.clientY;
+        
+        // Check if menu would go off the right edge
+        if (left + menuRect.width > viewportWidth) {
+          left = viewportWidth - menuRect.width - 10; // 10px padding from edge
+        }
+        
+        // Check if menu would go off the bottom edge
+        if (top + menuRect.height > viewportHeight) {
+          top = viewportHeight - menuRect.height - 10; // 10px padding from edge
+        }
+        
+        // Ensure menu doesn't go off the left edge
+        if (left < 10) {
+          left = 10;
+        }
+        
+        // Ensure menu doesn't go off the top edge
+        if (top < 10) {
+          top = 10;
+        }
+        
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+      } else {
+        // Toggle to hidden
+        menu.classList.add('hidden');
+      }
+    } else if (!e.target.closest('.action-menu')) {
+      // Close all open action menus when clicking anywhere else
+      document.querySelectorAll('.action-menu-items').forEach(menu => {
+        menu.classList.add('hidden');
+      });
+    }
+  });
+  
+  // Close menu when scrolling
+  window.addEventListener('scroll', function() {
+    document.querySelectorAll('.action-menu-items').forEach(menu => {
+      menu.classList.add('hidden');
+    });
+  }, true);
+
+  // Refresh device templates data without full page reload
+  function refreshDeviceTemplatesData() {
+    console.log('Refreshing device templates...');
+    
+    fetch('/SNMP/DeviceTemplates/')
+      .then(response => response.text())
+      .then(html => {
+        // Parse the HTML response
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract the templates grid
+        const newGrid = doc.querySelector('#templatesGridContainer');
+        const currentGrid = document.querySelector('#templatesGridContainer');
+        
+        if (newGrid && currentGrid) {
+          // Replace the grid content
+          currentGrid.innerHTML = newGrid.innerHTML;
+          console.log('Device templates refreshed successfully');
+        } else {
+          console.error('Could not find templates grid');
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing templates:', error);
+        showToast('Error refreshing templates', 'error');
+      });
+  }
+
+  // Refresh profiles data without full page reload  
+  function refreshProfilesData() {
+    console.log('Refreshing profiles...');
+    
+    fetch('/SNMP/DeviceTemplates/')
+      .then(response => response.text())
+      .then(html => {
+        // Parse the HTML response
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract the profiles grid
+        const newGrid = doc.querySelector('#profilesGridContainer');
+        const currentGrid = document.querySelector('#profilesGridContainer');
+        
+        if (newGrid && currentGrid) {
+          // Replace the grid content
+          currentGrid.innerHTML = newGrid.innerHTML;
+          console.log('Profiles refreshed successfully');
+        } else {
+          console.error('Could not find profiles grid');
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing profiles:', error);
+        showToast('Error refreshing profiles', 'error');
+      });
+  }
+
+  // Device Template action functions
+  function cloneTemplate(templateId, isOfficial) {
+    // Load template data and open modal with cloned values
+    // Note: Official templates are synced to the database, so we can use GetDeviceTemplate for both
+    const endpoint = `/SNMP/GetDeviceTemplate/${templateId}/`;
+    
+    fetch(endpoint)
+      .then(response => response.json())
+      .then(data => {
+        console.log('Clone template data received:', data);
+        
+        // Check for error response
+        if (data.error) {
+          showToast('Error loading template: ' + data.error, 'error');
+          return;
+        }
+        
+        // Remove the ID so it creates a new template
+        delete data.id;
+        delete data.official;
+        
+        // Append " (Copy)" to the name
+        if (data.name) {
+          data.name = data.name + ' (Copy)';
+        } else {
+          console.error('Template name is undefined in response:', data);
+          showToast('Error: Template name not found', 'error');
+          return;
+        }
+        
+        // Profiles should already be in the correct format from GetDeviceTemplate
+        // They come as objects with {id, name, display_name}
+        
+        console.log('Opening modal with cloned data:', data);
+        // Open modal in add mode with cloned data
+        openDeviceTemplateModal(null, false, false, data);
+      })
+      .catch(error => {
+        console.error('Error cloning template:', error);
+        showToast('Error loading template: ' + error, 'error');
+      });
+  }
+
+  function viewTemplate(templateId, isOfficial) {
+    openDeviceTemplateModal(templateId, true, isOfficial);
+  }
+
+  function editTemplate(templateId) {
+    openDeviceTemplateModal(templateId, false, false);
+  }
+
+  async function deleteTemplate(templateId, templateName) {
+    const confirmed = await ConfirmationModal.show(
+      `Are you sure you want to delete the template "${templateName}"?`,
+      'Confirm Delete',
+      'OK'
+    );
+    
+    if (confirmed) {
+      fetch(`/SNMP/DeleteDeviceTemplate/${templateId}/`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast('Device template deleted successfully!', 'success');
+          refreshDeviceTemplatesData();
+        } else {
+          showToast(data.message || 'Failed to delete template', 'error');
+        }
+      })
+      .catch(error => {
+        showToast('Error deleting template: ' + error, 'error');
+      });
+    }
+  }
+
+  // Profile action functions (from Profiles.html)
+  function cloneProfile(profileName, isOfficial) {
+    // Load profile data and open modal with cloned values
+    const endpoint = isOfficial 
+      ? `/SNMP/GetOfficialProfile/${profileName}/`
+      : `/SNMP/GetProfile/${profileName}/`;
+    
+    fetch(endpoint)
+      .then(response => response.json())
+      .then(data => {
+        // Remove any ID-related fields
+        delete data.id;
+        // Append " (Copy)" to the name
+        data.name = data.name + ' (Copy)';
+        // Open modal in add mode with cloned data
+        openProfileModalWithData(data);
+      })
+      .catch(error => {
+        showToast('Error loading profile: ' + error, 'error');
+      });
+  }
+
+  function viewProfile(profileName, isOfficial) {
+    openProfileModal(profileName, isOfficial, true); // true = view mode
+  }
+
+  function editProfile(profileName) {
+    openProfileModal(profileName, false, false); // false = edit mode
+  }
+
+  async function deleteProfile(profileName) {
+    const confirmed = await ConfirmationModal.show(
+      `Are you sure you want to delete the profile "${profileName}"?`,
+      'Confirm Delete',
+      'OK'
+    );
+    
+    if (confirmed) {
+      fetch(`/SNMP/DeleteProfile/${profileName}/`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showToast('Profile deleted successfully!', 'success');
+          refreshProfilesData();
+        } else {
+          showToast(data.message || 'Failed to delete profile', 'error');
+        }
+      })
+      .catch(error => {
+        showToast('Error deleting profile: ' + error, 'error');
+      });
+    }
+  }
+
+  // Device Template Search and Filter Functionality
+  function initializeTemplateFilters() {
+    const templateSearchInput = document.getElementById('templateSearchInput');
+    const templateVendorFilter = document.getElementById('templateVendorFilter');
+    const templateProductFilter = document.getElementById('templateProductFilter');
+    
+    // Get all template cards using data attributes
+    const templateCards = document.querySelectorAll('#deviceTemplatesContent [data-template-vendor]');
+    
+    // Extract unique vendors and products from data attributes
+    const vendors = new Set();
+    const products = new Set();
+    
+    templateCards.forEach(card => {
+      const vendor = card.dataset.templateVendor;
+      const product = card.dataset.templateProduct;
+      
+      if (vendor && vendor !== 'Unknown') {
+        vendors.add(vendor);
+      }
+      
+      if (product && product.trim() !== '') {
+        products.add(product);
+      }
+    });
+    
+    // Clear existing options (except "All" option)
+    templateVendorFilter.innerHTML = '<option value="">All Vendors</option>';
+    templateProductFilter.innerHTML = '<option value="">All Products</option>';
+    
+    // Populate vendor dropdown
+    Array.from(vendors).sort().forEach(vendor => {
+      const option = document.createElement('option');
+      option.value = vendor;
+      option.textContent = vendor;
+      templateVendorFilter.appendChild(option);
+    });
+    
+    // Populate product dropdown
+    Array.from(products).sort().forEach(product => {
+      const option = document.createElement('option');
+      option.value = product;
+      option.textContent = product;
+      templateProductFilter.appendChild(option);
+    });
+    
+    // Filter function
+    function filterTemplates() {
+      const searchTerm = templateSearchInput.value.toLowerCase();
+      const selectedVendor = templateVendorFilter.value;
+      const selectedProduct = templateProductFilter.value;
+      
+      templateCards.forEach(card => {
+        // Get card data from data attributes
+        const name = card.dataset.templateName || '';
+        const description = card.dataset.templateDescription || '';
+        const vendor = card.dataset.templateVendor || '';
+        const product = card.dataset.templateProduct || '';
+        
+        // Check search term
+        const matchesSearch = !searchTerm || 
+          name.includes(searchTerm) || 
+          description.includes(searchTerm) ||
+          vendor.toLowerCase().includes(searchTerm) ||
+          product.toLowerCase().includes(searchTerm);
+        
+        // Check vendor filter
+        const matchesVendor = !selectedVendor || vendor === selectedVendor;
+        
+        // Check product filter
+        const matchesProduct = !selectedProduct || product === selectedProduct;
+        
+        // Show/hide card
+        if (matchesSearch && matchesVendor && matchesProduct) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+    
+    // Add event listeners
+    if (templateSearchInput) {
+      templateSearchInput.addEventListener('input', filterTemplates);
+    }
+    if (templateVendorFilter) {
+      templateVendorFilter.addEventListener('change', filterTemplates);
+    }
+    if (templateProductFilter) {
+      templateProductFilter.addEventListener('change', filterTemplates);
+    }
+  }
+
+  // Initialize template filters on page load
+  initializeTemplateFilters();
+
+  // Profile Search and Filter Functionality
+  function initializeProfileFilters() {
+    // Add a small delay to ensure DOM is fully rendered
+    setTimeout(() => {
+      const profileSearchInput = document.getElementById('profileSearchInput');
+      const profileVendorFilter = document.getElementById('profileVendorFilter');
+      const profileProductFilter = document.getElementById('profileProductFilter');
+      
+      // Get all profile cards using data attributes
+      const profileCards = document.querySelectorAll('#profilesContent [data-profile-vendor]');
+      
+      console.log('Found profile cards:', profileCards.length);
+      
+      // Extract unique vendors and products from data attributes
+      const vendors = new Set();
+      const products = new Set();
+      
+      profileCards.forEach(card => {
+        const vendor = card.dataset.profileVendor;
+        const product = card.dataset.profileProduct;
+        
+        if (vendor && vendor !== 'Unknown') {
+          vendors.add(vendor);
+        }
+        
+        if (product && product.trim() !== '') {
+          products.add(product);
+        }
+      });
+      
+      console.log('Found vendors:', Array.from(vendors));
+      console.log('Found products:', Array.from(products));
+    
+      // Clear existing options (except "All" option)
+      profileVendorFilter.innerHTML = '<option value="">All Vendors</option>';
+      profileProductFilter.innerHTML = '<option value="">All Products</option>';
+      
+      // Populate vendor dropdown
+      Array.from(vendors).sort().forEach(vendor => {
+        const option = document.createElement('option');
+        option.value = vendor;
+        option.textContent = vendor;
+        profileVendorFilter.appendChild(option);
+      });
+      
+      // Populate product dropdown
+      Array.from(products).sort().forEach(product => {
+        const option = document.createElement('option');
+        option.value = product;
+        option.textContent = product;
+        profileProductFilter.appendChild(option);
+      });
+      
+      // Filter function
+      function filterProfiles() {
+        const searchTerm = profileSearchInput.value.toLowerCase();
+        const selectedVendor = profileVendorFilter.value;
+        const selectedProduct = profileProductFilter.value;
+        
+        profileCards.forEach(card => {
+          // Get card data from data attributes
+          const name = card.dataset.profileName || '';
+          const description = card.dataset.profileDescription || '';
+          const vendor = card.dataset.profileVendor || '';
+          const product = card.dataset.profileProduct || '';
+          
+          // Check search term
+          const matchesSearch = !searchTerm || 
+            name.includes(searchTerm) || 
+            description.includes(searchTerm) ||
+            vendor.toLowerCase().includes(searchTerm) ||
+            product.toLowerCase().includes(searchTerm);
+          
+          // Check vendor filter
+          const matchesVendor = !selectedVendor || vendor === selectedVendor;
+          
+          // Check product filter
+          const matchesProduct = !selectedProduct || product === selectedProduct;
+          
+          // Show/hide card
+          if (matchesSearch && matchesVendor && matchesProduct) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      }
+      
+      // Add event listeners
+      if (profileSearchInput) {
+        profileSearchInput.addEventListener('input', filterProfiles);
+      }
+      if (profileVendorFilter) {
+        profileVendorFilter.addEventListener('change', filterProfiles);
+      }
+      if (profileProductFilter) {
+        profileProductFilter.addEventListener('change', filterProfiles);
+      }
+    }, 100); // 100ms delay
+  }
+</script>
+
+{% endblock %}

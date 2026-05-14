@@ -112,7 +112,7 @@ def test_device(db, test_network, test_credential):
     )
     # Add system profile
     system_profile, _ = Profile.objects.get_or_create(
-        name='system.json',
+        name='generic_system.json',
         defaults={
             'profile_data': {'is_official_placeholder': True},
             'description': 'Official profile'

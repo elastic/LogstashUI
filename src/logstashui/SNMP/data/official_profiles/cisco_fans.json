@@ -1,0 +1,17 @@
+{
+  "name": "cisco_cdp",
+  "description": "Fan activity and state",
+  "product": "Any",
+  "vendor": "Cisco",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "fans": {
+      "columns": {
+        "description": "1.3.6.1.4.1.9.9.13.1.4.1.2",
+        "state": "1.3.6.1.4.1.9.9.13.1.4.1.3"
+      }
+    }
+  }
+}

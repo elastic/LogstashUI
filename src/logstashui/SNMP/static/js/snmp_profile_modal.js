@@ -16,6 +16,80 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+// Open profile modal with pre-filled data (for cloning)
+function openProfileModalWithData(data) {
+  const modal = document.getElementById('profileFormModal');
+  const form = document.getElementById('profileForm');
+  const modalTitle = document.getElementById('profileModalTitle');
+  const saveBtn = document.getElementById('profileSaveBtn');
+  
+  // Reset form
+  form.reset();
+  document.getElementById('profileErrorContainer').innerHTML = '';
+  
+  // Clear all containers including tables
+  clearKVContainer('get');
+  clearKVContainer('walk');
+  clearTableContainer();
+  
+  // Set to add mode
+  modalTitle.textContent = 'Add SNMP Profile';
+  document.getElementById('profileOriginalName').value = '';
+  document.getElementById('profileIsOfficial').value = 'false';
+  
+  // Enable all fields
+  document.getElementById('profileName').readOnly = false;
+  document.getElementById('profileDescription').readOnly = false;
+  document.getElementById('profileVendor').readOnly = false;
+  document.getElementById('profileProduct').readOnly = false;
+  saveBtn.style.display = '';
+  
+  // Enable add buttons
+  const addButtons = modal.querySelectorAll('button[onclick^="addKVPair"]');
+  addButtons.forEach(btn => {
+    btn.disabled = false;
+    btn.style.display = '';
+  });
+  
+  // Show Add Table button
+  const addTableBtn = modal.querySelector('button[onclick="addTable()"]');
+  if (addTableBtn) {
+    addTableBtn.disabled = false;
+    addTableBtn.style.display = '';
+  }
+  
+  // Fill in the data
+  document.getElementById('profileName').value = data.name || '';
+  document.getElementById('profileDescription').value = data.description || '';
+  document.getElementById('profileVendor').value = data.vendor || '';
+  document.getElementById('profileProduct').value = data.product || '';
+  
+  // Load Get section
+  if (data.profile_data && data.profile_data.get) {
+    Object.entries(data.profile_data.get).forEach(([key, value]) => {
+      addKVPair('get', key, value, false);
+    });
+  }
+  
+  // Load Walk section
+  if (data.profile_data && data.profile_data.walk && Object.keys(data.profile_data.walk).length > 0) {
+    Object.entries(data.profile_data.walk).forEach(([key, value]) => {
+      addKVPair('walk', key, value, false);
+    });
+  }
+  
+  // Load Table section
+  if (data.profile_data && data.profile_data.table) {
+    Object.entries(data.profile_data.table).forEach(([tableName, tableData]) => {
+      if (tableData && tableData.columns && Object.keys(tableData.columns).length > 0) {
+        addTable(tableName, tableData.columns, false);
+      }
+    });
+  }
+  
+  modal.classList.remove('hidden');
+}
+
 // Open profile modal (for add, edit, or view)
 function openProfileModal(profileName = null, isOfficial = false, viewMode = false) {
   const modal = document.getElementById('profileFormModal');
@@ -42,8 +116,8 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     const isReadOnly = isOfficial || viewMode;
     document.getElementById('profileName').readOnly = isReadOnly;
     document.getElementById('profileDescription').readOnly = isReadOnly;
-    document.getElementById('profileType').disabled = isReadOnly;
     document.getElementById('profileVendor').readOnly = isReadOnly;
+    document.getElementById('profileProduct').readOnly = isReadOnly;
     
     // Hide/disable save button for official profiles or view mode
     if (isReadOnly) {
@@ -73,8 +147,8 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
     modalTitle.textContent = 'Add SNMP Profile';
     document.getElementById('profileName').readOnly = false;
     document.getElementById('profileDescription').readOnly = false;
-    document.getElementById('profileType').disabled = false;
     document.getElementById('profileVendor').readOnly = false;
+    document.getElementById('profileProduct').readOnly = false;
     saveBtn.style.display = '';
     
     // Enable add buttons
@@ -114,8 +188,8 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
       // Set basic fields
       document.getElementById('profileName').value = data.name || profileName;
       document.getElementById('profileDescription').value = data.description || '';
-      document.getElementById('profileType').value = data.type || '';
       document.getElementById('profileVendor').value = data.vendor || '';
+      document.getElementById('profileProduct').value = data.product || '';
       
       // Load Get section
       if (data.profile_data && data.profile_data.get) {
@@ -499,8 +573,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const profileData = {
         name: profileName,
         description: formData.get('description'),
-        type: formData.get('type'),
         vendor: formData.get('vendor'),
+        product: formData.get('product'),
         profile_data: {}
       };
       
@@ -550,7 +624,11 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast(isEdit ? 'Profile updated successfully!' : 'Profile created successfully!', 'success');
           }
           closeProfileModal();
-          setTimeout(() => window.location.reload(), 500);
+          
+          // Refresh profiles data without page reload
+          if (typeof refreshProfilesData === 'function') {
+            refreshProfilesData();
+          }
         } else {
           showErrorInModal(data.message || 'Failed to save profile');
         }

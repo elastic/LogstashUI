@@ -1,0 +1,19 @@
+{
+  "name": "dell_idrac_memory",
+  "description": "Memory details",
+  "product": "iDRAC",
+  "vendor": "Dell",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "idracMemoryTable": {
+      "columns": {
+        "memoryIndex": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.1",
+        "memoryLocation": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.5",
+        "memoryStatus": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.4",
+        "memorySizeMB": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.14"
+      }
+    }
+  }
+}

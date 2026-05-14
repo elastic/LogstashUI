@@ -1,3 +1,7 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 """
 Django settings for logstashui project.
 
@@ -60,7 +64,7 @@ def _get_version():
         return "0.0.0+unknown"
 
 __VERSION__ = _get_version()
-__PREFERRED_LS_AGENT_VERSION__ = "0.2.6"
+__PREFERRED_LS_AGENT_VERSION__ = "0.3.0"
 
 # Application definition
 
@@ -81,6 +85,7 @@ INSTALLED_APPS = [
     'Monitoring',
     'Site',
     'Documentation',
+    'AI',
 
     # Frameworks
     'django_htmx',
@@ -123,6 +128,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'Common.context_processors.version_update_info',
                 'Common.context_processors.navigation_highlight',
+                'Common.context_processors.experimental_mode',
             ],
         },
     },

@@ -41,6 +41,8 @@ urlpatterns = [
     path('Monitoring/', include('Monitoring.urls')),
     path('', include('Site.urls')),
     path('Documentation/', include("Documentation.urls")),
+
+    path('AI/', include ("AI.urls"))
     #path('Crash', crash)
 ]
 

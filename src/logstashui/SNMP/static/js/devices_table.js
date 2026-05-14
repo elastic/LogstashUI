@@ -114,20 +114,33 @@ function checkDeviceStatuses(devices) {
       if (data.success && data.statuses) {
         // Update status circles for all devices
         Object.entries(data.statuses).forEach(([deviceId, status]) => {
-          if (status.is_online) {
-            const statusCircle = document.getElementById(`status-circle-${deviceId}`);
-            if (statusCircle) {
-              statusCircle.classList.remove('bg-gray-500');
-              statusCircle.classList.add('bg-green-500');
-              statusCircle.title = 'Device online (data received in last 15 minutes)';
+          const statusContainer = document.getElementById(`status-circle-${deviceId}`);
+          if (statusContainer) {
+            if (status.is_online) {
+              // Replace spinner with green dot
+              statusContainer.innerHTML = '';
+              statusContainer.className = 'w-3 h-3 rounded-full bg-green-500';
+              statusContainer.title = 'Device online (data received in last 15 minutes)';
+            } else {
+              // Replace spinner with gray dot
+              statusContainer.innerHTML = '';
+              statusContainer.className = 'w-3 h-3 rounded-full bg-gray-500';
+              statusContainer.title = 'Device offline (no recent data)';
             }
           }
-          // If not online, leave the circle gray (default state)
         });
       }
     })
     .catch(error => {
-      // Silently fail - leave status circles gray
+      // On error, replace all spinners with gray dots
+      devices.forEach(device => {
+        const statusContainer = document.getElementById(`status-circle-${device.id}`);
+        if (statusContainer) {
+          statusContainer.innerHTML = '';
+          statusContainer.className = 'w-3 h-3 rounded-full bg-gray-500';
+          statusContainer.title = 'Device status unknown';
+        }
+      });
       console.debug('Could not check device statuses:', error);
     });
 }
@@ -148,14 +161,12 @@ function renderDevices(devices) {
       year: 'numeric'
     });
     
-    // Render profile pills
-    let profilesHtml = '';
-    if (device.profiles && device.profiles.length > 0) {
-      profilesHtml = device.profiles.map(profile => 
-        `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-1 mb-1">${escapeHtml(profile)}</span>`
-      ).join('');
+    // Render device template badge
+    let templateHtml = '';
+    if (device.device_template_name) {
+      templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(device.device_template_name)}</span>`;
     } else {
-      profilesHtml = '<span class="text-gray-500 italic">None</span>';
+      templateHtml = '<span class="text-gray-500 italic">None</span>';
     }
     
     row.innerHTML = `
@@ -166,7 +177,12 @@ function renderDevices(devices) {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          <div class="w-3 h-3 rounded-full bg-gray-500" id="status-circle-${device.id}" title="Device status"></div>
+          <div id="status-circle-${device.id}" class="w-3 h-3" title="Checking device status...">
+            <svg class="animate-spin h-3 w-3 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
         </div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
@@ -188,8 +204,8 @@ function renderDevices(devices) {
           </div>
         ` : '<span class="text-gray-500 italic">None</span>'}
       </td>
-      <td class="px-6 py-4 text-sm text-gray-300">
-        <div class="flex flex-wrap">${profilesHtml}</div>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+        ${templateHtml}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${createdDate}</td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -199,14 +215,22 @@ function renderDevices(devices) {
               <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
             </svg>
           </button>
-          <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+          <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
             <div class="px-1 py-1">
+              <button onclick="cloneDevice(${device.id})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Clone
+              </button>
+              <hr class="my-1 border-gray-700">
               <button onclick="editDevice(${device.id})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 Edit
               </button>
+              <hr class="my-1 border-gray-700">
               <button onclick="deleteDevice(${device.id}, '${escapeHtml(device.name)}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -327,6 +351,23 @@ async function deleteDevice(deviceId, deviceName) {
   });
 }
 
+// Clone device
+function cloneDevice(deviceId) {
+  fetch(`/SNMP/GetDevice/${deviceId}/`)
+    .then(response => response.json())
+    .then(data => {
+      // Remove the ID so it creates a new device
+      delete data.id;
+      // Append " (Copy)" to the name
+      data.name = data.name + ' (Copy)';
+      // Open modal in add mode with cloned data
+      openDeviceModal(data);
+    })
+    .catch(error => {
+      showToast('Error loading device: ' + error.message, 'error');
+    });
+}
+
 // Edit device (defined in snmp_devices_modal.js)
 function editDevice(deviceId) {
   fetch(`/SNMP/GetDevice/${deviceId}/`)
@@ -404,14 +445,44 @@ document.addEventListener('DOMContentLoaded', function() {
         if (m !== menu) m.classList.add('hidden');
       });
       
-      // Position the menu at the cursor
+      // Position the menu with smart positioning to avoid going off-screen
       if (isHidden) {
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
+        // First show the menu to get its dimensions
+        menu.classList.remove('hidden');
+        
+        const menuRect = menu.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let left = e.clientX;
+        let top = e.clientY;
+        
+        // Check if menu would go off the right edge
+        if (left + menuRect.width > viewportWidth) {
+          left = viewportWidth - menuRect.width - 10; // 10px padding from edge
+        }
+        
+        // Check if menu would go off the bottom edge
+        if (top + menuRect.height > viewportHeight) {
+          top = viewportHeight - menuRect.height - 10; // 10px padding from edge
+        }
+        
+        // Ensure menu doesn't go off the left edge
+        if (left < 10) {
+          left = 10;
+        }
+        
+        // Ensure menu doesn't go off the top edge
+        if (top < 10) {
+          top = 10;
+        }
+        
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+      } else {
+        // Toggle to hidden
+        menu.classList.add('hidden');
       }
-      
-      // Toggle current menu
-      menu.classList.toggle('hidden', !isHidden);
     } else if (!e.target.closest('.action-menu')) {
       // Close all open action menus when clicking anywhere else
       document.querySelectorAll('.action-menu-items').forEach(menu => {
