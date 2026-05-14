@@ -5,12 +5,22 @@
 from django.urls import path
 from . import views
 from . import snmp_crud
+from . import network_map
+from . import snmp_test
 
 urlpatterns = [
+    path("Overview/", views.Overview, name="SNMPOverview"),
     path("Networks/", views.Networks, name="Networks"),
     path("Devices/", views.Devices, name="Devices"),
+    path("DeviceTemplates/", views.DeviceTemplates, name="DeviceTemplates"),
     path("Profiles/", views.Profiles, name="Profiles"),
     path("Credentials/", views.Credentials, name="Credentials"),
+    
+    # Overview API endpoints
+    path("GetOverviewMetrics/", views.GetOverviewMetrics, name="GetOverviewMetrics"),
+    
+    # Network Map API endpoints
+    path("GetNetworkMapData/", network_map.get_network_map_data, name="GetNetworkMapData"),
 
     # SNMP Credential endpoints
     path("GetCredentials/", snmp_crud.GetCredentials, name="GetSNMPCredentials"),
@@ -28,10 +38,10 @@ urlpatterns = [
     path("GetNetworkPipelineName/<int:network_id>/", snmp_crud.GetNetworkPipelineName,
          name="GetNetworkPipelineName"),
 
-    # SNMP Commit endpoints
-    path("GetCommitDiff/", snmp_crud.GetCommitDiff, name="GetCommitDiff"),
-    path("GenerateCommitConfiguration/", snmp_crud.GenerateCommitConfiguration, name="CommitConfiguration"),
-    path("CommitConfiguration/", snmp_crud.CommitConfiguration, name="CommitConfiguration"),
+    # SNMP Deploy endpoints
+    path("GetDeployDiff/", snmp_crud.GetDeployDiff, name="GetDeployDiff"),
+    path("GenerateDeployConfiguration/", snmp_crud.GenerateDeployConfiguration, name="DeployConfiguration"),
+    path("DeployConfiguration/", snmp_crud.DeployConfiguration, name="DeployConfiguration"),
 
     # SNMP Device endpoints
     path("GetDevices/", snmp_crud.GetDevices, name="GetSNMPDevices"),
@@ -51,5 +61,16 @@ urlpatterns = [
     path("AddProfile/", snmp_crud.AddProfile, name="AddSNMPProfile"),
     path("UpdateProfile/<str:profile_name>/", snmp_crud.UpdateProfile, name="UpdateSNMPProfile"),
     path("DeleteProfile/<str:profile_name>/", snmp_crud.DeleteProfile, name="DeleteSNMPProfile"),
+
+    # SNMP Device Template endpoints
+    path("GetDeviceTemplates/", snmp_crud.GetDeviceTemplates, name="GetDeviceTemplates"),
+    path("GetOfficialDeviceTemplate/<str:template_name>/", snmp_crud.GetOfficialDeviceTemplate, name="GetOfficialDeviceTemplate"),
+    path("GetDeviceTemplate/<str:template_id>/", snmp_crud.GetDeviceTemplate, name="GetDeviceTemplate"),
+    path("AddDeviceTemplate/", snmp_crud.AddDeviceTemplate, name="AddDeviceTemplate"),
+    path("UpdateDeviceTemplate/<int:template_id>/", snmp_crud.UpdateDeviceTemplate, name="UpdateDeviceTemplate"),
+    path("DeleteDeviceTemplate/<int:template_id>/", snmp_crud.DeleteDeviceTemplate, name="DeleteDeviceTemplate"),
+
+    # SNMP Test endpoints
+    path("RunSNMPTest/", snmp_test.RunSNMPTest, name="RunSNMPTest"),
 
 ]

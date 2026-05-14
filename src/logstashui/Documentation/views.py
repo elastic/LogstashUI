@@ -168,33 +168,48 @@ def rewrite_doc_links(html_content):
     """
     Rewrite documentation links from .md files to Django URLs
     Examples:
+    - /docs/docs/logstashui/index.md -> /Documentation/logstashui/
     - docs/docs/logstashui/index.md -> /Documentation/logstashui/
     - logstashui/index.md -> /Documentation/logstashui/
     """
-    # Pattern 1: docs/docs/path/index.md -> /Documentation/path/
+    # Pattern 1: /docs/docs/path/index.md -> /Documentation/path/ (absolute paths)
+    html_content = re.sub(
+        r'href="/docs/docs/([^"]+)/index\.md"',
+        r'href="/Documentation/\1/"',
+        html_content
+    )
+    
+    # Pattern 2: /docs/docs/path/file.md -> /Documentation/path/file/ (absolute paths)
+    html_content = re.sub(
+        r'href="/docs/docs/([^"]+)\.md"',
+        r'href="/Documentation/\1/"',
+        html_content
+    )
+    
+    # Pattern 3: docs/docs/path/index.md -> /Documentation/path/ (relative paths)
     html_content = re.sub(
         r'href="docs/docs/([^"]+)/index\.md"',
         r'href="/Documentation/\1/"',
         html_content
     )
     
-    # Pattern 2: path/index.md -> /Documentation/path/
-    html_content = re.sub(
-        r'href="([^"]+)/index\.md"',
-        r'href="/Documentation/\1/"',
-        html_content
-    )
-    
-    # Pattern 3: docs/docs/path/file.md -> /Documentation/path/file/
+    # Pattern 4: docs/docs/path/file.md -> /Documentation/path/file/ (relative paths)
     html_content = re.sub(
         r'href="docs/docs/([^"]+)\.md"',
         r'href="/Documentation/\1/"',
         html_content
     )
     
-    # Pattern 4: path/file.md -> /Documentation/path/file/
+    # Pattern 5: path/index.md -> /Documentation/path/ (generic relative)
     html_content = re.sub(
-        r'href="([^"]+)\.md"',
+        r'href="([^"/][^"]+)/index\.md"',
+        r'href="/Documentation/\1/"',
+        html_content
+    )
+    
+    # Pattern 6: path/file.md -> /Documentation/path/file/ (generic relative)
+    html_content = re.sub(
+        r'href="([^"/][^"]+)\.md"',
         r'href="/Documentation/\1/"',
         html_content
     )

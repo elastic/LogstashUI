@@ -30,9 +30,9 @@ function getCsrfToken() {
   return cookieValue;
 }
 
-// Attach event listener to commit button
+// Attach event listener to commit/deploy button
 document.addEventListener('DOMContentLoaded', function () {
-  const commitBtn = document.getElementById('commitBtn');
+  const commitBtn = document.getElementById('commitBtn') || document.getElementById('deployChangesBtn');
   if (commitBtn) {
     commitBtn.addEventListener('click', prepareSnmpDiffModal);
   }

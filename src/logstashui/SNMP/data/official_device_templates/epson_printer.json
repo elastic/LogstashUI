@@ -1,0 +1,14 @@
+{
+  "name": "epson_printer",
+  "description": "General metrics for Epson printers",
+  "vendor": "Epson",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "epson"
+  ]
+}

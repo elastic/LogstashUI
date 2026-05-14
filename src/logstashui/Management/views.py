@@ -13,8 +13,10 @@ from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.db import transaction
-from .models import UserProfile
+from .models import UserProfile, Settings
+from django.http import JsonResponse
 import logging
+import json
 import os
 from html import escape
 from Common.decorators import require_admin_role
@@ -334,3 +336,32 @@ def LogsDownload(request):
     except Exception as e:
         logger.error(f"Error downloading log file: {e}")
         return HttpResponse('Error downloading log file', status=500)
+
+@require_admin_role
+def SettingsView(request):
+    app_settings = Settings.get_settings()
+    
+    if request.method == 'POST':
+        try:
+            experimental_mode = request.POST.get('experimental_mode') == 'on'
+            
+            app_settings = Settings.get_settings()
+            app_settings.experimental_mode = experimental_mode
+            app_settings.save()
+            
+            logger.info(f"User '{request.user.username}' updated experimental mode to {experimental_mode}")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Settings saved successfully'
+            })
+        except Exception as e:
+            logger.error(f"Error saving settings: {e}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Error: {str(e)}. Please run migrations first.'
+            })
+    
+    return render(request, 'management_settings.html', {
+        'app_settings': app_settings
+    })

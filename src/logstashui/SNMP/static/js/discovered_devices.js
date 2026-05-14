@@ -91,21 +91,40 @@ function populateDiscoveredDevicesTable(devices) {
         }
         window.discoveredDevicesData[index] = device;
         
+        // Format suggested template display
+        let suggestedTemplateHtml = '<span class="text-gray-500 text-xs">None</span>';
+        if (device.suggested_template_name) {
+            suggestedTemplateHtml = `
+                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    ${escapeHtml(device.suggested_template_name)}
+                </span>
+            `;
+        }
+        
+        // Prepare OS description for tooltip
+        const hostDescription = device.host_description || 'No description available';
+        const hostName = device.host_name || 'N/A';
+        
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                ${escapeHtml(device.host_name || 'N/A')}
+                <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(hostDescription)}">
+                    ${escapeHtml(hostName)}
+                </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(ipOrHostname)}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-300">
-                ${escapeHtml(device.host_os_full || 'N/A')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(device.network_name || 'N/A')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                 ${escapeHtml(device.connection_name || 'N/A')}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${suggestedTemplateHtml}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                 <button 
@@ -142,13 +161,47 @@ function addDiscoveredDevice(deviceIndex) {
             ip_address: ipOrHostname,
             credential: device.credential_id,
             network: device.network_id,
-            profiles: ['system']  // Pre-select system profile
+            device_template: device.suggested_template_id  // Pre-select suggested template
         });
     } else {
         console.error('openDeviceModal function not found');
     }
 }
 
+
+// Instant tooltip handler for device names
+let tooltipElement = null;
+
+document.addEventListener('mouseover', function(e) {
+    const target = e.target.closest('.device-name-tooltip');
+    if (target && target.dataset.tooltip) {
+        // Create tooltip if it doesn't exist
+        if (!tooltipElement) {
+            tooltipElement = document.createElement('div');
+            tooltipElement.className = 'fixed px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg border border-gray-700 pointer-events-none';
+            tooltipElement.style.zIndex = '10000';
+            tooltipElement.style.maxWidth = '400px';
+            tooltipElement.style.whiteSpace = 'pre-wrap';
+            document.body.appendChild(tooltipElement);
+        }
+        
+        // Set content and show
+        tooltipElement.textContent = target.dataset.tooltip;
+        tooltipElement.style.display = 'block';
+        
+        // Position below the element
+        const rect = target.getBoundingClientRect();
+        tooltipElement.style.left = rect.left + (rect.width / 2) - (tooltipElement.offsetWidth / 2) + 'px';
+        tooltipElement.style.top = rect.bottom + 8 + 'px';
+    }
+});
+
+document.addEventListener('mouseout', function(e) {
+    const target = e.target.closest('.device-name-tooltip');
+    if (target && tooltipElement) {
+        tooltipElement.style.display = 'none';
+    }
+});
 
 // Attach event listener to discovered devices button
 document.addEventListener('DOMContentLoaded', function() {

@@ -25,9 +25,20 @@ function openCredentialModal(credentialData = null) {
   document.getElementById('credentialErrorContainer').innerHTML = '';
 
   if (credentialData) {
-    // Edit mode
-    modalTitle.textContent = 'Edit SNMP Credential';
-    document.getElementById('credentialId').value = credentialData.id;
+    // Check if this is edit mode (has ID) or clone mode (no ID)
+    const isEditMode = credentialData.id !== undefined;
+    
+    if (isEditMode) {
+      // Edit mode
+      modalTitle.textContent = 'Edit SNMP Credential';
+      document.getElementById('credentialId').value = credentialData.id;
+    } else {
+      // Clone mode - has data but no ID
+      modalTitle.textContent = 'Add SNMP Credential';
+      document.getElementById('credentialId').value = '';
+    }
+    
+    // Fill in the form fields
     document.getElementById('credentialName').value = credentialData.name;
     document.getElementById('credentialDescription').value = credentialData.description || '';
 
@@ -194,10 +205,10 @@ document.getElementById('credentialForm').addEventListener('submit', function (e
         // Don't reload - let network modal handle the refresh
       } else {
         closeCredentialModal();
-        // Reload page to show updated credentials
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // Refresh credentials data without page reload
+        if (typeof refreshCredentialsData === 'function') {
+          refreshCredentialsData();
+        }
       }
     })
     .catch(error => {

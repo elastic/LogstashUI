@@ -35,6 +35,23 @@ async function fetchNetworks() {
   }
 }
 
+// Update networks data without full page reload (called after add/edit/delete)
+function updateNetworksData(networks) {
+  allNetworks = networks;
+  totalNetworksCount = networks.length;
+  
+  // Populate filter dropdowns
+  populateFilters();
+  
+  // Apply filters and render
+  applyFiltersAndRender();
+  
+  // Show/hide appropriate states
+  updateUIState();
+  
+  console.log('Networks table updated with new data');
+}
+
 // Populate filter dropdowns with unique values
 function populateFilters() {
   // Get unique logstash nodes
@@ -119,6 +136,16 @@ function sortNetworks() {
       bVal = b.connection ? b.connection.name : '';
     }
     
+    // Handle numeric fields (device_count)
+    if (sortField === 'device_count') {
+      aVal = a[sortField] || 0;
+      bVal = b[sortField] || 0;
+      // Numeric comparison
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    }
+    
     // Convert to lowercase for case-insensitive sorting
     if (typeof aVal === 'string') aVal = aVal.toLowerCase();
     if (typeof bVal === 'string') bVal = bVal.toLowerCase();
@@ -189,6 +216,9 @@ function createNetworkRow(network) {
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
       <span class="font-mono">${escapeHtml(network.network_range)}</span>
     </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${network.device_count > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">${network.device_count || 0}</span>
+    </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${escapeHtml(network.logstash_name || '')}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
       ${network.discovery_enabled ? 
@@ -212,14 +242,22 @@ function createNetworkRow(network) {
             <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
           </svg>
         </button>
-        <div class="action-menu-items hidden fixed z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+        <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
           <div class="px-1 py-1">
+            <button onclick="cloneNetwork(${network.id})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Clone
+            </button>
+            <hr class="my-1 border-gray-700">
             <button onclick="editNetwork(${network.id})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               Edit
             </button>
+            <hr class="my-1 border-gray-700">
             <button onclick="deleteNetwork(${network.id}, '${escapeHtml(network.name)}')" class="group flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

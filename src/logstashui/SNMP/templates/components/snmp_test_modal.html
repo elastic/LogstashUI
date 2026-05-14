@@ -1,0 +1,177 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- SNMP Test Modal -->
+<div id="snmpTestModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+  <!-- Backdrop -->
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" id="snmpTestBackdrop"></div>
+  
+  <!-- Modal Content -->
+  <div class="bg-gray-800 rounded-lg w-full max-w-7xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+    
+    <!-- Modal Header -->
+    <div class="p-4 border-b border-blue-900/50 bg-gradient-to-r from-gray-800 to-gray-800">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-blue-400 flex items-center gap-2">
+          SNMP Test
+          <div class="relative group">
+            <div class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50 cursor-help hover:bg-blue-500/30 transition-colors">
+              <span class="text-xs font-bold text-blue-400">?</span>
+            </div>
+            <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
+              <h4 class="text-sm font-semibold text-white mb-2">SNMP Test</h4>
+              <p class="text-xs text-gray-300">Test SNMP connectivity and data collection from a device using a device template. This will perform real SNMP queries and show you the results in the format they would appear in your Logstash pipeline.</p>
+            </div>
+          </div>
+        </h2>
+        <button id="closeSnmpTestModal" class="text-gray-400 hover:text-white transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="p-4 flex-1 overflow-y-auto" style="min-height: 0;">
+
+  <!-- Test Configuration Card -->
+  <div class="mb-6">
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Device Selection -->
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-sm font-semibold text-gray-300">Select Device</span>
+          <span class="text-red-400">*</span>
+        </div>
+        <select id="snmpTestDeviceSelect" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <option value="">-- Select a device --</option>
+          {% for device in devices %}
+          <option value="{{ device.id }}" 
+                  data-ip="{{ device.ip_address }}" 
+                  data-port="{{ device.port }}"
+                  data-template-id="{% if device.device_template %}{{ device.device_template.id }}{% endif %}"
+                  data-template-name="{% if device.device_template %}{{ device.device_template.name }}{% endif %}"
+                  data-has-credential="{% if device.credential %}true{% else %}false{% endif %}">
+            {{ device.name }} ({{ device.ip_address }})
+          </option>
+          {% endfor %}
+        </select>
+        <div id="snmpTestDeviceInfo" class="mt-2 text-sm text-gray-400 hidden">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span id="snmpTestDeviceInfoText"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Template Selection -->
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-sm font-semibold text-gray-300">Device Template</span>
+          <span class="text-red-400">*</span>
+        </div>
+        <select id="snmpTestTemplateSelect" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <option value="">-- Select a template --</option>
+          {% for template in templates %}
+          <option value="{{ template.id }}" 
+                  data-vendor="{{ template.vendor }}"
+                  data-official="{{ template.official }}">
+            {{ template.name }}{% if template.official %} (Official){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div id="snmpTestTemplateInfo" class="mt-2 text-sm text-gray-400 hidden">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span id="snmpTestTemplateInfoText"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Run Test Button -->
+    <div class="mt-6 flex justify-end">
+      <button type="button" id="snmpTestRunTestBtn" class="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium" disabled>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span id="snmpTestRunTestBtnText">Run Test</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div id="snmpTestLoadingState" class="hidden bg-gray-800/95 rounded-lg p-8 shadow-xl text-center">
+    <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
+      <svg class="animate-spin h-8 w-8 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+    </div>
+    <h3 class="text-lg font-semibold text-white mb-2">Running SNMP Test...</h3>
+  </div>
+
+  <!-- Results Container -->
+  <div id="snmpTestResultsContainer" class="hidden">
+    <!-- Test Summary -->
+    <div class="mb-6 p-4 bg-gray-700/30 border border-gray-600/50 rounded-lg">
+      <h3 class="text-sm font-semibold text-gray-300 mb-3">Test Summary</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-gray-700/50 rounded p-3">
+          <div class="text-xs text-gray-400 mb-1">Device</div>
+          <div class="text-sm text-white font-medium" id="snmpTestSummaryDevice"></div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-3">
+          <div class="text-xs text-gray-400 mb-1">Template</div>
+          <div class="text-sm text-white font-medium" id="snmpTestSummaryTemplate"></div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-3">
+          <div class="text-xs text-gray-400 mb-1">Status</div>
+          <div class="text-sm text-white font-medium" id="snmpTestSummaryStatus"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="space-y-4">
+      <!-- GET Results -->
+      <div class="p-4 bg-gray-700/30 border border-gray-600/50 rounded-lg">
+        <h3 class="text-sm font-semibold text-gray-300 mb-4">GET Results</h3>
+        <div id="snmpTestGetResults" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </div>
+
+      <!-- TABLE Results -->
+      <div class="p-4 bg-gray-700/30 border border-gray-600/50 rounded-lg">
+        <h3 class="text-sm font-semibold text-gray-300 mb-4">TABLE Results</h3>
+        <div id="snmpTestTableResults" class="space-y-4"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error State -->
+  <div id="snmpTestErrorState" class="hidden bg-red-900/20 border border-red-500/50 rounded-lg p-6 mb-6 shadow-xl">
+    <div class="flex items-start gap-3">
+      <svg class="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="text-lg font-semibold text-red-400 mb-2">Test Failed</h3>
+        <p class="text-red-300" id="snmpTestErrorMessage"></p>
+        <p class="text-red-300" id="errorMessage"></p>
+      </div>
+    </div>
+  </div>
+
+    </div>
+  </div>
+</div>

@@ -15,4 +15,5 @@ urlpatterns = [
     path("Logs/", views.Logs, name="Logs"),
     path("Logs/filter", views.LogsFilter, name="LogsFilter"),
     path("Logs/download", views.LogsDownload, name="LogsDownload"),
+    path("Settings/", views.SettingsView, name="Settings"),
 ]

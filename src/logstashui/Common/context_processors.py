@@ -5,6 +5,7 @@
 from Site.views import check_for_update
 from PipelineManager.models import Connection
 from SNMP.models import Device
+from Management.models import Settings
 
 
 def version_update_info(request):
@@ -35,3 +36,19 @@ def navigation_highlight(request):
         'highlight_connection_manager': highlight_connection_manager,
         'highlight_snmp_devices': highlight_snmp_devices
     }
+
+
+def experimental_mode(request):
+    """
+    Context processor to add experimental mode status to all templates.
+    """
+    try:
+        app_settings = Settings.get_settings()
+        return {
+            'experimental_mode_enabled': app_settings.experimental_mode
+        }
+    except Exception:
+        # If settings table doesn't exist yet, default to False
+        return {
+            'experimental_mode_enabled': False
+        }

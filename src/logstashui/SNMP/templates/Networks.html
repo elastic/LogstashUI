@@ -8,6 +8,8 @@
 {% load static %}
 
 {% block content %}
+<link rel="stylesheet" href="{% static 'css/snmp.css' %}">
+
 <div class="p-6">
   <!-- Empty State (No networks at all) - Shown by JavaScript when totalNetworksCount === 0 -->
   <div id="initialEmptyState" class="hidden flex items-center justify-center min-h-[calc(100vh-12rem)]">
@@ -36,7 +38,18 @@
   <div id="mainContent">
     <!-- Header with Add Button -->
     <div class="page-header flex justify-between items-center mb-2">
-      <h1 class="text-2xl font-bold text-white">SNMP Networks (Polling Zones)</h1>
+      <div class="flex items-center gap-2">
+        <h1 class="text-2xl font-bold text-white">SNMP Networks (Polling Zones)</h1>
+        <div class="group relative inline-block">
+          <svg class="w-5 h-5 text-gray-400 hover:text-blue-400 cursor-help transition-colors" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+          </svg>
+          <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
+            <h4 class="text-sm font-semibold text-white mb-2">SNMP Networks</h4>
+            <p class="text-xs text-gray-300">Logical groupings of devices. Each network has its own unique Logstash pipeline, allowing you to organize devices and manage them with separate Logstash instances.</p>
+          </div>
+        </div>
+      </div>
       <div class="flex gap-2 items-center">
         <!-- Undeployed changes indicator -->
         <div id="snmpUndeployedIndicator" class="hidden flex items-center gap-1 px-2 py-1 bg-orange-500/20 border border-orange-500/40 rounded-full">
@@ -47,9 +60,9 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
-          Commit Changes
+          Deploy Changes
         </button>
-        <button id="addNetworkBtn" class="btn btn-primary flex items-center gap-x-2">
+        <button id="addNetworkBtn" class="btn btn-primary flex items-center justify-center gap-x-2 w-56">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -121,6 +134,9 @@
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('network_range')">
             Network Range <span id="sort-network_range" class="ml-1"></span>
           </th>
+          <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('device_count')">
+            Devices <span id="sort-device_count" class="ml-1"></span>
+          </th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Logstash Node</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Discovery</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Traps</th>
@@ -180,6 +196,31 @@
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
 <script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
 <script>
+  // Refresh networks data without page reload
+  function refreshNetworksData() {
+    console.log('Refreshing networks data...');
+    
+    // Fetch updated networks data
+    fetch('/SNMP/GetNetworks/')
+      .then(response => response.json())
+      .then(networks => {
+        // GetNetworks returns a plain array, not {success: true, networks: [...]}
+        if (Array.isArray(networks)) {
+          // Update the networks data in the table
+          if (typeof updateNetworksData === 'function') {
+            updateNetworksData(networks);
+          }
+          console.log('Networks data refreshed successfully:', networks.length, 'networks');
+        } else {
+          console.error('Unexpected response format:', networks);
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing networks:', error);
+        showToast('Error refreshing networks data', 'error');
+      });
+  }
+
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
     const actionButton = e.target.closest('.action-menu-button');
@@ -194,14 +235,44 @@
         if (m !== menu) m.classList.add('hidden');
       });
       
-      // Position the menu at the cursor
+      // Position the menu with smart positioning to avoid going off-screen
       if (isHidden) {
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
+        // First show the menu to get its dimensions
+        menu.classList.remove('hidden');
+        
+        const menuRect = menu.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let left = e.clientX;
+        let top = e.clientY;
+        
+        // Check if menu would go off the right edge
+        if (left + menuRect.width > viewportWidth) {
+          left = viewportWidth - menuRect.width - 10; // 10px padding from edge
+        }
+        
+        // Check if menu would go off the bottom edge
+        if (top + menuRect.height > viewportHeight) {
+          top = viewportHeight - menuRect.height - 10; // 10px padding from edge
+        }
+        
+        // Ensure menu doesn't go off the left edge
+        if (left < 10) {
+          left = 10;
+        }
+        
+        // Ensure menu doesn't go off the top edge
+        if (top < 10) {
+          top = 10;
+        }
+        
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+      } else {
+        // Toggle to hidden
+        menu.classList.add('hidden');
       }
-      
-      // Toggle current menu
-      menu.classList.toggle('hidden', !isHidden);
     } else if (!e.target.closest('.action-menu')) {
       // Close all open action menus when clicking anywhere else
       document.querySelectorAll('.action-menu-items').forEach(menu => {
@@ -216,6 +287,24 @@
       menu.classList.add('hidden');
     });
   }, true);
+
+  // Clone network function
+  function cloneNetwork(networkId) {
+    // Load network data and open modal with cloned values
+    fetch(`/SNMP/GetNetwork/${networkId}/`)
+      .then(response => response.json())
+      .then(data => {
+        // Remove the ID so it creates a new network
+        delete data.id;
+        // Append " (Copy)" to the name
+        data.name = data.name + ' (Copy)';
+        // Open modal in add mode with cloned data
+        openNetworkModal(data);
+      })
+      .catch(error => {
+        showToast('Error loading network: ' + error, 'error');
+      });
+  }
 
   // Edit network function
   function editNetwork(networkId) {
@@ -263,9 +352,8 @@
             .then(data => {
               if (data.success) {
                 showToast(data.message, 'success');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 1000);
+                // Refresh networks data without page reload
+                refreshNetworksData();
               } else {
                 throw new Error(data.error || 'Failed to delete network');
               }
@@ -296,9 +384,8 @@
             .then(data => {
               if (data.success) {
                 showToast(data.message, 'success');
-                setTimeout(() => {
-                  window.location.reload();
-                }, 1000);
+                // Refresh networks data without page reload
+                refreshNetworksData();
               } else {
                 throw new Error(data.error || 'Failed to delete network');
               }

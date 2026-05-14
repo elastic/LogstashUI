@@ -1,0 +1,43 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+{% load static %}
+
+<div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden mb-6" 
+     hx-get="/SNMP/GetNetworkMapData/" 
+     hx-trigger="load" 
+     hx-swap="none"
+     id="networkMapCard">
+  <div class="p-6 border-b border-gray-700">
+    <h2 class="text-xl font-bold text-white">
+      Network Topology Map
+      <span class="text-sm text-gray-400 font-normal ml-2">Visual representation of your network infrastructure</span>
+    </h2>
+  </div>
+  
+  <!-- Loading State -->
+  <div id="networkMapLoading" class="p-8 text-center">
+    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+    <p class="text-gray-400 mt-2">Loading network topology...</p>
+  </div>
+
+  <!-- Network Map Container -->
+  <div id="networkMapContainer" class="hidden p-6">
+    <!-- Map will be rendered here by JavaScript -->
+  </div>
+
+  <!-- Empty State -->
+  <div id="networkMapEmpty" class="hidden p-8 text-center">
+    <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-700/50 rounded-full mb-4">
+      <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+      </svg>
+    </div>
+    <h3 class="text-lg font-semibold text-white mb-2">No Network Data Available</h3>
+    <p class="text-gray-400">Add devices and networks to visualize your topology.</p>
+  </div>
+</div>
+
+<script src="{% static 'js/network_map.js' %}"></script>

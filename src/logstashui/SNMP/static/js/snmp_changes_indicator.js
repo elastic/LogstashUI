@@ -14,8 +14,8 @@ async function checkForUndeployedSNMPChanges() {
     if (!indicator) return;
 
     try {
-        // Fetch diff data from the server (same endpoint used by the commit modal)
-        const response = await fetch('/SNMP/GetCommitDiff/', {
+        // Fetch diff data from the server (same endpoint used by the deploy modal)
+        const response = await fetch('/SNMP/GetDeployDiff/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -85,10 +85,20 @@ async function checkForUndeployedSNMPChanges() {
         }
 
         // Show or hide the indicator based on whether there are changes
+        const deployBtn = document.getElementById('deployChangesBtn') || document.getElementById('commitBtn');
+        
         if (hasChanges) {
             indicator.classList.remove('hidden');
+            // Add purple glow to Deploy button
+            if (deployBtn) {
+                deployBtn.classList.add('deploy-button-glow');
+            }
         } else {
             indicator.classList.add('hidden');
+            // Remove purple glow from Deploy button
+            if (deployBtn) {
+                deployBtn.classList.remove('deploy-button-glow');
+            }
         }
 
     } catch (error) {
