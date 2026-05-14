@@ -1,3 +1,59 @@
+## [0.4.2] - SNMP Expansion, Settings, and AI Foundation - 05/14/2026
+
+### Added
+
+- Added global settings support with an initial Experimental Mode setting.
+- Added the initial AI / chat app foundation.
+- Added the ability to test an SNMP connection and device template directly from the SNMP UI.
+- Added an SNMP overview page with initial KPI cards, visualizations, queries, and network summary data.
+- Added a CDP-based network map for SNMP adjacency visualization.
+- Added CDP adjacency data to the SNMP data quality table.
+- Added an agent view to the policy page in preparation for feature flags.
+- Added Logstash node visibility to agent policies.
+- Added a deploy button glow when there are undeployed changes.
+- Added support for cloning SNMP-related objects.
+- Added interfaces as a core field in the device data quality check.
+- Added `sysObjectID` to the generic system profile.
+- Added an Epson device template.
+- Added automatic SNMP profile / template detection.
+- Added device template assignment suggestions based on detected device metadata such as `sysDescr`.
+- Added template suggestion context, including name, description, vendor, family/type, model, matching field, official status, and associated profiles.
+- Added handling for cases where no strong device template match is available.
+- Added hover descriptions and explanatory text across SNMP CRUD pages.
+- Added dedicated SNMP setup documentation and linked to it from the SNMP UI.
+
+### Changed
+
+- Incremented the version number to `0.4.2`.
+- Renamed SNMP “Commit Changes” language to “Deploy Changes” for clearer deployment semantics.
+- Reduced the discovery modal to show devices seen in the last 10 minutes instead of the last 2 hours.
+- Normalized SNMP “Add” button sizing across pages.
+- Overhauled the SNMP profile page and removed/changed older pinning behavior.
+- Updated SNMP CRUD pages so creating, updating, and deleting values no longer requires a full page reload.
+- Replaced the offline symbol with a loading spinner while device information is being fetched from Elasticsearch.
+- Added last successful poll / last seen visibility for SNMP devices.
+- Added a startup / management sync process for official SNMP profiles instead of re-syncing profiles on page load.
+- Updated official SNMP profile sync behavior to remove unused official profiles that are no longer present in the official profile set.
+- Replaced the old profile-to-device relationship model with the newer profile-to-template relationship model.
+- Removed deprecated profile-to-device junction table usage.
+- Moved inline HTML CSS into dedicated CSS files where Tailwind could not be used.
+- Moved “Click here for setup instructions” content into a dedicated documentation page and updated the UI to reference that page.
+- Added top-of-page explanatory text to SNMP pages describing what each component does and linking to relevant documentation.
+
+### Fixed
+
+- Fixed SNMP connection modal styling on SNMP pages.
+- Fixed broken documentation app link rewriting.
+- Updated documentation compatibility details for Elastic / Logstash `8.x` and `9.x`.
+- Improved SNMP template matching behavior, including tie-breaker handling for competing matches.
+
+### Documentation
+
+- Updated in-app SNMP setup instructions.
+- Added SNMP setup documentation.
+- Added compatibility documentation for `8.x` and `9.x`.
+- Added contextual descriptions for SNMP CRUD pages and linked related docs from the UI.
+
 ## [0.4.1] - Post 0.4.0 Polish - 04/20/2026
 
 ### Added
