@@ -902,7 +902,7 @@ def GetSimulationNodeStatus(request):
             
             return JsonResponse({
                 "status": "running",
-                "message": "Agent Running",
+                "message": "Sim Node Running",
                 "agent_info": agent_data
             }, status=200)
             
@@ -910,7 +910,7 @@ def GetSimulationNodeStatus(request):
             logger.warning(f"logstashagent not responding: {e}")
             return JsonResponse({
                 "status": "not_responding",
-                "message": "Agent Not Responding",
+                "message": "Sim Node Offline",
                 "error": str(e)
             }, status=200)
     
@@ -919,7 +919,7 @@ def GetSimulationNodeStatus(request):
         logger.error(traceback.format_exc())
         return JsonResponse({
             "status": "error",
-            "message": "Agent Not Responding",
+            "message": "Sim Node Offline",
             "error": str(e)
         }, status=200)
 
