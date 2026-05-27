@@ -1,0 +1,2851 @@
+{
+    "append": {
+        "name": "append",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/append-processor",
+        "description": "Appends one or more values to an existing array if the field already exists and it is an array. Converts a scalar to an array and appends one or more...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be appended to. Supportstemplate snippets."
+            },
+            "value": {
+                "name": "value",
+                "required": "yes*",
+                "default": "-",
+                "description": "The value to be appended. Supportstemplate snippets. May specify only one ofvalueorcopy_from."
+            },
+            "copy_from": {
+                "name": "copy_from",
+                "required": "no",
+                "default": "-",
+                "description": "The origin field which will be appended tofield, cannot setvaluesimultaneously."
+            },
+            "allow_duplicates": {
+                "name": "allow_duplicates",
+                "required": "no",
+                "default": "true",
+                "description": "Iffalse, the processor does not appendvalues already present in the field."
+            },
+            "ignore_empty_values": {
+                "name": "ignore_empty_values",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrue, the processor does not append values that resolve tonullor an empty string."
+            },
+            "media_type": {
+                "name": "media_type",
+                "required": "no",
+                "default": "application/json",
+                "description": "The media type for encodingvalue. Applies only whenvalueis atemplate snippet. Must be one ofapplication/json,text/plain, orapplication/x-www-form-urlencoded."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "attachment": {
+        "name": "attachment",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/attachment",
+        "description": "The attachment processor lets Elasticsearch extract file attachments in common formats (such as PPT, XLS, and PDF) by using the Apache text extraction...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to get the base64 encoded field from"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "attachment",
+                "description": "The field that will hold the attachment information"
+            },
+            "indexed_chars": {
+                "name": "indexed_chars",
+                "required": "no",
+                "default": "100000",
+                "description": "The number of chars being used for extraction to prevent huge fields. Use-1for no limit."
+            },
+            "indexed_chars_field": {
+                "name": "indexed_chars_field",
+                "required": "no",
+                "default": "null",
+                "description": "Field name from which you can overwrite the number of chars being used for extraction. Seeindexed_chars."
+            },
+            "properties": {
+                "name": "properties",
+                "required": "no",
+                "default": "all properties",
+                "description": "Array of properties to select to be stored. Can becontent,title,name,author,keywords,date,content_type,content_length,language"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "remove_binary": {
+                "name": "remove_binary",
+                "required": "encouraged",
+                "default": "false",
+                "description": "Iftrue, the binaryfieldwill be removed from the document. This option is not required, but setting it explicitly is encouraged, and omitting it will result in a warning."
+            },
+            "resource_name": {
+                "name": "resource_name",
+                "required": "no",
+                "default": "",
+                "description": "Field containing the name of the resource to decode. If specified, the processor passes this resource name to the underlying Tika library to enableResource Name Based Detection."
+            }
+        }
+    },
+    "bytes": {
+        "name": "bytes",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/bytes-processor",
+        "description": "Converts a human readable byte value (e.g. 1kb) to its value in bytes (e.g. 1024). If the field is an array of strings, all members of the array will...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to convert"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the converted value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "cef": {
+        "name": "cef",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/cef-processor",
+        "description": "Extracts fields from Common Event Format (CEF) message document. Here is a cef processor config When the above processor executes against the following...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be parsed."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field that the parsed structured object will be written into. Any existing content in this field will be overwritten."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "ignore_empty_values": {
+                "name": "ignore_empty_values",
+                "required": "no",
+                "default": "true",
+                "description": "Iftruethen keys with empty values are quietly ignored in the document"
+            },
+            "timezone": {
+                "name": "timezone",
+                "required": "no",
+                "default": "UTC",
+                "description": "The default timezone used by the processor. Supportstemplate snippets."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "community_id": {
+        "name": "community_id",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/community-id-processor",
+        "description": "Computes the Community ID for network flow data as defined in the Community ID Specification. You can use a community ID to correlate network events related...",
+        "parameters": {
+            "source_ip": {
+                "name": "source_ip",
+                "required": "no",
+                "default": "source.ip",
+                "description": "Field containing the source IP address."
+            },
+            "source_port": {
+                "name": "source_port",
+                "required": "no",
+                "default": "source.port",
+                "description": "Field containing the source port."
+            },
+            "destination_ip": {
+                "name": "destination_ip",
+                "required": "no",
+                "default": "destination.ip",
+                "description": "Field containing the destination IP address."
+            },
+            "destination_port": {
+                "name": "destination_port",
+                "required": "no",
+                "default": "destination.port",
+                "description": "Field containing the destination port."
+            },
+            "iana_number": {
+                "name": "iana_number",
+                "required": "no",
+                "default": "network.iana_number",
+                "description": "Field containing the IANA number."
+            },
+            "icmp_type": {
+                "name": "icmp_type",
+                "required": "no",
+                "default": "icmp.type",
+                "description": "Field containing the ICMP type."
+            },
+            "icmp_code": {
+                "name": "icmp_code",
+                "required": "no",
+                "default": "icmp.code",
+                "description": "Field containing the ICMP code."
+            },
+            "transport": {
+                "name": "transport",
+                "required": "no",
+                "default": "network.transport",
+                "description": "Field containing the transport protocol name or number.Used only when theiana_numberfield is not present. The following protocol names are currently supported:ICMP,IGMP,TCP,UDP,GRE,ICMP IPv6,EIGRP,OSPF,PIM, andSCTP."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "network.community_id",
+                "description": "Output field for the community ID."
+            },
+            "seed": {
+                "name": "seed",
+                "required": "no",
+                "default": "0",
+                "description": "Seed for the community ID hash. Must be between0 and 65535 (inclusive). The seed can prevent hash collisions between network domains, such asa staging and production network that use the same addressing scheme."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrueand any required fields are missing,the processor quietly exits without modifying the document."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "convert": {
+        "name": "convert",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/convert-processor",
+        "description": "Converts a field in the currently ingested document to a different type, such as converting a string to an integer. If the field value is an array, all...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field whose value is to be converted"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the converted value to, by defaultfieldis updated in-place"
+            },
+            "type": {
+                "name": "type",
+                "required": "yes",
+                "default": "-",
+                "description": "The type to convert the existing value to"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "csv": {
+        "name": "csv",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/csv-processor",
+        "description": "Extracts fields from CSV line out of a single text field within a document. Any empty field in CSV will be skipped. If the trim option is enabled then...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to extract data from"
+            },
+            "target_fields": {
+                "name": "target_fields",
+                "required": "yes",
+                "default": "-",
+                "description": "The array of fields to assign extracted values to"
+            },
+            "separator": {
+                "name": "separator",
+                "required": "no",
+                "default": ",",
+                "description": "Separator used in CSV, has to be single character string"
+            },
+            "quote": {
+                "name": "quote",
+                "required": "no",
+                "default": "\"",
+                "description": "Quote used in CSV, has to be single character string"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "trim": {
+                "name": "trim",
+                "required": "no",
+                "default": "false",
+                "description": "Trim whitespaces in unquoted fields"
+            },
+            "empty_value": {
+                "name": "empty_value",
+                "required": "no",
+                "default": "-",
+                "description": "Value used to fill empty fields, empty fields will be skipped if this is not provided.                                             Empty field is one with no value (2 consecutive separators) or empty quotes (\"\")"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "date": {
+        "name": "date",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/date-processor",
+        "description": "Parses dates from fields, and then uses the date or timestamp as the timestamp for the document. By default, the date processor adds the parsed date as...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to get the date from."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "@timestamp",
+                "description": "The field that will hold the parsed date."
+            },
+            "formats": {
+                "name": "formats",
+                "required": "yes",
+                "default": "-",
+                "description": "An array of the expected date formats. Can be ajava time patternor one of the following formats: ISO8601, UNIX, UNIX_MS, or TAI64N."
+            },
+            "timezone": {
+                "name": "timezone",
+                "required": "no",
+                "default": "UTC",
+                "description": "The defaulttimezoneused by the processor. Supportstemplate snippets."
+            },
+            "locale": {
+                "name": "locale",
+                "required": "no",
+                "default": "ENGLISH",
+                "description": "The locale to use when parsing the date, relevant when parsing month names or week days. Supportstemplate snippets."
+            },
+            "output_format": {
+                "name": "output_format",
+                "required": "no",
+                "default": "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+                "description": "The format to use when writing the date totarget_field. Must be a validjava time pattern."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "date_index_name": {
+        "name": "date_index_name",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/date-index-name-processor",
+        "description": "The purpose of this processor is to point documents to the right time based index based on a date or timestamp field in a document by using the date math...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to get the date or timestamp from."
+            },
+            "index_name_prefix": {
+                "name": "index_name_prefix",
+                "required": "no",
+                "default": "-",
+                "description": "A prefix of the index name to be prepended before the printed date. Supportstemplate snippets."
+            },
+            "date_rounding": {
+                "name": "date_rounding",
+                "required": "yes",
+                "default": "-",
+                "description": "How to round the date when formatting the date into the index name. Valid values are:y(year),M(month),w(week),d(day),h(hour),m(minute) ands(second). Supportstemplate snippets."
+            },
+            "date_formats": {
+                "name": "date_formats",
+                "required": "no",
+                "default": "yyyy-MM-dd'T'HH:mm:ss.SSSXX",
+                "description": "An array of the expected date formats for parsing dates / timestamps in the document being preprocessed. Can be a java time pattern or one of the following formats: ISO8601, UNIX, UNIX_MS, or TAI64N."
+            },
+            "timezone": {
+                "name": "timezone",
+                "required": "no",
+                "default": "UTC",
+                "description": "The timezone to use when parsing the date and when date math index supports resolves expressions into concrete index names."
+            },
+            "locale": {
+                "name": "locale",
+                "required": "no",
+                "default": "ENGLISH",
+                "description": "The locale to use when parsing the date from the document being preprocessed, relevant when parsing month names or week days."
+            },
+            "index_name_format": {
+                "name": "index_name_format",
+                "required": "no",
+                "default": "yyyy-MM-dd",
+                "description": "The format to be used when printing the parsed date into the index name. A valid java time pattern is expected here. Supportstemplate snippets."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "doc": {
+        "name": "doc",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/dissect-processor",
+        "description": "Similar to the Grok Processor, dissect also extracts structured fields out of a single text field within a document. However unlike the Grok Processor,...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to dissect"
+            },
+            "pattern": {
+                "name": "pattern",
+                "required": "yes",
+                "default": "-",
+                "description": "The pattern to apply to the field"
+            },
+            "append_separator": {
+                "name": "append_separator",
+                "required": "no",
+                "default": "\"\" (empty string)",
+                "description": "The character(s) that separate the appended fields."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            },
+            "->": {
+                "name": "Skip right padding",
+                "position": "(far) right",
+                "example": "%{keyname1->}",
+                "description": "Skips any repeated characters to the right",
+                "details": "link"
+            },
+            "+": {
+                "name": "Append",
+                "position": "left",
+                "example": "%{+keyname} %{+keyname}",
+                "description": "Appends two or more fields together",
+                "details": "link"
+            },
+            "+with/n": {
+                "name": "Append with order",
+                "position": "left and right",
+                "example": "%{+keyname/2} %{+keyname/1}",
+                "description": "Appends two or more fields together in the order specified",
+                "details": "link"
+            },
+            "?": {
+                "name": "Named skip key",
+                "position": "left",
+                "example": "%{?ignoreme}",
+                "description": "Skips the matched value in the output. Same behavior as%{}",
+                "details": "link"
+            },
+            "*and&": {
+                "name": "Reference keys",
+                "position": "left",
+                "example": "%{*r1} %{&r1}",
+                "description": "Sets the output key as value of*and output value of&",
+                "details": "link"
+            }
+        }
+    },
+    "dot_expander": {
+        "name": "dot_expander",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/dot-expand-processor",
+        "description": "Expands a field with dots into an object field. This processor allows fields with dots in the name to be accessible by other processors in the pipeline...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to expand into an object field. If set to*, all top-level fields will be expanded."
+            },
+            "path": {
+                "name": "path",
+                "required": "no",
+                "default": "-",
+                "description": "The field that contains the field to expand. Only required if the field to expand is part another object field, because thefieldoption can only understand leaf fields."
+            },
+            "override": {
+                "name": "override",
+                "required": "no",
+                "default": "false",
+                "description": "Controls the behavior when there is already an existing nested object that conflicts with the expanded field. Whenfalse, the processor will merge conflicts by combining the old and the new values into an array. Whentrue, the value from the expanded field will overwrite the existing value."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "drop": {
+        "name": "drop",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/drop-processor",
+        "description": "Drops the document without raising any errors. This is useful to prevent the document from getting indexed based on some condition. ",
+        "parameters": {
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "enrich": {
+        "name": "enrich",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/enrich-processor",
+        "description": "The enrich processor can enrich documents with data from another index. See enrich data section for more information about how to set this up. ",
+        "parameters": {
+            "policy_name": {
+                "name": "policy_name",
+                "required": "yes",
+                "default": "-",
+                "description": "The name of the enrich policy to use."
+            },
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field in the input document that matches the policies match_field used to retrieve the enrichment data. Supportstemplate snippets."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "yes",
+                "default": "-",
+                "description": "Field added to incoming documents to contain enrich data. This field contains both thematch_fieldandenrich_fieldsspecified in theenrich policy. Supportstemplate snippets."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "override": {
+                "name": "override",
+                "required": "no",
+                "default": "true",
+                "description": "If processor will update fields with pre-existing non-null-valued field. When set tofalse, such fields will not be touched."
+            },
+            "max_matches": {
+                "name": "max_matches",
+                "required": "no",
+                "default": "1",
+                "description": "The maximum number of matched documents to include under the configured target field. Thetarget_fieldwill be turned into a json array ifmax_matchesis higher than 1, otherwisetarget_fieldwill become a json object. In order to avoid documents getting too large, the maximum allowed value is 128."
+            },
+            "shape_relation": {
+                "name": "shape_relation",
+                "required": "no",
+                "default": "INTERSECTS",
+                "description": "A spatial relation operator used to match thegeoshapeof incoming documents to documents in the enrich index. This option is only used forgeo_matchenrich policy types. SeeSpatial Relationsfor operators and more information."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "fail": {
+        "name": "fail",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/fail-processor",
+        "description": "Raises an exception. This is useful for when you expect a pipeline to fail and want to relay a specific message to the requester. ",
+        "parameters": {
+            "message": {
+                "name": "message",
+                "required": "yes",
+                "default": "-",
+                "description": "The error message thrown by the processor. Supportstemplate snippets."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "fingerprint": {
+        "name": "fingerprint",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/fingerprint-processor",
+        "description": "Computes a hash of the document’s content. You can use this hash for content fingerprinting. The following example illustrates the use of the fingerprint...",
+        "parameters": {
+            "fields": {
+                "name": "fields",
+                "required": "yes",
+                "default": "n/a",
+                "description": "Array of fields to include in the fingerprint. For objects, the processor hashes both the field key andvalue. For other fields, the processor hashes only the field value."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "fingerprint",
+                "description": "Output field for the fingerprint."
+            },
+            "salt": {
+                "name": "salt",
+                "required": "no",
+                "default": "<none>",
+                "description": "Salt valuefor the hash function."
+            },
+            "method": {
+                "name": "method",
+                "required": "no",
+                "default": "SHA-1",
+                "description": "The hash method used tocompute the fingerprint. Must be one ofMD5,SHA-1,SHA-256,SHA-512, orMurmurHash3."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrue, the processorignores any missingfields. If all fields are missing, the processor silentlyexits without modifying the document."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "foreach": {
+        "name": "foreach",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/foreach-processor",
+        "description": "Runs an ingest processor on each element of an array or object. All ingest processors can run on array or object elements. However, if the number of elements...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "Field containing array or objectvalues."
+            },
+            "processor": {
+                "name": "processor",
+                "required": "yes",
+                "default": "-",
+                "description": "Ingest processor to run on eachelement."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrue, the processor silentlyexits without changing the document if thefieldisnullor missing."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "geoip": {
+        "name": "geoip",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/geoip-processor",
+        "description": "The geoip processor adds information about the geographical location of an IPv4 or IPv6 address.  By default, the processor uses the GeoLite2 City, GeoLite2...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to get the IP address from for the geographical lookup."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "geoip",
+                "description": "The field that will hold the geographical information looked up from the database."
+            },
+            "database_file": {
+                "name": "database_file",
+                "required": "no",
+                "default": "GeoLite2-City.mmdb",
+                "description": "The database filename referring to one of the automatically downloaded GeoLite2 databases (GeoLite2-City.mmdb, GeoLite2-Country.mmdb, or GeoLite2-ASN.mmdb), or the name of a supported database file in theingest-geoipconfig directory, or the name of aconfigured database(with the.mmdbsuffix appended)."
+            },
+            "properties": {
+                "name": "properties",
+                "required": "no",
+                "default": "[continent_name,country_iso_code,country_name,region_iso_code,region_name,city_name,location] *",
+                "description": "Controls what properties are added to thetarget_fieldbased on the ip geolocation lookup."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "first_only": {
+                "name": "first_only",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrueonly first found ip geolocation data, will be returned, even iffieldcontains array"
+            },
+            "download_database_on_pipeline_creation": {
+                "name": "download_database_on_pipeline_creation",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrue(and ifingest.geoip.downloader.eager.downloadisfalse), the missing database is downloaded when the pipeline is created. Else, the download is triggered by when the pipeline is used as thedefault_pipelineorfinal_pipelinein an index."
+            }
+        }
+    },
+    "grok": {
+        "name": "grok",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/grok-processor",
+        "description": "Extracts structured fields out of a single text field within a document. You choose which field to extract matched fields from, as well as the grok pattern...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to use for grok expression parsing"
+            },
+            "patterns": {
+                "name": "patterns",
+                "required": "yes",
+                "default": "-",
+                "description": "An ordered list of grok expression to match and extract named captures with. Returns on the first expression in the list that matches."
+            },
+            "pattern_definitions": {
+                "name": "pattern_definitions",
+                "required": "no",
+                "default": "-",
+                "description": "A map of pattern-name and pattern tuples defining custom patterns to be used by the current processor. Patterns matching existing names will override the pre-existing definition."
+            },
+            "ecs_compatibility": {
+                "name": "ecs_compatibility",
+                "required": "no",
+                "default": "disabled",
+                "description": "Must bedisabledorv1. Ifv1, the processor uses patterns withElastic Common Schema (ECS)field names."
+            },
+            "trace_match": {
+                "name": "trace_match",
+                "required": "no",
+                "default": "false",
+                "description": "when true,_ingest._grok_match_indexwill be inserted into your matched documentâs metadata with the index into the pattern found inpatternsthat matched."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "validate_only": {
+                "name": "validate_only",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrue, the processor does matching but does not extract structured fields"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            },
+            "ingest.grok.watchdog.max_execution_time": {
+                "name": "ingest.grok.watchdog.max_execution_time",
+                "default": "1s",
+                "description": "The maximum allowed execution of a grok expression evaluation."
+            },
+            "ingest.grok.watchdog.interval": {
+                "name": "ingest.grok.watchdog.interval",
+                "default": "1s",
+                "description": "How often to check whether there are grok evaluations that take longer than the maximum allowed execution time. As of Elasticsearch 9.4, this setting is no longer necessary and is deprecated."
+            }
+        }
+    },
+    "gsub": {
+        "name": "gsub",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/gsub-processor",
+        "description": "Converts a string field by applying a regular expression and a replacement. If the field is an array of string, all members of the array will be converted...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to apply the replacement to"
+            },
+            "pattern": {
+                "name": "pattern",
+                "required": "yes",
+                "default": "-",
+                "description": "The pattern to be replaced"
+            },
+            "replacement": {
+                "name": "replacement",
+                "required": "yes",
+                "default": "-",
+                "description": "The string to replace the matching patterns with"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the converted value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "html_strip": {
+        "name": "html_strip",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/htmlstrip-processor",
+        "description": "Removes HTML tags from the field. If the field is an array of strings, HTML tags will be removed from all members of the array. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The string-valued field to remove HTML tags from"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "inference": {
+        "name": "inference",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/inference-processor",
+        "description": "Uses a pre-trained data frame analytics model or a model deployed for natural language processing tasks to infer against the data that is being ingested...",
+        "parameters": {
+            "model_id": {
+                "name": "model_id",
+                "required": "yes",
+                "default": "-",
+                "description": "(String) An inference ID, a model deployment ID, a trained model ID or an alias."
+            },
+            "input_output": {
+                "name": "input_output",
+                "required": "no",
+                "default": "-",
+                "description": "(List) Input fields for inference and output (destination) fields for the inference results. This option is incompatible with thetarget_fieldandfield_mapoptions."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "ml.inference.<processor_tag>",
+                "description": "(String) Field added to incoming documents to contain results objects."
+            },
+            "field_map": {
+                "name": "field_map",
+                "required": "no",
+                "default": "If defined the modelâs default field map",
+                "description": "(Object) Maps the document field names to the known field names of the model. This mapping takes precedence over any default mappings provided in the model configuration."
+            },
+            "inference_config": {
+                "name": "inference_config",
+                "required": "no",
+                "default": "The default settings defined in the model",
+                "description": "(Object) Contains the inference type and its options."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "(Boolean) Iftrueand any of the input fields defined ininput_ouputare missing then those missing fields are quietly ignored, otherwise a missing field causes a failure. Only applies when usinginput_outputconfigurations to explicitly list the input fields."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "ip_location": {
+        "name": "ip_location",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/ip-location-processor",
+        "description": "The ip_location processor adds information about the geographical location of an IPv4 or IPv6 address.  By default, the processor uses the GeoLite2 City,...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to get the IP address from for the geographical lookup."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "ip_location",
+                "description": "The field that will hold the geographical information looked up from the database."
+            },
+            "database_file": {
+                "name": "database_file",
+                "required": "no",
+                "default": "GeoLite2-City.mmdb",
+                "description": "The database filename referring to one of the automatically downloaded GeoLite2 databases (GeoLite2-City.mmdb, GeoLite2-Country.mmdb, or GeoLite2-ASN.mmdb), or the name of a supported database file in theingest-geoipconfig directory, or the name of aconfigured database(with the.mmdbsuffix appended)."
+            },
+            "properties": {
+                "name": "properties",
+                "required": "no",
+                "default": "[continent_name,country_iso_code,country_name,region_iso_code,region_name,city_name,location] *",
+                "description": "Controls what properties are added to thetarget_fieldbased on the ip geolocation lookup."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "first_only": {
+                "name": "first_only",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrueonly first found ip geolocation data, will be returned, even iffieldcontains array"
+            },
+            "download_database_on_pipeline_creation": {
+                "name": "download_database_on_pipeline_creation",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrue(and ifingest.geoip.downloader.eager.downloadisfalse), the missing database is downloaded when the pipeline is created. Else, the download is triggered by when the pipeline is used as thedefault_pipelineorfinal_pipelinein an index."
+            }
+        }
+    },
+    "join": {
+        "name": "join",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/join-processor",
+        "description": "Joins each element of an array into a single string using a separator character between each element. Throws an error when the field is not an array. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "Field containing array values to join"
+            },
+            "separator": {
+                "name": "separator",
+                "required": "yes",
+                "default": "-",
+                "description": "The separator character"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the joined value to, by defaultfieldis updated in-place"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "json": {
+        "name": "json",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/json-processor",
+        "description": "Parses a string containing JSON data into a structured object, string, or other value. All JSON-supported types will be parsed (null, boolean, number,...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be parsed."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field that the converted value will be written into. Any existing content in this field will be overwritten."
+            },
+            "add_to_root": {
+                "name": "add_to_root",
+                "required": "no",
+                "default": "false",
+                "description": "Flag that forces the parsed JSON to be added at the top level of the document.target_fieldmust not be set when this option is chosen."
+            },
+            "add_to_root_conflict_strategy": {
+                "name": "add_to_root_conflict_strategy",
+                "required": "no",
+                "default": "replace",
+                "description": "When set toreplace, root fields that conflict with fields from the parsed JSON will be overridden. When set tomerge, conflicting fields will be merged. Only applicable ifadd_to_rootis set totrue."
+            },
+            "allow_duplicate_keys": {
+                "name": "allow_duplicate_keys",
+                "required": "no",
+                "default": "false",
+                "description": "When set totrue, the JSON parser will not fail if the JSON contains duplicate keys. Instead, the last encountered value for any duplicate key wins."
+            },
+            "strict_json_parsing": {
+                "name": "strict_json_parsing",
+                "required": "no",
+                "default": "true",
+                "description": "When set totrue, the JSON parser will strictly parse the field value. When set tofalse, the JSON parser will be more lenient but also more likely to drop parts of the field value. For example ifstrict_json_parsingis set totrueand the field value is123 \"foo\"then the processor will throw an IllegalArgumentException. But ifstrict_json_parsingis set tofalsethen the field value will be parsed as123."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "kv": {
+        "name": "kv",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/kv-processor",
+        "description": "This processor helps automatically parse messages (or specific event fields) which are of the foo=bar variety. For example, if you have a log message...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be parsed. Supportstemplate snippets."
+            },
+            "field_split": {
+                "name": "field_split",
+                "required": "yes",
+                "default": "-",
+                "description": "Regex pattern to use for splitting key-value pairs"
+            },
+            "value_split": {
+                "name": "value_split",
+                "required": "yes",
+                "default": "-",
+                "description": "Regex pattern to use for splitting the key from the value within a key-value pair"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "null",
+                "description": "The field to insert the extracted keys into. Defaults to the root of the document. Supportstemplate snippets."
+            },
+            "include_keys": {
+                "name": "include_keys",
+                "required": "no",
+                "default": "null",
+                "description": "List of keys to filter and insert into document. Defaults to including all keys"
+            },
+            "exclude_keys": {
+                "name": "exclude_keys",
+                "required": "no",
+                "default": "null",
+                "description": "List of keys to exclude from document"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "prefix": {
+                "name": "prefix",
+                "required": "no",
+                "default": "null",
+                "description": "Prefix to be added to extracted keys"
+            },
+            "trim_key": {
+                "name": "trim_key",
+                "required": "no",
+                "default": "null",
+                "description": "String of characters to trim from extracted keys"
+            },
+            "trim_value": {
+                "name": "trim_value",
+                "required": "no",
+                "default": "null",
+                "description": "String of characters to trim from extracted values"
+            },
+            "strip_brackets": {
+                "name": "strip_brackets",
+                "required": "no",
+                "default": "false",
+                "description": "Iftruestrip brackets(),<>,[]as well as quotes'and\"from extracted values"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "lowercase": {
+        "name": "lowercase",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/lowercase-processor",
+        "description": "Converts a string to its lowercase equivalent. If the field is an array of strings, all members of the array will be converted. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to make lowercase"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the converted value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "mappings": {
+        "name": "mappings",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/ingest-circle-processor",
+        "description": "Converts circle definitions of shapes to regular polygons which approximate them. error distance Using the above pipeline, we can attempt to index a document...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to interpret as a circle. Either a string in WKT format or a map for GeoJSON."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the polygon shape to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "error_distance": {
+                "name": "error_distance",
+                "required": "yes",
+                "default": "-",
+                "description": "The difference between the resulting inscribed distance from center to side and the circleâs radius (measured in meters forgeo_shape, unit-less forshape)"
+            },
+            "shape_type": {
+                "name": "shape_type",
+                "required": "yes",
+                "default": "-",
+                "description": "Which field mapping type is to be used when processing the circle:geo_shapeorshape"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "network_direction": {
+        "name": "network_direction",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/network-direction-processor",
+        "description": "Calculates the network direction given a source IP address, destination IP address, and a list of internal networks. The network direction processor reads...",
+        "parameters": {
+            "source_ip": {
+                "name": "source_ip",
+                "required": "no",
+                "default": "source.ip",
+                "description": "Field containing the source IP address."
+            },
+            "destination_ip": {
+                "name": "destination_ip",
+                "required": "no",
+                "default": "destination.ip",
+                "description": "Field containing the destination IP address."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "network.direction",
+                "description": "Output field for the network direction."
+            },
+            "internal_networks": {
+                "name": "internal_networks",
+                "required": "yes *",
+                "default": "",
+                "description": "List of internal networks. Supports IPv4 andIPv6 addresses and ranges in CIDR notation. Also supports the named ranges listed below. These may be constructed withtemplate snippets. * Must specify only one ofinternal_networksorinternal_networks_field."
+            },
+            "internal_networks_field": {
+                "name": "internal_networks_field",
+                "required": "no",
+                "default": "",
+                "description": "A field on the given document to read theinternal_networksconfiguration from."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrueand any required fields are missing,the processor quietly exits without modifying the document."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "params": {
+        "name": "params",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/script-processor",
+        "description": "Runs an inline or stored script on incoming documents. The script runs in the ingest context. The script processor uses the script cache to avoid recompiling...",
+        "parameters": {
+            "lang": {
+                "name": "lang",
+                "required": "no",
+                "default": "\"painless\"",
+                "description": "Script language."
+            },
+            "id": {
+                "name": "id",
+                "required": "no",
+                "default": "-",
+                "description": "ID of astored script.                                         If nosourceis specified, this parameter is required."
+            },
+            "source": {
+                "name": "source",
+                "required": "no",
+                "default": "-",
+                "description": "Inline script.                                         If noidis specified, this parameter is required."
+            },
+            "params": {
+                "name": "params",
+                "required": "no",
+                "default": "-",
+                "description": "Object containing parameters for the script."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "recover_failure_document": {
+        "name": "recover_failure_document",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/recover-failure-document-processor",
+        "description": "Recovers documents that have been stored in a data stream's failure store by restoring them to their original format. This processor is designed to work...",
+        "parameters": {
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "redact": {
+        "name": "redact",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/redact-processor",
+        "description": "The Redact processor uses the Grok rules engine to obscure text in the input document matching the given Grok patterns. The processor can be used to obscure...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be redacted"
+            },
+            "patterns": {
+                "name": "patterns",
+                "required": "yes",
+                "default": "-",
+                "description": "A list of grok expressions to match and redact named captures with"
+            },
+            "pattern_definitions": {
+                "name": "pattern_definitions",
+                "required": "no",
+                "default": "-",
+                "description": "A map of pattern-name and pattern tuples defining custom patterns to be used by the processor. Patterns matching existing names will override the pre-existing definition"
+            },
+            "prefix": {
+                "name": "prefix",
+                "required": "no",
+                "default": "<",
+                "description": "Start a redacted section with this token"
+            },
+            "suffix": {
+                "name": "suffix",
+                "required": "no",
+                "default": ">",
+                "description": "End a redacted section with this token"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            },
+            "skip_if_unlicensed": {
+                "name": "skip_if_unlicensed",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueand the current license does not support running redact processors, then the processor quietly exits without modifying the document"
+            },
+            "trace_redact": {
+                "name": "trace_redact",
+                "required": "no",
+                "default": "false",
+                "description": "Iftruethen ingest metadata_ingest._redact._is_redactedis set totrueif the document has been redacted"
+            }
+        }
+    },
+    "registered_domain": {
+        "name": "registered_domain",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/registered-domain-processor",
+        "description": "Extracts the registered domain (also known as the effective top-level domain or eTLD), sub-domain, and top-level domain from a fully qualified domain...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "",
+                "description": "Field containing the source FQDN."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "<empty string>",
+                "description": "Object field containingextracted domain components. If an<empty string>, the processor addscomponents to the documentâs root."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrueand any required fieldsare missing, the processor quietly exits without modifying the document."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "remove": {
+        "name": "remove",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/remove-processor",
+        "description": "Removes existing fields. If one field doesn’t exist, an exception will be thrown. Here is an example to remove a single field: To remove multiple fields,...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "Fields to be removed. Supportstemplate snippets. This parameter is not required if you usekeepinstead."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "keep": {
+                "name": "keep",
+                "required": "no",
+                "default": "-",
+                "description": "Fields to keep. When set, all fields other than those specified are removed."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "rename": {
+        "name": "rename",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/rename-processor",
+        "description": "Renames an existing field. If the field doesn’t exist or the new name is already used, an exception will be thrown. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be renamed. Supportstemplate snippets."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "yes",
+                "default": "-",
+                "description": "The new name of the field. Supportstemplate snippets."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document."
+            },
+            "override": {
+                "name": "override",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrue, the processor will update pre-existing non-null-valued fields. When set tofalse, such fields will not be touched."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "reroute": {
+        "name": "reroute",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/reroute-processor",
+        "description": "The reroute processor routes a document to a different target index or data stream during ingestion. This allows you to dynamically direct documents to...",
+        "parameters": {
+            "destination": {
+                "name": "destination",
+                "required": "no",
+                "default": "-",
+                "description": "A static value for the target. Cannot be set when thedatasetornamespaceoption is set."
+            },
+            "dataset": {
+                "name": "dataset",
+                "required": "no",
+                "default": "{{data_stream.dataset}}",
+                "description": "Field references or a static value for the dataset part of the data stream name. In addition to the criteria forindex names, cannot contain-and must be no longer than 100 characters. Example values arenginx.accessandnginx.error.Supports field references with a mustache-like syntax (denoted as{{double}}or{{{triple}}}curly braces). When resolving field references, the processor replaces invalid characters with_. Uses the<dataset>part of the index name as a fallback if all field references resolve to anull, missing, or non-string value."
+            },
+            "namespace": {
+                "name": "namespace",
+                "required": "no",
+                "default": "{{data_stream.namespace}}",
+                "description": "Field references or a static value for the namespace part of the data stream name. See the criteria forindex namesfor allowed characters. Must be no longer than 100 characters.Supports field references with a mustache-like syntax (denoted as{{double}}or{{{triple}}}curly braces). When resolving field references, the processor replaces invalid characters with_. Uses the<namespace>part of the index name as a fallback if all field references resolve to anull, missing, or non-string value."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "resource": {
+        "name": "resource",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/normalize-for-stream",
+        "description": "Detects whether a document is OpenTelemetry-compliant and if not - normalizes it as described below. If used in combination with the OTel-related mappings...",
+        "parameters": {
+            "span.id": {
+                "name": "span.id",
+                "semantic conventions attribute": "span_id"
+            },
+            "trace.id": {
+                "name": "trace.id",
+                "semantic conventions attribute": "trace_id"
+            },
+            "message": {
+                "name": "message",
+                "semantic conventions attribute": "body.text"
+            },
+            "log.level": {
+                "name": "log.level",
+                "semantic conventions attribute": "severity_text"
+            }
+        }
+    },
+    "set": {
+        "name": "set",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/pipeline-processor",
+        "description": "Executes another pipeline. The name of the current pipeline can be accessed from the _ingest.pipeline ingest metadata key. An example of using this processor...",
+        "parameters": {
+            "name": {
+                "name": "name",
+                "required": "yes",
+                "default": "-",
+                "description": "The name of the pipeline to execute. Supportstemplate snippets."
+            },
+            "ignore_missing_pipeline": {
+                "name": "ignore_missing_pipeline",
+                "required": "no",
+                "default": "false",
+                "description": "Whether to ignore missing pipelines instead of failing."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "set_security_user": {
+        "name": "set_security_user",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/ingest-node-set-security-user-processor",
+        "description": "Sets user-related details (such as username, roles, email, full_name, metadata, api_key, realm and authentication_type) from the current authenticated...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to store the user information into."
+            },
+            "properties": {
+                "name": "properties",
+                "required": "no",
+                "default": "[username,roles,email,full_name,metadata,api_key,realm,authentication_type]",
+                "description": "Controls what user related properties are added to thefield."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "sort": {
+        "name": "sort",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/sort-processor",
+        "description": "Sorts the elements of an array ascending or descending. Homogeneous arrays of numbers will be sorted numerically, while arrays of strings or heterogeneous...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to be sorted"
+            },
+            "order": {
+                "name": "order",
+                "required": "no",
+                "default": "\"asc\"",
+                "description": "The sort order to use. Accepts\"asc\"or\"desc\"."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the sorted value to, by defaultfieldis updated in-place"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "split": {
+        "name": "split",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/split-processor",
+        "description": "Splits a field into an array using a separator character. Only works on string fields. If the preserve_trailing option is enabled, any trailing empty...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to split"
+            },
+            "separator": {
+                "name": "separator",
+                "required": "yes",
+                "default": "-",
+                "description": "A regex which matches the separator, eg,or\\s+"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the split value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "preserve_trailing": {
+                "name": "preserve_trailing",
+                "required": "no",
+                "default": "false",
+                "description": "Preserves empty trailing fields, if any."
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "terminate": {
+        "name": "terminate",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/terminate-processor",
+        "description": "Terminates the current ingest pipeline, causing no further processors to be run. This will normally be executed conditionally, using the if option. If...",
+        "parameters": {
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "trim": {
+        "name": "trim",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/trim-processor",
+        "description": "Trims whitespace from field. If the field is an array of strings, all members of the array will be trimmed. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The string-valued field to trim whitespace from"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the trimmed value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "uppercase": {
+        "name": "uppercase",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/uppercase-processor",
+        "description": "Converts a string to its uppercase equivalent. If the field is an array of strings, all members of the array will be converted. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to make uppercase"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the converted value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "uri_parts": {
+        "name": "uri_parts",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/uri-parts-processor",
+        "description": "Parses a Uniform Resource Identifier (URI) string and extracts its components as an object. This URI object includes properties for the URI’s domain,...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "Field containing the URI string."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "url",
+                "description": "Output field for the URI object."
+            },
+            "keep_original": {
+                "name": "keep_original",
+                "required": "no",
+                "default": "true",
+                "description": "Iftrue, the processor copies the unparsed URI to<target_field>.original."
+            },
+            "remove_if_successful": {
+                "name": "remove_if_successful",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrue, the processor removes thefieldafter parsing the URI string. If parsing fails, the processor does notremove thefield."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "urldecode": {
+        "name": "urldecode",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/urldecode-processor",
+        "description": "URL-decodes a string. If the field is an array of strings, all members of the array will be decoded. ",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field to decode"
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "field",
+                "description": "The field to assign the converted value to, by defaultfieldis updated in-place"
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist or isnull, the processor quietly exits without modifying the document"
+            },
+            "description": {
+                "name": "description",
+                "required": "no",
+                "default": "-",
+                "description": "Description of the processor. Useful for describing the purpose of the processor or its configuration."
+            },
+            "if": {
+                "name": "if",
+                "required": "no",
+                "default": "-",
+                "description": "Conditionally execute the processor. SeeConditionally run a processor."
+            },
+            "ignore_failure": {
+                "name": "ignore_failure",
+                "required": "no",
+                "default": "false",
+                "description": "Ignore failures for the processor. SeeHandling pipeline failures."
+            },
+            "on_failure": {
+                "name": "on_failure",
+                "required": "no",
+                "default": "-",
+                "description": "Handle failures for the processor. SeeHandling pipeline failures."
+            },
+            "tag": {
+                "name": "tag",
+                "required": "no",
+                "default": "-",
+                "description": "Identifier for the processor. Useful for debugging and metrics."
+            }
+        }
+    },
+    "user_agent": {
+        "name": "user_agent",
+        "link": "https://www.elastic.co/docs/reference/enrich-processor/user-agent-processor",
+        "description": "The user_agent processor extracts details from the user agent string a browser sends with its web requests. This processor adds this information by default...",
+        "parameters": {
+            "field": {
+                "name": "field",
+                "required": "yes",
+                "default": "-",
+                "description": "The field containing the user agent string."
+            },
+            "target_field": {
+                "name": "target_field",
+                "required": "no",
+                "default": "user_agent",
+                "description": "The field that will be filled with the user agent details."
+            },
+            "regex_file": {
+                "name": "regex_file",
+                "required": "no",
+                "default": "-",
+                "description": "The name of the file in theconfig/user-agent* directory containing the regular expressions for parsing the user agent string. Both the directory and the file have to be created before starting Elasticsearch. If not specified, theuser-agentmodule uses theregexes.yamlfile from theuap-corepackage that it ships with (see below).* Before version 9.4, this directory was namedconfig/ingest-user-agent."
+            },
+            "properties": {
+                "name": "properties",
+                "required": "no",
+                "default": "[name,os,device,original,version]",
+                "description": "Controls what properties are added totarget_field."
+            },
+            "extract_device_type": {
+                "name": "extract_device_type",
+                "required": "no",
+                "default": "false",
+                "description": "Extracts device type from the user agent string on a best-effort basis."
+            },
+            "ignore_missing": {
+                "name": "ignore_missing",
+                "required": "no",
+                "default": "false",
+                "description": "Iftrueandfielddoes not exist, the processor quietly exits without modifying the document"
+            }
+        }
+    }
+}
