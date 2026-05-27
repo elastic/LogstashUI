@@ -2783,6 +2783,16 @@ function createNodeElement(component, x, y, width, height, type) {
             <span class="font-medium text-white truncate" style="color: ${color.text}">${component.plugin || 'Unknown'}</span>
         </div>
         <div class="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity graph-node-buttons">
+            ${(isConditional && !isContinue) ? `
+            <button class="text-gray-400 hover:text-white p-1 graph-edit-condition-btn" 
+                    data-component-id="${component.id}"
+                    data-plugin="${component.plugin}"
+                    title="Edit Condition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+            </button>
+            ` : ''}
             <button class="text-gray-400 hover:text-white p-1" 
                     onclick="event.stopPropagation(); if(typeof PluginConfigModal !== 'undefined') PluginConfigModal.show(${JSON.stringify(component).replace(/"/g, '&quot;')})"
                     title="Configure">
@@ -3259,7 +3269,72 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Add event listeners for graph connection line buttons
-    document.body.addEventListener('click', function(e) {
+    document.body.addEventListener('click', async function(e) {
+        // Handle Edit Condition button on conditional nodes
+        if (e.target.closest('.graph-edit-condition-btn')) {
+            e.stopPropagation();
+            const btn = e.target.closest('.graph-edit-condition-btn');
+            const componentId = btn.dataset.componentId;
+            const plugin = btn.dataset.plugin;
+            
+            if (typeof ConfirmationModal !== 'undefined' && typeof ConfirmationModal.prompt === 'function') {
+                // Get the base component ID (remove _elseif_ or _else suffixes)
+                const baseComponentId = componentId.split('_elseif_')[0].split('_else')[0];
+                const baseComponent = findComponentById(baseComponentId);
+                
+                if (!baseComponent) {
+                    console.error('Could not find base component:', baseComponentId);
+                    return;
+                }
+                
+                // Determine which condition we're editing
+                let currentCondition = '';
+                let elseIfIndex = null;
+                
+                if (plugin === 'if') {
+                    currentCondition = baseComponent.config.condition || '';
+                } else if (plugin === 'else_if') {
+                    // Extract the else_if index from the component ID
+                    const match = componentId.match(/_elseif_(\d+)$/);
+                    if (match) {
+                        elseIfIndex = parseInt(match[1]);
+                        currentCondition = baseComponent.config.else_ifs?.[elseIfIndex]?.condition || '';
+                    }
+                }
+                
+                // Show the prompt
+                const title = plugin === 'if' ? 'Edit If Condition' : 'Edit Else-If Condition';
+                const newCondition = await ConfirmationModal.prompt(
+                    `Enter the ${plugin === 'if' ? 'if' : 'else-if'} condition:`,
+                    currentCondition,
+                    title,
+                    'e.g., [message] == "error"'
+                );
+                
+                if (newCondition !== null && newCondition !== currentCondition) {
+                    // Update the condition
+                    if (plugin === 'if') {
+                        baseComponent.config.condition = newCondition;
+                    } else if (plugin === 'else_if' && elseIfIndex !== null) {
+                        if (!baseComponent.config.else_ifs) {
+                            baseComponent.config.else_ifs = [];
+                        }
+                        if (!baseComponent.config.else_ifs[elseIfIndex]) {
+                            baseComponent.config.else_ifs[elseIfIndex] = {};
+                        }
+                        baseComponent.config.else_ifs[elseIfIndex].condition = newCondition;
+                    }
+                    
+                    // Mark as changed and re-render
+                    if (typeof markAsChanged === 'function') {
+                        markAsChanged();
+                    }
+                    renderGraphEditor();
+                }
+            }
+            return;
+        }
+        
         // Handle Add Plugin button between components
         if (e.target.closest('.graph-add-plugin-between-btn')) {
             const btn = e.target.closest('.graph-add-plugin-between-btn');
