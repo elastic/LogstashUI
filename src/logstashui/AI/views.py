@@ -7,8 +7,9 @@ from PipelineManager.models import Connection
 
 def IntegrationFactory(request):
     connections = Connection.objects.filter(
-        connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name')
+        connection_type=Connection.ConnectionType.CENTRALIZED,
+        cloud_id__isnull=False
+    ).exclude(cloud_id='').values('id', 'name')
     
     return render(request, 'integration_factory.html', {
         'connections': connections
