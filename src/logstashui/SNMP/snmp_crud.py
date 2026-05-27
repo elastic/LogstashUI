@@ -1278,7 +1278,9 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
     if connection.cloud_id:
         config["cloud_id"] = connection.cloud_id
     elif connection.host:
-        config["hosts"] = [connection.host]
+        # Add port to host if available
+        host_with_port = f"{connection.host}:{connection.port}" if connection.port else connection.host
+        config["hosts"] = [host_with_port]
 
     # Add authentication
     if connection.api_key:
