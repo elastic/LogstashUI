@@ -614,6 +614,11 @@ formData.append('es_id', esId);
 formData.append('pipeline', pipelineName);
 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
+console.log('[FE->BE] Sending simulation request with components:', {
+  filterCount: componentsData.filter?.length || 0,
+  filterPlugins: componentsData.filter?.map(f => f.plugin) || []
+});
+
 try {
   const response = await fetch('/ConnectionManager/SimulatePipeline/', {
     method: 'POST',

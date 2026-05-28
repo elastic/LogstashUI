@@ -70,10 +70,10 @@ def SimulatePipeline(request):
         # For actual simulations, generate a unique UUID to track results
         if not log_text:
             run_id = "preallocation"
-            logger.info(f"Slot preallocation request (using deterministic run_id)")
+            logger.info(f"[FE->BE] Slot preallocation request - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
         else:
             run_id = str(uuid.uuid4())
-            logger.info(f"Starting simulation with run_id: {run_id}")
+            logger.info(f"[FE->BE] Starting simulation with run_id: {run_id} - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
 
         # Get logstashagent URL early so we can use it in instrumentation
         logstash_agent_url = settings.LOGSTASH_AGENT_URL
@@ -407,6 +407,9 @@ end
             "pipeline_name": request.GET.get('pipeline', 'simulation'),
             "pipelines": [pipeline_data]
         }
+        
+        logger.info(f"[BE->AGENT] Sending slot allocation with {len(filter_plugins)} filter plugins")
+        logger.debug(f"[BE->AGENT] filter_config being sent:\n{filter_content}")
 
         slot_id = None
         try:
@@ -571,7 +574,11 @@ def StreamSimulate(request):
 
         # Log detailed information about the received event
         event_run_id = event_data.get('run_id', 'MISSING')
-        logger.info(f"StreamSimulate: Received event with run_id={event_run_id}, queue size now: {queue_size}")
+        snapshots = event_data.get('snapshots', {})
+        snapshot_count = len(snapshots) if snapshots else 0
+        logger.info(f"[AGENT->BE] Received event with run_id={event_run_id}, snapshots={snapshot_count}, queue size now: {queue_size}")
+        if snapshots:
+            logger.debug(f"[AGENT->BE] Snapshot keys: {list(snapshots.keys()) if isinstance(snapshots, dict) else 'NOT A DICT'}")
         logger.debug(f"StreamSimulate: Event data keys: {list(event_data.keys())}")
         if event_run_id == 'MISSING':
             logger.error(f"StreamSimulate: Event is missing run_id field! Event keys: {list(event_data.keys())}")
@@ -622,7 +629,13 @@ def GetSimulationResults(request):
             simulation_results.clear()
             simulation_results.extend(remaining_results)
 
-        logger.info(f"GetSimulationResults: Returning {len(matching_results)} events for run_id {run_id}")
+        # Log snapshot counts for each event being returned
+        snapshot_info = []
+        for event in matching_results:
+            snapshots = event.get('snapshots', {})
+            snapshot_info.append(len(snapshots) if snapshots else 0)
+        
+        logger.info(f"[BE->FE] Returning {len(matching_results)} events for run_id {run_id}, snapshots per event: {snapshot_info}")
         if matching_results:
             logger.debug(f"GetSimulationResults: First event keys: {list(matching_results[0].keys())}")
 

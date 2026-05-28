@@ -2006,7 +2006,11 @@ function initSimulationResults(runId) {
         fetch(`/ConnectionManager/GetSimulationResults/?run_id=${encodeURIComponent(runId)}`)
             .then(response => response.json())
             .then(data => {
-
+                if (data.results && data.results.length > 0) {
+                    const snapshotCounts = data.results.map(e => e.snapshots ? Object.keys(e.snapshots).length : 0);
+                    const snapshotKeys = data.results.map(e => e.snapshots ? Object.keys(e.snapshots) : []);
+                    console.log(`[BE->FE] Received ${data.results.length} events, snapshot counts: ${JSON.stringify(snapshotCounts)}, keys: ${JSON.stringify(snapshotKeys)}`);
+                }
 
                 if (data.results && data.results.length > 0) {
 
