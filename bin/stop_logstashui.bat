@@ -76,6 +76,18 @@ if /i "!MODE!"=="host" (
     
     echo LogstashAgent stopped
     
+    REM Kill Logstash process (managed by the agent)
+    REM Port 9650 is Logstash API, port 9449 is HTTP input
+    echo Stopping Logstash process
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9650 ^| findstr LISTENING') do (
+        echo Killing Logstash process on port 9650 (PID: %%a)
+        taskkill /PID %%a /F >nul 2>&1
+    )
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9449 ^| findstr LISTENING') do (
+        echo Killing Logstash process on port 9449 (PID: %%a)
+        taskkill /PID %%a /F >nul 2>&1
+    )
+    
     echo.
     echo Stopping Docker containers (UI + Nginx)
     cd docker
