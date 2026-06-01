@@ -49,6 +49,7 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 ## Documentation
 
+- **[Architecture](docs/docs/logstashui/architecture.md)** - System architecture and component overview
 - **[LogstashUI Documentation](docs/docs/logstashui/index.md)** - Installation, configuration, and usage guides for LogstashUI
 - **[LogstashAgent Documentation](docs/docs/logstashagent/index.md)** - Setup and configuration for LogstashAgent
 

@@ -39,6 +39,7 @@ Configure polling, traps, and discovery through a web interface.
 
 ## Documentation
 
+- **[Architecture](/docs/docs/logstashui/architecture.md)** - System architecture
 - **[Compatibility](/docs/docs/logstashui/compatibility.md)** - Logstash version compatibility and requirements
 - **[Configuration](/docs/docs/logstashui/configuration/index.md)** - Configuration options and settings for LogstashUI
 - **[General](/docs/docs/logstashui/general/index.md)** - Build, update, and deployment guides
