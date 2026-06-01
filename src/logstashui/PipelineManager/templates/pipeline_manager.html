@@ -190,7 +190,18 @@
                     <div class="rounded-lg p-2" style="background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 70%, transparent 100%);">
                       <img src="{% static 'images/ElasticIcon.png' %}" alt="Centralized" width="52" height="52" class="inline-block">
                     </div>
+                    {% if connection.is_serverless %}
+                    <div class="flex items-center gap-1 mt-1">
+                      <span class="text-[11px] font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                        Elastic Serverless
+                      </span>
+                      <svg class="w-3 h-3 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                      </svg>
+                    </div>
+                    {% else %}
                     <span class="text-xs text-gray-500 mt-1">Elastic</span>
+                    {% endif %}
                   {% else %}
                     <div class="rounded-lg p-2" style="background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.05) 70%, transparent 100%);">
                       <img src="{% static 'images/LogstashIcon.png' %}" alt="Agent" width="52" height="52" class="inline-block">
@@ -1160,6 +1171,29 @@
         });
     }
   }
+</script>
+
+<script>
+  // Listen for serverless detection event
+  document.body.addEventListener('serverlessDetected', function(event) {
+    const connectionId = event.detail.connectionId;
+    const typeCell = document.querySelector(`tr:has([hx-get*="test=${connectionId}"]) .flex.flex-col.items-center`);
+    if (typeCell) {
+      const elasticSpan = typeCell.querySelector('span.text-xs.text-gray-500');
+      if (elasticSpan && elasticSpan.textContent === 'Elastic') {
+        elasticSpan.outerHTML = `
+          <div class="flex items-center gap-1 mt-1">
+            <span class="text-[11px] font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Elastic Serverless
+            </span>
+            <svg class="w-3 h-3 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+            </svg>
+          </div>
+        `;
+      }
+    }
+  });
 </script>
 
 <script src="{% static 'js/pipeline_list.js' %}"></script>
