@@ -1,3 +1,27 @@
+## [0.4.3] - AI Foundation, Simulation Improvements, and SNMP Fixes - 06/07/2026
+
+### Added
+
+- Added an Elastic Serverless indicator after successfully testing a connection.
+- Added foundational support for AI agents.
+- Added Integration Factory as an experimental feature.
+- Added system architecture documentation and linked it from the README.
+
+### Changed
+
+- Updated simulation mode to use port `9650` instead of `9600` to avoid conflicts with Logstash monitoring APIs.
+- Normalized language around simulation nodes in the pipeline editor.
+- Updated condition editing controls so they appear as clear edit buttons instead of inline pencil icons in both graph and inline modes.
+- Updated Integration Factory so it only uses connections configured with Cloud IDs.
+
+### Fixed
+
+- Fixed an issue where simulated document batches could incorrectly show the “no plugins executed” banner for all documents when only a single document returned no results.
+- Fixed an issue where simulation continued searching for results after the final document response had already been received.
+- Fixed the walk profile caution message so it appears again when rows are added to a walk profile.
+- Fixed generated SNMP pipelines so they include the port when connections do not use a Cloud ID, preventing incorrect default port behavior.
+- Added additional simulation-mode agent logging to help diagnose agent issues.
+
 ## [0.4.2] - SNMP Expansion, Settings, and AI Foundation - 05/14/2026
 
 ### Added
