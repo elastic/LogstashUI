@@ -142,12 +142,26 @@ def TestConnectivity(request):
     success, message = test_connectivity(test_id)
     
     if success:
-        return HttpResponse("""
+        # Check if this is a serverless instance
+        is_serverless = False
+        try:
+            info = json.loads(message)
+            is_serverless = info.get('name') == 'serverless'
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        
+        # Return response with HX-Trigger to update the type column if serverless
+        response = HttpResponse("""
             <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
                 onload="setTimeout(() => this.remove(), 3000);">
                 <p>{0}</p>
             </div>
         """.format(escape(str(message))))
+        
+        if is_serverless:
+            response['HX-Trigger'] = json.dumps({"serverlessDetected": {"connectionId": test_id}})
+        
+        return response
     else:
         return HttpResponse("""
             <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">

@@ -1,0 +1,2690 @@
+[
+    {
+        "name": "1password",
+        "title": "1Password",
+        "description": "Collect logs from 1Password with Elastic Agent.",
+        "version": "1.34.0"
+    },
+    {
+        "name": "ti_anyrun",
+        "title": "ANY.RUN Threat Intelligence Feeds",
+        "description": "Ingest Threat Intelligence indicators from ANY.RUN TI Feeds with Elastic Agent",
+        "version": "1.1.1"
+    },
+    {
+        "name": "aws",
+        "title": "AWS",
+        "description": "Collect logs and metrics from Amazon Web Services (AWS) with Elastic Agent.",
+        "version": "6.16.0"
+    },
+    {
+        "name": "aws_cloudtrail_otel",
+        "title": "AWS CloudTrail Logs OpenTelemetry Assets",
+        "description": "AWS CloudTrail Logs OpenTelemetry Assets",
+        "version": "0.1.0"
+    },
+    {
+        "name": "aws_billing",
+        "title": "AWS Cost and Usage Report (CUR 2.0)",
+        "description": "Collect AWS CUR 2.0 billing data from S3 with Elastic Agent.",
+        "version": "0.2.1"
+    },
+    {
+        "name": "aws_elb_otel",
+        "title": "AWS ELB OpenTelemetry Assets",
+        "description": "AWS ELB logs for OpenTelemetry Collector",
+        "version": "0.1.1"
+    },
+    {
+        "name": "awsfargate",
+        "title": "AWS Fargate (for ECS clusters)",
+        "description": "Collects metrics from containers and tasks running on Amazon ECS clusters with Elastic Agent.",
+        "version": "1.3.0"
+    },
+    {
+        "name": "aws_securityhub",
+        "title": "AWS Security Hub",
+        "description": "Collect logs from AWS Security Hub with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "aws_vpcflow_otel",
+        "title": "AWS VPC Flow Logs OpenTelemetry Assets",
+        "description": "AWS VPC Flow Logs OpenTelemetry Assets",
+        "version": "0.2.0"
+    },
+    {
+        "name": "aws_waf_otel",
+        "title": "AWS WAF Logs OpenTelemetry Assets",
+        "description": "AWS WAF Logs OpenTelemetry Assets",
+        "version": "0.1.0"
+    },
+    {
+        "name": "abnormal_security",
+        "title": "Abnormal AI",
+        "description": "Collect logs from Abnormal AI with Elastic Agent.",
+        "version": "1.14.0"
+    },
+    {
+        "name": "entityanalytics_ad",
+        "title": "Active Directory Entity Analytics",
+        "description": "Collect User Identities from Active Directory Entity with Elastic Agent.",
+        "version": "0.18.0"
+    },
+    {
+        "name": "activemq",
+        "title": "ActiveMQ",
+        "description": "Collect logs and metrics from ActiveMQ instances with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "activemq_otel",
+        "title": "ActiveMQ OpenTelemetry Assets",
+        "description": "ActiveMQ Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "admin_by_request_epm",
+        "title": "Admin By Request EPM",
+        "description": "Collect logs from Admin By Request EPM with Elastic Agent.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "agentless_hello_world",
+        "title": "Agentless Hello World",
+        "description": "A sample integration to exercise the Agentless infrastructure by fetching https://epr.elastic.co every minute. Optionally includes a counter data stream for high-rate mock metric ingestion testing.",
+        "version": "0.4.0"
+    },
+    {
+        "name": "airflow",
+        "title": "Airflow",
+        "description": "Airflow Integration.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "airflow_otel",
+        "title": "Airflow OpenTelemetry",
+        "description": "Airflow OpenTelemetry Integration.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "airlock_digital",
+        "title": "Airlock Digital",
+        "description": "Collect logs from Airlock Digital with Elastic Agent.",
+        "version": "0.3.0"
+    },
+    {
+        "name": "akamai",
+        "title": "Akamai",
+        "description": "Collect logs from Akamai with Elastic Agent.",
+        "version": "3.1.1"
+    },
+    {
+        "name": "ti_otx",
+        "title": "AlienVault OTX",
+        "description": "Ingest threat intelligence indicators from AlienVault Open Threat Exchange (OTX) with Elastic Agent.",
+        "version": "1.31.0"
+    },
+    {
+        "name": "aws_bedrock",
+        "title": "Amazon Bedrock",
+        "description": "Collect Amazon Bedrock model invocation logs and runtime metrics with Elastic Agent.",
+        "version": "1.5.1"
+    },
+    {
+        "name": "aws_bedrock_agentcore",
+        "title": "Amazon Bedrock AgentCore",
+        "description": "Collect Amazon Bedrock AgentCore's Agent runtime, Gateway, Identity, Memory, Browser Tools and Code Interpreter metrics and logs using Elastic Agent",
+        "version": "0.7.0"
+    },
+    {
+        "name": "awsfirehose",
+        "title": "Amazon Data Firehose",
+        "description": "Stream logs and metrics from Amazon Data Firehose into Elastic Cloud.",
+        "version": "1.9.1"
+    },
+    {
+        "name": "aws_mq",
+        "title": "Amazon MQ",
+        "description": "Collect Amazon MQ metrics and logs with Elastic Agent",
+        "version": "1.0.0"
+    },
+    {
+        "name": "amazon_security_lake",
+        "title": "Amazon Security Lake",
+        "description": "Collect logs from Amazon Security Lake with Elastic Agent.",
+        "version": "2.8.2"
+    },
+    {
+        "name": "otel_android_dashboards",
+        "title": "Android OpenTelemetry Assets",
+        "description": "Dashboards for visualizing Android application's telemetry",
+        "version": "0.1.1"
+    },
+    {
+        "name": "ti_anomali",
+        "title": "Anomali ThreatStream",
+        "description": "Ingest threat intelligence indicators from Anomali ThreatStream with Elastic Agent.",
+        "version": "2.7.0"
+    },
+    {
+        "name": "apache",
+        "title": "Apache HTTP Server",
+        "description": "Collect logs and metrics from Apache servers with Elastic Agent.",
+        "version": "3.0.0"
+    },
+    {
+        "name": "apache_input_otel",
+        "title": "Apache HTTP Server OpenTelemetry Input Package",
+        "description": "Collect Apache HTTP Server status metrics using OpenTelemetry Collector",
+        "version": "0.1.0"
+    },
+    {
+        "name": "apache_otel",
+        "title": "Apache OpenTelemetry Assets",
+        "description": "Apache HTTP Server Assets for OpenTelemetry Collector",
+        "version": "0.4.0"
+    },
+    {
+        "name": "apache_spark",
+        "title": "Apache Spark",
+        "description": "Collect metrics from Apache Spark with Elastic Agent.",
+        "version": "1.5.0"
+    },
+    {
+        "name": "apache_tomcat",
+        "title": "Apache Tomcat",
+        "description": "Collect and parse logs and metrics from Apache Tomcat servers with Elastic Agent.",
+        "version": "1.13.0"
+    },
+    {
+        "name": "apache_tomcat_otel",
+        "title": "Apache Tomcat OpenTelemetry Assets",
+        "description": "Apache Tomcat Assets from OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "netscout",
+        "title": "Arbor Peakflow SP Logs (Deprecated)",
+        "description": "Deprecated. Netscout Arbor Peakflow SP is no longer supported.",
+        "version": "0.22.1"
+    },
+    {
+        "name": "arista_ngfw",
+        "title": "Arista NG Firewall",
+        "description": "Collect logs and metrics from Arista NG Firewall.",
+        "version": "1.6.3"
+    },
+    {
+        "name": "armis",
+        "title": "Armis",
+        "description": "Collect logs from Armis with Elastic Agent.",
+        "version": "0.4.1"
+    },
+    {
+        "name": "atlassian_bitbucket",
+        "title": "Atlassian Bitbucket",
+        "description": "Collect logs from Atlassian Bitbucket with Elastic Agent.",
+        "version": "2.6.0"
+    },
+    {
+        "name": "atlassian_confluence",
+        "title": "Atlassian Confluence",
+        "description": "Collect logs from Atlassian Confluence with Elastic Agent.",
+        "version": "1.30.0"
+    },
+    {
+        "name": "atlassian_jira",
+        "title": "Atlassian Jira",
+        "description": "Collect logs from Atlassian Jira with Elastic Agent.",
+        "version": "1.31.0"
+    },
+    {
+        "name": "auditd",
+        "title": "Auditd Logs",
+        "description": "Collect logs from Linux audit daemon with Elastic Agent.",
+        "version": "3.22.2"
+    },
+    {
+        "name": "auditd_manager",
+        "title": "Auditd Manager",
+        "description": "The Auditd Manager Integration receives audit events from the Linux Audit Framework that is a part of the Linux kernel.",
+        "version": "1.20.0"
+    },
+    {
+        "name": "auth0",
+        "title": "Auth0",
+        "description": "Collect logs from Auth0 with Elastic Agent.",
+        "version": "1.23.1"
+    },
+    {
+        "name": "azure_activity_otel",
+        "title": "Azure Activity Logs OpenTelemetry Assets",
+        "description": "Azure Activity Logs OpenTelemetry Assets",
+        "version": "0.1.1"
+    },
+    {
+        "name": "azure_app_service",
+        "title": "Azure App Service",
+        "description": "Collect logs from Azure App Service with Elastic Agent.",
+        "version": "1.1.0"
+    },
+    {
+        "name": "azure_application_insights",
+        "title": "Azure Application Insights Metrics Overview",
+        "description": "Collect application insights metrics from Azure Monitor with Elastic Agent.",
+        "version": "1.11.0"
+    },
+    {
+        "name": "azure_billing",
+        "title": "Azure Billing Metrics",
+        "description": "Collect billing metrics with Elastic Agent.",
+        "version": "1.10.0"
+    },
+    {
+        "name": "azure_frontdoor",
+        "title": "Azure Frontdoor",
+        "description": "This Elastic integration collects logs from Azure Frontdoor.",
+        "version": "2.3.0"
+    },
+    {
+        "name": "azure_functions",
+        "title": "Azure Functions",
+        "description": "Get metrics and logs from Azure Functions",
+        "version": "0.13.0"
+    },
+    {
+        "name": "azure",
+        "title": "Azure Logs",
+        "description": "This Elastic integration collects logs from Azure",
+        "version": "1.37.0"
+    },
+    {
+        "name": "azure_network_watcher_nsg",
+        "title": "Azure Network Watcher NSG",
+        "description": "Collect logs from Azure Network Watcher NSG with Elastic Agent.",
+        "version": "1.5.1"
+    },
+    {
+        "name": "azure_network_watcher_vnet",
+        "title": "Azure Network Watcher VNet",
+        "description": "Collect logs from Azure Network Watcher VNet with Elastic Agent.",
+        "version": "1.6.0"
+    },
+    {
+        "name": "azure_openai",
+        "title": "Azure OpenAI",
+        "description": "Collects Azure OpenAI Logs and Metrics",
+        "version": "1.12.0"
+    },
+    {
+        "name": "azure_metrics",
+        "title": "Azure Resource Metrics",
+        "description": "Collect metrics from Azure resources with Elastic Agent.",
+        "version": "1.11.1"
+    },
+    {
+        "name": "bbot",
+        "title": "BBOT (Bighuge BLS OSINT Tool)",
+        "description": "BBOT is a recursive internet scanner inspired by Spiderfoot, but designed to be faster, more reliable, and friendlier to pentesters, bug bounty hunters, and developers. ",
+        "version": "1.4.0"
+    },
+    {
+        "name": "barracuda_cloudgen_firewall",
+        "title": "Barracuda CloudGen Firewall Logs",
+        "description": "Collect logs from Barracuda CloudGen Firewall devices with Elastic Agent.",
+        "version": "1.16.0"
+    },
+    {
+        "name": "barracuda",
+        "title": "Barracuda Web Application Firewall",
+        "description": "Collect logs from Barracuda Web Application Firewall with Elastic Agent.",
+        "version": "1.18.0"
+    },
+    {
+        "name": "beat",
+        "title": "Beat",
+        "description": "Beat Integration",
+        "version": "1.0.1"
+    },
+    {
+        "name": "beelzebub",
+        "title": "Beelzebub",
+        "description": "Beelzebub is an advanced honeypot framework designed to provide a highly secure environment for detecting and analyzing cyber attacks. It offers a low code approach for easy implementation and uses AI to mimic the behavior of a high-interaction honeypot.",
+        "version": "0.4.0"
+    },
+    {
+        "name": "beyondinsight_password_safe",
+        "title": "BeyondInsight and Password Safe",
+        "description": "Ingest privileged access management (PAM) data from BeyondTrust's BeyondInsight PAM Reporting Platform and Password Safe, using Elastic Agent.",
+        "version": "1.1.0"
+    },
+    {
+        "name": "beyondtrust_pra",
+        "title": "BeyondTrust PRA",
+        "description": "Collect logs from BeyondTrust PRA with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "bitdefender",
+        "title": "BitDefender",
+        "description": "Ingest BitDefender GravityZone logs and data",
+        "version": "2.9.0"
+    },
+    {
+        "name": "bitsight",
+        "title": "Bitsight",
+        "description": "Ingest data from the Bitsight API.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "bitwarden",
+        "title": "Bitwarden",
+        "description": "Collect logs from Bitwarden with Elastic Agent.",
+        "version": "1.19.0"
+    },
+    {
+        "name": "bluecoat",
+        "title": "Blue Coat Director Logs (Deprecated)",
+        "description": "Deprecated. Director is no longer supported.",
+        "version": "0.18.1"
+    },
+    {
+        "name": "box_events",
+        "title": "Box Events",
+        "description": "Collect logs from Box with Elastic Agent",
+        "version": "3.2.0"
+    },
+    {
+        "name": "hid_bravura_monitor",
+        "title": "Bravura Monitor",
+        "description": "Collect logs from Bravura Security Fabric with Elastic Agent.",
+        "version": "1.21.0"
+    },
+    {
+        "name": "proxysg",
+        "title": "Broadcom ProxySG",
+        "description": "Collect access logs from Broadcom ProxySG with Elastic Agent.",
+        "version": "0.8.1"
+    },
+    {
+        "name": "cisa_kevs",
+        "title": "CISA Known Exploited Vulnerabilities",
+        "description": "This package allows the ingest of known exploited vulnerabilities according to the Cybersecurity and Infrastructure Security Agency of the United States of America. This information could be used to enrich or track exisiting vulnerabilities that are known to be exploited in the wild.",
+        "version": "1.8.0"
+    },
+    {
+        "name": "canva",
+        "title": "Canva",
+        "description": "Collect logs from Canva with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "cassandra",
+        "title": "Cassandra",
+        "description": "This Elastic integration collects logs and metrics from cassandra.",
+        "version": "1.20.0"
+    },
+    {
+        "name": "cassandra_otel",
+        "title": "Cassandra OpenTelemetry Assets",
+        "description": "Apache Cassandra Assets from OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "ceph",
+        "title": "Ceph",
+        "description": "This Elastic integration collects metrics from Ceph instance.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "checkpoint",
+        "title": "Check Point",
+        "description": "Collect logs from Check Point with Elastic Agent.",
+        "version": "1.45.5"
+    },
+    {
+        "name": "checkpoint_email",
+        "title": "Check Point Harmony Email & Collaboration",
+        "description": "Collect logs from Check Point Harmony Email & Collaboration with Elastic Agent.",
+        "version": "1.4.0"
+    },
+    {
+        "name": "checkpoint_harmony_endpoint",
+        "title": "Check Point Harmony Endpoint",
+        "description": "Collect logs from Check Point Harmony Endpoint",
+        "version": "1.2.0"
+    },
+    {
+        "name": "cilium_tetragon",
+        "title": "Cilium Tetragon",
+        "description": "Collect Cilium Tetragon logs from Kubernetes environments.",
+        "version": "0.4.1"
+    },
+    {
+        "name": "cisco_asa",
+        "title": "Cisco ASA",
+        "description": "Collect logs from Cisco ASA with Elastic Agent.",
+        "version": "2.45.1"
+    },
+    {
+        "name": "cisco_aironet",
+        "title": "Cisco Aironet",
+        "description": "Integration for Cisco Aironet WLC Logs",
+        "version": "1.20.1"
+    },
+    {
+        "name": "cisco_duo",
+        "title": "Cisco Duo",
+        "description": "Collect logs from Cisco Duo with Elastic Agent.",
+        "version": "2.9.0"
+    },
+    {
+        "name": "cisco_ftd",
+        "title": "Cisco FTD",
+        "description": "Collect logs from Cisco FTD with Elastic Agent.",
+        "version": "3.13.3"
+    },
+    {
+        "name": "cisco_ios",
+        "title": "Cisco IOS",
+        "description": "Collect logs from Cisco IOS with Elastic Agent.",
+        "version": "1.35.4"
+    },
+    {
+        "name": "cisco_ise",
+        "title": "Cisco ISE",
+        "description": "Collect logs from Cisco ISE with Elastic Agent.",
+        "version": "1.32.5"
+    },
+    {
+        "name": "cisco_meraki",
+        "title": "Cisco Meraki",
+        "description": "Collect logs from Cisco Meraki with Elastic Agent.",
+        "version": "1.31.1"
+    },
+    {
+        "name": "cisco_meraki_metrics",
+        "title": "Cisco Meraki Metrics",
+        "description": "Collect metrics from Cisco Meraki with Elastic Agent.",
+        "version": "0.4.3"
+    },
+    {
+        "name": "cisco_nexus",
+        "title": "Cisco Nexus",
+        "description": "Collect logs from Cisco Nexus with Elastic Agent.",
+        "version": "1.6.1"
+    },
+    {
+        "name": "cisco_secure_email_gateway",
+        "title": "Cisco Secure Email Gateway",
+        "description": "Collect logs from Cisco Secure Email Gateway with Elastic Agent.",
+        "version": "1.29.2"
+    },
+    {
+        "name": "cisco_secure_endpoint",
+        "title": "Cisco Secure Endpoint",
+        "description": "Collect logs from Cisco Secure Endpoint (AMP) with Elastic Agent.",
+        "version": "2.33.1"
+    },
+    {
+        "name": "cisco_umbrella",
+        "title": "Cisco Umbrella",
+        "description": "Collect logs from Cisco Umbrella with Elastic Agent.",
+        "version": "1.33.1"
+    },
+    {
+        "name": "citrix_adc",
+        "title": "Citrix ADC",
+        "description": "This Elastic integration collects logs and metrics from Citrix ADC product.",
+        "version": "1.18.5"
+    },
+    {
+        "name": "citrix_waf",
+        "title": "Citrix Web App Firewall",
+        "description": "Ingest events from Citrix Systems Web App Firewall.",
+        "version": "1.20.1"
+    },
+    {
+        "name": "claroty_ctd",
+        "title": "Claroty CTD",
+        "description": "Collect logs from Claroty CTD using Elastic Agent.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "claroty_xdome",
+        "title": "Claroty xDome",
+        "description": "Collect logs from Claroty xDome with Elastic Agent.",
+        "version": "1.0.2"
+    },
+    {
+        "name": "cloud_asset_inventory",
+        "title": "Cloud Asset Discovery",
+        "description": "Discover and Create Cloud Assets Discovery",
+        "version": "1.5.0"
+    },
+    {
+        "name": "cloudflare",
+        "title": "Cloudflare",
+        "description": "Collect logs from Cloudflare with Elastic Agent.",
+        "version": "2.33.0"
+    },
+    {
+        "name": "cloudflare_logpush",
+        "title": "Cloudflare Logpush",
+        "description": "Collect and parse logs from Cloudflare API with Elastic Agent.",
+        "version": "1.44.1"
+    },
+    {
+        "name": "cockroachdb",
+        "title": "CockroachDB Metrics",
+        "description": "Collect metrics from CockroachDB servers with Elastic Agent.",
+        "version": "1.13.1"
+    },
+    {
+        "name": "cockroachdb_otel",
+        "title": "CockroachDB OpenTelemetry Assets",
+        "description": "CockroachDB Assets from OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "ti_cif3",
+        "title": "Collective Intelligence Framework v3",
+        "description": "Ingest threat indicators from a Collective Intelligence Framework v3 instance with Elastic Agent.",
+        "version": "1.19.0"
+    },
+    {
+        "name": "cef",
+        "title": "Common Event Format (CEF)",
+        "description": "Collect logs from CEF Logs with Elastic Agent.",
+        "version": "2.23.2"
+    },
+    {
+        "name": "containerd",
+        "title": "Containerd",
+        "description": "Collect metrics from containerd containers.",
+        "version": "0.6.0"
+    },
+    {
+        "name": "coredns",
+        "title": "CoreDNS",
+        "description": "Collect logs from CoreDNS instances with Elastic Agent.",
+        "version": "0.10.0"
+    },
+    {
+        "name": "corelight",
+        "title": "Corelight",
+        "description": "Collect logs from Corelight with Elastic Agent.",
+        "version": "1.1.0"
+    },
+    {
+        "name": "couchdb",
+        "title": "CouchDB",
+        "description": "Collect metrics from CouchDB with Elastic Agent.",
+        "version": "1.5.1"
+    },
+    {
+        "name": "couchdb_otel",
+        "title": "CouchDB OpenTelemetry Assets",
+        "description": "CouchDB Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "couchbase",
+        "title": "Couchbase",
+        "description": "Collect metrics from Couchbase databases with Elastic Agent.",
+        "version": "1.9.1"
+    },
+    {
+        "name": "cribl",
+        "title": "Cribl",
+        "description": "Stream logs from Cribl into Elastic.",
+        "version": "1.1.1"
+    },
+    {
+        "name": "crowdstrike",
+        "title": "CrowdStrike",
+        "description": "Collect logs from Crowdstrike with Elastic Agent.",
+        "version": "3.17.0"
+    },
+    {
+        "name": "ti_crowdstrike",
+        "title": "CrowdStrike Falcon Intelligence",
+        "description": "Collect logs from CrowdStrike Falcon Intelligence with Elastic Agent.",
+        "version": "2.8.0"
+    },
+    {
+        "name": "cursor",
+        "title": "Cursor",
+        "description": "Collect audit logs from Cursor with Elastic Agent",
+        "version": "0.1.0"
+    },
+    {
+        "name": "httpjson",
+        "title": "Custom API",
+        "description": "Collect custom events from an API endpoint with Elastic agent",
+        "version": "1.24.0"
+    },
+    {
+        "name": "cel",
+        "title": "Custom API using Common Expression Language",
+        "description": "Collect custom events from an API with Elastic agent",
+        "version": "1.19.0"
+    },
+    {
+        "name": "aws_logs",
+        "title": "Custom AWS Logs",
+        "description": "Collect raw logs from AWS S3 or CloudWatch with Elastic Agent.",
+        "version": "1.8.3"
+    },
+    {
+        "name": "azure_blob_storage",
+        "title": "Custom Azure Blob Storage Input",
+        "description": "Collect log data from configured Azure Blob Storage Container with Elastic Agent.",
+        "version": "2.3.0"
+    },
+    {
+        "name": "azure_logs",
+        "title": "Custom Azure Logs",
+        "description": "Collect log events from Azure Event Hubs with Elastic Agent",
+        "version": "0.6.0"
+    },
+    {
+        "name": "google_cloud_storage",
+        "title": "Custom GCS (Google Cloud Storage) Input",
+        "description": "Collect JSON data from configured GCS Bucket with Elastic Agent.",
+        "version": "2.2.0"
+    },
+    {
+        "name": "gcp_pubsub",
+        "title": "Custom Google Pub/Sub Logs",
+        "description": "Collect Logs from Google Pub/Sub topics",
+        "version": "2.2.1"
+    },
+    {
+        "name": "http_endpoint",
+        "title": "Custom HTTP Endpoint Logs",
+        "description": "Collect JSON data from listening HTTP port with Elastic Agent.",
+        "version": "2.5.0"
+    },
+    {
+        "name": "journald",
+        "title": "Custom Journald logs",
+        "description": "Collect logs from journald with Elastic Agent.",
+        "version": "1.2.1"
+    },
+    {
+        "name": "kafka_log",
+        "title": "Custom Kafka Logs",
+        "description": "Collect data from kafka topic with Elastic Agent.",
+        "version": "2.1.0"
+    },
+    {
+        "name": "log",
+        "title": "Custom Logs (Deprecated)",
+        "description": "Collect custom logs with Elastic Agent.",
+        "version": "2.4.4"
+    },
+    {
+        "name": "filestream",
+        "title": "Custom Logs (Filestream)",
+        "description": "Collect log data using filestream with Elastic Agent.",
+        "version": "2.5.0"
+    },
+    {
+        "name": "tcp",
+        "title": "Custom TCP Logs",
+        "description": "Collect raw TCP data from listening TCP port with Elastic Agent.",
+        "version": "2.3.1"
+    },
+    {
+        "name": "ti_custom",
+        "title": "Custom Threat Intelligence",
+        "description": "Ingest threat intelligence data in STIX 2.1 format with Elastic Agent",
+        "version": "1.7.0"
+    },
+    {
+        "name": "udp",
+        "title": "Custom UDP Logs",
+        "description": "Collect raw UDP data from listening UDP port with Elastic Agent.",
+        "version": "2.5.1"
+    },
+    {
+        "name": "wmi",
+        "title": "Custom WMI Input Package",
+        "description": "Custom WMI Input Package",
+        "version": "0.0.2"
+    },
+    {
+        "name": "websocket",
+        "title": "Custom Websocket logs",
+        "description": "Collect custom events from a socket server with Elastic agent.",
+        "version": "1.0.1"
+    },
+    {
+        "name": "windows_etw",
+        "title": "Custom Windows ETW logs",
+        "description": "Collect and parse logs from any Windows ETW provider with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "winlog",
+        "title": "Custom Windows Event Logs",
+        "description": "Collect and parse logs from any Windows event log channel with Elastic Agent.",
+        "version": "2.6.0"
+    },
+    {
+        "name": "unifiedlogs",
+        "title": "Custom macOS Unified Logs",
+        "description": "Collect and parse logs from macOS unified logs with Elastic Agent.",
+        "version": "0.5.1"
+    },
+    {
+        "name": "cyberark_epm",
+        "title": "CyberArk EPM",
+        "description": "Collect logs from CyberArk EPM with Elastic Agent.",
+        "version": "1.4.0"
+    },
+    {
+        "name": "cyberarkpas",
+        "title": "CyberArk Privileged Access Security",
+        "description": "Collect logs from CyberArk Privileged Access Security with Elastic Agent.",
+        "version": "2.28.0"
+    },
+    {
+        "name": "cyberark_pta",
+        "title": "Cyberark Privileged Threat Analytics",
+        "description": "Collect security logs from Cyberark PTA integration.",
+        "version": "1.15.0"
+    },
+    {
+        "name": "cybereason",
+        "title": "Cybereason",
+        "description": "Collect logs from Cybereason with Elastic Agent.",
+        "version": "1.5.0"
+    },
+    {
+        "name": "ti_cybersixgill",
+        "title": "Cybersixgill",
+        "description": "Ingest threat intelligence indicators from Cybersixgill with Elastic Agent.",
+        "version": "1.35.0"
+    },
+    {
+        "name": "cyera",
+        "title": "Cyera",
+        "description": "Collect logs from Cyera with Elastic Agent.",
+        "version": "0.6.0"
+    },
+    {
+        "name": "cylance",
+        "title": "CylanceProtect Logs (Deprecated)",
+        "description": "Collect logs from CylanceProtect devices with Elastic Agent.",
+        "version": "0.24.0"
+    },
+    {
+        "name": "ti_cyware_intel_exchange",
+        "title": "Cyware Intel Exchange",
+        "description": "Collect logs from Cyware Intel Exchange with Elastic Agent.",
+        "version": "0.3.0"
+    },
+    {
+        "name": "darktrace",
+        "title": "Darktrace",
+        "description": "Collect logs from Darktrace with Elastic Agent.",
+        "version": "2.1.0"
+    },
+    {
+        "name": "ded",
+        "title": "Data Exfiltration Detection",
+        "description": "ML package to detect data exfiltration in your network and file data.",
+        "version": "3.1.0"
+    },
+    {
+        "name": "dataminr_pulse",
+        "title": "Dataminr Pulse",
+        "description": "Collect real-time alerts from Dataminr Pulse API",
+        "version": "0.1.0"
+    },
+    {
+        "name": "cloud_defend",
+        "title": "Defend for Containers (BETA)",
+        "description": "Elastic Defend for Containers (BETA) provides cloud-native runtime protections for containerized environments.",
+        "version": "1.4.0"
+    },
+    {
+        "name": "digital_guardian",
+        "title": "Digital Guardian",
+        "description": "Collect logs from Digital Guardian with Elastic Agent.",
+        "version": "1.8.0"
+    },
+    {
+        "name": "docker",
+        "title": "Docker",
+        "description": "Collect metrics and logs from Docker instances with Elastic Agent.",
+        "version": "2.15.1"
+    },
+    {
+        "name": "docker_otel",
+        "title": "Docker OpenTelemetry Assets",
+        "description": "Utilise the pre-built dashboard for OTel-native metrics of Docker hosts and their running containers",
+        "version": "0.2.0"
+    },
+    {
+        "name": "docker_input_otel",
+        "title": "Docker OpenTelemetry Input Package",
+        "description": "Collect Docker container metrics using OpenTelemetry Collector",
+        "version": "0.1.0"
+    },
+    {
+        "name": "dga",
+        "title": "Domain Generation Algorithm Detection",
+        "description": "ML solution package to detect domain generation algorithm (DGA) activity in your network data.",
+        "version": "3.0.0"
+    },
+    {
+        "name": "ti_domaintools",
+        "title": "DomainTools Feeds",
+        "description": "DomainTools Feeds provide data on the different stages of the domain lifecycle: from first-observed in the wild, to newly re-activated after a period of quiet.",
+        "version": "1.4.0"
+    },
+    {
+        "name": "eset_protect",
+        "title": "ESET PROTECT",
+        "description": "Collect logs from ESET PROTECT with Elastic Agent.",
+        "version": "2.2.0"
+    },
+    {
+        "name": "ti_eset",
+        "title": "ESET Threat Intelligence",
+        "description": "Ingest threat intelligence indicators from ESET Threat Intelligence with Elastic Agent.",
+        "version": "1.10.0"
+    },
+    {
+        "name": "ti_eclecticiq",
+        "title": "EclecticIQ",
+        "description": "Ingest threat intelligence from EclecticIQ with Elastic Agent",
+        "version": "1.6.0"
+    },
+    {
+        "name": "apm",
+        "title": "Elastic APM",
+        "description": "Monitor, detect, and diagnose complex application performance issues.",
+        "version": "8.4.2"
+    },
+    {
+        "name": "elasticapm_input_otel",
+        "title": "Elastic APM Intake OpenTelemetry Input Package",
+        "description": "Receive APM data from Elastic APM agents using the Elastic APM Intake receiver",
+        "version": "0.1.0"
+    },
+    {
+        "name": "elastic_agent",
+        "title": "Elastic Agent",
+        "description": "Collect logs and metrics from Elastic Agents.",
+        "version": "2.9.0"
+    },
+    {
+        "name": "ece",
+        "title": "Elastic Cloud Enterprise",
+        "description": "This is a helpful integration for all customers using ECE and need to track the events generated within the ECE admin UI or against the ECE API.",
+        "version": "0.0.2"
+    },
+    {
+        "name": "elastic_connectors",
+        "title": "Elastic Connectors",
+        "description": "Sync data from source to the Elasticsearch index.",
+        "version": "1.0.3"
+    },
+    {
+        "name": "endpoint",
+        "title": "Elastic Defend",
+        "description": "Protect your hosts and cloud workloads with threat prevention, detection, and deep security data visibility.",
+        "version": "9.4.0"
+    },
+    {
+        "name": "elastic_package_registry",
+        "title": "Elastic Package Registry",
+        "description": "Collect metrics from a Elastic Package Registry instance",
+        "version": "0.3.1"
+    },
+    {
+        "name": "elastic_security",
+        "title": "Elastic Security",
+        "description": "Collect logs from Elastic Instance with Elastic Agent.",
+        "version": "0.4.0"
+    },
+    {
+        "name": "synthetics",
+        "title": "Elastic Synthetics",
+        "description": "Internal Elastic integration for providing access to private locations.",
+        "version": "1.6.1"
+    },
+    {
+        "name": "synthetics_dashboards",
+        "title": "Elastic Synthetics Dashboards",
+        "description": "Explore Elastic Synthetics metrics with these dashboards.",
+        "version": "1.0.1"
+    },
+    {
+        "name": "elasticsearch",
+        "title": "Elasticsearch",
+        "description": "Elasticsearch Integration",
+        "version": "1.21.1"
+    },
+    {
+        "name": "ess_billing",
+        "title": "Elasticsearch Service Billing",
+        "description": "Collects billing metrics from Elasticsearch Service billing API",
+        "version": "1.7.2"
+    },
+    {
+        "name": "endace",
+        "title": "Endace",
+        "description": "This Endace integration configures Network Packet Capture for flow generation and adds a pivot field to your Endace platform.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "enterprisesearch",
+        "title": "Enterprise Search",
+        "description": "Enterprise Search Integration",
+        "version": "1.0.1"
+    },
+    {
+        "name": "entro",
+        "title": "Entro",
+        "description": "Collect logs from Entro with Elastic Agent.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "envoyproxy",
+        "title": "Envoyproxy",
+        "description": "Envoyproxy Integration",
+        "version": "0.4.0"
+    },
+    {
+        "name": "envoyproxy_otel",
+        "title": "Envoyproxy OpenTelemetry assets",
+        "description": "Envoyproxy Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "extrahop",
+        "title": "ExtraHop",
+        "description": "Collect logs from ExtraHop RevealX 360 with Elastic Agent.",
+        "version": "0.2.1"
+    },
+    {
+        "name": "f5_bigip",
+        "title": "F5 BIG-IP",
+        "description": "Collect logs from F5 BIG-IP with Elastic Agent.",
+        "version": "1.28.0"
+    },
+    {
+        "name": "falco",
+        "title": "Falco",
+        "description": "Collect events and alerts from Falco using Elastic Agent",
+        "version": "2.0.2"
+    },
+    {
+        "name": "fim",
+        "title": "File Integrity Monitoring",
+        "description": "The File Integrity Monitoring integration reports filesystem changes in real time.",
+        "version": "1.17.0"
+    },
+    {
+        "name": "filelog_otel",
+        "title": "File Log OpenTelemetry input",
+        "description": "Tails and parses logs from files using the filelog receiver of the OTel collector.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "fireeye",
+        "title": "FireEye Network Security",
+        "description": "Collect logs from FireEye NX with Elastic Agent.",
+        "version": "1.27.1"
+    },
+    {
+        "name": "first_epss",
+        "title": "First EPSS",
+        "description": "Collect exploit prediction score data from the First EPSS API with Elastic Agent.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "ti_flashpoint",
+        "title": "Flashpoint",
+        "description": "Collect logs from Flashpoint with Elastic Agent.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "fleet_server",
+        "title": "Fleet Server",
+        "description": "Centrally manage Elastic Agents with the Fleet Server integration.",
+        "version": "1.6.1"
+    },
+    {
+        "name": "forcepoint_web",
+        "title": "Forcepoint Web Security",
+        "description": "Forcepoint Web Security",
+        "version": "1.13.0"
+    },
+    {
+        "name": "forescout",
+        "title": "Forescout",
+        "description": "Collect logs from Forescout with Elastic Agent and EyeExtend Connect.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "forgerock",
+        "title": "ForgeRock",
+        "description": "Collect audit logs from ForgeRock with Elastic Agent.",
+        "version": "1.22.0"
+    },
+    {
+        "name": "fortinet",
+        "title": "Fortinet",
+        "description": "Deprecated. Collect logs from Fortinet instances with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "fortinet_forticlient",
+        "title": "Fortinet FortiClient Logs (Deprecated)",
+        "description": "Deprecated. Fortinet FortiClient Logs is no longer supported.",
+        "version": "1.12.1"
+    },
+    {
+        "name": "fortinet_fortiedr",
+        "title": "Fortinet FortiEDR Logs",
+        "description": "Collect logs from Fortinet FortiEDR instances with Elastic Agent.",
+        "version": "1.21.1"
+    },
+    {
+        "name": "fortinet_fortigate",
+        "title": "Fortinet FortiGate Firewall Logs",
+        "description": "Collect logs from Fortinet FortiGate firewalls with Elastic Agent.",
+        "version": "1.36.5"
+    },
+    {
+        "name": "fortinet_fortimail",
+        "title": "Fortinet FortiMail",
+        "description": "Collect logs from Fortinet FortiMail instances with Elastic Agent.",
+        "version": "2.19.1"
+    },
+    {
+        "name": "fortinet_fortimanager",
+        "title": "Fortinet FortiManager Logs",
+        "description": "Collect logs from Fortinet FortiManager instances with Elastic Agent.",
+        "version": "2.18.1"
+    },
+    {
+        "name": "fortinet_fortiproxy",
+        "title": "Fortinet FortiProxy",
+        "description": "Collect logs from Fortinet FortiProxy with Elastic Agent.",
+        "version": "1.4.1"
+    },
+    {
+        "name": "gcp_audit_otel",
+        "title": "GCP Audit Logs OpenTelemetry Assets",
+        "description": "GCP Audit Logs OpenTelemetry Assets",
+        "version": "0.1.0"
+    },
+    {
+        "name": "gcp_metrics",
+        "title": "GCP Metrics Input",
+        "description": "GCP Metrics Input",
+        "version": "0.3.1"
+    },
+    {
+        "name": "gcp_vpcflow_otel",
+        "title": "GCP VPC Flow Logs OpenTelemetry Assets",
+        "description": "GCP VPC Flow Logs OpenTelemetry Assets",
+        "version": "0.1.0"
+    },
+    {
+        "name": "gcp_vertexai",
+        "title": "GCP Vertex AI",
+        "description": "Collect GCP Vertex AI metrics and logs with Elastic Agent",
+        "version": "1.4.0"
+    },
+    {
+        "name": "gigamon",
+        "title": "Gigamon",
+        "description": "Collect logs from Gigamon with Elastic Agent.",
+        "version": "2.2.0"
+    },
+    {
+        "name": "github",
+        "title": "GitHub",
+        "description": "Collect logs from GitHub with Elastic Agent.",
+        "version": "2.23.1"
+    },
+    {
+        "name": "gitlab",
+        "title": "GitLab",
+        "description": "Collect logs from GitLab with Elastic Agent.",
+        "version": "2.6.0"
+    },
+    {
+        "name": "goflow2",
+        "title": "GoFlow2 logs",
+        "description": "Collect logs from goflow2 with Elastic Agent.",
+        "version": "0.7.1"
+    },
+    {
+        "name": "golang",
+        "title": "Golang",
+        "description": "This Elastic integration collects metrics from Golang applications.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "gcp",
+        "title": "Google Cloud Platform",
+        "description": "Collect logs and metrics from Google Cloud Platform with Elastic Agent.",
+        "version": "2.49.0"
+    },
+    {
+        "name": "santa",
+        "title": "Google Santa",
+        "description": "Collect logs from Google Santa with Elastic Agent.",
+        "version": "3.24.0"
+    },
+    {
+        "name": "google_secops",
+        "title": "Google SecOps",
+        "description": "Collect alerts from Google SecOps with Elastic Agent.",
+        "version": "1.2.2"
+    },
+    {
+        "name": "google_scc",
+        "title": "Google Security Command Center",
+        "description": "Collect logs from Google Security Command Center with Elastic Agent.",
+        "version": "2.4.0"
+    },
+    {
+        "name": "ti_google_threat_intelligence",
+        "title": "Google Threat Intelligence",
+        "description": "Collect Threat Intelligence Events from Google Threat Intelligence using Elastic Agent, and perform enrichment on Elasticsearch by correlating Indicators of Compromise (IOCs).",
+        "version": "0.9.0"
+    },
+    {
+        "name": "google_workspace",
+        "title": "Google Workspace",
+        "description": "Collect logs from Google Workspace with Elastic Agent.",
+        "version": "3.3.1"
+    },
+    {
+        "name": "grafana",
+        "title": "Grafana",
+        "description": "Collect metrics and logs from Grafana instances with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "greenhouse",
+        "title": "Greenhouse",
+        "description": "Collect audit logs from Greenhouse ATS with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "ti_greynoise",
+        "title": "GreyNoise",
+        "description": "Collect Threat Intelligence Indicators from GreyNoise using Elastic Agent, and perform enrichment on Elasticsearch by correlating Indicators of Compromise (IOCs).",
+        "version": "0.8.0"
+    },
+    {
+        "name": "haproxy",
+        "title": "HAProxy",
+        "description": "Collect logs and metrics from HAProxy servers with Elastic Agent.",
+        "version": "1.19.0"
+    },
+    {
+        "name": "hpe_aruba_cx",
+        "title": "HPE Aruba CX",
+        "description": "Collect logs from HPE Aruba CX with Elastic Agent",
+        "version": "0.4.2"
+    },
+    {
+        "name": "hadoop",
+        "title": "Hadoop",
+        "description": "Collect metrics from Apache Hadoop with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "haproxy_otel",
+        "title": "Haproxy OpenTelemetry Assets",
+        "description": "Haproxy Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "hashicorp_vault",
+        "title": "Hashicorp Vault",
+        "description": "Collect logs and metrics from Hashicorp Vault with Elastic Agent.",
+        "version": "1.30.2"
+    },
+    {
+        "name": "hostmetrics_input_otel",
+        "title": "Host Metrics OpenTelemetry Input Package",
+        "description": "Collect system metrics using OpenTelemetry Collector",
+        "version": "0.1.0"
+    },
+    {
+        "name": "hta",
+        "title": "Host Traffic Anomalies",
+        "description": "Prebuilt dashboard for Machine Learning module Security: Host.",
+        "version": "2.0.0"
+    },
+    {
+        "name": "ibmmq",
+        "title": "IBM MQ",
+        "description": "Collect logs and metrics from IBM MQ with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "ibmmq_otel",
+        "title": "IBM MQ OpenTelemetry Assets",
+        "description": "IBM MQ Assets from OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "ibm_qradar",
+        "title": "IBM QRadar",
+        "description": "Collect logs from IBM QRadar with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "iis",
+        "title": "IIS",
+        "description": "Collect logs and metrics from Internet Information Services (IIS) servers with Elastic Agent.",
+        "version": "1.24.5"
+    },
+    {
+        "name": "iis_otel_input",
+        "title": "IIS OpenTelemetry Input Package",
+        "description": "IIS OpenTelemetry Input Package",
+        "version": "0.1.0"
+    },
+    {
+        "name": "iis_otel",
+        "title": "IIS OpenTelemetry assets",
+        "description": "IIS Assets for OpenTelemetry Collector",
+        "version": "0.4.0"
+    },
+    {
+        "name": "ironscales",
+        "title": "IRONSCALES",
+        "description": "Collect logs from IRONSCALES with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "imperva",
+        "title": "Imperva",
+        "description": "Collect logs from Imperva devices with Elastic Agent.",
+        "version": "1.10.1"
+    },
+    {
+        "name": "imperva_cloud_waf",
+        "title": "Imperva Cloud WAF",
+        "description": "Collect logs from Imperva Cloud WAF with Elastic Agent.",
+        "version": "1.13.1"
+    },
+    {
+        "name": "influxdb",
+        "title": "InfluxDb",
+        "description": "Collect metrics from Influxdb database",
+        "version": "0.11.0"
+    },
+    {
+        "name": "influxdb_otel",
+        "title": "InfluxDb OpenTelemetry Assets",
+        "description": "InfluxDb Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "infoblox_bloxone_ddi",
+        "title": "Infoblox BloxOne DDI",
+        "description": "Collect logs from Infoblox BloxOne DDI with Elastic Agent.",
+        "version": "1.22.0"
+    },
+    {
+        "name": "infoblox_nios",
+        "title": "Infoblox NIOS",
+        "description": "Collect logs from Infoblox NIOS with Elastic Agent.",
+        "version": "2.1.1"
+    },
+    {
+        "name": "infoblox_threat_defense",
+        "title": "Infoblox Threat Defense",
+        "description": "Collect logs from Infoblox Threat Defense with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "iptables",
+        "title": "Iptables",
+        "description": "Collect logs from Iptables with Elastic Agent.",
+        "version": "1.23.1"
+    },
+    {
+        "name": "island_browser",
+        "title": "Island Browser",
+        "description": "Collect logs from Island Browser with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "istio",
+        "title": "Istio",
+        "description": "Collect logs and metrics from the service mesh Istio with Elastic Agent.",
+        "version": "0.8.0"
+    },
+    {
+        "name": "jaeger_input_otel",
+        "title": "Jaeger OpenTelemetry Input Package",
+        "description": "Collect Jaeger traces via the OpenTelemetry jaegerreceiver (gRPC, Thrift HTTP, Thrift UDP). Enable only the protocols you need; at least one must be enabled.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "jamf_compliance_reporter",
+        "title": "Jamf Compliance Reporter",
+        "description": "Collect logs from Jamf Compliance Reporter with Elastic Agent.",
+        "version": "1.16.0"
+    },
+    {
+        "name": "jamf_pro",
+        "title": "Jamf Pro",
+        "description": "Collect logs and inventory data from Jamf Pro with Elastic Agent",
+        "version": "1.1.0"
+    },
+    {
+        "name": "jamf_protect",
+        "title": "Jamf Protect",
+        "description": "Receives events from Jamf Protect with Elastic Agent.",
+        "version": "3.3.1"
+    },
+    {
+        "name": "jolokia",
+        "title": "Jolokia Input",
+        "description": "Collects Metrics from Jolokia Agents",
+        "version": "1.0.0"
+    },
+    {
+        "name": "jumpcloud",
+        "title": "JumpCloud",
+        "description": "Collect logs from JumpCloud Directory as a Service",
+        "version": "1.19.0"
+    },
+    {
+        "name": "juniper",
+        "title": "Juniper Logs",
+        "description": "Deprecated. Use a specific Juniper package instead.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "juniper_srx",
+        "title": "Juniper SRX",
+        "description": "Collect logs from Juniper SRX devices with Elastic Agent.",
+        "version": "1.27.1"
+    },
+    {
+        "name": "jupiter_one",
+        "title": "JupiterOne",
+        "description": "Collect logs from JupiterOne with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "kafka",
+        "title": "Kafka",
+        "description": "Collect logs and metrics from Kafka servers with Elastic Agent.",
+        "version": "1.27.0"
+    },
+    {
+        "name": "kafka_connect",
+        "title": "Kafka Connect",
+        "description": "Collect metrics from Kafka Connect instances with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "kafka_otel",
+        "title": "Kafka OpenTelemetry Assets",
+        "description": "Kafka Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "kafka_input_otel",
+        "title": "Kafka OpenTelemetry Input",
+        "description": "Consume telemetry data (logs, metrics, traces) from Kafka using the OpenTelemetry Collector Kafka receiver.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "keeper",
+        "title": "Keeper Security",
+        "description": "Keeper Security agentless integration for collecting audit events directly via Elasticsearch Bulk API. No agents required - Keeper pushes data directly to Elasticsearch.\n",
+        "version": "0.1.0"
+    },
+    {
+        "name": "keycloak",
+        "title": "Keycloak",
+        "description": "Collect logs from Keycloak with Elastic Agent.",
+        "version": "1.31.2"
+    },
+    {
+        "name": "kibana",
+        "title": "Kibana",
+        "description": "Collect logs and metrics from Kibana with Elastic Agent.",
+        "version": "2.8.0"
+    },
+    {
+        "name": "kubernetes",
+        "title": "Kubernetes",
+        "description": "Collect logs and metrics from Kubernetes clusters with Elastic Agent.",
+        "version": "1.85.0"
+    },
+    {
+        "name": "kubernetes_otel",
+        "title": "Kubernetes OpenTelemetry Assets",
+        "description": "Utilise the pre-built dashboard for OTel-native metrics and events collected from a Kubernetes cluster",
+        "version": "1.4.0"
+    },
+    {
+        "name": "lastpass",
+        "title": "LastPass",
+        "description": "Collect logs from LastPass with Elastic Agent.",
+        "version": "1.21.0"
+    },
+    {
+        "name": "lmd",
+        "title": "Lateral Movement Detection",
+        "description": "ML package to detect lateral movement based on file transfer activity and Windows RDP events.",
+        "version": "3.1.1"
+    },
+    {
+        "name": "linux",
+        "title": "Linux Metrics",
+        "description": "Collect metrics from Linux servers with Elastic Agent.",
+        "version": "1.1.0"
+    },
+    {
+        "name": "problemchild",
+        "title": "Living off the Land Attack Detection",
+        "description": "ML solution package to detect Living off the Land (LotL) attacks in your environment. Requires a Platinum subscription.",
+        "version": "3.0.1"
+    },
+    {
+        "name": "logstash",
+        "title": "Logstash",
+        "description": "Collect logs and metrics from Logstash with Elastic Agent.",
+        "version": "2.10.1"
+    },
+    {
+        "name": "lumos",
+        "title": "Lumos",
+        "description": "An integration with Lumos to ship your Activity logs to your Elastic instance.",
+        "version": "1.6.0"
+    },
+    {
+        "name": "lyve_cloud",
+        "title": "Lyve Cloud",
+        "description": "Collect S3 API audit log from Lyve Cloud with Elastic Agent.",
+        "version": "1.17.1"
+    },
+    {
+        "name": "ti_misp",
+        "title": "MISP",
+        "description": "Ingest threat intelligence indicators from MISP platform with Elastic Agent.",
+        "version": "1.43.1"
+    },
+    {
+        "name": "ti_maltiverse",
+        "title": "Maltiverse",
+        "description": "Ingest threat intelligence indicators from Maltiverse feeds with Elastic Agent",
+        "version": "1.7.0"
+    },
+    {
+        "name": "ti_mandiant_advantage",
+        "title": "Mandiant Advantage",
+        "description": "Collect Threat Intelligence from products within the Mandiant Advantage platform.",
+        "version": "1.10.0"
+    },
+    {
+        "name": "mattermost",
+        "title": "Mattermost",
+        "description": "Collect logs from Mattermost with Elastic Agent.",
+        "version": "2.5.0"
+    },
+    {
+        "name": "memcached",
+        "title": "Memcached",
+        "description": "Memcached Integration",
+        "version": "1.8.0"
+    },
+    {
+        "name": "memcached_otel",
+        "title": "Memcached OpenTelemetry assets",
+        "description": "Memcached Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "menlo",
+        "title": "Menlo Security",
+        "description": "Collect logs from Menlo Security products with Elastic Agent",
+        "version": "1.7.1"
+    },
+    {
+        "name": "microsoft",
+        "title": "Microsoft",
+        "description": "This Elastic integration collects logs from Microsoft products",
+        "version": "1.0.0"
+    },
+    {
+        "name": "microsoft_dhcp",
+        "title": "Microsoft DHCP",
+        "description": "Collect logs from Microsoft DHCP with Elastic Agent.",
+        "version": "1.27.0"
+    },
+    {
+        "name": "microsoft_dnsserver",
+        "title": "Microsoft DNS Server",
+        "description": "Collect logs from Microsoft DNS Server with Elastic Agent.",
+        "version": "1.5.1"
+    },
+    {
+        "name": "m365_defender",
+        "title": "Microsoft Defender XDR",
+        "description": "Collect logs from Microsoft Defender XDR with Elastic Agent.",
+        "version": "5.13.1"
+    },
+    {
+        "name": "microsoft_defender_cloud",
+        "title": "Microsoft Defender for Cloud",
+        "description": "Collect logs from Microsoft Defender for Cloud with Elastic Agent.",
+        "version": "3.4.0"
+    },
+    {
+        "name": "microsoft_defender_endpoint",
+        "title": "Microsoft Defender for Endpoint",
+        "description": "Collect logs from Microsoft Defender for Endpoint with Elastic Agent.",
+        "version": "4.6.0"
+    },
+    {
+        "name": "entityanalytics_entra_id",
+        "title": "Microsoft Entra ID Entity Analytics",
+        "description": "Collect identities from Microsoft Entra ID (formerly Azure Active Directory) with Elastic Agent.",
+        "version": "1.9.1"
+    },
+    {
+        "name": "microsoft_exchange_online_message_trace",
+        "title": "Microsoft Exchange Online Message Trace",
+        "description": "Microsoft Exchange Online Message Trace Integration",
+        "version": "2.0.4"
+    },
+    {
+        "name": "microsoft_exchange_server",
+        "title": "Microsoft Exchange Server",
+        "description": "Collect logs from Microsoft Exchange Server with Elastic Agent.",
+        "version": "1.5.1"
+    },
+    {
+        "name": "azure_ai_foundry",
+        "title": "Microsoft Foundry",
+        "description": "Collects Microsoft Foundry logs and metrics",
+        "version": "0.10.0"
+    },
+    {
+        "name": "microsoft_intune",
+        "title": "Microsoft Intune",
+        "description": "Collect logs from Microsoft Intune with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "o365",
+        "title": "Microsoft Office 365",
+        "description": "Collect logs from Microsoft Office 365 with Elastic Agent.",
+        "version": "3.8.1"
+    },
+    {
+        "name": "o365_metrics",
+        "title": "Microsoft Office 365 Metrics",
+        "description": "Collect metrics from Microsoft Office 365 with Elastic Agent.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "microsoft_sqlserver",
+        "title": "Microsoft SQL Server",
+        "description": "Collect events from Microsoft SQL Server with Elastic Agent",
+        "version": "2.17.0"
+    },
+    {
+        "name": "microsoft_sqlserver_otel",
+        "title": "Microsoft SQL Server Assets",
+        "description": "Microsoft SQL Server Assets",
+        "version": "0.2.0"
+    },
+    {
+        "name": "microsoft_sentinel",
+        "title": "Microsoft Sentinel",
+        "description": "Collect logs from Microsoft Sentinel with Elastic Agent.",
+        "version": "1.3.1"
+    },
+    {
+        "name": "mimecast",
+        "title": "Mimecast",
+        "description": "Collect logs from Mimecast with Elastic Agent.",
+        "version": "3.3.2"
+    },
+    {
+        "name": "miniflux",
+        "title": "Miniflux RSS reader",
+        "description": "Collect RSS feed content from the Miniflux API with Elastic Agent.",
+        "version": "1.0.1"
+    },
+    {
+        "name": "modsecurity",
+        "title": "ModSecurity Audit",
+        "description": "Collect logs from ModSecurity with Elastic Agent",
+        "version": "1.23.2"
+    },
+    {
+        "name": "mongodb",
+        "title": "MongoDB",
+        "description": "Collect logs and metrics from MongoDB instances with Elastic Agent.",
+        "version": "1.24.0"
+    },
+    {
+        "name": "mongodb_atlas",
+        "title": "MongoDB Atlas",
+        "description": "This Elastic integration collects logs and metrics from MongoDB Atlas instance.",
+        "version": "1.2.1"
+    },
+    {
+        "name": "mongodb_otel",
+        "title": "MongoDB OpenTelemetry Assets",
+        "description": "MongoDB Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "mysql",
+        "title": "MySQL",
+        "description": "Collect logs and metrics from MySQL servers with Elastic Agent.",
+        "version": "1.29.2"
+    },
+    {
+        "name": "mysql_enterprise",
+        "title": "MySQL Enterprise",
+        "description": "Collect audit logs from MySQL Enterprise with Elastic Agent.",
+        "version": "1.17.0"
+    },
+    {
+        "name": "mysql_otel",
+        "title": "MySQL OpenTelemetry Assets",
+        "description": "MySQL Assets for OpenTelemetry Collector",
+        "version": "0.5.0"
+    },
+    {
+        "name": "mysql_input_otel",
+        "title": "MySQL OpenTelemetry Input Package",
+        "description": "Collect MySQL metrics and logs using OpenTelemetry Collector",
+        "version": "0.2.1"
+    },
+    {
+        "name": "nats",
+        "title": "NATS",
+        "description": "Collect logs and metrics from NATS servers with Elastic Agent.",
+        "version": "1.12.0"
+    },
+    {
+        "name": "nginx_otel",
+        "title": "NGINX OpenTelemetry Assets",
+        "description": "NGINX Assets from OpenTelemetry Collector",
+        "version": "0.5.0"
+    },
+    {
+        "name": "nginx_otel_input",
+        "title": "NGINX OpenTelemetry Input Package",
+        "description": "NGINX OpenTelemetry Input Package",
+        "version": "0.2.0"
+    },
+    {
+        "name": "nvidia_gpu",
+        "title": "NVIDIA GPU Monitoring",
+        "description": "Monitor NVIDIA GPUs via NVIDIA Data Center GPU Manager",
+        "version": "0.4.1"
+    },
+    {
+        "name": "nvidia_gpu_otel",
+        "title": "NVIDIA GPU OpenTelemetry Assets",
+        "description": "NVIDIA GPU Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "nagios_xi",
+        "title": "Nagios XI",
+        "description": "Collect Logs and Metrics from Nagios XI with Elastic Agent.",
+        "version": "1.8.0"
+    },
+    {
+        "name": "neon_cyber",
+        "title": "Neon Cyber",
+        "description": "The Neon Cyber integration for the Elastic Stack",
+        "version": "0.1.0"
+    },
+    {
+        "name": "netbox",
+        "title": "NetBox",
+        "description": "Collect logs from NetBox with Elastic Agent",
+        "version": "0.1.0"
+    },
+    {
+        "name": "netflow",
+        "title": "NetFlow Records",
+        "description": "Collect flow records from NetFlow and IPFIX exporters with Elastic Agent.",
+        "version": "2.25.1"
+    },
+    {
+        "name": "netskope",
+        "title": "Netskope",
+        "description": "Collect logs from Netskope with Elastic Agent.",
+        "version": "3.1.4"
+    },
+    {
+        "name": "beaconing",
+        "title": "Network Beaconing Identification",
+        "description": "Package to identify beaconing activity in your network events.",
+        "version": "1.6.0"
+    },
+    {
+        "name": "network_traffic",
+        "title": "Network Packet Capture",
+        "description": "Capture and analyze network traffic from a host with Elastic Agent.",
+        "version": "1.34.2"
+    },
+    {
+        "name": "nextron_thor_apt_scanner",
+        "title": "Nextron Thor APT Scanner",
+        "description": "Integration for Nextron Thor APT Scanner",
+        "version": "0.0.2"
+    },
+    {
+        "name": "nginx",
+        "title": "Nginx",
+        "description": "Collect logs and metrics from Nginx HTTP servers with Elastic Agent.",
+        "version": "3.1.0"
+    },
+    {
+        "name": "nginx_ingress_controller",
+        "title": "Nginx Ingress Controller Logs",
+        "description": "Collect Nginx Ingress Controller logs.",
+        "version": "1.14.0"
+    },
+    {
+        "name": "nginx_ingress_controller_otel",
+        "title": "Nginx Ingress Controller OpenTelemetry Logs",
+        "description": "Collect Nginx Ingress Controller logs using the OpenTelemetry collector.",
+        "version": "0.2.2"
+    },
+    {
+        "name": "nozomi_networks",
+        "title": "Nozomi Networks",
+        "description": "Collect logs from Nozomi Networks with Elastic Agent.",
+        "version": "0.2.1"
+    },
+    {
+        "name": "otlp_input_otel",
+        "title": "OTLP Receiver OpenTelemetry Input Package",
+        "description": "Receive logs, metrics, and traces via OTLP (OpenTelemetry Protocol) over gRPC and HTTP",
+        "version": "0.2.0"
+    },
+    {
+        "name": "okta",
+        "title": "Okta",
+        "description": "Collect and parse event logs from Okta API with Elastic Agent.",
+        "version": "3.14.1"
+    },
+    {
+        "name": "entityanalytics_okta",
+        "title": "Okta Entity Analytics",
+        "description": "Collect Identities from Okta with Elastic Agent.",
+        "version": "3.1.0"
+    },
+    {
+        "name": "openai",
+        "title": "OpenAI",
+        "description": "Collect OpenAI usage metrics with Elastic Agent.\n",
+        "version": "1.2.1"
+    },
+    {
+        "name": "ti_opencti",
+        "title": "OpenCTI",
+        "description": "Ingest threat intelligence indicators from OpenCTI with Elastic Agent.",
+        "version": "2.14.0"
+    },
+    {
+        "name": "opencanary",
+        "title": "OpenCanary",
+        "description": "This integration collects and parses logs from OpenCanary honeypots.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "otel_collector_internal_telemetry",
+        "title": "OpenTelemetry Collector Internal Telemetry",
+        "description": "This package contains dashboards that visualize the internal telemetry from the OpenTelemetry Collector",
+        "version": "1.2.0"
+    },
+    {
+        "name": "profiling_otel",
+        "title": "OpenTelemetry Profiling",
+        "description": "OpenTelemetry Profiling",
+        "version": "0.0.1"
+    },
+    {
+        "name": "oracle",
+        "title": "Oracle",
+        "description": "Collect Oracle Audit Log, Performance metrics, Tablespace metrics, Sysmetrics metrics, System statistics metrics, memory metrics from Oracle database.",
+        "version": "1.31.2"
+    },
+    {
+        "name": "oracle_otel",
+        "title": "Oracle OpenTelemetry Assets",
+        "description": "Oracle Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "oracle_weblogic",
+        "title": "Oracle WebLogic",
+        "description": "Collect logs and metrics from Oracle WebLogic with Elastic Agent.",
+        "version": "1.9.1"
+    },
+    {
+        "name": "osquery",
+        "title": "Osquery Logs",
+        "description": "Collect logs from Osquery with Elastic Agent.",
+        "version": "1.24.1"
+    },
+    {
+        "name": "osquery_manager",
+        "title": "Osquery Manager",
+        "description": "Deploy Osquery with Elastic Agent, then run and schedule queries in Kibana",
+        "version": "1.28.1"
+    },
+    {
+        "name": "php_fpm",
+        "title": "PHP-FPM",
+        "description": "This Elastic integration collects metrics from PHP-FPM.",
+        "version": "1.6.0"
+    },
+    {
+        "name": "panw_cortex_xdr",
+        "title": "Palo Alto Cortex XDR",
+        "description": "Collect logs from Palo Alto Cortex XDR with Elastic Agent.",
+        "version": "2.5.2"
+    },
+    {
+        "name": "panw_metrics",
+        "title": "Palo Alto Networks Metrics",
+        "description": "Collect metrics from Palo Alto Networks with Elastic Agent.",
+        "version": "0.2.0"
+    },
+    {
+        "name": "panw",
+        "title": "Palo Alto Next-Gen Firewall",
+        "description": "Collect logs from Palo Alto next-gen firewalls with Elastic Agent.",
+        "version": "5.5.0"
+    },
+    {
+        "name": "prisma_access",
+        "title": "Palo Alto Prisma Access",
+        "description": "Collect logs from Palo Alto Prisma Access with Elastic Agent.",
+        "version": "1.7.3"
+    },
+    {
+        "name": "prisma_cloud",
+        "title": "Palo Alto Prisma Cloud",
+        "description": "Collect logs from Prisma Cloud with Elastic Agent.",
+        "version": "4.1.0"
+    },
+    {
+        "name": "verifier_otel",
+        "title": "Permission Verifier",
+        "description": "Verify identity federation based integration permissions and report results to Elasticsearch using the Verifier receiver of the OTel Collector.",
+        "version": "0.0.1"
+    },
+    {
+        "name": "ping_federate",
+        "title": "PingFederate",
+        "description": "Collect logs from PingFederate with Elastic Agent.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "ping_one",
+        "title": "PingOne",
+        "description": "Collect logs from PingOne with Elastic-Agent.",
+        "version": "1.23.0"
+    },
+    {
+        "name": "platform_observability",
+        "title": "Platform Observability",
+        "description": "Collect stack component logs with Elastic Agent",
+        "version": "0.1.0"
+    },
+    {
+        "name": "pps",
+        "title": "Pleasant Password Server",
+        "description": "Integration for Pleasant Password Server Syslog Messages",
+        "version": "1.2.1"
+    },
+    {
+        "name": "postgresql",
+        "title": "PostgreSQL",
+        "description": "Collect logs and metrics from PostgreSQL servers with Elastic Agent.",
+        "version": "1.32.1"
+    },
+    {
+        "name": "postgresql_otel",
+        "title": "PostgreSQL OpenTelemetry Assets",
+        "description": "PostgreSQL Assets for OpenTelemetry Collector",
+        "version": "0.4.0"
+    },
+    {
+        "name": "security_detection_engine",
+        "title": "Prebuilt Security Detection Rules",
+        "description": "Prebuilt detection rules for Elastic Security",
+        "version": "9.4.4"
+    },
+    {
+        "name": "pad",
+        "title": "Privileged Access Detection",
+        "description": "ML package to detect anomalous privileged access activity in Windows, Linux and Okta logs",
+        "version": "2.1.0"
+    },
+    {
+        "name": "profilingmetrics_otel",
+        "title": "Profilingmetrics OpenTelemetry Assets",
+        "description": "Create metrics from profiling data.",
+        "version": "0.0.6"
+    },
+    {
+        "name": "prometheus",
+        "title": "Prometheus",
+        "description": "Collect metrics from Prometheus servers with Elastic Agent.",
+        "version": "1.24.2"
+    },
+    {
+        "name": "prometheus_input",
+        "title": "Prometheus Input",
+        "description": "Collects metrics from Prometheus exporter.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "prometheus_input_otel_raw",
+        "title": "Prometheus OTel Scrape (Bring Your Own Config)",
+        "description": "Scrape Prometheus metrics endpoints using the OpenTelemetry Collector Prometheus receiver with raw scrape configuration",
+        "version": "0.1.0"
+    },
+    {
+        "name": "prometheus_input_otel",
+        "title": "Prometheus OTel Scrape (Guided)",
+        "description": "Scrape Prometheus metrics endpoints using the OpenTelemetry Collector Prometheus receiver with guided configuration",
+        "version": "0.1.0"
+    },
+    {
+        "name": "proofpoint_365totalprotection",
+        "title": "Proofpoint 365 Total Protection",
+        "description": "The Proofpoint 365 Total Protection integration for Elastic collects detailed email security and delivery logs via a REST API. It provides security teams with centralized visibility into email traffic, threat activity, and message disposition directly in Elastic.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "proofpoint_essentials",
+        "title": "Proofpoint Essentials",
+        "description": "Collect logs from Proofpoint Essentials with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "proofpoint_itm",
+        "title": "Proofpoint ITM",
+        "description": "Collect logs from Proofpoint ITM using Elastic Agent.",
+        "version": "1.0.1"
+    },
+    {
+        "name": "proofpoint_on_demand",
+        "title": "Proofpoint On Demand",
+        "description": "Collect logs from Proofpoint On Demand with Elastic Agent.",
+        "version": "1.9.1"
+    },
+    {
+        "name": "proofpoint_tap",
+        "title": "Proofpoint TAP",
+        "description": "Collect logs from Proofpoint TAP with Elastic Agent.",
+        "version": "1.29.1"
+    },
+    {
+        "name": "pulse_connect_secure",
+        "title": "Pulse Connect Secure",
+        "description": "Collect logs from Pulse Connect Secure with Elastic Agent.",
+        "version": "2.6.1"
+    },
+    {
+        "name": "qnap_nas",
+        "title": "QNAP NAS",
+        "description": "Collect logs from QNAP NAS devices with Elastic Agent.",
+        "version": "1.25.3"
+    },
+    {
+        "name": "qualys_gav",
+        "title": "Qualys Global AssetView",
+        "description": "Collect logs from Qualys Global AssetView with Elastic Agent.",
+        "version": "0.7.2"
+    },
+    {
+        "name": "qualys_vmdr",
+        "title": "Qualys VMDR",
+        "description": "Collect data from Qualys VMDR platform with Elastic Agent.",
+        "version": "6.18.0"
+    },
+    {
+        "name": "qualys_was",
+        "title": "Qualys Web Application Scanning (WAS)",
+        "description": "Collect data from Qualys Web Application Scanning platform with Elastic Agent or Agentless",
+        "version": "0.3.1"
+    },
+    {
+        "name": "otel_rum_dashboards",
+        "title": "RUM OpenTelemetry Assets",
+        "description": "RUM status metrics from OpenTelemetry JS SDKs",
+        "version": "0.0.3"
+    },
+    {
+        "name": "rabbitmq",
+        "title": "RabbitMQ Logs and Metrics",
+        "description": "Collect and parse logs from RabbitMQ servers with Elastic Agent.",
+        "version": "1.22.0"
+    },
+    {
+        "name": "rabbitmq_otel",
+        "title": "RabbitMQ OpenTelemetry assets",
+        "description": "RabbitMQ Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "radware",
+        "title": "Radware DefensePro Logs (Deprecated)",
+        "description": "Deprecated. Radware DefensePro Logs is no longer supported.",
+        "version": "0.20.1"
+    },
+    {
+        "name": "rapid7_insightvm",
+        "title": "Rapid7 InsightVM",
+        "description": "Collect logs from Rapid7 InsightVM with Elastic Agent.",
+        "version": "2.8.0"
+    },
+    {
+        "name": "ti_rapid7_threat_command",
+        "title": "Rapid7 Threat Command",
+        "description": "Collect threat intelligence from Threat Command API with Elastic Agent.",
+        "version": "2.9.0"
+    },
+    {
+        "name": "ti_recordedfuture",
+        "title": "Recorded Future",
+        "description": "Ingest threat intelligence and alert data from Recorded Future with Elastic Agent.",
+        "version": "2.5.0"
+    },
+    {
+        "name": "redis",
+        "title": "Redis",
+        "description": "Collect logs and metrics from Redis servers with Elastic Agent.",
+        "version": "1.21.0"
+    },
+    {
+        "name": "redisenterprise",
+        "title": "Redis Enterprise",
+        "description": "Collect metrics from Redis Enterprise Cluster",
+        "version": "0.12.0"
+    },
+    {
+        "name": "redisenterprise_otel",
+        "title": "Redis Enterprise OpenTelemetry Assets",
+        "description": "Redis Enterprise Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "redis_otel",
+        "title": "Redis OpenTelemetry Assets",
+        "description": "Redis Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "redis_input_otel",
+        "title": "Redis OpenTelemetry Input Package",
+        "description": "Redis OpenTelemetry Input Package",
+        "version": "0.1.0"
+    },
+    {
+        "name": "rubrik",
+        "title": "Rubrik RSC Metrics",
+        "description": "Collect Metrics from Rubrik RSC with Elastic Agent.",
+        "version": "0.9.4"
+    },
+    {
+        "name": "sql",
+        "title": "SQL Input",
+        "description": "Collects Metrics by querying SQL Databases",
+        "version": "1.1.0"
+    },
+    {
+        "name": "sql_server_input_otel",
+        "title": "SQL Server OpenTelemetry Input Package",
+        "description": "Collect SQL Server metrics and logs using OpenTelemetry Collector",
+        "version": "0.1.1"
+    },
+    {
+        "name": "stan",
+        "title": "STAN",
+        "description": "Collect logs and metrics from STAN servers with Elastic Agent.",
+        "version": "1.11.0"
+    },
+    {
+        "name": "sailpoint_identity_sc",
+        "title": "Sailpoint Identity Security Cloud",
+        "description": "Sailpoint identity security cloud provides enterprise identity governance and security capabilities. The integration allows users to extract audit information from their identity security cloud tenant using the ISC's AuditEvent API.",
+        "version": "1.2.0"
+    },
+    {
+        "name": "salesforce",
+        "title": "Salesforce",
+        "description": "Collect logs from Salesforce instances using the Elastic Agent. This integration enables monitoring and analysis of various Salesforce logs, including Login, Logout, Setup Audit Trail, and Apex execution logs. Gain insights into user activity, security events, and application performance.\n",
+        "version": "1.7.1"
+    },
+    {
+        "name": "security_ai_prompts",
+        "title": "Security AI Prompts",
+        "description": "Prompts used by Security AI features, including the Security Assistant, and Attack discovery",
+        "version": "1.0.13"
+    },
+    {
+        "name": "cloud_security_posture",
+        "title": "Security Posture Management",
+        "description": "Identify & remediate configuration risks in your Cloud infrastructure",
+        "version": "3.3.0"
+    },
+    {
+        "name": "sentinel_one",
+        "title": "SentinelOne",
+        "description": "Collect logs from SentinelOne with Elastic Agent.",
+        "version": "2.7.0"
+    },
+    {
+        "name": "sentinel_one_cloud_funnel",
+        "title": "SentinelOne Cloud Funnel",
+        "description": "Collect logs from SentinelOne Cloud Funnel with Elastic Agent.",
+        "version": "1.13.1"
+    },
+    {
+        "name": "servicenow",
+        "title": "ServiceNow",
+        "description": "Collect logs from ServiceNow with Elastic Agent.",
+        "version": "2.0.0"
+    },
+    {
+        "name": "httpcheck_otel",
+        "title": "Simple HTTP Check",
+        "description": "Perform HTTP checks using the HTTP Check receiver of the OTel Collector.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "slack",
+        "title": "Slack Logs",
+        "description": "Slack Logs Integration",
+        "version": "1.27.0"
+    },
+    {
+        "name": "snort",
+        "title": "Snort",
+        "description": "Collect logs from Snort with Elastic Agent.",
+        "version": "1.21.2"
+    },
+    {
+        "name": "snyk",
+        "title": "Snyk",
+        "description": "Collect logs from Snyk with Elastic Agent.",
+        "version": "3.4.3"
+    },
+    {
+        "name": "sonicwall_firewall",
+        "title": "SonicWall Firewall",
+        "description": "Integration for SonicWall firewall logs",
+        "version": "1.22.1"
+    },
+    {
+        "name": "sophos",
+        "title": "Sophos",
+        "description": "Collect logs from Sophos with Elastic Agent.",
+        "version": "3.17.1"
+    },
+    {
+        "name": "sophos_central",
+        "title": "Sophos Central",
+        "description": "This Elastic integration collects logs from Sophos Central with Elastic Agent.",
+        "version": "1.21.0"
+    },
+    {
+        "name": "splunk",
+        "title": "Splunk",
+        "description": "Collect logs from Splunk with Elastic Agent.",
+        "version": "1.0.1"
+    },
+    {
+        "name": "spring_boot",
+        "title": "Spring Boot",
+        "description": "This Elastic integration collects logs and metrics from Spring Boot integration.",
+        "version": "1.9.1"
+    },
+    {
+        "name": "spycloud",
+        "title": "SpyCloud Enterprise Protection",
+        "description": "Collect data from SpyCloud Enterprise Protection with Elastic Agent.",
+        "version": "1.6.0"
+    },
+    {
+        "name": "squid",
+        "title": "Squid Proxy",
+        "description": "Collect and parse logs from Squid devices with Elastic Agent.",
+        "version": "1.5.1"
+    },
+    {
+        "name": "statsd_input",
+        "title": "StatsD Input",
+        "description": "StatsD Input Package",
+        "version": "1.0.0"
+    },
+    {
+        "name": "statsd_input_otel",
+        "title": "StatsD OpenTelemetry Input Package",
+        "description": "StatsD OpenTelemetry Input Package",
+        "version": "0.1.0"
+    },
+    {
+        "name": "stormshield",
+        "title": "StormShield SNS",
+        "description": "Stormshield SNS integration.",
+        "version": "1.5.2"
+    },
+    {
+        "name": "ti_strider",
+        "title": "Strider Shield",
+        "description": "Ingest threat intelligence indicators from Strider Shield with Elastic Agent.",
+        "version": "0.1.0"
+    },
+    {
+        "name": "sublime_security",
+        "title": "Sublime Security",
+        "description": "Collect logs from Sublime Security with Elastic Agent.",
+        "version": "1.11.2"
+    },
+    {
+        "name": "suricata",
+        "title": "Suricata",
+        "description": "Collect logs from Suricata with Elastic Agent.",
+        "version": "2.27.0"
+    },
+    {
+        "name": "swimlane",
+        "title": "Swimlane Turbine",
+        "description": "Collect Swimlane Turbine Audit logs with Elastic Agent",
+        "version": "0.4.2"
+    },
+    {
+        "name": "symantec_edr_cloud",
+        "title": "Symantec EDR Cloud (Deprecated)",
+        "description": "Deprecated. Use the Symantec Endpoint Security package instead.",
+        "version": "1.8.1"
+    },
+    {
+        "name": "symantec_endpoint",
+        "title": "Symantec Endpoint Protection",
+        "description": "Collect logs from Symantec Endpoint Protection with Elastic Agent.",
+        "version": "2.20.0"
+    },
+    {
+        "name": "symantec_endpoint_security",
+        "title": "Symantec Endpoint Security",
+        "description": "Collect logs from Symantec Endpoint Security with Elastic Agent.",
+        "version": "1.14.2"
+    },
+    {
+        "name": "sysdig",
+        "title": "Sysdig",
+        "description": "Collect logs from Sysdig using Elastic Agent.",
+        "version": "2.3.0"
+    },
+    {
+        "name": "syslog_router",
+        "title": "Syslog Router",
+        "description": "Route syslog events to integrations with Elastic Agent.",
+        "version": "1.0.1"
+    },
+    {
+        "name": "sysmon_linux",
+        "title": "Sysmon for Linux",
+        "description": "Collect Sysmon Linux logs with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "system",
+        "title": "System",
+        "description": "Collect system logs and metrics from your servers with Elastic Agent.",
+        "version": "2.18.0"
+    },
+    {
+        "name": "system_audit",
+        "title": "System Audit",
+        "description": "Collect various logs & metrics from System Audit modules with Elastic Agent.",
+        "version": "1.11.0"
+    },
+    {
+        "name": "system_otel",
+        "title": "System OpenTelemetry Assets",
+        "description": "Dashboards for the OpenTelemetry data collected with the `hostmetrics` receiver.",
+        "version": "0.2.7"
+    },
+    {
+        "name": "tychon",
+        "title": "TYCHON Agentless",
+        "description": "Collect complete master endpoint datasets including vulnerability and STIG to comply with DISA endpoint requirements and C2C without adding services to your endpoints.",
+        "version": "1.1.0"
+    },
+    {
+        "name": "tanium",
+        "title": "Tanium",
+        "description": "This Elastic integration collects logs from Tanium with Elastic Agent.",
+        "version": "1.17.0"
+    },
+    {
+        "name": "teleport",
+        "title": "Teleport",
+        "description": "Collect logs from Teleport with Elastic Agent.",
+        "version": "1.6.1"
+    },
+    {
+        "name": "tenable_ot_security",
+        "title": "Tenable OT Security",
+        "description": "Tenable OT Security",
+        "version": "2.0.0"
+    },
+    {
+        "name": "tenable_sc",
+        "title": "Tenable Security Center",
+        "description": "Collect data from Tenable Security Center with Elastic Agent.\n",
+        "version": "2.2.0"
+    },
+    {
+        "name": "tenable_io",
+        "title": "Tenable Vulnerability Management",
+        "description": "Collect logs from Tenable Vulnerability Management with Elastic Agent.",
+        "version": "4.10.0"
+    },
+    {
+        "name": "tencent_cloud",
+        "title": "Tencent Cloud",
+        "description": "从腾讯云的 COS 中采集审计日志",
+        "version": "0.2.0"
+    },
+    {
+        "name": "ti_util",
+        "title": "Threat Intelligence Utilities",
+        "description": "Prebuilt Threat Intelligence dashboard for Elastic Security",
+        "version": "1.7.1"
+    },
+    {
+        "name": "threat_map",
+        "title": "Threat Map",
+        "description": "The Threat Map integration includes a dashboard for analyzing network traffic data.",
+        "version": "1.1.0"
+    },
+    {
+        "name": "ti_threatconnect",
+        "title": "ThreatConnect",
+        "description": "Collects Indicators from ThreatConnect using the Elastic Agent and saves them as logs inside Elastic",
+        "version": "2.1.0"
+    },
+    {
+        "name": "ti_threatq",
+        "title": "ThreatQuotient",
+        "description": "Ingest threat intelligence indicators from ThreatQuotient with Elastic Agent.",
+        "version": "1.38.0"
+    },
+    {
+        "name": "thycotic_ss",
+        "title": "Thycotic Secret Server",
+        "description": "Thycotic Secret Server logs",
+        "version": "1.12.1"
+    },
+    {
+        "name": "tines",
+        "title": "Tines",
+        "description": "Tines Logs & Time Saved Reports",
+        "version": "1.16.0"
+    },
+    {
+        "name": "tomcat",
+        "title": "Tomcat NetWitness Logs (Deprecated)",
+        "description": "Collect and parse logs from Apache Tomcat servers with Elastic Agent.",
+        "version": "1.14.0"
+    },
+    {
+        "name": "traefik",
+        "title": "Traefik",
+        "description": "Collect logs from Traefik servers with Elastic Agent.",
+        "version": "2.7.0"
+    },
+    {
+        "name": "traefik_otel",
+        "title": "Traefik OpenTelemetry Assets",
+        "description": "Traefik Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "trellix_edr_cloud",
+        "title": "Trellix EDR Cloud",
+        "description": "Collect logs from Trellix EDR Cloud with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "trellix_epo_cloud",
+        "title": "Trellix ePO Cloud",
+        "description": "Collect logs from Trellix ePO Cloud with Elastic Agent.",
+        "version": "1.15.0"
+    },
+    {
+        "name": "trendmicro",
+        "title": "TrendAI Deep Security",
+        "description": "Collect logs from TrendAI Deep Security with Elastic Agent.",
+        "version": "2.8.2"
+    },
+    {
+        "name": "trend_micro_vision_one",
+        "title": "TrendAI Vision One",
+        "description": "Collect logs from TrendAI Vision One with Elastic Agent.",
+        "version": "2.12.0"
+    },
+    {
+        "name": "profiler_agent",
+        "title": "Universal Profiling Agent",
+        "description": "Fleet-wide, whole-system, continuous profiling with zero instrumentation.",
+        "version": "8.17.3"
+    },
+    {
+        "name": "profiler_collector",
+        "title": "Universal Profiling Collector",
+        "description": "Fleet-wide, whole-system, continuous profiling with zero instrumentation.",
+        "version": "8.17.3"
+    },
+    {
+        "name": "profiler_symbolizer",
+        "title": "Universal Profiling Symbolizer",
+        "description": "Fleet-wide, whole-system, continuous profiling with zero instrumentation.",
+        "version": "8.17.3"
+    },
+    {
+        "name": "carbon_black_cloud",
+        "title": "VMware Carbon Black Cloud",
+        "description": "Collect logs from VMWare Carbon Black Cloud with Elastic Agent.",
+        "version": "4.2.0"
+    },
+    {
+        "name": "carbonblack_edr",
+        "title": "VMware Carbon Black EDR",
+        "description": "Collect logs from VMware Carbon Black EDR with Elastic Agent.",
+        "version": "1.21.0"
+    },
+    {
+        "name": "vsphere",
+        "title": "VMware vSphere",
+        "description": "This Elastic integration collects metrics and logs from vSphere/vCenter servers",
+        "version": "1.24.0"
+    },
+    {
+        "name": "vsphere_otel",
+        "title": "VMware vSphere OpenTelemetry Assets",
+        "description": "VMware vSphere Assets for OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "varonis",
+        "title": "Varonis",
+        "description": "Collect Varonis syslog alerts using TCP/UDP input.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "vectra_detect",
+        "title": "Vectra Detect",
+        "description": "Collect logs from Vectra Detect with Elastic Agent.",
+        "version": "1.14.0"
+    },
+    {
+        "name": "vectra_rux",
+        "title": "Vectra RUX",
+        "description": "Collect logs from Vectra RUX with Elastic Agent.",
+        "version": "0.3.3"
+    },
+    {
+        "name": "watchguard_firebox",
+        "title": "WatchGuard Firebox",
+        "description": "Collect logs from WatchGuard Firebox with Elastic Agent.",
+        "version": "1.6.4"
+    },
+    {
+        "name": "websphere_application_server",
+        "title": "WebSphere Application Server",
+        "description": "Collects metrics from IBM WebSphere Application Server with Elastic Agent.",
+        "version": "1.6.1"
+    },
+    {
+        "name": "windows",
+        "title": "Windows",
+        "description": "Collect logs and metrics from Windows OS and services with Elastic Agent.",
+        "version": "3.8.3"
+    },
+    {
+        "name": "withsecure_elements",
+        "title": "WithSecure Elements",
+        "description": "Ingest WithSecure Elements incidents and security events data",
+        "version": "0.2.0"
+    },
+    {
+        "name": "wiz",
+        "title": "Wiz",
+        "description": "Collect logs from Wiz with Elastic Agent.",
+        "version": "4.2.0"
+    },
+    {
+        "name": "zeek",
+        "title": "Zeek",
+        "description": "Collect logs from Zeek with Elastic Agent.",
+        "version": "5.0.1"
+    },
+    {
+        "name": "zeronetworks",
+        "title": "Zero Networks",
+        "description": "Zero Networks Logs integration",
+        "version": "1.19.0"
+    },
+    {
+        "name": "zerofox",
+        "title": "ZeroFox",
+        "description": "Collect logs from ZeroFox with Elastic Agent.",
+        "version": "1.29.0"
+    },
+    {
+        "name": "zipkin_input_otel",
+        "title": "Zipkin OpenTelemetry Input Package",
+        "description": "Collect Zipkin traces using OpenTelemetry Collector",
+        "version": "0.1.0"
+    },
+    {
+        "name": "zookeeper",
+        "title": "ZooKeeper Metrics",
+        "description": "Collect metrics from ZooKeeper service with Elastic Agent.",
+        "version": "1.14.0"
+    },
+    {
+        "name": "zookeeper_otel",
+        "title": "Zookeeper OTel Assets",
+        "description": "Zookeeper OTel Assets",
+        "version": "0.2.0"
+    },
+    {
+        "name": "zoom",
+        "title": "Zoom",
+        "description": "Collect logs from Zoom with Elastic Agent.",
+        "version": "1.23.0"
+    },
+    {
+        "name": "zscaler_zia",
+        "title": "Zscaler Internet Access",
+        "description": "Collect logs from Zscaler Internet Access (ZIA) with Elastic Agent.",
+        "version": "3.17.1"
+    },
+    {
+        "name": "zscaler_zpa",
+        "title": "Zscaler Private Access",
+        "description": "Collect logs from Zscaler Private Access (ZPA) with Elastic Agent.",
+        "version": "1.23.3"
+    },
+    {
+        "name": "ti_abusech",
+        "title": "abuse.ch",
+        "description": "Ingest threat intelligence indicators from URL Haus, Malware Bazaar, and Threat Fox feeds with Elastic Agent.",
+        "version": "4.0.0"
+    },
+    {
+        "name": "authentik",
+        "title": "authentik",
+        "description": "Collect logs from authentik with Elastic Agent.",
+        "version": "1.9.0"
+    },
+    {
+        "name": "blacklens",
+        "title": "blacklens.io",
+        "description": "Collect logs from blacklens.io with Elastic Agent",
+        "version": "1.1.0"
+    },
+    {
+        "name": "etcd",
+        "title": "etcd",
+        "description": "Collect metrics from etcd instances with Elastic Agent.",
+        "version": "1.4.1"
+    },
+    {
+        "name": "etcd_otel",
+        "title": "etcd OpenTelemetry Assets",
+        "description": "etcd Assets from OpenTelemetry Collector",
+        "version": "0.2.0"
+    },
+    {
+        "name": "macos",
+        "title": "macOS Security Events",
+        "description": "Collect logs from macOS with Elastic Agent.",
+        "version": "1.0.0"
+    },
+    {
+        "name": "pfsense",
+        "title": "pfSense",
+        "description": "Collect logs from pfSense and OPNsense with Elastic Agent.",
+        "version": "1.25.3"
+    }
+]

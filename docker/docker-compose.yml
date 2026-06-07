@@ -43,7 +43,7 @@ services:
     profiles:
       - embedded  # Only start this container in embedded mode
     ports:
-      - "9600:9600"  # Logstash API
+      - "9650:9650"  # Logstash API
       - "9449:9449"  # Logstash HTTP input (for sample events)
     expose:
       - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)

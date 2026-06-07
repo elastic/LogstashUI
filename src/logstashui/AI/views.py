@@ -3,6 +3,14 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from django.shortcuts import render
+from PipelineManager.models import Connection
 
 def IntegrationFactory(request):
-    return render(request, 'integration_factory.html')
+    connections = Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED,
+        cloud_id__isnull=False
+    ).exclude(cloud_id='').values('id', 'name')
+    
+    return render(request, 'integration_factory.html', {
+        'connections': connections
+    })

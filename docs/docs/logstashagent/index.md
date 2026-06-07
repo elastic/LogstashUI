@@ -85,7 +85,7 @@ cp src/logstashagent/config/logstashagent.example.yml src/logstashagent/config/l
 python src/logstashagent/main.py
 ```
 
-By default this starts the agent service (including management API) on `0.0.0.0:9600` unless overridden in config.
+By default this starts the agent service (including management API) on `0.0.0.0:9650` unless overridden in config.
 
 ---
 

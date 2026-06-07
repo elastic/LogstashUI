@@ -1790,6 +1790,37 @@ function renderCachedResults(runId, index) {
     // Update counter
     updateDocumentCounter();
 
+    // Check if this document had no plugins executed
+    if (cachedData.noPluginsExecuted) {
+        // Show the "No Plugins Executed" banner
+        const resultsContainer = document.getElementById('results-container');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = `
+                <div class="w-full p-4 bg-yellow-900/30 border-y border-yellow-600">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-6 h-6 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                        <div>
+                            <h3 class="text-base font-semibold text-yellow-400">No Plugins Executed</h3>
+                            <p class="text-sm text-yellow-200">
+                                No plugins were triggered during this execution.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Hide loading indicator
+        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+        
+        return;
+    }
+
     // Re-render the graph and badges with cached data
     if (cachedData.nodes && cachedData.links) {
         // Mark executed plugins
@@ -1857,6 +1888,21 @@ function clearSimulationArtifacts() {
     const textViewContent = document.getElementById('textViewContent');
     if (textViewContent) {
         textViewContent.innerHTML = '';
+    }
+    
+    // Clear results container (removes banners) and recreate SVG
+    const resultsContainer = document.getElementById('results-container');
+    if (resultsContainer) {
+        resultsContainer.innerHTML = '';
+        
+        // Recreate the SVG element
+        const svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svgElement.id = "pipeline-graph";
+        svgElement.setAttribute("width", "100%");
+        svgElement.setAttribute("height", "100");
+        svgElement.setAttribute("class", "bg-gray-900");
+        svgElement.style.display = "block";
+        resultsContainer.appendChild(svgElement);
     }
 }
 
@@ -2006,7 +2052,11 @@ function initSimulationResults(runId) {
         fetch(`/ConnectionManager/GetSimulationResults/?run_id=${encodeURIComponent(runId)}`)
             .then(response => response.json())
             .then(data => {
-
+                if (data.results && data.results.length > 0) {
+                    const snapshotCounts = data.results.map(e => e.snapshots ? Object.keys(e.snapshots).length : 0);
+                    const snapshotKeys = data.results.map(e => e.snapshots ? Object.keys(e.snapshots) : []);
+                    console.log(`[BE->FE] Received ${data.results.length} events, snapshot counts: ${JSON.stringify(snapshotCounts)}, keys: ${JSON.stringify(snapshotKeys)}`);
+                }
 
                 if (data.results && data.results.length > 0) {
 
@@ -2023,6 +2073,21 @@ function initSimulationResults(runId) {
                                 const hasSnapshots = event.snapshots && Object.keys(event.snapshots).length > 0;
 
                                 if (!hasSnapshots) {
+                                    // This document had no plugins executed
+                                    // In multi-document simulations, don't overwrite other documents' results
+                                    const isMultiDocument = window.simulationDocuments && window.simulationDocuments.length > 1;
+                                    
+                                    // Cache empty result for this document
+                                    if (!window.simulationResultsCache) {
+                                        window.simulationResultsCache = {};
+                                    }
+                                    window.simulationResultsCache[runId] = {
+                                        nodes: [],
+                                        links: [],
+                                        originalEvent: originalEvent,
+                                        totalExecutionTimeMs: '0',
+                                        noPluginsExecuted: true
+                                    };
 
                                     // Hide loading indicator
                                     const loadingIndicator = document.getElementById('simulation-loading-indicator');
@@ -2035,24 +2100,27 @@ function initSimulationResults(runId) {
                                         hideOverlayLoadingBlock();
                                     }
 
-                                    // Show message that no plugins were executed
-                                    const resultsContainer = document.getElementById('results-container');
-                                    if (resultsContainer) {
-                                        resultsContainer.innerHTML = `
-                                            <div class="w-full p-4 bg-yellow-900/30 border-y border-yellow-600">
-                                                <div class="flex items-center gap-3">
-                                                    <svg class="w-6 h-6 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                                                    </svg>
-                                                    <div>
-                                                        <h3 class="text-base font-semibold text-yellow-400">No Plugins Executed</h3>
-                                                        <p class="text-sm text-yellow-200">
-                                                            No plugins were triggered during this execution.
-                                                        </p>
+                                    // Only show the banner in single-document simulations
+                                    // In multi-document simulations, just cache the result and let user navigate to it
+                                    if (!isMultiDocument) {
+                                        const resultsContainer = document.getElementById('results-container');
+                                        if (resultsContainer) {
+                                            resultsContainer.innerHTML = `
+                                                <div class="w-full p-4 bg-yellow-900/30 border-y border-yellow-600">
+                                                    <div class="flex items-center gap-3">
+                                                        <svg class="w-6 h-6 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                                        </svg>
+                                                        <div>
+                                                            <h3 class="text-base font-semibold text-yellow-400">No Plugins Executed</h3>
+                                                            <p class="text-sm text-yellow-200">
+                                                                No plugins were triggered during this execution.
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        `;
+                                            `;
+                                        }
                                     }
 
                                     // Clear loading timeout

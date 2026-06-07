@@ -17,7 +17,7 @@ This will:
 - Build the LogstashAgent Docker image with Python 3.12
 - Start Logstash with the agent supervisor
 - Expose ports:
-  - `9600`: Logstash API
+  - `9650`: Logstash API
   - `9449`: Logstash HTTP input (for simulation)
   - `9500`: FastAPI sidecar API
 
@@ -51,7 +51,7 @@ docker build -t logstashagent:latest -f docker/Dockerfile .
 Run the container:
 
 ```bash
-docker run -p 9600:9600 -p 9449:9449 -p 9500:9500 \
+docker run -p 9650:9650 -p 9449:9449 -p 9500:9500 \
   -e LOGSTASH_URL=http://host.docker.internal:8080 \
   --add-host host.docker.internal:host-gateway \
   logstashagent:latest
@@ -101,7 +101,7 @@ python src/logstashagent/main.py
 
 The agent will be available at:
 - FastAPI API: http://localhost:9500
-- Logstash API: http://localhost:9600
+- Logstash API: http://localhost:9650
 - Simulation Input: http://localhost:9449
 
 ---

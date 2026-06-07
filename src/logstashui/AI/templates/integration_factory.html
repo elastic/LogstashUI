@@ -5,34 +5,196 @@
 -->
 
 {% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/markdown.css' %}">
+{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-7xl">
-    <!-- Header -->
-    <div class="mb-8">
-        <div class="flex items-center gap-3 mb-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-            </svg>
-            <h1 class="text-3xl font-bold">Integration Factory</h1>
-            <span class="badge badge-warning">Experimental</span>
-        </div>
-        <p class="text-base-content/70">AI-powered integration builder for Logstash</p>
-    </div>
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-2">Integration Factory</h1>
+        <p class="text-gray-400 mb-8">Generate Logstash integrations using AI-powered analysis</p>
 
-    <!-- Main Content Area -->
-    <div class="bg-base-200 rounded-xl shadow-lg p-8">
-        <div class="text-center py-12">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto mb-4 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-            </svg>
-            <h2 class="text-2xl font-semibold mb-2">Coming Soon</h2>
-            <p class="text-base-content/70 max-w-md mx-auto">
-                The Integration Factory will help you build custom Logstash integrations using AI assistance.
-            </p>
+        <!-- Info Box -->
+        <div class="bg-blue-900/20 border border-blue-500/40 rounded-lg p-4 mb-6">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                    <h4 class="text-blue-300 font-semibold mb-1">About Integration Factory</h4>
+                    <p class="text-gray-300 text-sm">Provide sample logs and let AI analyze them to generate a complete Elasticsearch ingest pipeline configuration.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timer (Fixed Position) -->
+        <div id="timer" class="hidden fixed top-20 right-8 bg-gray-900 border border-purple-500/40 rounded-lg p-4 shadow-lg z-50">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span id="timerDisplay" class="text-2xl font-mono text-white">00:00</span>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" id="pauseTimer" class="btn btn-sm btn-ghost text-yellow-400 hover:bg-yellow-400/10">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                    <button type="button" id="resetTimer" class="btn btn-sm btn-ghost text-red-400 hover:bg-red-400/10">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <form id="integrationForm" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Step 1: Connection Selection -->
+            <div class="bg-gray-900/50 rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                    Select An Elasticsearch Connection
+                </h3>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Elasticsearch Connection</label>
+                    <select id="connectionSelect" name="connection_id" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" required>
+                        <option value="" disabled selected>Select a connection...</option>
+                        {% for connection in connections %}
+                            <option value="{{ connection.id }}">{{ connection.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-300 mt-2">Choose the Elasticsearch connection to use for AI inference</p>
+                    <p class="text-xs text-gray-400 mt-1 italic">Note: Connections that are using a URL instead of a cloud ID will not appear here</p>
+                </div>
+            </div>
+
+            <!-- Step 2: Model Selection -->
+            <div id="modelSelectContainer" class="bg-gray-900/50 rounded-lg p-6 hidden">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Select An Elastic Hosted LLM
+                </h3>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Elastic Hosted LLM</label>
+                    <select id="modelSelect" name="inference_id" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600 transition-all" required disabled>
+                        <option value="" disabled selected>Loading models...</option>
+                    </select>
+                    <p class="text-xs text-gray-300 mt-2" id="modelHint">Select the model to use for generation</p>
+                </div>
+            </div>
+
+            <!-- Step 3: Log Input -->
+            <div id="logInputContainer" class="bg-gray-900/50 rounded-lg p-6 hidden">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Provide Log Samples
+                </h3>
+
+                <!-- Tab Buttons -->
+                <div class="flex gap-2 mb-4">
+                    <button type="button" class="btn btn-sm bg-gray-700 border-gray-600 text-white hover:bg-gray-600 tab-active" data-tab="paste">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Paste Logs
+                    </button>
+                    <button type="button" class="btn btn-sm bg-gray-700 border-gray-600 text-white hover:bg-gray-600" data-tab="upload">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Upload File
+                    </button>
+                </div>
+
+                <!-- Paste Tab -->
+                <div id="pasteTab">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Log Samples</label>
+                    <textarea 
+                        id="logInput"
+                        name="log_lines" 
+                        class="textarea textarea-bordered w-full h-48 font-mono text-sm bg-gray-700 text-white border-gray-600" 
+                        placeholder="Paste your log samples here..."
+                        required
+                    ></textarea>
+                    <p class="text-xs text-gray-300 mt-2">Provide sample log lines for analysis</p>
+                </div>
+
+                <!-- Upload Tab -->
+                <div id="uploadTab" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Log File</label>
+                    <input 
+                        id="logFile"
+                        type="file" 
+                        name="log_file" 
+                        class="file-input file-input-bordered w-full bg-gray-700 text-white border-gray-600" 
+                        accept=".log,.txt"
+                    />
+                    <p class="text-xs text-gray-300 mt-2">Upload a log file for analysis</p>
+                </div>
+
+                <!-- Classify Button -->
+                <button id="generateBtn" type="submit" class="btn btn-primary w-full mt-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Classify Logs
+                </button>
+            </div>
+        </form>
+
+        <!-- Classification Results -->
+        <div id="classificationArea" class="mt-6 hidden">
+            <div class="bg-gray-900/50 rounded-lg p-6">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Log Classification
+                </h3>
+                <div id="classificationResult" class="bg-gray-800 rounded-lg p-4 mb-4"></div>
+                
+                <!-- Pipeline Type Selection -->
+                <div id="pipelineTypeSelection" class="hidden">
+                    <h4 class="text-md font-semibold text-white mb-3">Select Pipeline Type</h4>
+                    <div class="flex gap-4">
+                        <button id="elasticsearchPipelineBtn" type="button" class="btn btn-primary flex-1">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                            </svg>
+                            Elasticsearch Ingest Pipeline
+                        </button>
+                        <button id="logstashPipelineBtn" type="button" class="btn btn-secondary flex-1 opacity-50 cursor-not-allowed" disabled>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                            Logstash Pipeline <span class="text-xs ml-1">(Coming Soon!)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pipeline Progress Steps -->
+        <div id="pipelineArea" class="mt-6 hidden">
+            <div id="pipelineOutput"></div>
         </div>
     </div>
 </div>
+
+{% load static %}
+<script src="{% static 'js/integration_factory.js' %}"></script>
 {% endblock %}
