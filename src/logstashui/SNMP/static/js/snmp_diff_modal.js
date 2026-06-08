@@ -848,6 +848,11 @@ async function confirmDeployConfiguration() {
             // Close the modal
             hideSnmpDiffModal();
 
+            // Refresh the undeployed changes indicator
+            if (typeof window.triggerUndeployedChangesCheck === 'function') {
+                window.triggerUndeployedChangesCheck();
+            }
+
             // Optionally reload the page to reflect changes
             // window.location.reload();
         } else {

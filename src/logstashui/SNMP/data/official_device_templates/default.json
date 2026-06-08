@@ -1,0 +1,12 @@
+{
+  "name": "Default",
+  "type": "None",
+  "description": "Default template for when no others are assigned, or can be assigned",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_system"
+  ],
+  "matching_rules": []
+}

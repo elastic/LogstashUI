@@ -104,13 +104,13 @@ function populateDiscoveredDevicesTable(devices) {
             `;
         }
         
-        // Prepare OS description for tooltip
-        const hostDescription = device.host_description || 'No description available';
+        // Prepare OS description for tooltip (sysDescr from SNMP)
+        const sysDescr = device.sys_descr || 'No description available';
         const hostName = device.host_name || 'N/A';
         
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(hostDescription)}">
+                <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(sysDescr)}">
                     ${escapeHtml(hostName)}
                 </span>
             </td>

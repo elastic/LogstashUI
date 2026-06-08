@@ -469,6 +469,11 @@ document.getElementById('networkForm').addEventListener('submit', function (e) {
 
       showToast(networkId ? 'Network updated successfully!' : 'Network created successfully!', 'success');
 
+      // Trigger check for undeployed changes
+      if (typeof window.triggerUndeployedChangesCheck === 'function') {
+        window.triggerUndeployedChangesCheck();
+      }
+
       // Check if device modal is open (called from device modal)
       const deviceModal = document.getElementById('deviceFormModal');
       const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');

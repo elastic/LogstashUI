@@ -108,6 +108,20 @@ async function checkForUndeployedSNMPChanges() {
     }
 }
 
+/**
+ * Trigger a check for undeployed changes after a CRUD operation
+ * This should be called after adding/updating/deleting devices, networks, credentials, templates, or profiles
+ */
+function triggerUndeployedChangesCheck() {
+    // Small delay to allow backend to process the change
+    setTimeout(() => {
+        checkForUndeployedSNMPChanges();
+    }, 500);
+}
+
+// Expose function globally so other scripts can call it
+window.triggerUndeployedChangesCheck = triggerUndeployedChangesCheck;
+
 // Check for changes when the page loads
 document.addEventListener('DOMContentLoaded', function() {
     checkForUndeployedSNMPChanges();

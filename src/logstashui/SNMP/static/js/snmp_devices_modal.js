@@ -316,6 +316,11 @@ if (deviceForm) {
         showToast(deviceId ? 'Device updated successfully!' : 'Device created successfully!', 'success');
         closeDeviceModal();
 
+        // Trigger check for undeployed changes
+        if (typeof window.triggerUndeployedChangesCheck === 'function') {
+          window.triggerUndeployedChangesCheck();
+        }
+
         // Reload devices table instead of entire page
         if (typeof window.reloadDevicesTable === 'function') {
           window.reloadDevicesTable();

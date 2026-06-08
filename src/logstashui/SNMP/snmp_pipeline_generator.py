@@ -19,8 +19,13 @@ _OFFICIAL_PROFILE_CACHE = {}
 def _generate_input(input_data, profile_cache=None):
     """
     Generate SNMP input components grouped by:
-    1. Credential version (v1/v2c vs v3)
-    2. Profile combination (devices with same set of profiles)
+    1. Device template (all devices with same template in one input)
+    2. Credential (devices with different credentials need separate inputs)
+
+    Each input is enriched with ECS fields from the device template:
+    - [host][type] from template.type
+    - [observer][vendor] from template.vendor
+    - [observer][os][full] from template.product-template.model
 
     Args:
         input_data: Dict containing network and device information
@@ -45,23 +50,31 @@ def _generate_input(input_data, profile_cache=None):
 
     # Process v1/v2c devices
     if input_data['devices']['v1_v2c']:
-        # Group v1/v2c devices by their profile combinations
+        # Group v1/v2c devices by device template + credential
         v1_v2c_groups = {}
 
         for device_name, device in input_data['devices']['v1_v2c'].items():
             profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
+            
+            # Get device template (use None if not assigned)
+            template_id = device.device_template.id if device.device_template else None
+            credential_id = device.credential.id if device.credential else None
+            
+            # Use (template_id, credential_id) as grouping key
+            group_key = (template_id, credential_id)
 
-            # Use profile_ids tuple as grouping key
-            if profile_ids not in v1_v2c_groups:
-                v1_v2c_groups[profile_ids] = {
+            if group_key not in v1_v2c_groups:
+                v1_v2c_groups[group_key] = {
                     'devices': [],
-                    'oids': merged_oids
+                    'oids': merged_oids,
+                    'template': device.device_template,
+                    'credential': device.credential
                 }
 
-            v1_v2c_groups[profile_ids]['devices'].append(device)
+            v1_v2c_groups[group_key]['devices'].append(device)
 
-        # Create an input for each profile group
-        for group_idx, (profile_ids, group_data) in enumerate(v1_v2c_groups.items()):
+        # Create an input for each template+credential group
+        for group_idx, (group_key, group_data) in enumerate(v1_v2c_groups.items()):
             hosts = []
 
             for device in group_data['devices']:
@@ -75,13 +88,39 @@ def _generate_input(input_data, profile_cache=None):
                 })
 
             if hosts:
+                template = group_data['template']
                 interval_value = getattr(input_data['network'], 'interval', 30) or 30
                 logger.info(
                     f"Network {input_data['network'].name} interval: {interval_value} (type: {type(interval_value)})")
+                
                 config = {
-                             "hosts": hosts,
-                             "interval": interval_value
-                         } | global_input_config
+                    "hosts": hosts,
+                    "interval": interval_value
+                } | global_input_config
+
+                # Add ECS field enrichment from device template
+                if template:
+                    add_fields = {}
+                    
+                    # 'type' from template.type (will be renamed to [host][type] in filter)
+                    if template.type:
+                        add_fields["type"] = template.type
+                    
+                    # [observer][vendor] from template.vendor
+                    if template.vendor:
+                        add_fields["[observer][vendor]"] = template.vendor
+                    
+                    # [observer][os][full] from product-model
+                    os_full_parts = []
+                    if template.product:
+                        os_full_parts.append(template.product)
+                    if template.model:
+                        os_full_parts.append(template.model)
+                    if os_full_parts:
+                        add_fields["[observer][os][full]"] = "-".join(os_full_parts)
+                    
+                    if add_fields:
+                        config["add_field"] = add_fields
 
                 # Add OIDs from merged profiles
                 oids = group_data['oids']
@@ -116,27 +155,30 @@ def _generate_input(input_data, profile_cache=None):
 
     # Process v3 devices
     if input_data['devices']['v3']:
-        # Group v3 devices by their profile combinations AND credential
-        # (v3 devices with different credentials need separate inputs even with same profiles)
+        # Group v3 devices by device template + credential
         v3_groups = {}
 
         for device_name, device in input_data['devices']['v3'].items():
             profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
-            credential = device.credential
+            
+            # Get device template (use None if not assigned)
+            template_id = device.device_template.id if device.device_template else None
+            credential_id = device.credential.id if device.credential else None
 
-            # Use both profile_ids and credential_id as grouping key
-            group_key = (profile_ids, credential.id)
+            # Use (template_id, credential_id) as grouping key
+            group_key = (template_id, credential_id)
 
             if group_key not in v3_groups:
                 v3_groups[group_key] = {
                     'devices': [],
                     'oids': merged_oids,
-                    'credential': credential
+                    'template': device.device_template,
+                    'credential': device.credential
                 }
 
             v3_groups[group_key]['devices'].append(device)
 
-        # Create an input for each profile+credential group
+        # Create an input for each template+credential group
         for group_idx, (group_key, group_data) in enumerate(v3_groups.items()):
             hosts = []
 
@@ -149,17 +191,18 @@ def _generate_input(input_data, profile_cache=None):
                 })
 
             if hosts:
+                template = group_data['template']
                 credential = group_data['credential']
                 interval_value = getattr(input_data['network'], 'interval', 30) or 30
                 logger.info(
                     f"Network {input_data['network'].name} (v3) interval: {interval_value} (type: {type(interval_value)})")
 
                 config = {
-                             "hosts": hosts,
-                             "interval": interval_value,
-                             "security_name": credential.security_name,
-                             "security_level": credential.security_level
-                         } | global_input_config
+                    "hosts": hosts,
+                    "interval": interval_value,
+                    "security_name": credential.security_name,
+                    "security_level": credential.security_level
+                } | global_input_config
 
                 # Add auth settings based on security level
                 if credential.security_level in ['authNoPriv', 'authPriv']:
@@ -169,6 +212,30 @@ def _generate_input(input_data, profile_cache=None):
                 if credential.security_level == 'authPriv':
                     config["priv_protocol"] = credential.priv_protocol
                     config["priv_pass"] = credential.get_priv_pass()
+
+                # Add ECS field enrichment from device template
+                if template:
+                    add_fields = {}
+                    
+                    # 'type' from template.type (will be renamed to [host][type] in filter)
+                    if template.type:
+                        add_fields["type"] = template.type
+                    
+                    # [observer][vendor] from template.vendor
+                    if template.vendor:
+                        add_fields["[observer][vendor]"] = template.vendor
+                    
+                    # [observer][os][full] from product-model
+                    os_full_parts = []
+                    if template.product:
+                        os_full_parts.append(template.product)
+                    if template.model:
+                        os_full_parts.append(template.model)
+                    if os_full_parts:
+                        add_fields["[observer][os][full]"] = "-".join(os_full_parts)
+                    
+                    if add_fields:
+                        config["add_field"] = add_fields
 
                 # Add OIDs from merged profiles
                 oids = group_data['oids']
@@ -367,7 +434,8 @@ def _generate_filters(oid_mappings, network):
             "plugin": "mutate",
             "config": {
                 "rename": {
-                    "host": "[host][hostname]"
+                    "host": "[host][hostname]",
+                    "type": "[host][type]"
                 }
             }
         },

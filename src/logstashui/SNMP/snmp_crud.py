@@ -1974,13 +1974,13 @@ def GetDiscoveredDevices(request):
                                         logger.warning(f"Could not query network '{network_name}': {str(e)}")
 
                                 # Get suggested device template based on observer.sys_descr (sysDescr)
-                                host_description = source.get('host', {}).get('description', '')
+                                sys_descr = source.get('observer', {}).get('sys_descr', '')
                                 suggested_template_ids = []
                                 suggested_template_name = None
                                 
-                                if host_description:
+                                if sys_descr:
                                     from .views import suggest_device_template
-                                    suggested_template_ids = suggest_device_template(host_description)
+                                    suggested_template_ids = suggest_device_template(sys_descr)
                                     
                                     # Get the name of the first (best) suggested template
                                     if suggested_template_ids:
@@ -1994,7 +1994,7 @@ def GetDiscoveredDevices(request):
                                 device = {
                                     'host_name': source.get('host', {}).get('name', 'Unknown'),
                                     'host_hostname': source.get('host', {}).get('hostname', ''),
-                                    'host_description': host_description,
+                                    'sys_descr': sys_descr,
                                     'host_ip': source.get('host', {}).get('ip', ''),
                                     'network_name': network_name,
                                     'network_id': network_id,
