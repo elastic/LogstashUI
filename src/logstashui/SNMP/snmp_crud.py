@@ -1921,7 +1921,7 @@ def GetDiscoveredDevices(request):
                                                 "host.ip",
                                                 "network.name",
                                                 "@timestamp",
-                                                "host.description"
+                                                "observer.sys_descr"
                                             ]
                                         }
                                     }
@@ -1973,7 +1973,7 @@ def GetDiscoveredDevices(request):
                                     except Exception as e:
                                         logger.warning(f"Could not query network '{network_name}': {str(e)}")
 
-                                # Get suggested device template based on host.description (sysDescr)
+                                # Get suggested device template based on observer.sys_descr (sysDescr)
                                 host_description = source.get('host', {}).get('description', '')
                                 suggested_template_ids = []
                                 suggested_template_name = None
