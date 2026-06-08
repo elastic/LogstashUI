@@ -161,6 +161,8 @@
                   <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
                 {% elif template.vendor|lower == 'epson' %}
                   <img src="{% static 'images/epson.png' %}" alt="Epson" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'ubiquiti' %}
+                  <img src="{% static 'images/ubiquiti.png' %}" alt="Ubiquiti" class="w-full h-full object-contain">
                 {% else %}
                   <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
                 {% endif %}
@@ -342,6 +344,8 @@
                   <img src="{% static 'images/hpe.png' %}" alt="HPE" class="w-full h-full object-contain">
                 {% elif profile.vendor|lower == 'epson' %}
                   <img src="{% static 'images/epson.png' %}" alt="Epson" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'ubiquiti' %}
+                  <img src="{% static 'images/ubiquiti.png' %}" alt="Ubiquiti" class="w-full h-full object-contain">
                 {% else %}
                   <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
                 {% endif %}

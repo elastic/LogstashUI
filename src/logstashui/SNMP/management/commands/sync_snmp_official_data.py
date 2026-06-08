@@ -42,30 +42,28 @@ class Command(BaseCommand):
             # Step 1: Sync official profiles (must happen first - templates depend on profiles)
             self.stdout.write('Syncing official profiles...')
             profiles_synced = self._sync_official_profiles()
-            self.stdout.write(self.style.SUCCESS(f'✓ Synced {profiles_synced} official profiles'))
+            self.stdout.write(self.style.SUCCESS(f'Synced {profiles_synced} official profiles'))
             
             # Step 2: Sync official device templates
             self.stdout.write('Syncing official device templates...')
             templates_synced = self._sync_official_device_templates()
-            self.stdout.write(self.style.SUCCESS(f'✓ Synced {templates_synced} official device templates'))
+            self.stdout.write(self.style.SUCCESS(f'Synced {templates_synced} official device templates'))
             
             # Step 3: Cleanup unused official data (if requested)
             if cleanup:
                 self.stdout.write('Cleaning up unused official data...')
                 profiles_removed, templates_removed = self._cleanup_unused_official_data()
                 self.stdout.write(self.style.SUCCESS(
-                    f'✓ Removed {profiles_removed} unused profiles and {templates_removed} unused templates'
+                    f'Removed {profiles_removed} unused profiles and {templates_removed} unused templates'
                 ))
             
-            self.stdout.write(self.style.SUCCESS('\n✓ SNMP official data sync completed successfully'))
-            return 0
+            self.stdout.write(self.style.SUCCESS('\nSNMP official data sync completed successfully'))
             
         except Exception as e:
             # Log error but don't crash - startup should continue
             logger.error(f'Error during SNMP official data sync: {str(e)}', exc_info=True)
-            self.stdout.write(self.style.ERROR(f'✗ Error: {str(e)}'))
-            self.stdout.write(self.style.WARNING('⚠ Continuing startup despite sync error'))
-            return 1
+            self.stdout.write(self.style.ERROR(f'Error: {str(e)}'))
+            self.stdout.write(self.style.WARNING('Continuing startup despite sync error'))
 
     def _sync_official_profiles(self):
         """

@@ -1,0 +1,15 @@
+{
+  "name": "ubiquiti_unifi_ap",
+  "description": "Metrics for Unifi Access Points",
+  "vendor": "Ubiquiti",
+  "product": "Unifi",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "ubiquiti_unifi_system_metrics"
+  ],
+  "matching_rules": [
+    "UAP"
+  ]
+}
