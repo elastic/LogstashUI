@@ -154,11 +154,11 @@ class Device(models.Model):
     
     device_template = models.ForeignKey(
         'DeviceTemplate',
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='devices',
-        help_text="Device template assigned to this device"
+        help_text="Device template assigned to this device (defaults to 'Default' template if not specified)"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -197,6 +197,17 @@ class Device(models.Model):
                     })
     
     def save(self, *args, **kwargs):
+        # If no device template is assigned, use the Default template
+        if not self.device_template_id:
+            default_template = DeviceTemplate.objects.filter(
+                name='Default',
+                official=True
+            ).first()
+            
+            if default_template:
+                self.device_template = default_template
+            # If Default template doesn't exist, leave as None (will be handled by sync)
+        
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -581,6 +592,28 @@ class DeviceTemplate(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        """
+        Before deleting a template, reassign all its devices to the Default template.
+        Prevents deletion of the Default template itself.
+        """
+        # Prevent deletion of the Default template
+        if self.name == 'Default' and self.official:
+            raise ValidationError("Cannot delete the Default template")
+        
+        # Get the Default template
+        default_template = DeviceTemplate.objects.filter(
+            name='Default',
+            official=True
+        ).exclude(id=self.id).first()
+        
+        if default_template:
+            # Reassign all devices using this template to Default
+            self.devices.all().update(device_template=default_template)
+        
+        # Now safe to delete
+        super().delete(*args, **kwargs)
     
     def matches_device(self, device_info):
         """
