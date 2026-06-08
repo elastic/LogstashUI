@@ -1,5 +1,6 @@
 {
   "name": "brocade_fc_switch",
+  "type": "FC Switch",
   "description": "Fibre Channel switch metrics, FC port telemetry, and fabric endpoint visibility",
   "vendor": "Brocade",
   "product": "FC Switch",

@@ -524,6 +524,12 @@ class DeviceTemplate(models.Model):
         help_text="Product line or series (e.g., iDRAC, Catalyst, ASR)"
     )
     
+    type = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Device type (e.g., Router, Switch, Server, Firewall)"
+    )
+    
     matching_rules = models.JSONField(
         default=list,
         blank=True,

@@ -1,5 +1,6 @@
 {
   "name": "dell_idrac",
+  "type": "Management",
   "description": "Hardware health: system status, PSU, fans, temperature, memory, CPU, RAID",
   "vendor": "Dell",
   "product": "iDRAC",

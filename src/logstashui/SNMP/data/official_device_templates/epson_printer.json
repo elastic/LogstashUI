@@ -1,5 +1,6 @@
 {
   "name": "epson_printer",
+  "type": "Printer",
   "description": "General metrics for Epson printers",
   "vendor": "Epson",
   "product": "Any",

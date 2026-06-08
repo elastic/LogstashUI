@@ -1,5 +1,6 @@
 {
   "name": "cisco_ios",
+  "type": "Network",
   "description": "Hardware health and adjacency",
   "vendor": "Cisco",
   "product": "IOS",

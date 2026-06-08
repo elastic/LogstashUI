@@ -97,6 +97,7 @@ def sync_official_device_templates():
                         'vendor': template_data.get('vendor', ''),
                         'model': template_data.get('model', ''),
                         'product': template_data.get('product', ''),
+                        'type': template_data.get('type', ''),
                         'matching_rules': template_data.get('matching_rules', []),
                         'official': True
                     }
@@ -108,6 +109,7 @@ def sync_official_device_templates():
                     template.vendor = template_data.get('vendor', '')
                     template.model = template_data.get('model', '')
                     template.product = template_data.get('product', '')
+                    template.type = template_data.get('type', '')
                     template.matching_rules = template_data.get('matching_rules', [])
                     template.official = True
                     template.save()

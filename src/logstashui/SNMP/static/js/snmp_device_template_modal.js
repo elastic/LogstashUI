@@ -49,6 +49,7 @@ function openDeviceTemplateModal(templateId = null, viewMode = false, isOfficial
     document.getElementById('deviceTemplateVendor').value = clonedData.vendor || '';
     document.getElementById('deviceTemplateModel').value = clonedData.model || '';
     document.getElementById('deviceTemplateProduct').value = clonedData.product || '';
+    document.getElementById('deviceTemplateType').value = clonedData.type || '';
 
     // Load matching rules
     if (clonedData.matching_rules && clonedData.matching_rules.length > 0) {
@@ -95,6 +96,7 @@ function openDeviceTemplateModal(templateId = null, viewMode = false, isOfficial
         document.getElementById('deviceTemplateVendor').value = data.vendor || '';
         document.getElementById('deviceTemplateModel').value = data.model || '';
         document.getElementById('deviceTemplateProduct').value = data.product || '';
+        document.getElementById('deviceTemplateType').value = data.type || '';
 
         // Load matching rules
         if (data.matching_rules && data.matching_rules.length > 0) {

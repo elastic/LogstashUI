@@ -1,5 +1,6 @@
 {
   "name": "ubiquiti_unifi_ap",
+  "type": "Wireless AP",
   "description": "Metrics for Unifi Access Points",
   "vendor": "Ubiquiti",
   "product": "Unifi",

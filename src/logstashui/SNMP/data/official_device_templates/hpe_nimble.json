@@ -1,5 +1,6 @@
 {
   "name": "hpe_nimble",
+  "type": "Storage Array",
   "description": "Storage-admin core: per-volume capacity + IOPS/throughput + avg latency inputs + cache hits + minimal latency distribution + global stats",
   "vendor": "HPE Nimble",
   "product": "Nimble",

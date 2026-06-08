@@ -2484,6 +2484,7 @@ def GetDeviceTemplates(request):
                 'vendor': template.vendor,
                 'model': template.model,
                 'product': template.product,
+                'type': template.type,
                 'official': template.official
             })
         
@@ -2520,6 +2521,7 @@ def GetDeviceTemplate(request, template_id):
                 'vendor': template.vendor,
                 'model': template.model,
                 'product': template.product,
+                'type': template.type,
                 'matching_rules': template.matching_rules,
                 'official': template.official,
                 'profiles': profiles_data
@@ -2544,6 +2546,7 @@ def AddDeviceTemplate(request):
         vendor = request.POST.get('vendor')
         model = request.POST.get('model', '')
         product = request.POST.get('product', '')
+        type_value = request.POST.get('type', '')
         matching_rules_json = request.POST.get('matching_rules', '[]')
         profiles_json = request.POST.get('profiles', '[]')
         
@@ -2564,6 +2567,7 @@ def AddDeviceTemplate(request):
             vendor=vendor,
             model=model,
             product=product,
+            type=type_value,
             matching_rules=matching_rules,
             official=False
         )
@@ -2619,6 +2623,7 @@ def UpdateDeviceTemplate(request, template_id):
         template.vendor = request.POST.get('vendor', template.vendor)
         template.model = request.POST.get('model', template.model)
         template.product = request.POST.get('product', template.product)
+        template.type = request.POST.get('type', template.type)
         
         # Update matching rules
         matching_rules_json = request.POST.get('matching_rules')
