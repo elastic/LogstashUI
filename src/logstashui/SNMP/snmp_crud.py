@@ -752,7 +752,7 @@ def GetDeployDiff(request):
                             "plugin": "mutate",
                             "config": {
                                 "add_field": {
-                                    "[event][kind]": "traps"
+                                    "[event][category]": "traps"
                                 }
                             }
                         }
@@ -1033,7 +1033,7 @@ def DeployConfiguration(request):
                                         "plugin": "mutate",
                                         "config": {
                                             "add_field": {
-                                                "[event][kind]": "traps"
+                                                "[event][category]": "traps"
                                             }
                                         }
                                     }
@@ -2048,7 +2048,7 @@ def _get_device_interfaces(device, es_connection):
                     },
                     {
                         "term": {
-                            "event.kind": "interfaces"
+                            "event.category": "interfaces"
                         }
                     }
                 ]
@@ -2105,7 +2105,7 @@ def _get_device_metrics(device, es_connection):
                     },
                     {
                         "term": {
-                            "event.kind": "metrics"
+                            "event.category": "metrics"
                         }
                     }
                 ]
@@ -2163,7 +2163,7 @@ def _get_device_fans(device, es_connection):
                     },
                     {
                         "term": {
-                            "event.kind": "fans"
+                            "event.category": "fans"
                         }
                     }
                 ]
@@ -2221,7 +2221,7 @@ def _get_device_sensors(device, es_connection):
                     },
                     {
                         "term": {
-                            "event.kind": "sensors"
+                            "event.category": "sensors"
                         }
                     }
                 ]
@@ -2408,7 +2408,7 @@ def decide_visualizations(device, es):
             aggregations={
                 "data_kinds": {
                     "terms": {
-                        "field": "event.kind",
+                        "field": "event.category",
                         "size": 20
                     }
                 }

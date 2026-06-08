@@ -294,7 +294,7 @@ def _generate_discovery_input(network):
 def _generate_discovery_filters(oid_mappings, network):
     """
     Generate filter components for discovery pipeline.
-    Adds event.kind: discovery field to distinguish from regular metrics.
+    Adds event.category: discovery field to distinguish from regular metrics.
 
     Args:
         oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
@@ -325,7 +325,7 @@ def _generate_discovery_filters(oid_mappings, network):
                 "add_field": {
                     "[network][name]": f"{network.name}",
                     "[metricset][module]": "snmp",
-                    "[event][kind]": "discovery"
+                    "[event][category]": "discovery"
                 }
             }
         }
@@ -733,12 +733,12 @@ def _get_special_case_filters(oid_mappings):
                     f"      \"network\" => {{ \"name\" => network_name }},\n"
                     f"      \"table\" => row,\n"
                     f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
-                    f"      \"event\" => {{ \"kind\" => \"{table_name.lower()}\" }}\n"
+                    f"      \"event\" => {{ \"category\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
                     f"  event.remove(\"[{table_name}]\")\n"
-                    f"  event.set(\"[event][kind]\", \"metrics\")\n"
+                    f"  event.set(\"[event][category]\", \"metrics\")\n"
                     f"end"
                 )
 

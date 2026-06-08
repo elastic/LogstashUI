@@ -78,7 +78,7 @@ def get_cdp_adjacencies():
                                     },
                                     {
                                         "term": {
-                                            "event.kind": "cdpcachetable"
+                                            "event.category": "cdpcachetable"
                                         }
                                     },
                                     {
@@ -129,7 +129,7 @@ def get_cdp_adjacencies():
                                                     "host.name",
                                                     "host.hostname",
                                                     "network.name",
-                                                    "event.kind",
+                                                    "event.category",
                                                     "table.index",
                                                     "table.cdpCacheDeviceId",
                                                     "table.cdpCacheDevicePort",
@@ -209,7 +209,7 @@ def get_cdp_adjacencies():
                                 "host.name",
                                 "host.hostname",
                                 "network.name",
-                                "event.kind",
+                                "event.category",
                                 "table.ifIndex",
                                 "table.ifDescr"
                             ],
@@ -223,7 +223,7 @@ def get_cdp_adjacencies():
                                         },
                                         {
                                             "term": {
-                                                "event.kind": "interfaces"
+                                                "event.category": "interfaces"
                                             }
                                         },
                                         {
