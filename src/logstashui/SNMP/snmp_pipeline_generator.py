@@ -220,7 +220,7 @@ def _generate_input(input_data, profile_cache=None):
                 add_fields = {}
                 
                 # Use SNMP plugin's built-in metadata field for host IP
-                add_fields["[host][hostname]"] = "[@metadata][host_address]"
+                add_fields["[host][hostname]"] = "%{[@metadata][host_address]}"
                 
                 if template:
                     # [host][type] from template.type
@@ -504,7 +504,7 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
     config = {
         "data_stream": True,
         "data_stream_type": data_stream_type,
-        "data_stream_namespace": "default",
+        "data_stream_namespace": network_db_object.namespace,
         "data_stream_dataset": data_stream_dataset
     }
 

@@ -73,6 +73,12 @@ class Network(models.Model):
         help_text="Polling interval in seconds"
     )
     
+    namespace = models.CharField(
+        max_length=100,
+        default='default',
+        help_text="Data stream namespace for organizing data (e.g., dev, prod, qa). Max 100 bytes."
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

@@ -61,6 +61,20 @@
             <p class="text-gray-400 text-xs mt-1">Connection to centralized pipeline management cluster</p>
           </div>
 
+          <!-- Namespace -->
+          <div class="mb-4">
+            <label for="networkNamespace" class="block text-sm font-medium text-gray-300 mb-2">
+              <a href="https://www.elastic.co/docs/reference/fleet/data-streams#data-streams-naming-scheme" target="_blank" class="text-primary hover:text-primary-focus mr-1" title="Learn more about data stream namespaces">
+                <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </a>
+              Namespace <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="networkNamespace" name="namespace" class="input input-bordered w-full" required value="default" maxlength="100" placeholder="default">
+            <p class="text-gray-400 text-xs mt-1">User-configurable grouping (e.g., dev, prod, qa). Max 100 bytes.</p>
+          </div>
+
           <!-- Logstash Name -->
           <div class="mb-4">
             <label for="logstashName" class="block text-sm font-medium text-gray-300 mb-2">

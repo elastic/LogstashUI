@@ -51,24 +51,34 @@ def GetNetworks(request):
     """Get all SNMP networks"""
     try:
         from django.db.models import Count
+        import logging
+        logger = logging.getLogger(__name__)
         
         networks = Network.objects.select_related('connection').annotate(
             device_count=Count('devices')
         ).all()
         networks_data = []
         for network in networks:
-            networks_data.append({
+            namespace_value = getattr(network, 'namespace', 'default')
+            logger.info(f"Network {network.id} namespace: {namespace_value}")
+            
+            network_dict = {
                 'id': network.id,
                 'name': network.name,
                 'network_range': network.network_range,
                 'logstash_name': network.logstash_name,
+                'namespace': namespace_value,
+                'interval': network.interval,
                 'discovery_enabled': network.discovery_enabled,
                 'traps_enabled': network.traps_enabled,
                 'discovery_credential': network.discovery_credential_id,
+                'credential': network.credential_id,
                 'connection': network.connection_id,
                 'connection_name': network.connection.name if network.connection else None,
                 'device_count': network.device_count
-            })
+            }
+            logger.info(f"Network dict: {network_dict}")
+            networks_data.append(network_dict)
         return JsonResponse(networks_data, safe=False, status=200)
     except Exception as e:
         return HttpResponse(f"Error fetching networks: {str(e)}", status=500)
@@ -353,6 +363,7 @@ def AddNetwork(request):
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         interval = int(request.POST.get('interval', 30))
+        namespace = request.POST.get('namespace', 'default')
 
         # Create network object
         network = Network(
@@ -361,7 +372,8 @@ def AddNetwork(request):
             logstash_name=logstash_name,
             discovery_enabled=discovery_enabled,
             traps_enabled=traps_enabled,
-            interval=interval
+            interval=interval,
+            namespace=namespace
         )
 
         # Set connection if provided
@@ -400,6 +412,7 @@ def UpdateNetwork(request, network_id):
         network.name = request.POST.get('name', network.name)
         network.network_range = request.POST.get('network_range', network.network_range)
         network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
+        network.namespace = request.POST.get('namespace', network.namespace)
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
 
@@ -455,6 +468,7 @@ def GetNetwork(request, network_id):
             'name': network.name,
             'network_range': network.network_range,
             'logstash_name': network.logstash_name,
+            'namespace': network.namespace,
             'connection': network.connection_id if network.connection else None,
             'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,
             'credential': network.credential_id if network.credential else None,
