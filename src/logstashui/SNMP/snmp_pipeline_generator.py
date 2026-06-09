@@ -99,12 +99,15 @@ def _generate_input(input_data, profile_cache=None):
                 } | global_input_config
 
                 # Add ECS field enrichment from device template
+                add_fields = {}
+                
+                # Use SNMP plugin's built-in metadata field for host IP
+                add_fields["[host][hostname]"] = "%{[@metadata][host_address]}"
+                
                 if template:
-                    add_fields = {}
-                    
-                    # 'type' from template.type (will be renamed to [host][type] in filter)
+                    # [host][type] from template.type
                     if template.type:
-                        add_fields["type"] = template.type
+                        add_fields["[host][type]"] = template.type
                     
                     # [observer][vendor] from template.vendor
                     if template.vendor:
@@ -118,9 +121,9 @@ def _generate_input(input_data, profile_cache=None):
                         os_full_parts.append(template.model)
                     if os_full_parts:
                         add_fields["[observer][os][full]"] = "-".join(os_full_parts)
-                    
-                    if add_fields:
-                        config["add_field"] = add_fields
+                
+                if add_fields:
+                    config["add_field"] = add_fields
 
                 # Add OIDs from merged profiles
                 oids = group_data['oids']
@@ -214,12 +217,15 @@ def _generate_input(input_data, profile_cache=None):
                     config["priv_pass"] = credential.get_priv_pass()
 
                 # Add ECS field enrichment from device template
+                add_fields = {}
+                
+                # Use SNMP plugin's built-in metadata field for host IP
+                add_fields["[host][hostname]"] = "[@metadata][host_address]"
+                
                 if template:
-                    add_fields = {}
-                    
-                    # 'type' from template.type (will be renamed to [host][type] in filter)
+                    # [host][type] from template.type
                     if template.type:
-                        add_fields["type"] = template.type
+                        add_fields["[host][type]"] = template.type
                     
                     # [observer][vendor] from template.vendor
                     if template.vendor:
@@ -233,9 +239,9 @@ def _generate_input(input_data, profile_cache=None):
                         os_full_parts.append(template.model)
                     if os_full_parts:
                         add_fields["[observer][os][full]"] = "-".join(os_full_parts)
-                    
-                    if add_fields:
-                        config["add_field"] = add_fields
+                
+                if add_fields:
+                    config["add_field"] = add_fields
 
                 # Add OIDs from merged profiles
                 oids = group_data['oids']
@@ -433,22 +439,11 @@ def _generate_filters(oid_mappings, network):
             "type": "filter",
             "plugin": "mutate",
             "config": {
-                "rename": {
-                    "host": "[host][hostname]",
-                    "type": "[host][type]"
-                }
-            }
-        },
-        {
-            "id": "filter_mutate_2",
-            "type": "filter",
-            "plugin": "mutate",
-            "config": {
                 "rename": get_renames
             }
         },
         {
-            "id": "filter_mutate_3",
+            "id": "filter_mutate_2",
             "type": "filter",
             "plugin": "mutate",
             "config": {
@@ -790,6 +785,9 @@ def _get_special_case_filters(oid_mappings):
                     f"if rows.is_a?(Array)\n"
                     f"  host_name = event.get(\"[host][name]\")\n"
                     f"  host_hostname = event.get(\"[host][hostname]\")\n"
+                    f"  host_type = event.get(\"[host][type]\")\n"
+                    f"  observer_vendor = event.get(\"[observer][vendor]\")\n"
+                    f"  observer_os_full = event.get(\"[observer][os][full]\")\n"
                     f"  network_name = event.get(\"[network][name]\")\n"
                     f"  timestamp = event.get(\"@timestamp\")\n"
                     f"  rows.each do |row|\n"
@@ -797,7 +795,8 @@ def _get_special_case_filters(oid_mappings):
                     f"{rename_statements}\n"
                     f"    new_event = LogStash::Event.new({{\n"
                     f"      \"@timestamp\" => timestamp,\n"
-                    f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname }},\n"
+                    f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname, \"type\" => host_type }},\n"
+                    f"      \"observer\" => {{ \"vendor\" => observer_vendor, \"os\" => {{ \"full\" => observer_os_full }} }},\n"
                     f"      \"network\" => {{ \"name\" => network_name }},\n"
                     f"      \"table\" => row,\n"
                     f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
