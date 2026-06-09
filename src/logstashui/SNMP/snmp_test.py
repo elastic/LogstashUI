@@ -550,50 +550,83 @@ def RunSNMPTest(request):
         results = results_container[0]
         print("SNMP operations completed")
         
-        # Check if there are any errors in the results
-        has_errors = False
-        error_messages = []
+        # Collect all error messages and check for authentication failures
+        auth_error_count = 0
+        total_operations = 0
+        all_errors = []
         has_any_success = False
         
-        # Check for top-level errors
-        for category in ['get', 'walk', 'table']:
-            if isinstance(results[category], dict) and 'error' in results[category]:
-                has_errors = True
-                error_messages.append(f"{category.upper()}: {results[category]['error']}")
-            elif results[category]:  # Has some data
-                has_any_success = True
-        
-        # Check for field-level errors in get results
+        # Check GET results
         if isinstance(results['get'], dict):
-            for field, value in results['get'].items():
-                if isinstance(value, dict) and 'error' in value:
-                    has_errors = True
-                else:
-                    has_any_success = True
+            if 'error' in results['get']:
+                # Top-level error
+                total_operations += 1
+                all_errors.append(results['get']['error'])
+                if 'Unknown USM user' in results['get']['error'] or 'authentication' in results['get']['error'].lower():
+                    auth_error_count += 1
+            else:
+                # Field-level results
+                for field, value in results['get'].items():
+                    total_operations += 1
+                    if isinstance(value, dict) and 'error' in value:
+                        if value['error'] not in all_errors:
+                            all_errors.append(value['error'])
+                        if 'Unknown USM user' in value['error'] or 'authentication' in value['error'].lower():
+                            auth_error_count += 1
+                    else:
+                        has_any_success = True
         
-        # Check for field-level errors in walk results
+        # Check WALK results
         if isinstance(results['walk'], dict):
-            for field, value in results['walk'].items():
-                if isinstance(value, dict) and 'error' in value:
-                    has_errors = True
-                else:
-                    has_any_success = True
+            if 'error' in results['walk']:
+                total_operations += 1
+                all_errors.append(results['walk']['error'])
+                if 'Unknown USM user' in results['walk']['error'] or 'authentication' in results['walk']['error'].lower():
+                    auth_error_count += 1
+            else:
+                for field, value in results['walk'].items():
+                    total_operations += 1
+                    if isinstance(value, dict) and 'error' in value:
+                        if value['error'] not in all_errors:
+                            all_errors.append(value['error'])
+                        if 'Unknown USM user' in value['error'] or 'authentication' in value['error'].lower():
+                            auth_error_count += 1
+                    else:
+                        has_any_success = True
         
-        # Check for field-level errors in table results
+        # Check TABLE results
         if isinstance(results['table'], dict):
-            for table, value in results['table'].items():
-                if isinstance(value, dict) and 'error' in value:
-                    has_errors = True
-                else:
-                    has_any_success = True
+            if 'error' in results['table']:
+                total_operations += 1
+                all_errors.append(results['table']['error'])
+                if 'Unknown USM user' in results['table']['error'] or 'authentication' in results['table']['error'].lower():
+                    auth_error_count += 1
+            else:
+                for table, value in results['table'].items():
+                    total_operations += 1
+                    if isinstance(value, dict) and 'error' in value:
+                        if value['error'] not in all_errors:
+                            all_errors.append(value['error'])
+                        if 'Unknown USM user' in value['error'] or 'authentication' in value['error'].lower():
+                            auth_error_count += 1
+                    else:
+                        has_any_success = True
         
         execution_time = time.time() - start_time
         
-        # If everything failed, return error response
-        if has_errors and not has_any_success:
+        print(f"Auth errors: {auth_error_count}/{total_operations}, has_any_success: {has_any_success}")
+        
+        # If we have authentication errors and no successes, it's an auth failure
+        if auth_error_count > 0 and not has_any_success:
+            unique_errors = list(dict.fromkeys(all_errors))
+            if len(unique_errors) == 1:
+                error_text = f'Authentication failed: {unique_errors[0]}'
+            else:
+                error_text = 'Authentication failed - check SNMP credentials'
+            
             return JsonResponse({
                 'success': False,
-                'error': '; '.join(error_messages) if error_messages else 'All SNMP operations failed',
+                'error': error_text,
                 'execution_time': round(execution_time, 2),
                 'device': {
                     'id': device.id,
@@ -610,10 +643,36 @@ def RunSNMPTest(request):
                 }
             })
         
+        # If all operations failed (but not auth-related), return generic error
+        if len(all_errors) > 0 and not has_any_success:
+            unique_errors = list(dict.fromkeys(all_errors))
+            error_text = '; '.join(unique_errors) if unique_errors else 'All SNMP operations failed'
+            
+            return JsonResponse({
+                'success': False,
+                'error': error_text,
+                'execution_time': round(execution_time, 2),
+                'device': {
+                    'id': device.id,
+                    'name': device.name,
+                    'ip_address': device.ip_address,
+                    'port': device.port
+                },
+                'template': {
+                    'id': template.id,
+                    'name': template.name,
+                    'description': template.description,
+                    'vendor': template.vendor,
+                    'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                }
+            })
+        
+        # Partial success or full success
+        has_errors = len(all_errors) > 0
         response_data = {
             'success': True,  # True if we got at least some results
             'has_errors': has_errors,
-            'error_summary': '; '.join(error_messages) if error_messages else None,
+            'error_summary': '; '.join(list(dict.fromkeys(all_errors))) if all_errors else None,
             'execution_time': round(execution_time, 2),
             'device': {
                 'id': device.id,

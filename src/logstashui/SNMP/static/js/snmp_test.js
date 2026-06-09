@@ -228,6 +228,17 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Run test button not found!');
     }
 
+    // Display error state
+    function displayError(errorMsg, data) {
+        loadingState.classList.add('hidden');
+        resultsContainer.classList.add('hidden');
+        
+        errorMessage.textContent = errorMsg;
+        errorState.classList.remove('hidden');
+        
+        errorState.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     // Display results
     function displayResults(data) {
         // Hide loading and error states
