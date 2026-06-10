@@ -1,0 +1,43 @@
+{
+  "multiply": {
+    "label": "Multiply value",
+    "description": "Multiplies a numeric SNMP value by a configured number. Useful for converting raw SNMP values into the expected unit.",
+    "applies_to": ["get", "table_column"],
+    "has_target_field": true,
+    "inputs": {
+      "multiply_value":{
+        "type": "float",
+        "default": 1.0,
+        "description": "The value to multiply the SNMP value by."
+      }
+    }
+  },
+  "ratio": {
+    "label": "Calculate ratio",
+    "description": "Calculates ratio and derived fields from two input values. Computes: total = value1 + value2, ratio1 = value1 / total, ratio2 = value2 / total",
+    "applies_to": ["get"],
+    "has_target_field": false,
+    "inputs": {
+      "value1_field": {
+        "type": "field_selector",
+        "description": "First field name (e.g., system.memory.actual.used.bytes)"
+      },
+      "value2_field": {
+        "type": "field_selector",
+        "description": "Second field name (e.g., system.memory.actual.free.bytes)"
+      },
+      "total_output_field": {
+        "type": "string",
+        "description": "Field to store the sum (value1 + value2). Leave empty to skip."
+      },
+      "ratio1_output_field": {
+        "type": "string",
+        "description": "Field to store value1 / (value1 + value2). Leave empty to skip."
+      },
+      "ratio2_output_field": {
+        "type": "string",
+        "description": "Field to store value2 / (value1 + value2). Leave empty to skip."
+      }
+    }
+  }
+}

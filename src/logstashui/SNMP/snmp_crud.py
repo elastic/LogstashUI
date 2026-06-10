@@ -681,8 +681,8 @@ def GetDeployDiff(request):
 
             # Generate components for this network (only if has devices)
             if has_devices:
-                input_components, oid_mappings = _generate_input(input_data, profile_cache)
-                filter_components = _generate_filters(oid_mappings, network)
+                input_components, oid_mappings, normalizers = _generate_input(input_data, profile_cache)
+                filter_components = _generate_filters(oid_mappings, network, normalizers)
             else:
                 input_components = []
                 filter_components = []
@@ -943,8 +943,8 @@ def DeployConfiguration(request):
                 # Only create main discovery pipeline if there are devices
                 if has_devices:
                     # Generate components for this network
-                    input_components, oid_mappings = _generate_input(input_data)
-                    filter_components = _generate_filters(oid_mappings, network)
+                    input_components, oid_mappings, normalizers = _generate_input(input_data)
+                    filter_components = _generate_filters(oid_mappings, network, normalizers)
 
                     components = {
                         "input": input_components,
@@ -1560,6 +1560,26 @@ def DeleteDevice(request, device_id):
 
 # ==================== Profile API Endpoints ====================
 
+def GetNormalizerDefinitions(request):
+    """Get normalizer definitions from JSON file"""
+    try:
+        normalizers_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'normalizers.json')
+        
+        if not os.path.exists(normalizers_path):
+            return JsonResponse({'success': False, 'message': 'Normalizers file not found'}, status=404)
+        
+        with open(normalizers_path, 'r') as f:
+            normalizers = json.load(f)
+        
+        return JsonResponse({
+            'success': True,
+            'normalizers': normalizers
+        }, status=200)
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
 def GetOfficialProfile(request, profile_name):
     """Get an official profile from JSON file"""
     try:
@@ -1578,7 +1598,8 @@ def GetOfficialProfile(request, profile_name):
             'description': profile_data.get('description', ''),
             'vendor': profile_data.get('vendor', ''),
             'product': profile_data.get('product', ''),
-            'profile_data': profile_data
+            'profile_data': profile_data,
+            'normalizers': profile_data.get('normalizers', [])
         }, status=200)
 
     except Exception as e:
@@ -1595,7 +1616,8 @@ def GetProfile(request, profile_name):
             'description': profile.description,
             'vendor': profile.vendor,
             'product': profile.product,
-            'profile_data': profile.profile_data
+            'profile_data': profile.profile_data,
+            'normalizers': profile.normalizers
         }, status=200)
 
     except Profile.DoesNotExist:
@@ -1615,6 +1637,7 @@ def AddProfile(request):
         vendor = data.get('vendor', '')
         product = data.get('product', '')
         profile_data = data.get('profile_data', {})
+        normalizers = data.get('normalizers', [])
 
         # Validate required fields
         if not name:
@@ -1630,7 +1653,8 @@ def AddProfile(request):
             description=description,
             vendor=vendor,
             product=product,
-            profile_data=profile_data
+            profile_data=profile_data,
+            normalizers=normalizers
         )
         profile.save()
 
@@ -1661,6 +1685,7 @@ def UpdateProfile(request, profile_name):
         profile.vendor = data.get('vendor', profile.vendor)
         profile.product = data.get('product', profile.product)
         profile.profile_data = data.get('profile_data', profile.profile_data)
+        profile.normalizers = data.get('normalizers', profile.normalizers)
 
         # If name changed, check for conflicts
         if new_name != profile.name:

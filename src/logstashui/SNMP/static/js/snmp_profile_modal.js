@@ -6,6 +6,47 @@
 
 // SNMP Profile Modal JavaScript
 
+// Global variable to store normalizer definitions
+let normalizerDefinitions = {};
+let normalizerDefinitionsLoaded = false;
+
+// Load normalizer definitions on page load
+document.addEventListener('DOMContentLoaded', function() {
+  loadNormalizerDefinitions();
+});
+
+// Function to load normalizer definitions
+async function loadNormalizerDefinitions() {
+  try {
+    const response = await fetch('/SNMP/GetNormalizerDefinitions/');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    if (data.success) {
+      normalizerDefinitions = data.normalizers;
+      normalizerDefinitionsLoaded = true;
+      console.log('Normalizer definitions loaded:', normalizerDefinitions);
+    } else {
+      throw new Error(data.message || 'Failed to load normalizer definitions');
+    }
+  } catch (error) {
+    console.error('Error loading normalizer definitions:', error);
+    normalizerDefinitionsLoaded = false;
+    // Show error to user
+    if (typeof showToast === 'function') {
+      showToast('Failed to load normalizer definitions', 'error');
+    }
+  }
+}
+
+// Ensure normalizer definitions are loaded before using them
+async function ensureNormalizerDefinitionsLoaded() {
+  if (!normalizerDefinitionsLoaded) {
+    await loadNormalizerDefinitions();
+  }
+}
+
 // Open modal for adding new profile
 document.addEventListener('DOMContentLoaded', function() {
   const addProfileBtn = document.getElementById('addProfileBtn');
@@ -27,10 +68,11 @@ function openProfileModalWithData(data) {
   form.reset();
   document.getElementById('profileErrorContainer').innerHTML = '';
   
-  // Clear all containers including tables
+  // Clear all containers including tables and normalizers
   clearKVContainer('get');
   clearKVContainer('walk');
   clearTableContainer();
+  clearNormalizersContainer();
   
   // Set to add mode
   modalTitle.textContent = 'Add SNMP Profile';
@@ -87,6 +129,13 @@ function openProfileModalWithData(data) {
     });
   }
   
+  // Load Normalizers section
+  if (data.normalizers && Array.isArray(data.normalizers) && data.normalizers.length > 0) {
+    data.normalizers.forEach(normalizerData => {
+      addNormalizer(normalizerData, false);
+    });
+  }
+  
   modal.classList.remove('hidden');
 }
 
@@ -101,10 +150,11 @@ function openProfileModal(profileName = null, isOfficial = false, viewMode = fal
   form.reset();
   document.getElementById('profileErrorContainer').innerHTML = '';
   
-  // Clear all containers including tables
+  // Clear all containers including tables and normalizers
   clearKVContainer('get');
   clearKVContainer('walk');
   clearTableContainer();
+  clearNormalizersContainer();
   
   if (profileName) {
     // Load existing profile
@@ -214,6 +264,13 @@ function loadProfileData(profileName, isOfficial, isReadOnly) {
           }
         });
       }
+      
+      // Load Normalizers section
+      if (data.normalizers && Array.isArray(data.normalizers) && data.normalizers.length > 0) {
+        data.normalizers.forEach(normalizerData => {
+          addNormalizer(normalizerData, isReadOnly);
+        });
+      }
     })
     .catch(error => {
       console.error('Error loading profile:', error);
@@ -245,7 +302,8 @@ function addKVPair(section, key = '', value = '', isReadOnly = false) {
              class="input input-bordered input-sm w-full kv-key" 
              placeholder="Field name (e.g., sysName)" 
              value="${key}"
-             ${isReadOnly ? 'readonly' : ''}>
+             ${isReadOnly ? 'readonly' : ''}
+             ${section === 'get' && !isReadOnly ? 'onchange="refreshNormalizerFieldDropdowns()"' : ''}>
     </div>
     <div class="flex-1">
       <input type="text" 
@@ -314,6 +372,11 @@ function removeKVPair(button, section) {
       hideWalkWarning();
     }
   }
+  
+  // Refresh normalizer field dropdowns if Get section changed
+  if (section === 'get') {
+    refreshNormalizerFieldDropdowns();
+  }
 }
 
 // Clear a KV container
@@ -369,7 +432,8 @@ function addTable(tableName = '', columns = {}, isReadOnly = false) {
              class="input input-bordered input-sm w-64 table-name" 
              placeholder="Table name (e.g., ifTable)" 
              value="${tableName}"
-             ${isReadOnly ? 'readonly' : ''}>
+             ${isReadOnly ? 'readonly' : ''}
+             ${!isReadOnly ? 'onchange="refreshNormalizerFieldDropdowns()"' : ''}>
       <button type="button" 
               onclick="removeTable(this)" 
               class="btn btn-ghost btn-sm text-red-400 hover:bg-red-900/20"
@@ -450,6 +514,7 @@ function addTableColumnToContainer(container, columnName = '', oid = '', isReadO
   input1.placeholder = 'Column name (e.g., ifIndex)';
   input1.value = columnName;
   if (isReadOnly) input1.readOnly = true;
+  if (!isReadOnly) input1.onchange = refreshNormalizerFieldDropdowns;
   wrapper1.appendChild(input1);
   
   // Create second input wrapper
@@ -486,6 +551,9 @@ function addTableColumnToContainer(container, columnName = '', oid = '', isReadO
 function removeTableColumn(button) {
   const column = button.closest('.table-column');
   column.remove();
+  
+  // Refresh normalizer field dropdowns
+  refreshNormalizerFieldDropdowns();
 }
 
 // Remove an entire table
@@ -501,6 +569,9 @@ function removeTable(button) {
   if (remainingTables.length === 0 && emptyMessage) {
     emptyMessage.style.display = '';
   }
+  
+  // Refresh normalizer field dropdowns
+  refreshNormalizerFieldDropdowns();
 }
 
 // Serialize KV pairs from a section (for get and walk)
@@ -551,6 +622,389 @@ function serializeTableSection() {
   return Object.keys(result).length > 0 ? result : null;
 }
 
+// Add a normalizer
+async function addNormalizer(normalizerData = null, isReadOnly = false) {
+  // Ensure normalizer definitions are loaded
+  await ensureNormalizerDefinitionsLoaded();
+  
+  const container = document.getElementById('normalizersContainer');
+  const emptyMessage = document.getElementById('normalizersEmptyMessage');
+  
+  if (emptyMessage) {
+    emptyMessage.style.display = 'none';
+  }
+  
+  const normalizerId = 'normalizer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  
+  const normalizerElement = document.createElement('div');
+  normalizerElement.className = 'normalizer-item border border-gray-600 rounded-lg p-4 mb-3';
+  normalizerElement.dataset.normalizerId = normalizerId;
+  
+  const operation = normalizerData?.operation || '';
+  
+  // Build operation options
+  const operationOptions = Object.keys(normalizerDefinitions).map(op => 
+    `<option value="${op}" ${op === operation ? 'selected' : ''}>${normalizerDefinitions[op].label}</option>`
+  ).join('');
+  
+  normalizerElement.innerHTML = `
+    <div class="flex justify-between items-start mb-3">
+      <h4 class="text-sm font-medium text-gray-300">Normalizer Configuration</h4>
+      <button type="button" 
+              onclick="removeNormalizer(this)" 
+              class="btn btn-ghost btn-sm text-red-400 hover:bg-red-900/20"
+              ${isReadOnly ? 'disabled style="display:none;"' : ''}>
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+        Remove
+      </button>
+    </div>
+    
+    <div class="space-y-3">
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Operation</label>
+        <select class="select select-bordered select-sm w-full normalizer-operation" 
+                onchange="onNormalizerOperationChange(this)"
+                ${isReadOnly ? 'disabled' : ''}>
+          <option value="">Select operation...</option>
+          ${operationOptions}
+        </select>
+      </div>
+      
+      <div class="normalizer-dynamic-fields">
+        <!-- Dynamic fields will be inserted here -->
+      </div>
+    </div>
+  `;
+  
+  container.appendChild(normalizerElement);
+  
+  // If loading existing data, populate the fields
+  if (operation && normalizerData) {
+    const selectElement = normalizerElement.querySelector('.normalizer-operation');
+    onNormalizerOperationChange(selectElement, normalizerData, isReadOnly);
+  }
+}
+
+// Generate HTML for normalizer parameters based on operation
+function generateNormalizerParamsHTML(operation, params = {}, isReadOnly = false) {
+  if (!normalizerDefinitions[operation]) {
+    return '<p class="text-gray-500 text-xs">Unknown operation</p>';
+  }
+  
+  const opDef = normalizerDefinitions[operation];
+  const inputs = opDef.inputs || {};
+  
+  if (Object.keys(inputs).length === 0) {
+    return '<p class="text-gray-500 text-xs">No parameters required</p>';
+  }
+  
+  let html = '<div class="space-y-2">';
+  
+  for (const [paramName, paramDef] of Object.entries(inputs)) {
+    const value = params[paramName] !== undefined ? params[paramName] : (paramDef.default || '');
+    
+    html += `
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+        <input type="${paramDef.type === 'float' ? 'number' : 'text'}" 
+               class="input input-bordered input-sm w-full normalizer-param" 
+               data-param-name="${paramName}"
+               placeholder="${paramDef.default || ''}"
+               value="${value}"
+               ${paramDef.type === 'float' ? 'step="any"' : ''}
+               ${isReadOnly ? 'readonly' : ''}>
+      </div>
+    `;
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+// Get available fields from current profile data based on scope
+function getAvailableFieldsForScope(scope) {
+  const fields = [];
+  
+  if (scope === 'get') {
+    // Get fields from Get section
+    const getContainer = document.getElementById('getContainer');
+    const kvPairs = getContainer.querySelectorAll('.kv-pair');
+    kvPairs.forEach(pair => {
+      const key = pair.querySelector('.kv-key').value.trim();
+      if (key) {
+        fields.push(key);
+      }
+    });
+  } else if (scope === 'table') {
+    // Get fields from Table columns
+    const tableContainer = document.getElementById('tableContainer');
+    const tables = tableContainer.querySelectorAll('.table-group');
+    tables.forEach(table => {
+      const tableName = table.querySelector('.table-name').value.trim();
+      if (tableName) {
+        const columns = table.querySelectorAll('.table-column');
+        columns.forEach(col => {
+          const columnName = col.querySelector('.column-name').value.trim();
+          if (columnName) {
+            fields.push(`${tableName}.${columnName}`);
+          }
+        });
+      }
+    });
+  }
+  
+  return fields;
+}
+
+// Handle normalizer operation change - show appropriate fields based on operation
+function onNormalizerOperationChange(selectElement, existingData = null, isReadOnly = false) {
+  const normalizerItem = selectElement.closest('.normalizer-item');
+  const dynamicFieldsContainer = normalizerItem.querySelector('.normalizer-dynamic-fields');
+  const operation = selectElement.value;
+  
+  if (!operation) {
+    dynamicFieldsContainer.innerHTML = '';
+    return;
+  }
+  
+  const opDef = normalizerDefinitions[operation];
+  if (!opDef) {
+    dynamicFieldsContainer.innerHTML = '<p class="text-gray-500 text-xs">Unknown operation</p>';
+    return;
+  }
+  
+  // Get applicable scopes
+  const appliesTo = opDef.applies_to || [];
+  const existingScope = existingData?.target?.scope || '';
+  
+  // Determine initial scope
+  let scope = existingScope;
+  if (!scope || !appliesTo.includes(scope === 'table' ? 'table_column' : scope)) {
+    // Default to first applicable scope
+    if (appliesTo.includes('get')) {
+      scope = 'get';
+    } else if (appliesTo.includes('table_column')) {
+      scope = 'table';
+    }
+  }
+  
+  // Get existing values if provided
+  const selectedField = existingData?.target?.field || '';
+  const params = existingData?.params || {};
+  
+  let html = '';
+  
+  // Add scope selector if multiple scopes are available
+  if (appliesTo.length > 1) {
+    html += `
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Scope</label>
+        <select class="select select-bordered select-sm w-full normalizer-scope" 
+                onchange="onNormalizerScopeChange(this)"
+                ${isReadOnly ? 'disabled' : ''}>
+          ${appliesTo.map(scopeType => {
+            const scopeValue = scopeType === 'table_column' ? 'table' : scopeType;
+            const scopeLabel = scopeType === 'table_column' ? 'Table Column' : 'Get';
+            return `<option value="${scopeValue}" ${scopeValue === scope ? 'selected' : ''}>${scopeLabel}</option>`;
+          }).join('')}
+        </select>
+      </div>
+    `;
+  }
+  
+  // Add target field selector only if operation has a target field
+  const hasTargetField = opDef.has_target_field !== false; // Default to true if not specified
+  if (hasTargetField) {
+    html += renderNormalizerFieldSelector(scope, selectedField, isReadOnly);
+  }
+  
+  // Add parameter inputs
+  const inputs = opDef.inputs || {};
+  if (Object.keys(inputs).length > 0) {
+    html += '<div class="space-y-2">';
+    for (const [paramName, paramDef] of Object.entries(inputs)) {
+      const value = params[paramName] !== undefined ? params[paramName] : (paramDef.default || '');
+      
+      // Check if this input is a field selector
+      if (paramDef.type === 'field_selector') {
+        const availableFields = getAvailableFieldsForScope(scope);
+        html += `
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+            <select class="select select-bordered select-sm w-full normalizer-param" 
+                    data-param-name="${paramName}"
+                    ${isReadOnly ? 'disabled' : ''}>
+              <option value="">Select field...</option>
+              ${availableFields.map(field => 
+                `<option value="${field}" ${field === value ? 'selected' : ''}>${field}</option>`
+              ).join('')}
+            </select>
+          </div>
+        `;
+      } else {
+        // Regular input field
+        html += `
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+            <input type="${paramDef.type === 'float' ? 'number' : 'text'}" 
+                   class="input input-bordered input-sm w-full normalizer-param" 
+                   data-param-name="${paramName}"
+                   placeholder="${paramDef.default || ''}"
+                   value="${value}"
+                   ${paramDef.type === 'float' ? 'step="any"' : ''}
+                   ${isReadOnly ? 'readonly' : ''}>
+          </div>
+        `;
+      }
+    }
+    html += '</div>';
+  }
+  
+  dynamicFieldsContainer.innerHTML = html;
+}
+
+// Render field selector for a given scope
+function renderNormalizerFieldSelector(scope, selectedField = '', isReadOnly = false) {
+  const availableFields = getAvailableFieldsForScope(scope);
+  
+  const placeholderText = availableFields.length === 0 
+    ? `No ${scope === 'get' ? 'Get' : 'Table'} fields defined yet...`
+    : 'Select field...';
+  
+  return `
+    <div>
+      <label class="block text-xs text-gray-400 mb-1">Target Field</label>
+      <select class="select select-bordered select-sm w-full normalizer-field" 
+              data-scope="${scope}"
+              ${isReadOnly ? 'disabled' : ''}>
+        <option value="">${placeholderText}</option>
+        ${availableFields.map(field => 
+          `<option value="${field}" ${field === selectedField ? 'selected' : ''}>${field}</option>`
+        ).join('')}
+      </select>
+    </div>
+  `;
+}
+
+// Handle scope change - refresh field dropdown
+function onNormalizerScopeChange(selectElement) {
+  const normalizerItem = selectElement.closest('.normalizer-item');
+  const dynamicFieldsContainer = normalizerItem.querySelector('.normalizer-dynamic-fields');
+  const scope = selectElement.value;
+  
+  // Find and replace the field selector
+  const fieldSelectorContainer = dynamicFieldsContainer.querySelector('.normalizer-field')?.closest('div');
+  if (fieldSelectorContainer) {
+    const newFieldSelector = document.createElement('div');
+    newFieldSelector.innerHTML = renderNormalizerFieldSelector(scope, '', false);
+    fieldSelectorContainer.replaceWith(newFieldSelector.firstElementChild);
+  }
+}
+
+// Refresh all normalizer field dropdowns (called when Get/Table fields change)
+function refreshNormalizerFieldDropdowns() {
+  const normalizers = document.querySelectorAll('.normalizer-item');
+  normalizers.forEach(normalizerItem => {
+    const fieldSelect = normalizerItem.querySelector('.normalizer-field');
+    if (fieldSelect) {
+      const scope = fieldSelect.dataset.scope;
+      const currentValue = fieldSelect.value;
+      const availableFields = getAvailableFieldsForScope(scope);
+      
+      // Rebuild options
+      fieldSelect.innerHTML = '<option value="">Select field...</option>' +
+        availableFields.map(field => 
+          `<option value="${field}" ${field === currentValue ? 'selected' : ''}>${field}</option>`
+        ).join('');
+    }
+  });
+}
+
+// Remove a normalizer
+function removeNormalizer(button) {
+  const normalizerItem = button.closest('.normalizer-item');
+  const container = document.getElementById('normalizersContainer');
+  const emptyMessage = document.getElementById('normalizersEmptyMessage');
+  
+  normalizerItem.remove();
+  
+  const remainingNormalizers = container.querySelectorAll('.normalizer-item');
+  if (remainingNormalizers.length === 0 && emptyMessage) {
+    emptyMessage.style.display = '';
+  }
+}
+
+// Clear normalizers container
+function clearNormalizersContainer() {
+  const container = document.getElementById('normalizersContainer');
+  const emptyMessage = document.getElementById('normalizersEmptyMessage');
+  
+  const normalizers = container.querySelectorAll('.normalizer-item');
+  normalizers.forEach(normalizer => normalizer.remove());
+  
+  if (emptyMessage) {
+    emptyMessage.style.display = '';
+  }
+}
+
+// Serialize normalizers
+function serializeNormalizers() {
+  const container = document.getElementById('normalizersContainer');
+  const normalizers = container.querySelectorAll('.normalizer-item');
+  const result = [];
+  
+  normalizers.forEach(normalizerItem => {
+    const operation = normalizerItem.querySelector('.normalizer-operation').value;
+    if (!operation) return;
+    
+    const fieldSelect = normalizerItem.querySelector('.normalizer-field');
+    const scopeSelect = normalizerItem.querySelector('.normalizer-scope');
+    
+    // Get scope - either from scope selector or from field selector's data attribute
+    let scope = 'get';
+    if (scopeSelect) {
+      scope = scopeSelect.value;
+    } else if (fieldSelect) {
+      scope = fieldSelect.dataset.scope || 'get';
+    }
+    
+    // Build target object
+    const target = { scope: scope };
+    
+    // Add field to target only if there's a field selector
+    if (fieldSelect) {
+      const field = fieldSelect.value.trim();
+      if (!field) return; // Skip if required field is empty
+      target.field = field;
+    }
+    
+    // Collect parameters
+    const params = {};
+    const paramInputs = normalizerItem.querySelectorAll('.normalizer-param');
+    paramInputs.forEach(input => {
+      const paramName = input.dataset.paramName;
+      let value = input.value.trim();
+      
+      if (value) {
+        if (input.type === 'number') {
+          value = parseFloat(value);
+        }
+        params[paramName] = value;
+      }
+    });
+    
+    result.push({
+      operation: operation,
+      target: target,
+      params: params
+    });
+  });
+  
+  return result.length > 0 ? result : null;
+}
+
 // Handle form submission
 document.addEventListener('DOMContentLoaded', function() {
   const form = document.getElementById('profileForm');
@@ -594,6 +1048,12 @@ document.addEventListener('DOMContentLoaded', function() {
       const tableSection = serializeTableSection();
       if (tableSection) {
         profileData.profile_data.table = tableSection;
+      }
+      
+      // Add Normalizers section
+      const normalizers = serializeNormalizers();
+      if (normalizers) {
+        profileData.normalizers = normalizers;
       }
       
       // Validate that at least one section has data

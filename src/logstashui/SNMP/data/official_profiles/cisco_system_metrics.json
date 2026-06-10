@@ -8,5 +8,30 @@
     "system.memory.actual.free.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
   },
   "walk": {},
-  "table": {}
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.total.norm.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.used.bytes",
+        "value2_field": "system.memory.actual.free.bytes",
+        "total_output_field": "system.memory.total",
+        "ratio1_output_field": "system.memory.actual.used.pct",
+        "ratio2_output_field": "system.memory.actual.free.pct"
+      }
+    }
+  ]
 }

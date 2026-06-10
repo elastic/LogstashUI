@@ -55,6 +55,7 @@ urlpatterns = [
     path("DiscoveredDevices/", snmp_crud.GetDiscoveredDevices, name="GetDiscoveredDevices"),
 
     # SNMP Profile endpoints
+    path("GetNormalizerDefinitions/", snmp_crud.GetNormalizerDefinitions, name="GetNormalizerDefinitions"),
     path("GetAllProfiles/", snmp_crud.GetAllProfiles, name="GetAllProfiles"),
     path("GetOfficialProfile/<str:profile_name>/", snmp_crud.GetOfficialProfile, name="GetOfficialProfile"),
     path("GetProfile/<str:profile_name>/", snmp_crud.GetProfile, name="GetSNMPProfile"),

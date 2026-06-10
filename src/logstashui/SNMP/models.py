@@ -475,6 +475,12 @@ class Profile(models.Model):
         help_text="Product line or series (e.g., iDRAC, Catalyst, ASR)"
     )
     
+    normalizers = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of normalizer configurations to apply to profile fields"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

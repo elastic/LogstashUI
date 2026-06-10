@@ -12,9 +12,42 @@ logger = logging.getLogger(__name__)
 
 # Import Device model for discovery IP address filtering
 from .models import Device
+from .snmp_normalizers import _apply_normalizers
 
 # Cache for official profile data to avoid repeated file I/O
 _OFFICIAL_PROFILE_CACHE = {}
+
+
+def _deduplicate_normalizers(normalizers):
+    """
+    Remove duplicate normalizers based on their content.
+    Two normalizers are considered duplicates if they have the same operation, target, and params.
+    
+    Args:
+        normalizers: List of normalizer configurations
+        
+    Returns:
+        List of unique normalizers
+    """
+    if not normalizers:
+        return []
+    
+    seen = []
+    unique = []
+    
+    for normalizer in normalizers:
+        # Create a hashable representation of the normalizer
+        normalizer_key = (
+            normalizer.get('operation'),
+            str(normalizer.get('target', {})),
+            str(normalizer.get('params', {}))
+        )
+        
+        if normalizer_key not in seen:
+            seen.append(normalizer_key)
+            unique.append(normalizer)
+    
+    return unique
 
 def _generate_input(input_data, profile_cache=None):
     """
@@ -31,7 +64,7 @@ def _generate_input(input_data, profile_cache=None):
         input_data: Dict containing network and device information
         profile_cache: Optional dict to cache loaded profile data
 
-    Returns: (input_components, oid_mappings)
+    Returns: (input_components, oid_mappings, all_normalizers)
     """
     input_components = []
     network_id = input_data['network'].id
@@ -42,6 +75,9 @@ def _generate_input(input_data, profile_cache=None):
         'walk': {},
         'table': {}
     }
+    
+    # Collect all normalizers from all device groups
+    all_normalizers = []
 
     global_input_config = {
         "ecs_compatibility": "disabled",
@@ -54,7 +90,7 @@ def _generate_input(input_data, profile_cache=None):
         v1_v2c_groups = {}
 
         for device_name, device in input_data['devices']['v1_v2c'].items():
-            profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
+            profile_ids, merged_oids, normalizers = _get_device_profiles(device, profile_cache)
             
             # Get device template (use None if not assigned)
             template_id = device.device_template.id if device.device_template else None
@@ -67,9 +103,14 @@ def _generate_input(input_data, profile_cache=None):
                 v1_v2c_groups[group_key] = {
                     'devices': [],
                     'oids': merged_oids,
+                    'normalizers': normalizers,
                     'template': device.device_template,
                     'credential': device.credential
                 }
+            else:
+                # Merge normalizers from additional devices in the same group
+                if normalizers:
+                    v1_v2c_groups[group_key]['normalizers'].extend(normalizers)
 
             v1_v2c_groups[group_key]['devices'].append(device)
 
@@ -148,6 +189,12 @@ def _generate_input(input_data, profile_cache=None):
                     ]
                     # Collect OID mappings for filter generation
                     oid_mappings['table'].update(oids['table'])
+                
+                # Collect normalizers from this group (deduplicated)
+                if 'normalizers' in group_data and group_data['normalizers']:
+                    # Deduplicate normalizers within this group first
+                    unique_group_normalizers = _deduplicate_normalizers(group_data['normalizers'])
+                    all_normalizers.extend(unique_group_normalizers)
 
                 input_components.append({
                     "id": f"input_snmp_v1_v2c_{network_id}_group_{group_idx}",
@@ -162,7 +209,7 @@ def _generate_input(input_data, profile_cache=None):
         v3_groups = {}
 
         for device_name, device in input_data['devices']['v3'].items():
-            profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
+            profile_ids, merged_oids, normalizers = _get_device_profiles(device, profile_cache)
             
             # Get device template (use None if not assigned)
             template_id = device.device_template.id if device.device_template else None
@@ -175,9 +222,14 @@ def _generate_input(input_data, profile_cache=None):
                 v3_groups[group_key] = {
                     'devices': [],
                     'oids': merged_oids,
+                    'normalizers': normalizers,
                     'template': device.device_template,
                     'credential': device.credential
                 }
+            else:
+                # Merge normalizers from additional devices in the same group
+                if normalizers:
+                    v3_groups[group_key]['normalizers'].extend(normalizers)
 
             v3_groups[group_key]['devices'].append(device)
 
@@ -266,6 +318,12 @@ def _generate_input(input_data, profile_cache=None):
                     ]
                     # Collect OID mappings for filter generation
                     oid_mappings['table'].update(oids['table'])
+                
+                # Collect normalizers from this group (deduplicated)
+                if 'normalizers' in group_data and group_data['normalizers']:
+                    # Deduplicate normalizers within this group first
+                    unique_group_normalizers = _deduplicate_normalizers(group_data['normalizers'])
+                    all_normalizers.extend(unique_group_normalizers)
 
                 input_components.append({
                     "id": f"input_snmp_v3_{network_id}_group_{group_idx}",
@@ -274,7 +332,7 @@ def _generate_input(input_data, profile_cache=None):
                     "config": config
                 })
 
-    return input_components, oid_mappings
+    return input_components, oid_mappings, all_normalizers
 
 
 
@@ -407,13 +465,14 @@ def _generate_discovery_filters(oid_mappings, network):
     return filter_components
 
 
-def _generate_filters(oid_mappings, network):
+def _generate_filters(oid_mappings, network, normalizers=None):
     """
     Generate filter components based on OID mappings from profiles.
 
     Args:
         oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
         network: Network object for accessing network name and other properties
+        normalizers: List of normalizer configurations from profiles
 
     Returns:
         List of filter components
@@ -455,17 +514,12 @@ def _generate_filters(oid_mappings, network):
         }
     ]
 
-    # ATTENTION: This is where I'm planning on implementing special logic
-    # to preprocess some data. I'm avoiding having to have 'magic functions'
-    # where the user may not understand why one OID works one way and another works in a different way
-    # we'll see if we need to add that.
-    # oid_mappings['get'] contains key-value pairs like {"host.hostname": "1.3.6.1.2.1.1.5.0", ...}
-    # oid_mappings['walk'] contains walk OID mappings
-    # oid_mappings['table'] contains table OID mappings
+    # Apply normalizers from profiles
+    if normalizers:
+        normalizer_filters = _apply_normalizers(normalizers)
+        filter_components.extend(normalizer_filters)
 
-    for mapping in oid_mappings['get']:
-        pass
-
+    # Apply special case filters (table splitters and legacy normalizations)
     filter_components.extend(_get_special_case_filters(oid_mappings))
     return filter_components
 
@@ -537,8 +591,8 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
 
 def _get_device_profiles(device, profile_cache=None):
     """
-    Get all profiles for a device and return merged OID data.
-    Returns a tuple: (profile_ids_tuple, merged_oids_dict)
+    Get all profiles for a device and return merged OID data and normalizers.
+    Returns a tuple: (profile_ids_tuple, merged_oids_dict, normalizers_list)
 
     Args:
         device: Device object with prefetched device_template and its profiles
@@ -558,7 +612,7 @@ def _get_device_profiles(device, profile_cache=None):
         logger.debug(f"Device '{device.name}' has no template assigned")
 
     if not profiles:
-        return (tuple(), {'get': {}, 'walk': {}, 'table': {}})
+        return (tuple(), {'get': {}, 'walk': {}, 'table': {}}, [])
 
     # Create a tuple of profile IDs for grouping (sorted for consistency)
     profile_ids = tuple(sorted([p.id for p in profiles]))
@@ -569,6 +623,9 @@ def _get_device_profiles(device, profile_cache=None):
         'walk': {},
         'table': {}
     }
+    
+    # Collect all normalizers from all profiles
+    all_normalizers = []
 
     for profile in profiles:
         profile_data = profile.profile_data or {}
@@ -623,8 +680,12 @@ def _get_device_profiles(device, profile_cache=None):
         # Merge table OIDs
         if 'table' in profile_data and isinstance(profile_data['table'], dict):
             merged_oids['table'].update(profile_data['table'])
+        
+        # Collect normalizers from this profile
+        if 'normalizers' in profile_data and isinstance(profile_data['normalizers'], list):
+            all_normalizers.extend(profile_data['normalizers'])
 
-    return (profile_ids, merged_oids)
+    return (profile_ids, merged_oids, all_normalizers)
 
 
 
@@ -717,44 +778,13 @@ def _format_field_name(field_name):
 
 
 def _get_special_case_filters(oid_mappings):
+    """
+    Generate special case filters.
+    Currently only handles table splitters.
+    CPU normalization and memory calculations have been moved to the normalizers system.
+    """
     special_case_filters = {
-        'get': {
-            "system.cpu.total.norm.pct": [
-                {
-                    "id": "comp_1770526174120",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": "    v = event.get(\"[system][cpu][total][norm][pct]\")\n    if v\n      event.set(\"[system][cpu][total][norm][pct]\", v.to_f / 100.0)\n    end"
-                    }
-                }
-            ],
-            "system.memory.actual.used.bytes": [
-                {
-                    "id": "comp_1770526174120",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": '''
-      used = event.get("[system][memory][actual][used][bytes]")
-      free = event.get("[system][memory][actual][free][bytes]")
-
-      if used && free
-        used_f  = used.to_f
-        free_f  = free.to_f
-        total_f = used_f + free_f
-
-        if total_f > 0
-          event.set("[system][memory][total]", total_f)
-          event.set("[system][memory][actual][used][pct]", (used_f / total_f))
-          event.set("[system][memory][actual][free][pct]", (free_f / total_f))
-        end
-      end
-    '''
-                    }
-                }
-            ]
-        },
+        'get': {},
         'walk': {}
     }
 
