@@ -292,7 +292,8 @@ def Profiles(request):
     return render(request, 'Profiles.html', {'profiles': all_profiles})
 
 def Credentials(request):
-    credentials = Credential.objects.all()
+    from django.db.models import Count
+    credentials = Credential.objects.annotate(device_count=Count('devices')).order_by('name')
     return render(request, 'Credentials.html', {'credentials': credentials})
 
 def Overview(request):
