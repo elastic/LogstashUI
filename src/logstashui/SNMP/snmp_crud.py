@@ -30,12 +30,63 @@ from datetime import datetime, timedelta, timezone
 
 import json
 import os
-
-
-import traceback
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _get_unique_templates_for_network(devices):
+    """
+    Get unique device templates used by devices in a network.
+    
+    Args:
+        devices: QuerySet or list of Device objects
+        
+    Returns:
+        List of unique DeviceTemplate objects (including None for devices without templates)
+    """
+    templates_dict = {}
+    has_none_template = False
+    
+    for device in devices:
+        if device.device_template:
+            templates_dict[device.device_template.id] = device.device_template
+        else:
+            has_none_template = True
+    
+    templates = list(templates_dict.values())
+    
+    # Add None as a "template" if any devices don't have a template
+    if has_none_template:
+        templates.append(None)
+    
+    return templates
+
+
+def _get_template_pipeline_name(network, template, pipeline_type='polling'):
+    """
+    Generate pipeline name for a network+template combination.
+    
+    Args:
+        network: Network object
+        template: DeviceTemplate object or None
+        pipeline_type: Type of pipeline ('polling', 'trap', 'discovery')
+        
+    Returns:
+        Pipeline name string
+    """
+    # Use network.name instead of network.logstash_name for unique pipeline names
+    network_name = _sanitize_pipeline_name_component(network.name)
+    
+    if template:
+        # DeviceTemplate uses 'name' not 'logstash_name'
+        template_name = _sanitize_pipeline_name_component(template.name)
+        return f"snmp-{network_name}-{template_name}-{pipeline_type}"
+    else:
+        return f"snmp-{network_name}-no-template-{pipeline_type}"
+
+
+import traceback
 
 
 def GetCredentials(request):
@@ -251,12 +302,12 @@ def DeleteCredential(request, credential_id):
 
 def _get_pipeline_name(network):
     """
-    Generate a sanitized pipeline name for a network.
-    Format: snmp-{logstash_name}-{network_name}
+    Generate a sanitized pipeline name for a network (legacy single-pipeline format).
+    Format: snmp-{network_name}-polling
+    This is kept for backward compatibility to detect and delete old pipelines.
     """
-    sanitized_logstash_name = _sanitize_pipeline_name_component(network.logstash_name)
     sanitized_network_name = _sanitize_pipeline_name_component(network.name)
-    return f"snmp-{sanitized_logstash_name}-{sanitized_network_name}"
+    return f"snmp-{sanitized_network_name}-polling"
 
 
 def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, description=""):
@@ -303,9 +354,6 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
                 return (True, False, None, False)
             else:
                 logger.info(f"Pipeline {pipeline_name} has changes - updating")
-                # Log first 500 chars of each to see the difference
-                logger.info(f"Existing (first 500): {existing_pipeline_content[:500]}")
-                logger.info(f"New (first 500): {pipeline_content[:500]}")
 
         # Prepare pipeline body
         pipeline_body = {
@@ -390,6 +438,10 @@ def AddNetwork(request):
 
         # Save (this will trigger validation)
         network.save()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': network.id, 'message': 'Network created successfully!'}, status=200)
 
@@ -444,6 +496,10 @@ def UpdateNetwork(request, network_id):
 
         # Save (this will trigger validation)
         network.save()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': network.id, 'message': 'Network updated successfully!'}, status=200)
 
@@ -492,7 +548,7 @@ def DeleteNetwork(request, network_id):
 
         network = Network.objects.get(pk=network_id)
         pipeline_name = _get_pipeline_name(network)
-        trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+        trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
         pipeline_deleted = False
         trap_pipeline_deleted = False
         pipeline_error = None
@@ -530,6 +586,10 @@ def DeleteNetwork(request, network_id):
 
         # Delete the network from database
         network.delete()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         # Build response message
         deleted_items = []
@@ -562,25 +622,49 @@ def DeleteNetwork(request, network_id):
 
 
 def GetNetworkPipelineName(request, network_id):
-    """Get the pipeline name for a network based on its logstash_name and network name"""
+    """Get the pipeline name pattern for a network based on its name"""
     try:
         network = Network.objects.get(pk=network_id)
 
-        # Generate sanitized pipeline name pattern: snmp-{logstash_name}-*
-        sanitized_logstash_name = _sanitize_pipeline_name_component(network.logstash_name)
-        pipeline_name = f"snmp-{sanitized_logstash_name}-*"
+        # Generate sanitized pipeline name pattern: snmp-{network_name}-*
+        sanitized_network_name = _sanitize_pipeline_name_component(network.name)
+        pipeline_name = f"snmp-{sanitized_network_name}-*"
 
         return JsonResponse({
             'success': True,
             'pipeline_name': pipeline_name,
-            'network_name': network.name,
-            'logstash_name': network.logstash_name
+            'network_name': network.name
         })
 
     except Network.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Network not found'}, status=404)
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def CheckUndeployedChanges(request):
+    """
+    Lightweight endpoint to check if there are undeployed SNMP changes.
+    Uses timestamp comparison instead of full reconciliation for performance.
+    
+    Returns:
+        JSON with has_changes boolean
+    """
+    try:
+        from SNMP.models import SNMPDeploymentState
+        has_changes = SNMPDeploymentState.has_undeployed_changes()
+        
+        return JsonResponse({
+            'success': True,
+            'has_changes': has_changes
+        })
+    except Exception as e:
+        logger.error(f"Error checking undeployed changes: {str(e)}", exc_info=True)
+        # On error, assume changes exist to be safe
+        return JsonResponse({
+            'success': True,
+            'has_changes': True
+        })
 
 
 def GetDeployDiff(request):
@@ -614,14 +698,31 @@ def GetDeployDiff(request):
                 if conn_id not in pipeline_names_by_connection:
                     pipeline_names_by_connection[conn_id] = []
 
-                pipeline_name = _get_pipeline_name(network)
-                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
-                discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                # Get unique templates for this network
+                devices = network.devices.all()
+                templates = _get_unique_templates_for_network(devices)
+                
+                # Generate pipeline names for each template
+                polling_pipelines = {}
+                for template in templates:
+                    template_id = template.id if template else None
+                    pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+                    polling_pipelines[template_id] = pipeline_name
+                    pipeline_names_by_connection[conn_id].append(pipeline_name)
+                
+                # Also fetch old single-pipeline format for cleanup (backwards compatibility)
+                old_pipeline_name = _get_pipeline_name(network)
+                pipeline_names_by_connection[conn_id].append(old_pipeline_name)
+                
+                # Trap and discovery pipelines remain network-level (not per-template)
+                trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
+                discovery_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery"
 
                 pipeline_names_by_connection[conn_id].extend(
-                    [pipeline_name, trap_pipeline_name, discovery_pipeline_name])
+                    [trap_pipeline_name, discovery_pipeline_name])
+                
                 network_pipeline_map[network.id] = {
-                    'main': pipeline_name,
+                    'polling': polling_pipelines,  # Changed from 'main' to 'polling' dict
                     'trap': trap_pipeline_name,
                     'discovery': discovery_pipeline_name
                 }
@@ -632,10 +733,13 @@ def GetDeployDiff(request):
             try:
                 es_client = get_elastic_connection(conn_id)
 
-                # Fetch all pipelines for this connection in one call
+                # Fetch ALL pipelines for this connection (avoids URL length limits with many pipelines)
                 try:
-                    response = es_client.logstash.get_pipeline(id=','.join(pipeline_names))
-                    existing_pipelines.update(response)
+                    all_pipelines = es_client.logstash.get_pipeline()
+                    # Filter to only the ones we care about
+                    for pipeline_name in pipeline_names:
+                        if pipeline_name in all_pipelines:
+                            existing_pipelines[pipeline_name] = all_pipelines[pipeline_name]
                 except Exception:
                     # Pipelines don't exist or error, continue
                     pass
@@ -645,81 +749,127 @@ def GetDeployDiff(request):
 
         network_diffs = []
 
-        # Iterate through each network and build pipeline configuration
+        # Iterate through each network and build pipeline configurations
         for network in networks:
-            # Initialize pipeline data structure for this network
-            input_data = {
-                "network": network,
-                "devices": {
-                    "v1_v2c": {},
-                    "v3": {}
-                },
-                "connection": network.connection
-            }
-
             # Get all devices for this network (already prefetched)
             devices = network.devices.all()
-
-            for device in devices:
-                if not device.credential:
-                    continue
-
-                credential = device.credential
-
-                # Group v1 and v2c together
-                if credential.version in ['1', '2c']:
-                    input_data["devices"]["v1_v2c"][device.name] = device
-
-                # Group v3 devices
-                elif credential.version == '3':
-                    input_data["devices"]["v3"][device.name] = device
-
+            
+            # Get unique templates for this network
+            templates = _get_unique_templates_for_network(devices)
+            
             # Skip networks with no devices (unless they have traps enabled)
-            has_devices = bool(input_data["devices"]["v1_v2c"] or input_data["devices"]["v3"])
+            has_devices = bool(devices.filter(credential__isnull=False).exists())
             if not has_devices and not network.traps_enabled:
                 continue
+            
+            # Generate a pipeline for each template
+            for template in templates:
+                template_id = template.id if template else None
+                
+                # Initialize pipeline data structure for this template
+                input_data = {
+                    "network": network,
+                    "devices": {
+                        "v1_v2c": {},
+                        "v3": {}
+                    },
+                    "connection": network.connection
+                }
 
-            # Generate components for this network (only if has devices)
-            if has_devices:
-                input_components, oid_mappings, normalizers = _generate_input(input_data, profile_cache)
+                # Collect devices for this template
+                device_ids = []
+                for device in devices:
+                    if not device.credential:
+                        continue
+                    
+                    # Skip devices that don't match this template
+                    device_template_id = device.device_template.id if device.device_template else None
+                    if device_template_id != template_id:
+                        continue
+                    
+                    device_ids.append(device.id)
+                    credential = device.credential
+
+                    # Group v1 and v2c together
+                    if credential.version in ['1', '2c']:
+                        input_data["devices"]["v1_v2c"][device.name] = device
+
+                    # Group v3 devices
+                    elif credential.version == '3':
+                        input_data["devices"]["v3"][device.name] = device
+                
+                # Skip if no devices for this template
+                if not device_ids:
+                    continue
+                
+                # Generate pipeline configuration
+                input_components, oid_mappings, normalizers = _generate_input(
+                    input_data, profile_cache, template_filter=template_id
+                )
                 filter_components = _generate_filters(oid_mappings, network, normalizers)
-            else:
-                input_components = []
-                filter_components = []
 
-            components = {
-                "input": input_components,
-                "filter": filter_components,
-                "output": _generate_output(input_data, network, snmp_type="polling")
-            }
+                components = {
+                    "input": input_components,
+                    "filter": filter_components,
+                    "output": _generate_output(input_data, network, snmp_type="polling")
+                }
 
-            # Generate new pipeline configuration
-            new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
+                new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
 
-            # Get current pipeline configuration from pre-fetched data
-            current_config = ""
-            pipeline_name = network_pipeline_map.get(network.id, {}).get('main', _get_pipeline_name(network))
+                # Get current pipeline configuration from pre-fetched data
+                current_config = ""
+                pipeline_name = network_pipeline_map.get(network.id, {}).get('polling', {}).get(template_id, '')
 
-            if pipeline_name in existing_pipelines:
-                pipeline_data = existing_pipelines[pipeline_name]
-                if 'pipeline' in pipeline_data:
-                    current_config = pipeline_data['pipeline']
-
-            # Build network diff object (only include main pipeline if has devices)
-            network_diff = {
-                'network_name': network.name,
-                'pipeline_name': pipeline_name if has_devices else None,
-                'current': current_config if has_devices else "",
-                'new': new_config if has_devices else "",
-                'trap_pipeline': None,
-                'discovery_pipeline': None,
-                'has_devices': has_devices
-            }
-
+                if pipeline_name and pipeline_name in existing_pipelines:
+                    pipeline_data = existing_pipelines[pipeline_name]
+                    if 'pipeline' in pipeline_data:
+                        current_config = pipeline_data['pipeline']
+                
+                # Add this template's pipeline to the network diff
+                template_name = template.name if template else 'no-template'
+                
+                # Determine action based on whether pipeline exists and if it's different
+                if not current_config:
+                    action = 'create'
+                elif current_config != new_config:
+                    action = 'update'
+                else:
+                    action = 'none'  # No changes
+                
+                # Only add to diffs if there's an actual change
+                if action != 'none':
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'template_name': template_name,
+                        'pipeline_name': pipeline_name,
+                        'current': current_config,
+                        'new': new_config,
+                        'pipeline_type': 'polling',
+                        'action': action,
+                        'has_devices': True
+                    })
+            
+            # Check for old single-pipeline format and mark for deletion (backwards compatibility)
+            old_pipeline_name = _get_pipeline_name(network)
+            if old_pipeline_name in existing_pipelines:
+                old_pipeline_data = existing_pipelines[old_pipeline_name]
+                if 'pipeline' in old_pipeline_data:
+                    old_config = old_pipeline_data['pipeline']
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'pipeline_name': old_pipeline_name,
+                        'current': old_config,
+                        'new': '',
+                        'pipeline_type': 'polling_legacy',
+                        'action': 'delete',
+                        'note': 'Legacy single-pipeline format - replaced by per-template pipelines'
+                    })
+                    logger.info(f"Marking legacy pipeline {old_pipeline_name} for deletion")
+            
             # Handle trap pipeline if traps are enabled
             if network.traps_enabled and network.credential:
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap',
-                                                                                  f"snmp-{network.logstash_name}-traps")
+                                                                                  f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
 
                 # Build trap input configuration
                 credential = network.credential
@@ -784,16 +934,27 @@ def GetDeployDiff(request):
                     if 'pipeline' in pipeline_data:
                         current_trap_config = pipeline_data['pipeline']
 
-                network_diff['trap_pipeline'] = {
-                    'pipeline_name': trap_pipeline_name,
-                    'current': current_trap_config,
-                    'new': new_trap_config,
-                    'action': 'create' if not current_trap_config else 'update'
-                }
+                # Only add if there's an actual change
+                if not current_trap_config:
+                    trap_action = 'create'
+                elif current_trap_config != new_trap_config:
+                    trap_action = 'update'
+                else:
+                    trap_action = 'none'
+                
+                if trap_action != 'none':
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'pipeline_name': trap_pipeline_name,
+                        'current': current_trap_config,
+                        'new': new_trap_config,
+                        'pipeline_type': 'trap',
+                        'action': trap_action
+                    })
             else:
                 # Traps disabled or no credential - check if trap pipeline exists and needs to be deleted
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap',
-                                                                                  f"snmp-{network.logstash_name}-traps")
+                                                                                  f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
                 current_trap_config = ""
 
                 if trap_pipeline_name in existing_pipelines:
@@ -802,17 +963,19 @@ def GetDeployDiff(request):
                         current_trap_config = pipeline_data['pipeline']
 
                 if current_trap_config:
-                    network_diff['trap_pipeline'] = {
+                    network_diffs.append({
+                        'network_name': network.name,
                         'pipeline_name': trap_pipeline_name,
                         'current': current_trap_config,
                         'new': '',
+                        'pipeline_type': 'trap',
                         'action': 'delete'
-                    }
+                    })
 
             # Handle discovery pipeline if discovery is enabled
             if network.discovery_enabled and network.discovery_credential:
                 discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery',
-                                                                                       f"snmp-{network.logstash_name}-discovery")
+                                                                                       f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
 
                 # Generate discovery pipeline components
                 discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
@@ -835,16 +998,27 @@ def GetDeployDiff(request):
                     if 'pipeline' in pipeline_data:
                         current_discovery_config = pipeline_data['pipeline']
 
-                network_diff['discovery_pipeline'] = {
-                    'pipeline_name': discovery_pipeline_name,
-                    'current': current_discovery_config,
-                    'new': new_discovery_config,
-                    'action': 'create' if not current_discovery_config else 'update'
-                }
+                # Only add if there's an actual change
+                if not current_discovery_config:
+                    discovery_action = 'create'
+                elif current_discovery_config != new_discovery_config:
+                    discovery_action = 'update'
+                else:
+                    discovery_action = 'none'
+                
+                if discovery_action != 'none':
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'pipeline_name': discovery_pipeline_name,
+                        'current': current_discovery_config,
+                        'new': new_discovery_config,
+                        'pipeline_type': 'discovery',
+                        'action': discovery_action
+                    })
             else:
                 # Discovery is disabled or no credential - check if pipeline exists and needs to be deleted
                 discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery',
-                                                                                       f"snmp-{network.logstash_name}-discovery")
+                                                                                       f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
                 current_discovery_config = ""
 
                 if discovery_pipeline_name in existing_pipelines:
@@ -853,18 +1027,99 @@ def GetDeployDiff(request):
                         current_discovery_config = pipeline_data['pipeline']
 
                 if current_discovery_config:
-                    network_diff['discovery_pipeline'] = {
+                    network_diffs.append({
+                        'network_name': network.name,
                         'pipeline_name': discovery_pipeline_name,
                         'current': current_discovery_config,
                         'new': '',
+                        'pipeline_type': 'discovery',
                         'action': 'delete'
-                    }
+                    })
 
-            network_diffs.append(network_diff)
-
+        # Check for orphaned pipelines that will be deleted
+        # Build a set of expected pipeline names
+        expected_pipelines = set()
+        for network in networks:
+            if network.connection:
+                # Add per-template polling pipelines
+                devices = Device.objects.filter(network=network).select_related('device_template')
+                if devices.exists():
+                    templates = _get_unique_templates_for_network(devices)
+                    for template in templates:
+                        pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+                        expected_pipelines.add(pipeline_name)
+                
+                # Add trap pipeline if traps are enabled
+                if network.traps_enabled:
+                    expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
+                # Add discovery pipeline if discovery is enabled
+                if network.discovery_enabled:
+                    expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
+        
+        # Check each connection for orphaned pipelines
+        connections_checked = set()
+        for network in networks:
+            if network.connection and network.connection.id not in connections_checked:
+                connections_checked.add(network.connection.id)
+                conn_id = network.connection.id
+                
+                try:
+                    # Fetch ALL pipelines from this connection to find orphans
+                    es_client = get_elastic_connection(conn_id)
+                    all_pipelines = es_client.logstash.get_pipeline()
+                    
+                    # Find orphaned SNMP pipelines
+                    for pipeline_name, pipeline_data in all_pipelines.items():
+                        # Check if it's a managed SNMP pipeline (starts with "snmp-")
+                        if pipeline_name.startswith("snmp-"):
+                            description = pipeline_data.get('description', '')
+                            
+                            if '[MANAGED]' in description and pipeline_name not in expected_pipelines:
+                                # This is an orphaned pipeline - add to diffs as delete
+                                network_diffs.append({
+                                    'network_name': 'Orphaned',
+                                    'pipeline_name': pipeline_name,
+                                    'current': pipeline_data.get('pipeline', ''),
+                                    'new': '',
+                                    'pipeline_type': 'orphaned',
+                                    'action': 'delete',
+                                    'note': 'Pipeline no longer matches any configured network/template'
+                                })
+                except Exception as e:
+                    # Connection error or ES error - skip orphan detection for this connection
+                    logger.warning(f"Could not check for orphaned pipelines on connection {conn_id}: {str(e)}")
+        
+        # Check if there are actual changes
+        # If user changed config then reverted, indicator may show changes but diff is empty
+        from SNMP.models import SNMPDeploymentState
+        has_actual_changes = any(
+            diff.get('action') in ['create', 'update', 'delete']
+            for diff in network_diffs
+        )
+        
+        # Debug: log the planned changes
+        logger.debug(f"Network diffs: {network_diffs}")
+        logger.debug(f"Actions found: {[diff.get('action') for diff in network_diffs]}")
+        logger.debug(f"has_actual_changes={has_actual_changes}")
+        
+        if not has_actual_changes:
+            # No actual changes found - sync timestamps to clear the indicator
+            # This handles the "change then revert" scenario
+            state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+            state.last_deployment = state.last_config_change
+            state.save(update_fields=['last_deployment'])
+            logger.info("No actual changes found in diff - cleared deployment indicator")
+        
+        # Cache the deployment plan for reuse when user clicks "Confirm Deploy"
+        # Short timeout (60 seconds) - just long enough for user to review and click deploy
+        from django.core.cache import cache
+        cache.set('snmp_deployment_plan', network_diffs, timeout=60)
+        logger.info(f"Cached deployment plan with {len(network_diffs)} pipeline changes")
+        
         return JsonResponse({
             'success': True,
-            'networks': network_diffs
+            'networks': network_diffs,
+            'has_changes': has_actual_changes
         })
 
     except Exception as e:
@@ -876,6 +1131,126 @@ def GetDeployDiff(request):
 def DeployConfiguration(request):
     """Deploy SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
     try:
+        # Try to use cached deployment plan from GetDeployDiff
+        from django.core.cache import cache
+        cached_plan = cache.get('snmp_deployment_plan')
+        
+        if cached_plan:
+            logger.info(f"Using cached deployment plan with {len(cached_plan)} pipeline changes")
+            # Clear cache immediately to prevent reuse
+            cache.delete('snmp_deployment_plan')
+            
+            # Execute the cached plan
+            pipelines_created = 0
+            pipelines_updated = 0
+            pipelines_deleted = 0
+            errors = []
+            
+            for diff in cached_plan:
+                pipeline_name = diff.get('pipeline_name')
+                action = diff.get('action')
+                network_name = diff.get('network_name')
+                
+                try:
+                    # Get the network to access its connection
+                    if network_name == 'Orphaned':
+                        # For orphaned pipelines, we need to find which connection they're on
+                        # We'll get the connection from the first network (they should all be on same connection)
+                        network = Network.objects.select_related('connection').first()
+                    else:
+                        network = Network.objects.select_related('connection').get(name=network_name)
+                    
+                    if not network or not network.connection:
+                        errors.append(f"Pipeline '{pipeline_name}': No connection found")
+                        continue
+                    
+                    es = get_elastic_connection(network.connection.id)
+                    
+                    if action == 'create' or action == 'update':
+                        # Create or update pipeline using helper function
+                        new_config = diff.get('new', '')
+                        description = f"[MANAGED] SNMP {diff.get('pipeline_type', 'polling')} pipeline"
+                        
+                        try:
+                            success, is_new, error, was_updated = _create_or_update_pipeline(
+                                es, pipeline_name, new_config, description
+                            )
+                            
+                            if success:
+                                if is_new:
+                                    pipelines_created += 1
+                                    logger.info(f"Created pipeline: {pipeline_name}")
+                                elif was_updated:
+                                    pipelines_updated += 1
+                                    logger.info(f"Updated pipeline: {pipeline_name}")
+                            else:
+                                errors.append(f"Failed to {action} '{pipeline_name}': {error}")
+                        except Exception as e:
+                            errors.append(f"Failed to {action} '{pipeline_name}': {str(e)}")
+                    
+                    elif action == 'delete':
+                        # Delete pipeline
+                        try:
+                            es.logstash.delete_pipeline(id=pipeline_name)
+                            pipelines_deleted += 1
+                            logger.info(f"Deleted pipeline: {pipeline_name}")
+                        except Exception as e:
+                            errors.append(f"Failed to delete '{pipeline_name}': {str(e)}")
+                
+                except Network.DoesNotExist:
+                    errors.append(f"Pipeline '{pipeline_name}': Network '{network_name}' not found")
+                except Exception as e:
+                    errors.append(f"Pipeline '{pipeline_name}': {str(e)}")
+            
+            # Build response message
+            if pipelines_created == 0 and pipelines_updated == 0 and pipelines_deleted == 0:
+                if errors:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
+                    }, status=500)
+                else:
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'All pipelines are already up to date - no changes needed',
+                        'pipelines_created': 0,
+                        'pipelines_updated': 0,
+                        'pipelines_deleted': 0,
+                        'errors': None
+                    })
+            
+            message_parts = []
+            if pipelines_created > 0:
+                message_parts.append(f"{pipelines_created} pipeline(s) created")
+            if pipelines_updated > 0:
+                message_parts.append(f"{pipelines_updated} pipeline(s) updated")
+            if pipelines_deleted > 0:
+                message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
+            
+            message = "Successfully deployed: " + ", ".join(message_parts)
+            if errors:
+                message += f". Warnings: {'; '.join(errors)}"
+            
+            # Mark deployment as successful
+            from SNMP.models import SNMPDeploymentState
+            from django.utils import timezone
+            state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+            state.last_deployment = timezone.now()
+            state.save(update_fields=['last_deployment'])
+            logger.info("Deployment completed successfully using cached plan")
+            
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'pipelines_created': pipelines_created,
+                'pipelines_updated': pipelines_updated,
+                'pipelines_deleted': pipelines_deleted,
+                'errors': errors if errors else None
+            })
+        
+        # No cached plan - fall back to full reconciliation
+        logger.info("No cached deployment plan found, performing full reconciliation")
+        
         # Clear the official profile cache to ensure we load fresh data from disk
         # This is important when profile JSON files have been edited
         global _OFFICIAL_PROFILE_CACHE
@@ -940,58 +1315,101 @@ def DeployConfiguration(request):
                 # Check if network has devices with credentials
                 has_devices = devices.exists() and (input_data["devices"]["v1_v2c"] or input_data["devices"]["v3"])
 
-                # Only create main discovery pipeline if there are devices
-                if has_devices:
-                    # Generate components for this network
-                    input_components, oid_mappings, normalizers = _generate_input(input_data)
-                    filter_components = _generate_filters(oid_mappings, network, normalizers)
-
-                    components = {
-                        "input": input_components,
-                        "filter": filter_components,
-                        "output": _generate_output(input_data, network, snmp_type="polling")
-                    }
-
-                    # Generate pipeline configuration
-                    pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
-                    pipeline_name = _get_pipeline_name(network)
-
-                    # Use helper function to create or update the pipeline
-                    success, is_new, error, was_updated = _create_or_update_pipeline(
-                        es,
-                        pipeline_name,
-                        pipeline_content,
-                        description=f"[MANAGED] SNMP pipeline for network: {network.name}"
-                    )
-
-                    if success:
-                        if is_new:
-                            pipelines_created += 1
-                            logger.info(f"Created new pipeline: {pipeline_name}")
-                        elif was_updated:
-                            pipelines_updated += 1
-                            logger.info(f"Updated pipeline: {pipeline_name}")
-                        else:
-                            logger.info(f"Pipeline {pipeline_name} unchanged - skipped")
-                    else:
-                        errors.append(f"Network '{network.name}': {error}")
-                        logger.error(f"Failed to create/update pipeline {pipeline_name}: {error}")
-                        continue
-                else:
-                    # Network has no devices - delete main pipeline if it exists
+                # Delete old legacy single-pipeline format if it exists
+                try:
+                    old_pipeline_name = _get_pipeline_name(network)
                     try:
-                        pipeline_name = _get_pipeline_name(network)
-                        try:
-                            existing = es.logstash.get_pipeline(id=pipeline_name)
-                            if pipeline_name in existing:
-                                # Pipeline exists, delete it
-                                es.logstash.delete_pipeline(id=pipeline_name)
-                                pipelines_deleted += 1
-                        except Exception:
-                            # Pipeline doesn't exist, that's okay
-                            pass
-                    except Exception as delete_e:
-                        errors.append(f"Network '{network.name}' main pipeline deletion: {str(delete_e)}")
+                        existing = es.logstash.get_pipeline(id=old_pipeline_name)
+                        if old_pipeline_name in existing:
+                            # Legacy pipeline exists, delete it
+                            es.logstash.delete_pipeline(id=old_pipeline_name)
+                            pipelines_deleted += 1
+                            logger.info(f"Deleted legacy pipeline: {old_pipeline_name}")
+                    except Exception:
+                        # Pipeline doesn't exist, that's okay
+                        pass
+                except Exception as delete_e:
+                    logger.warning(f"Error checking for legacy pipeline: {str(delete_e)}")
+
+                # Generate per-template pipelines if network has devices
+                if has_devices:
+                    # Get unique templates for this network
+                    templates = _get_unique_templates_for_network(devices)
+                    
+                    # Generate a pipeline for each template
+                    for template in templates:
+                        template_id = template.id if template else None
+                        template_name = template.name if template else 'no-template'
+                        
+                        # Initialize pipeline data for this template
+                        template_input_data = {
+                            "network": network,
+                            "devices": {
+                                "v1_v2c": {},
+                                "v3": {}
+                            },
+                            "connection": network.connection
+                        }
+                        
+                        # Collect devices for this template
+                        for device in devices:
+                            if not device.credential:
+                                continue
+                            
+                            # Skip devices that don't match this template
+                            device_template_id = device.device_template.id if device.device_template else None
+                            if device_template_id != template_id:
+                                continue
+                            
+                            credential = device.credential
+                            
+                            # Group v1 and v2c together
+                            if credential.version in ['1', '2c']:
+                                template_input_data["devices"]["v1_v2c"][device.name] = device
+                            # Group v3 devices
+                            elif credential.version == '3':
+                                template_input_data["devices"]["v3"][device.name] = device
+                        
+                        # Skip if no devices for this template
+                        if not (template_input_data["devices"]["v1_v2c"] or template_input_data["devices"]["v3"]):
+                            continue
+                        
+                        # Generate components for this template
+                        input_components, oid_mappings, normalizers = _generate_input(
+                            template_input_data, template_filter=template_id
+                        )
+                        filter_components = _generate_filters(oid_mappings, network, normalizers)
+
+                        components = {
+                            "input": input_components,
+                            "filter": filter_components,
+                            "output": _generate_output(template_input_data, network, snmp_type="polling")
+                        }
+
+                        # Generate pipeline configuration
+                        pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
+                        pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+
+                        # Use helper function to create or update the pipeline
+                        success, is_new, error, was_updated = _create_or_update_pipeline(
+                            es,
+                            pipeline_name,
+                            pipeline_content,
+                            description=f"[MANAGED] SNMP polling pipeline for network: {network.name}, template: {template_name}"
+                        )
+
+                        if success:
+                            if is_new:
+                                pipelines_created += 1
+                                logger.info(f"Created new pipeline: {pipeline_name}")
+                            elif was_updated:
+                                pipelines_updated += 1
+                                logger.info(f"Updated pipeline: {pipeline_name}")
+                            else:
+                                logger.info(f"Pipeline {pipeline_name} unchanged - skipped")
+                        else:
+                            errors.append(f"Network '{network.name}', template '{template_name}': {error}")
+                            logger.error(f"Failed to create/update pipeline {pipeline_name}: {error}")
 
                 # Handle SNMP Trap pipeline if traps are enabled
                 if network.traps_enabled:
@@ -1000,7 +1418,7 @@ def DeployConfiguration(request):
                     else:
                         try:
                             # Generate trap pipeline name
-                            trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                            trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
 
                             # Build trap input configuration
                             credential = network.credential
@@ -1081,7 +1499,7 @@ def DeployConfiguration(request):
                 else:
                     # Traps are disabled, check if trap pipeline exists and delete it
                     try:
-                        trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                        trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
 
                         # Check if pipeline exists
                         try:
@@ -1103,7 +1521,7 @@ def DeployConfiguration(request):
                     else:
                         try:
                             # Generate discovery pipeline name
-                            discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                            discovery_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery"
 
                             # Generate discovery pipeline components
                             discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
@@ -1142,7 +1560,7 @@ def DeployConfiguration(request):
                 else:
                     # Discovery is disabled, check if discovery pipeline exists and delete it
                     try:
-                        discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                        discovery_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery"
 
                         # Check if pipeline exists
                         try:
@@ -1168,14 +1586,20 @@ def DeployConfiguration(request):
             expected_pipelines = set()
             for network in networks:
                 if network.connection:
-                    # Add main pipeline
-                    expected_pipelines.add(_get_pipeline_name(network))
+                    # Add per-template polling pipelines
+                    devices = Device.objects.filter(network=network).select_related('device_template')
+                    if devices.exists():
+                        templates = _get_unique_templates_for_network(devices)
+                        for template in templates:
+                            pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+                            expected_pipelines.add(pipeline_name)
+                    
                     # Add trap pipeline if traps are enabled
                     if network.traps_enabled:
-                        expected_pipelines.add(f"snmp-{network.logstash_name}-traps")
+                        expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
                     # Add discovery pipeline if discovery is enabled
                     if network.discovery_enabled:
-                        expected_pipelines.add(f"snmp-{network.logstash_name}-discovery")
+                        expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
 
             # Get all pipelines from Elasticsearch for each connection
             connections_checked = set()
@@ -1239,6 +1663,14 @@ def DeployConfiguration(request):
 
         if errors:
             message += f". Warnings: {'; '.join(errors)}"
+
+        # Mark deployment as successful to clear the indicator
+        from SNMP.models import SNMPDeploymentState
+        from django.utils import timezone
+        state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+        state.last_deployment = timezone.now()
+        state.save(update_fields=['last_deployment'])
+        logger.info("Deployment completed successfully - updated deployment timestamp")
 
         return JsonResponse({
             'success': True,
@@ -1437,6 +1869,10 @@ def AddDevice(request):
 
         # Save (this will trigger validation)
         device.save()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         # Note: Profiles are now managed through device templates, not directly on devices
         # The device_template relationship handles profile assignment
@@ -1492,6 +1928,10 @@ def UpdateDevice(request, device_id):
 
         # Save (this will trigger validation)
         device.save()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         # Note: Profiles are now managed through device templates, not directly on devices
         # The device_template relationship handles profile assignment
@@ -1540,6 +1980,10 @@ def DeleteDevice(request, device_id):
     try:
         device = Device.objects.get(pk=device_id)
         device.delete()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         return HttpResponse("""
             <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
@@ -2633,6 +3077,10 @@ def AddDeviceTemplate(request):
                     logger.warning(f"Profile with ID/name '{profile_id}' not found, skipping")
                     pass  # Skip profiles that don't exist
         
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
+        
         return JsonResponse({
             'success': True,
             'message': 'Device template created successfully',
@@ -2703,6 +3151,10 @@ def UpdateDeviceTemplate(request, template_id):
                     logger.warning(f"Profile with ID/name '{profile_id}' not found, skipping")
                     pass  # Skip profiles that don't exist
         
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
+        
         return JsonResponse({
             'success': True,
             'message': 'Device template updated successfully'
@@ -2727,6 +3179,10 @@ def DeleteDeviceTemplate(request, template_id):
         
         template_name = template.name
         template.delete()
+        
+        # Mark config as changed to show deployment indicator
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
         
         return JsonResponse({
             'success': True,

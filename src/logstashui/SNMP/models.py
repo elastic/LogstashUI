@@ -4,6 +4,7 @@
 
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from Common.encryption import encrypt_credential, decrypt_credential
 from PipelineManager.models import Connection
 import ipaddress
@@ -642,4 +643,60 @@ class DeviceTemplate(models.Model):
         
         device_info_lower = device_info.lower()
         return any(rule.lower() in device_info_lower for rule in self.matching_rules)
+
+
+class SNMPDeploymentState(models.Model):
+    """
+    Track SNMP deployment state to optimize change detection.
+    Uses timestamps to avoid expensive reconciliation for the indicator.
+    """
+    last_deployment = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Timestamp of last successful deployment"
+    )
+    last_config_change = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of last configuration change"
+    )
+    
+    class Meta:
+        db_table = 'snmp_deployment_state'
+        verbose_name = 'SNMP Deployment State'
+        verbose_name_plural = 'SNMP Deployment State'
+    
+    @classmethod
+    def mark_config_changed(cls):
+        """
+        Mark that SNMP configuration has changed.
+        Call this after any CRUD operation on networks, devices, credentials, templates, or profiles.
+        """
+        from django.utils import timezone
+        state, _ = cls.objects.get_or_create(id=1)
+        state.last_config_change = timezone.now()
+        state.save(update_fields=['last_config_change'])
+    
+    @classmethod
+    def has_undeployed_changes(cls):
+        """
+        Fast timestamp-based check for undeployed changes.
+        Returns True if config has changed since last deployment.
+        
+        Note: May have false positives if user changes then reverts config.
+        These are cleared when user opens the diff modal and sees no changes.
+        """
+        state = cls.objects.filter(id=1).first()
+        
+        # Never deployed or no state
+        if not state or not state.last_deployment:
+            return True
+        
+        # Compare timestamps
+        return state.last_config_change > state.last_deployment
+    
+    def __str__(self):
+        if self.last_deployment:
+            return f"Last deployed: {self.last_deployment}"
+        return "Never deployed"
 

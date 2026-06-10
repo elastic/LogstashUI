@@ -6,7 +6,7 @@
 
 /**
  * Check for undeployed SNMP changes and update the indicator
- * This function fetches the diff data and determines if there are any changes
+ * Uses lightweight timestamp-based check for performance
  */
 async function checkForUndeployedSNMPChanges() {
     const indicator = document.getElementById('snmpUndeployedIndicator');
@@ -14,8 +14,8 @@ async function checkForUndeployedSNMPChanges() {
     if (!indicator) return;
 
     try {
-        // Fetch diff data from the server (same endpoint used by the deploy modal)
-        const response = await fetch('/SNMP/GetDeployDiff/', {
+        // Use lightweight endpoint that checks timestamps instead of full reconciliation
+        const response = await fetch('/SNMP/CheckUndeployedChanges/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
@@ -29,60 +29,8 @@ async function checkForUndeployedSNMPChanges() {
             return;
         }
 
-        const diffData = await response.json();
-
-        // Check if there are any changes
-        let hasChanges = false;
-
-        if (diffData.networks && diffData.networks.length > 0) {
-            for (const network of diffData.networks) {
-                // Check main pipeline
-                if (network.pipeline_name !== null) {
-                    const currentLines = network.current ? network.current.split('\n') : [];
-                    const newLines = network.new ? network.new.split('\n') : [];
-                    const isNewPipeline = !network.current || network.current.trim() === '';
-
-                    if (isNewPipeline) {
-                        hasChanges = true;
-                        break;
-                    }
-
-                    // Simple check: if current and new are different, there are changes
-                    if (network.current !== network.new) {
-                        hasChanges = true;
-                        break;
-                    }
-                }
-
-                // Check trap pipeline
-                if (network.trap_pipeline) {
-                    const trapPipeline = network.trap_pipeline;
-                    if (trapPipeline.action === 'create' || trapPipeline.action === 'delete') {
-                        hasChanges = true;
-                        break;
-                    } else if (trapPipeline.action === 'update') {
-                        if (trapPipeline.current !== trapPipeline.new) {
-                            hasChanges = true;
-                            break;
-                        }
-                    }
-                }
-
-                // Check discovery pipeline
-                if (network.discovery_pipeline) {
-                    const discoveryPipeline = network.discovery_pipeline;
-                    if (discoveryPipeline.action === 'create' || discoveryPipeline.action === 'delete') {
-                        hasChanges = true;
-                        break;
-                    } else if (discoveryPipeline.action === 'update') {
-                        if (discoveryPipeline.current !== discoveryPipeline.new) {
-                            hasChanges = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        const data = await response.json();
+        const hasChanges = data.has_changes || false;
 
         // Show or hide the indicator based on whether there are changes
         const deployBtn = document.getElementById('deployChangesBtn') || document.getElementById('commitBtn');

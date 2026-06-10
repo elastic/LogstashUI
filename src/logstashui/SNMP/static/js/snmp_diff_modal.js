@@ -149,11 +149,21 @@ async function prepareSnmpDiffModal() {
         // Display the diffs for each network
         displayNetworkDiffs(diffData.networks);
 
+        // If backend says no changes, refresh the indicator to clear it immediately
+        // (Backend already called mark_deployed() to sync timestamps)
+        if (diffData.has_changes === false) {
+            if (typeof checkForUndeployedSNMPChanges === 'function') {
+                checkForUndeployedSNMPChanges();
+            }
+        }
+
+        // Store change count for deployment message
+        window.snmpChangeCount = diffData.networks.length;
+
         // Display overall stats
-        const totalNetworks = diffData.networks.length;
-        const newNetworks = diffData.networks.filter(n => !n.current || n.current.trim() === '').length;
+        const newPipelines = diffData.networks.filter(n => !n.current || n.current.trim() === '').length;
         document.getElementById('snmpDiffStats').textContent =
-            `${totalNetworks} network(s) • ${newNetworks} new pipeline(s)`;
+            `${newPipelines} new pipeline(s)`;
 
     } catch (error) {
         console.error('Error preparing SNMP diff:', error);
@@ -187,6 +197,7 @@ function displayNetworkDiffs(networks) {
         let currentLines = [];
         let newLines = [];
         let isNewPipeline = false;
+        let isDeletePipeline = false;
         let hasChanges = false;
         let lineDiff = [];
 
@@ -194,8 +205,17 @@ function displayNetworkDiffs(networks) {
             currentLines = network.current ? network.current.split('\n') : [];
             newLines = network.new.split('\n');
 
-            // Check if this is a new pipeline (no current content)
-            isNewPipeline = !network.current || network.current.trim() === '';
+            // Check action field first, then fall back to checking current content
+            if (network.action === 'create') {
+                isNewPipeline = true;
+            } else if (network.action === 'delete') {
+                isDeletePipeline = true;
+            } else if (network.action === 'update') {
+                isNewPipeline = false;
+            } else {
+                // Fallback for backwards compatibility if action field not present
+                isNewPipeline = !network.current || network.current.trim() === '';
+            }
 
             // Compute diff
             lineDiff = computeLineDiff(currentLines, newLines);
@@ -204,7 +224,9 @@ function displayNetworkDiffs(networks) {
             hasChanges = lineDiff.some(change => change.type !== 'equal');
 
             // Track counts
-            if (isNewPipeline) {
+            if (isDeletePipeline) {
+                deletedPipelinesCount++;
+            } else if (isNewPipeline) {
                 newPipelinesCount++;
             } else if (hasChanges) {
                 networksWithChanges++;
@@ -330,7 +352,9 @@ function displayNetworkDiffs(networks) {
 
         // Build the network section with badge only if there are changes
         let networkBadge = '';
-        if (isNewPipeline) {
+        if (isDeletePipeline) {
+            networkBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded">DELETE</span>';
+        } else if (isNewPipeline) {
             networkBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-green-600 text-white rounded">NEW</span>';
         } else if (hasChanges) {
             networkBadge = '<span class="ml-2 px-2 py-0.5 text-xs bg-blue-600 text-white rounded">MODIFIED</span>';
@@ -814,17 +838,31 @@ async function confirmDeployConfiguration() {
 
     // Disable button and show loading state
     confirmButton.disabled = true;
-    confirmButton.textContent = 'Deploying...';
+    confirmButton.textContent = 'Deploying... (this may take several minutes)';
     confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
+    
+    // Show progress toast - conditional message based on change count
+    const changeCount = window.snmpChangeCount || 0;
+    const message = changeCount > 100 
+        ? 'Deployment started. This may take several minutes for large configurations...'
+        : 'Deployment started!';
+    showToast(message, 'info');
 
     try {
+        // Create AbortController with 10-minute timeout for large deployments
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes
+        
         const response = await fetch('/SNMP/DeployConfiguration/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
                 'Content-Type': 'application/json'
-            }
+            },
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -861,7 +899,13 @@ async function confirmDeployConfiguration() {
 
     } catch (error) {
         console.error('Error deploying configuration:', error);
-        showToast('Failed to deploy configuration: ' + error.message, 'error');
+        
+        // Handle timeout/abort errors specifically
+        if (error.name === 'AbortError') {
+            showToast('Deployment timed out after 10 minutes. Check server logs for status.', 'error');
+        } else {
+            showToast('Failed to deploy configuration: ' + error.message, 'error');
+        }
     } finally {
         // Re-enable button
         confirmButton.disabled = false;

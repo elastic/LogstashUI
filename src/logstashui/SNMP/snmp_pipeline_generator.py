@@ -49,7 +49,7 @@ def _deduplicate_normalizers(normalizers):
     
     return unique
 
-def _generate_input(input_data, profile_cache=None):
+def _generate_input(input_data, profile_cache=None, template_filter=None):
     """
     Generate SNMP input components grouped by:
     1. Device template (all devices with same template in one input)
@@ -63,6 +63,7 @@ def _generate_input(input_data, profile_cache=None):
     Args:
         input_data: Dict containing network and device information
         profile_cache: Optional dict to cache loaded profile data
+        template_filter: Optional device template ID to filter devices by
 
     Returns: (input_components, oid_mappings, all_normalizers)
     """
@@ -90,10 +91,14 @@ def _generate_input(input_data, profile_cache=None):
         v1_v2c_groups = {}
 
         for device_name, device in input_data['devices']['v1_v2c'].items():
-            profile_ids, merged_oids, normalizers = _get_device_profiles(device, profile_cache)
-            
             # Get device template (use None if not assigned)
             template_id = device.device_template.id if device.device_template else None
+            
+            # Skip devices that don't match the template filter
+            if template_filter is not None and template_id != template_filter:
+                continue
+            
+            profile_ids, merged_oids, normalizers = _get_device_profiles(device, profile_cache)
             credential_id = device.credential.id if device.credential else None
             
             # Use (template_id, credential_id) as grouping key
@@ -209,10 +214,14 @@ def _generate_input(input_data, profile_cache=None):
         v3_groups = {}
 
         for device_name, device in input_data['devices']['v3'].items():
-            profile_ids, merged_oids, normalizers = _get_device_profiles(device, profile_cache)
-            
             # Get device template (use None if not assigned)
             template_id = device.device_template.id if device.device_template else None
+            
+            # Skip devices that don't match the template filter
+            if template_filter is not None and template_id != template_filter:
+                continue
+            
+            profile_ids, merged_oids, normalizers = _get_device_profiles(device, profile_cache)
             credential_id = device.credential.id if device.credential else None
 
             # Use (template_id, credential_id) as grouping key

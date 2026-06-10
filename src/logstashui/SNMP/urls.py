@@ -39,6 +39,7 @@ urlpatterns = [
          name="GetNetworkPipelineName"),
 
     # SNMP Deploy endpoints
+    path("CheckUndeployedChanges/", snmp_crud.CheckUndeployedChanges, name="CheckUndeployedChanges"),
     path("GetDeployDiff/", snmp_crud.GetDeployDiff, name="GetDeployDiff"),
     path("GenerateDeployConfiguration/", snmp_crud.GenerateDeployConfiguration, name="DeployConfiguration"),
     path("DeployConfiguration/", snmp_crud.DeployConfiguration, name="DeployConfiguration"),
