@@ -35,12 +35,6 @@ class Network(models.Model):
         help_text="Logstash connection that will monitor this network"
     )
     
-    logstash_name = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Name of the Logstash node that will monitor this network (deprecated, use connection instead)"
-    )
-    
     discovery_enabled = models.BooleanField(
         default=True,
         help_text="Enable automatic device discovery on this network"

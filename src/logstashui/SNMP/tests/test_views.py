@@ -89,7 +89,6 @@ def test_network(db, test_connection, test_credential):
     return Network.objects.create(
         name='Test Network',
         network_range='192.168.1.0/24',
-        logstash_name='test-logstash',
         connection=test_connection,
         discovery_credential=test_credential,
         discovery_enabled=True,

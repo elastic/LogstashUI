@@ -74,22 +74,14 @@
     <!-- Search, Filter, and Controls -->
     <div id="searchFilterBar" class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
       <div class="flex gap-4 items-end">
-        <!-- Search (40%) -->
-        <div style="flex: 0 0 40%;">
+        <!-- Search (60%) -->
+        <div style="flex: 0 0 60%;">
           <label for="searchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
           <input type="text" id="searchInput" placeholder="Search by name or network range..." class="input input-bordered w-full">
         </div>
         
-        <!-- Logstash Node Filter (25%) -->
-        <div style="flex: 0 0 25%;">
-          <label for="logstashFilter" class="block text-sm font-medium text-gray-300 mb-2">Logstash Node</label>
-          <select id="logstashFilter" class="select select-bordered w-full">
-            <option value="">All Nodes</option>
-          </select>
-        </div>
-        
-        <!-- Connection Filter (25%) -->
-        <div style="flex: 0 0 25%;">
+        <!-- Connection Filter (32%) -->
+        <div style="flex: 0 0 32%;">
           <label for="connectionFilter" class="block text-sm font-medium text-gray-300 mb-2">Connection</label>
           <select id="connectionFilter" class="select select-bordered w-full">
             <option value="">All Connections</option>
@@ -137,7 +129,6 @@
           <th scope="col" class="px-6 py-4 text-center text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('device_count')">
             Devices <span id="sort-device_count" class="ml-1"></span>
           </th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Logstash Node</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Discovery</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Traps</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Connection</th>

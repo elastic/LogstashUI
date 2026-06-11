@@ -54,17 +54,6 @@ function updateNetworksData(networks) {
 
 // Populate filter dropdowns with unique values
 function populateFilters() {
-  // Get unique logstash nodes
-  const logstashNodes = [...new Set(allNetworks.map(n => n.logstash_name).filter(Boolean))].sort();
-  const logstashFilter = document.getElementById('logstashFilter');
-  logstashFilter.innerHTML = '<option value="">All Nodes</option>';
-  logstashNodes.forEach(node => {
-    const option = document.createElement('option');
-    option.value = node;
-    option.textContent = node;
-    logstashFilter.appendChild(option);
-  });
-  
   // Get unique connections from network data
   const connectionMap = new Map();
   allNetworks.forEach(n => {
@@ -93,7 +82,6 @@ function populateFilters() {
 // Apply search and filters
 function applyFiltersAndRender() {
   const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-  const logstashFilter = document.getElementById('logstashFilter').value;
   const connectionFilter = document.getElementById('connectionFilter').value;
   
   filteredNetworks = allNetworks.filter(network => {
@@ -102,14 +90,11 @@ function applyFiltersAndRender() {
       network.name.toLowerCase().includes(searchTerm) ||
       network.network_range.toLowerCase().includes(searchTerm);
     
-    // Logstash node filter
-    const matchesLogstash = !logstashFilter || network.logstash_name === logstashFilter;
-    
     // Connection filter
     const matchesConnection = !connectionFilter || 
       (network.connection && network.connection.toString() === connectionFilter);
     
-    return matchesSearch && matchesLogstash && matchesConnection;
+    return matchesSearch && matchesConnection;
   });
   
   // Sort the filtered results
@@ -219,7 +204,6 @@ function createNetworkRow(network) {
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${network.device_count > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">${network.device_count || 0}</span>
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${escapeHtml(network.logstash_name || '')}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
       ${network.discovery_enabled ? 
         '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Enabled</span>' :
@@ -345,7 +329,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Set up event listeners
   document.getElementById('searchInput').addEventListener('input', applyFiltersAndRender);
-  document.getElementById('logstashFilter').addEventListener('change', applyFiltersAndRender);
   document.getElementById('connectionFilter').addEventListener('change', applyFiltersAndRender);
   document.getElementById('pageSizeSelect').addEventListener('change', function() {
     pageSize = parseInt(this.value);

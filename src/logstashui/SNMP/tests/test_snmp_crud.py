@@ -104,7 +104,6 @@ def test_network(db, test_connection, test_credential_v2c):
     return Network.objects.create(
         name='Test Network',
         network_range='192.168.1.0/24',
-        logstash_name='test-logstash',
         connection=test_connection,
         discovery_credential=test_credential_v2c,
         discovery_enabled=True,
@@ -332,7 +331,6 @@ class TestNetworkCRUD:
         response = readonly_client.post('/SNMP/AddNetwork/', {
             'name': 'New Network',
             'network_range': '10.0.0.0/24',
-            'logstash_name': 'test',
             'connection': test_connection.id,
             'discovery_credential': test_credential_v2c.id
         })
@@ -343,7 +341,6 @@ class TestNetworkCRUD:
         response = authenticated_client.post('/SNMP/AddNetwork/', {
             'name': 'New Network',
             'network_range': '10.0.0.0/24',
-            'logstash_name': 'new-logstash',
             'connection': test_connection.id,
             'discovery_credential': test_credential_v2c.id,
             'discovery_enabled': 'true',
@@ -365,7 +362,6 @@ class TestNetworkCRUD:
         response = authenticated_client.post('/SNMP/AddNetwork/', {
             'name': 'Invalid Network',
             'network_range': 'not-a-valid-cidr',
-            'logstash_name': 'test'
         })
         assert response.status_code == 400
         assert b'Invalid CIDR notation' in response.content
@@ -375,7 +371,6 @@ class TestNetworkCRUD:
         response = readonly_client.post(f'/SNMP/UpdateNetwork/{test_network.id}/', {
             'name': 'Updated Network',
             'network_range': '192.168.1.0/24',
-            'logstash_name': 'test'
         })
         assert response.status_code == 403
 
@@ -384,7 +379,6 @@ class TestNetworkCRUD:
         response = authenticated_client.post(f'/SNMP/UpdateNetwork/{test_network.id}/', {
             'name': 'Updated Network',
             'network_range': '192.168.2.0/24',
-            'logstash_name': 'updated-logstash',
             'interval': '120'
         })
         assert response.status_code == 200
@@ -889,7 +883,6 @@ class TestEdgeCasesAndErrors:
         response = authenticated_client.post('/SNMP/AddNetwork/', {
             'name': 'Valid CIDR',
             'network_range': '10.0.0.0/8',
-            'logstash_name': 'test'
         })
         assert response.status_code == 200
         
@@ -897,7 +890,6 @@ class TestEdgeCasesAndErrors:
         response = authenticated_client.post('/SNMP/AddNetwork/', {
             'name': 'Invalid CIDR',
             'network_range': '999.999.999.999/99',
-            'logstash_name': 'test'
         })
         assert response.status_code == 400
 
@@ -955,18 +947,15 @@ class TestGetPipelineName:
         from SNMP.snmp_crud import _get_pipeline_name
         name = _get_pipeline_name(test_network)
         assert name.startswith('snmp-')
-        # logstash_name is 'test-logstash' — hyphens preserved by sanitizer
-        assert 'test-logstash' in name
         # network name is 'Test Network' — spaces become underscores via sanitizer
         assert 'test_network' in name
 
     def test_special_chars_sanitized(self, test_connection, test_credential_v2c):
-        """Special chars in network/logstash names are sanitized"""
+        """Special chars in network name are sanitized"""
         from SNMP.snmp_crud import _get_pipeline_name
         network = Network.objects.create(
             name='My Network (prod)!',
             network_range='10.0.0.0/24',
-            logstash_name='my logstash/cluster',
             connection=test_connection,
         )
         name = _get_pipeline_name(network)
@@ -1288,7 +1277,7 @@ class TestGetNetworkEndpointEdgeCases:
 
     def test_update_network_not_found(self, authenticated_client):
         response = authenticated_client.post('/SNMP/UpdateNetwork/99999/', {
-            'name': 'Ghost', 'network_range': '10.0.0.0/24', 'logstash_name': 'test'
+            'name': 'Ghost', 'network_range': '10.0.0.0/24'
         })
         assert response.status_code == 404
 
@@ -1303,7 +1292,6 @@ class TestGetNetworkEndpointEdgeCases:
         response = authenticated_client.post(f'/SNMP/UpdateNetwork/{test_network.id}/', {
             'name': test_network.name,
             'network_range': test_network.network_range,
-            'logstash_name': test_network.logstash_name,
             'connection': '',
             'discovery_credential': '',
             'credential': '',
@@ -1355,7 +1343,6 @@ class TestDeleteNetworkPipelinePaths:
         network = Network.objects.create(
             name='No Conn Network',
             network_range='172.16.0.0/24',
-            logstash_name='no-conn',
         )
         network_id = network.id
         response = authenticated_client.post(f'/SNMP/DeleteNetwork/{network_id}/')

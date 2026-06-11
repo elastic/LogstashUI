@@ -52,7 +52,6 @@ function openNetworkModal(networkData = null) {
     console.log('Namespace value:', networkData.namespace);
     document.getElementById('networkName').value = networkData.name;
     document.getElementById('networkRange').value = networkData.network_range;
-    document.getElementById('logstashName').value = networkData.logstash_name || '';
     document.getElementById('networkNamespace').value = networkData.namespace || 'default';
     
     // Set polling interval if present

@@ -161,7 +161,6 @@ class Command(BaseCommand):
                 name=name,
                 network_range=network_range,
                 connection=homelab_connection,
-                logstash_name='logcollector1',
                 discovery_enabled=random.choice([True, False]),
                 traps_enabled=random.choice([True, False]),
                 credential=credential

@@ -75,11 +75,9 @@ def _get_template_pipeline_name(network, template, pipeline_type='polling'):
     Returns:
         Pipeline name string
     """
-    # Use network.name instead of network.logstash_name for unique pipeline names
     network_name = _sanitize_pipeline_name_component(network.name)
     
     if template:
-        # DeviceTemplate uses 'name' not 'logstash_name'
         template_name = _sanitize_pipeline_name_component(template.name)
         return f"snmp-{network_name}-{template_name}-{pipeline_type}"
     else:
@@ -117,7 +115,6 @@ def GetNetworks(request):
                 'id': network.id,
                 'name': network.name,
                 'network_range': network.network_range,
-                'logstash_name': network.logstash_name,
                 'namespace': namespace_value,
                 'interval': network.interval,
                 'discovery_enabled': network.discovery_enabled,
@@ -404,7 +401,6 @@ def AddNetwork(request):
         # Extract form data
         name = request.POST.get('name')
         network_range = request.POST.get('network_range')
-        logstash_name = request.POST.get('logstash_name')
         connection_id = request.POST.get('connection')
         credential_id = request.POST.get('credential')
         discovery_credential_id = request.POST.get('discovery_credential')
@@ -417,7 +413,6 @@ def AddNetwork(request):
         network = Network(
             name=name,
             network_range=network_range,
-            logstash_name=logstash_name,
             discovery_enabled=discovery_enabled,
             traps_enabled=traps_enabled,
             interval=interval,
@@ -463,7 +458,6 @@ def UpdateNetwork(request, network_id):
         # Update fields
         network.name = request.POST.get('name', network.name)
         network.network_range = request.POST.get('network_range', network.network_range)
-        network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
         network.namespace = request.POST.get('namespace', network.namespace)
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
@@ -523,7 +517,6 @@ def GetNetwork(request, network_id):
             'id': network.id,
             'name': network.name,
             'network_range': network.network_range,
-            'logstash_name': network.logstash_name,
             'namespace': network.namespace,
             'connection': network.connection_id if network.connection else None,
             'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,
