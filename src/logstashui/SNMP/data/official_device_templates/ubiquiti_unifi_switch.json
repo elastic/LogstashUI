@@ -1,0 +1,16 @@
+{
+  "name": "ubiquiti_unifi_switch",
+  "type": "Network",
+  "description": "Metrics for Ubiquiti UniFi Switches",
+  "vendor": "Ubiquiti",
+  "product": "UniFi Switch",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "ubiquiti_unifi_switch"
+  ],
+  "matching_rules": [
+    "US-"
+  ]
+}

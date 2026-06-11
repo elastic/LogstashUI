@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from datetime import datetime, timedelta, timezone
 from Common.elastic_utils import get_elastic_connection
 from PipelineManager.models import Connection
-from .models import Network
+from .models import Network, Device
 
 import logging
 
@@ -106,7 +106,7 @@ def get_cdp_adjacencies():
                                         {
                                             "cdp_row_index": {
                                                 "terms": {
-                                                    "field": "table.index"
+                                                    "field": "cdpCacheTable.index"
                                                 }
                                             }
                                         }
@@ -130,12 +130,12 @@ def get_cdp_adjacencies():
                                                     "host.hostname",
                                                     "network.name",
                                                     "event.category",
-                                                    "table.index",
-                                                    "table.cdpCacheDeviceId",
-                                                    "table.cdpCacheDevicePort",
-                                                    "table.cdpCacheAddress",
-                                                    "table.cdpCachePlatform",
-                                                    "table.cdpCacheCapabilities"
+                                                    "cdpCacheTable.index",
+                                                    "cdpCacheTable.cdpCacheDeviceId",
+                                                    "cdpCacheTable.cdpCacheDevicePort",
+                                                    "cdpCacheTable.cdpCacheAddress",
+                                                    "cdpCacheTable.cdpCachePlatform",
+                                                    "cdpCacheTable.cdpCacheCapabilities"
                                                 ]
                                             }
                                         }
@@ -164,7 +164,7 @@ def get_cdp_adjacencies():
                                 source = hit['_source']
                                 
                                 device_name = source.get('host', {}).get('name', '')
-                                table_data = source.get('table', {})
+                                table_data = source.get('cdpCacheTable', {})
                                 table_index = table_data.get('index', '')
                                 
                                 # Extract ifIndex from table.index (format: "ifIndex.cdpCacheIfIndex")
@@ -193,7 +193,7 @@ def get_cdp_adjacencies():
                                         },
                                         {
                                             "term": {
-                                                "table.ifIndex": int(if_index)
+                                                "interface.ifIndex": int(if_index)
                                             }
                                         }
                                     ]
@@ -210,8 +210,8 @@ def get_cdp_adjacencies():
                                 "host.hostname",
                                 "network.name",
                                 "event.category",
-                                "table.ifIndex",
-                                "table.ifDescr"
+                                "interface.ifIndex",
+                                "interface.ifDescr"
                             ],
                             "query": {
                                 "bool": {
@@ -223,7 +223,7 @@ def get_cdp_adjacencies():
                                         },
                                         {
                                             "term": {
-                                                "event.category": "interfaces"
+                                                "event.category": "interface"
                                             }
                                         },
                                         {
@@ -258,7 +258,7 @@ def get_cdp_adjacencies():
                             for hit in interface_response['hits']['hits']:
                                 source = hit['_source']
                                 device_name = source.get('host', {}).get('name', '')
-                                table_data = source.get('table', {})
+                                table_data = source.get('interface', {})
                                 if_index = table_data.get('ifIndex', '')
                                 if_descr = table_data.get('ifDescr', '')
                                 
@@ -412,6 +412,22 @@ def convert_adjacency_to_graph(adjacency_table):
     # Convert nodes dict to list
     nodes_list = list(nodes.values())
     
+    # Enrich managed nodes with database device IDs for click-through detail panel.
+    # SNMP host.name is typically the device's IP address as polled; fall back to
+    # matching by device name for cases where hostnames are used instead.
+    try:
+        db_devices = list(Device.objects.values('id', 'name', 'ip_address'))
+        ip_to_device_id = {d['ip_address']: d['id'] for d in db_devices}
+        name_to_device_id = {d['name']: d['id'] for d in db_devices}
+
+        for node in nodes_list:
+            node_id = node['id']
+            device_id = ip_to_device_id.get(node_id) or name_to_device_id.get(node_id)
+            if device_id:
+                node['device_id'] = device_id
+    except Exception as e:
+        logger.warning(f"Could not enrich nodes with device IDs: {e}")
+
     logger.debug(f"Graph conversion complete: {len(nodes_list)} nodes, {len(edges)} edges")
     
     return {

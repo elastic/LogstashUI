@@ -1,0 +1,60 @@
+{
+  "name": "ubiquiti_unifi_wireless",
+  "description": "[Official] Ubiquiti UniFi AP wireless metrics via UAP-MIB: per-radio stats, per-SSID/VAP client and traffic counters, wired uplink stats, and device firmware info",
+  "vendor": "Ubiquiti",
+  "product": "UniFi AP",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.4.1.41112.1.6.3.3.0",
+    "observer.firmware_version": "1.3.6.1.4.1.41112.1.6.3.6.0",
+    "observer.uplink_interface": "1.3.6.1.4.1.41112.1.6.3.4.0",
+    "observer.device_uptime_seconds": "1.3.6.1.4.1.41112.1.6.3.5.0"
+  },
+  "walk": {},
+  "table": {
+    "ubntRadioTable": {
+      "columns": {
+        "ubntRadioIndex": "1.3.6.1.4.1.41112.1.6.1.1.1.1",
+        "ubntRadioName": "1.3.6.1.4.1.41112.1.6.1.1.1.2",
+        "ubntRadioBand": "1.3.6.1.4.1.41112.1.6.1.1.1.3",
+        "ubntRadioTxBytes": "1.3.6.1.4.1.41112.1.6.1.1.1.4",
+        "ubntRadioRxBytes": "1.3.6.1.4.1.41112.1.6.1.1.1.5",
+        "ubntRadioTxDrops": "1.3.6.1.4.1.41112.1.6.1.1.1.6",
+        "ubntRadioTxErrors": "1.3.6.1.4.1.41112.1.6.1.1.1.7",
+        "ubntRadioChannel": "1.3.6.1.4.1.41112.1.6.1.1.1.8"
+      }
+    },
+    "ubntVAPTable": {
+      "columns": {
+        "ubntVAPIndex": "1.3.6.1.4.1.41112.1.6.1.2.1.1",
+        "ubntVAPBSSID": "1.3.6.1.4.1.41112.1.6.1.2.1.2",
+        "ubntVAPChannel": "1.3.6.1.4.1.41112.1.6.1.2.1.4",
+        "ubntVAPESSID": "1.3.6.1.4.1.41112.1.6.1.2.1.6",
+        "ubntVAPRadioName": "1.3.6.1.4.1.41112.1.6.1.2.1.7",
+        "ubntVAPStations": "1.3.6.1.4.1.41112.1.6.1.2.1.8",
+        "ubntVAPBand": "1.3.6.1.4.1.41112.1.6.1.2.1.9",
+        "ubntVAPTxBytes": "1.3.6.1.4.1.41112.1.6.1.2.1.10",
+        "ubntVAPRxBytes": "1.3.6.1.4.1.41112.1.6.1.2.1.16",
+        "ubntVAPTxPkts": "1.3.6.1.4.1.41112.1.6.1.2.1.17",
+        "ubntVAPRxPkts": "1.3.6.1.4.1.41112.1.6.1.2.1.19",
+        "ubntVAPTxDrops": "1.3.6.1.4.1.41112.1.6.1.2.1.12",
+        "ubntVAPRxDrops": "1.3.6.1.4.1.41112.1.6.1.2.1.13",
+        "ubntVAPTxErrors": "1.3.6.1.4.1.41112.1.6.1.2.1.14",
+        "ubntVAPEncryption": "1.3.6.1.4.1.41112.1.6.1.2.1.22",
+        "ubntVAPNetworkType": "1.3.6.1.4.1.41112.1.6.1.2.1.23"
+      }
+    },
+    "ubntWiredTable": {
+      "columns": {
+        "ubntWiredIndex": "1.3.6.1.4.1.41112.1.6.2.1.1.1",
+        "ubntWiredMAC": "1.3.6.1.4.1.41112.1.6.2.1.1.4",
+        "ubntWiredName": "1.3.6.1.4.1.41112.1.6.2.1.1.5",
+        "ubntWiredRxBytes": "1.3.6.1.4.1.41112.1.6.2.1.1.6",
+        "ubntWiredRxDrops": "1.3.6.1.4.1.41112.1.6.2.1.1.7",
+        "ubntWiredRxErrors": "1.3.6.1.4.1.41112.1.6.2.1.1.8",
+        "ubntWiredTxBytes": "1.3.6.1.4.1.41112.1.6.2.1.1.10",
+        "ubntWiredTxErrors": "1.3.6.1.4.1.41112.1.6.2.1.1.13"
+      }
+    }
+  }
+}

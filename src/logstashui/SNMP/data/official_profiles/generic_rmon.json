@@ -1,0 +1,34 @@
+{
+  "name": "generic_rmon",
+  "description": "[Official] Per-port Ethernet error and traffic statistics from RMON MIB (RFC 2819) etherStatsTable. Provides error detail not available in IF-MIB: CRC/align errors, collisions, jabbers, fragments, undersized/oversized frames, and packet size distribution. Broadly supported on managed switches from Dell, Cisco, HP, and others.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "etherStatsTable": {
+      "columns": {
+        "etherStatsIndex": "1.3.6.1.2.1.16.1.1.1.1",
+        "etherStatsDataSource": "1.3.6.1.2.1.16.1.1.1.2",
+        "etherStatsDropEvents": "1.3.6.1.2.1.16.1.1.1.3",
+        "etherStatsOctets": "1.3.6.1.2.1.16.1.1.1.4",
+        "etherStatsPkts": "1.3.6.1.2.1.16.1.1.1.5",
+        "etherStatsBroadcastPkts": "1.3.6.1.2.1.16.1.1.1.6",
+        "etherStatsMulticastPkts": "1.3.6.1.2.1.16.1.1.1.7",
+        "etherStatsCRCAlignErrors": "1.3.6.1.2.1.16.1.1.1.8",
+        "etherStatsUndersizePkts": "1.3.6.1.2.1.16.1.1.1.9",
+        "etherStatsOversizePkts": "1.3.6.1.2.1.16.1.1.1.10",
+        "etherStatsFragments": "1.3.6.1.2.1.16.1.1.1.11",
+        "etherStatsJabbers": "1.3.6.1.2.1.16.1.1.1.12",
+        "etherStatsCollisions": "1.3.6.1.2.1.16.1.1.1.13",
+        "etherStatsPkts64Octets": "1.3.6.1.2.1.16.1.1.1.14",
+        "etherStatsPkts65to127Octets": "1.3.6.1.2.1.16.1.1.1.15",
+        "etherStatsPkts128to255Octets": "1.3.6.1.2.1.16.1.1.1.16",
+        "etherStatsPkts256to511Octets": "1.3.6.1.2.1.16.1.1.1.17",
+        "etherStatsPkts512to1023Octets": "1.3.6.1.2.1.16.1.1.1.18",
+        "etherStatsPkts1024to1518Octets": "1.3.6.1.2.1.16.1.1.1.19"
+      }
+    }
+  }
+}

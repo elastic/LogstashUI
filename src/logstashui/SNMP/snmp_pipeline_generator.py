@@ -837,7 +837,7 @@ def _get_special_case_filters(oid_mappings):
                     f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname, \"type\" => host_type }},\n"
                     f"      \"observer\" => {{ \"vendor\" => observer_vendor, \"os\" => {{ \"full\" => observer_os_full }} }},\n"
                     f"      \"network\" => {{ \"name\" => network_name }},\n"
-                    f"      \"table\" => row,\n"
+                    f"      \"{table_name}\" => row,\n"
                     f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
                     f"      \"event\" => {{ \"category\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"

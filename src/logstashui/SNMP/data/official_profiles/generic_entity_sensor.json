@@ -1,0 +1,26 @@
+{
+  "name": "generic_entity_sensor",
+  "description": "[Official] Physical sensor readings via ENTITY-SENSOR-MIB (RFC 3433) and entity names from ENTITY-MIB (RFC 2737). Captures temperature (°C), fan speed (RPM), power (W), current (A), and voltage (V) for all sensors the device exposes. Broadly supported on enterprise switches, routers, and servers (Cisco, Juniper, Mellanox, HPE, etc.). The entPhySensorValue must be divided by 10^entPhySensorPrecision to get the true reading.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "entPhySensorTable": {
+      "columns": {
+        "entPhySensorType": "1.3.6.1.2.1.99.1.1.1.1",
+        "entPhySensorScale": "1.3.6.1.2.1.99.1.1.1.2",
+        "entPhySensorPrecision": "1.3.6.1.2.1.99.1.1.1.3",
+        "entPhySensorValue": "1.3.6.1.2.1.99.1.1.1.4",
+        "entPhySensorOperStatus": "1.3.6.1.2.1.99.1.1.1.5",
+        "entPhySensorUnitsDisplay": "1.3.6.1.2.1.99.1.1.1.6"
+      }
+    },
+    "entPhysicalNameTable": {
+      "columns": {
+        "entPhysicalName": "1.3.6.1.2.1.47.1.1.1.1.7"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "generic_ont",
+  "description": "[Official] Generic ONT-series switch: per-core CPU utilization (live %), memory (total/used bytes), serial number, and per-port link/speed status via enterprise MIB (1.3.6.1.4.1.52208). CPU values are instantaneous percentages, not raw counters. Temperature sensors were not active on the sampled device. Vendor identity is unknown — OID 52208 is likely a white-label/OEM manufacturer.",
+  "vendor": "Unknown (OID: 1.3.6.1.4.1.52208)",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.mac_address": "1.3.6.1.4.1.52208.100.1.5.0",
+    "observer.chipset": "1.3.6.1.4.1.52208.100.1.11.1.0",
+    "system.cpu.pct.core1": "1.3.6.1.4.1.52208.100.1.11.2.0",
+    "system.cpu.pct.core2": "1.3.6.1.4.1.52208.100.1.11.3.0",
+    "system.cpu.pct.core3": "1.3.6.1.4.1.52208.100.1.11.4.0",
+    "system.cpu.pct.core4": "1.3.6.1.4.1.52208.100.1.11.5.0",
+    "system.memory.total.bytes": "1.3.6.1.4.1.52208.100.1.11.6.0",
+    "system.memory.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0",
+    "system.cpu.num_cpus": "1.3.6.1.4.1.52208.100.1.11.10.0",
+    "observer.firmware_image": "1.3.6.1.4.1.52208.100.1.13.0",
+    "observer.product_id": "1.3.6.1.4.1.52208.100.1.100.0",
+    "observer.serial_number": "1.3.6.1.4.1.52208.100.1.101.0"
+  },
+  "walk": {},
+  "table": {
+    "ontPortTable": {
+      "columns": {
+        "ontPortIndex": "1.3.6.1.4.1.52208.100.3.2.1.1",
+        "ontPortName": "1.3.6.1.4.1.52208.100.3.2.1.2",
+        "ontPortLinkStatus": "1.3.6.1.4.1.52208.100.3.2.1.3",
+        "ontPortAdminStatus": "1.3.6.1.4.1.52208.100.3.2.1.4",
+        "ontPortCurrentSpeedKbps": "1.3.6.1.4.1.52208.100.3.2.1.9",
+        "ontPortMaxSpeedKbps": "1.3.6.1.4.1.52208.100.3.2.1.10"
+      }
+    }
+  }
+}

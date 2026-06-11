@@ -2524,7 +2524,7 @@ def _get_device_interfaces(device, es_connection):
                     },
                     {
                         "term": {
-                            "event.category": "interfaces"
+                            "event.category": "interface"
                         }
                     }
                 ]
@@ -2533,7 +2533,7 @@ def _get_device_interfaces(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "table.ifDescr",
+                    "field": "interface.ifDescr",
                     "size": 1000
                 },
                 "aggregations": {
@@ -2553,7 +2553,7 @@ def _get_device_interfaces(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_if_doc']['hits']['hits']:
-            visualization_data['interfaces'].append(doc['_source']['table'])
+            visualization_data['interfaces'].append(doc['_source']['interface'])
 
     return visualization_data
 
@@ -2648,14 +2648,14 @@ def _get_device_fans(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "table.description",
+                    "field": "fans.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_fan_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["table.state", "table.description"]
+                            "_source": ["fans.state", "fans.description"]
                         }
                     }
                 }
@@ -2669,7 +2669,7 @@ def _get_device_fans(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_fan_doc']['hits']['hits']:
-            visualization_data['fans'].append(doc['_source']['table'])
+            visualization_data['fans'].append(doc['_source']['fans'])
 
     return visualization_data
 
@@ -2706,15 +2706,15 @@ def _get_device_sensors(device, es_connection):
         aggregations={
             "sensors": {
                 "terms": {
-                    "field": "table.description",
+                    "field": "sensors.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_sensor_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["table.state", "table.description", "table.temp_celsius",
-                                        "table.temp_threshold"]
+                            "_source": ["sensors.state", "sensors.description", "sensors.temp_celsius",
+                                        "sensors.temp_threshold"]
                         }
                     }
                 }
@@ -2728,7 +2728,7 @@ def _get_device_sensors(device, es_connection):
 
     for sensor in results['aggregations']['sensors']['buckets']:
         for doc in sensor['top_sensor_doc']['hits']['hits']:
-            visualization_data['sensors'].append(doc['_source']['table'])
+            visualization_data['sensors'].append(doc['_source']['sensors'])
 
     return visualization_data
 
@@ -2744,7 +2744,7 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)
     if "fans" in visualizations:
         visualization_data['fans'] = _get_device_fans(device, es_connection)
-    if "interfaces" in visualizations:
+    if "interface" in visualizations:
         visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)
 
     return visualization_data
@@ -2981,7 +2981,7 @@ def GetDeviceTemplate(request, template_id):
                 {
                     'id': profile.id,
                     'name': profile.name,
-                    'display_name': profile.name.replace('_', ' ').title() if profile.name.endswith('.json') else profile.name
+                    'display_name': profile.name[:-5].replace('_', ' ').title() if profile.name.endswith('.json') else profile.name
                 }
                 for profile in template.profiles.all()
             ]

@@ -1,0 +1,18 @@
+{
+  "name": "mellanox_sx6036",
+  "type": "Network",
+  "description": "Metrics for Mellanox SX6036 36-port 40GbE/InfiniBand data center switch running MLNX-OS. Includes interface counters, hardware sensors (temperature, fan RPM, PSU power/current/voltage) via ENTITY-SENSOR-MIB, and firmware metadata.",
+  "vendor": "Mellanox",
+  "product": "SX6036",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "generic_entity_sensor",
+    "mellanox_mlnx_os"
+  ],
+  "matching_rules": [
+    "SX6036",
+    "MLNX-OS"
+  ]
+}

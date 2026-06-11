@@ -8,7 +8,9 @@
   "profiles": [
     "generic_interfaces",
     "generic_system",
-    "ubiquiti_unifi_system_metrics"
+    "generic_host_system_metrics",
+    "generic_ucd_system_metrics",
+    "ubiquiti_unifi_wireless"
   ],
   "matching_rules": [
     "UAP"

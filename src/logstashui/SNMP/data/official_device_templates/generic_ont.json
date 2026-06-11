@@ -1,0 +1,17 @@
+{
+  "name": "generic_ont",
+  "type": "Network",
+  "description": "Metrics for ONT-series managed switches (Realtek RTL8390 chipset, enterprise OID 1.3.6.1.4.1.52208). Vendor identity is unknown — likely a white-label/OEM device. NOTE: sysDescr reports only 'Switch' — auto-matching is unreliable and manual template assignment is recommended.",
+  "vendor": "Unknown (OID: 1.3.6.1.4.1.52208)",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "generic_ont"
+  ],
+  "matching_rules": [
+    "S508CL",
+    "S508"
+  ]
+}

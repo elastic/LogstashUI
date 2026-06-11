@@ -1,0 +1,47 @@
+{
+  "name": "generic_printer_mib",
+  "description": "[Official] Standard Printer MIB (RFC 3805, 1.3.6.1.2.1.43): toner/supply levels and descriptions, lifetime and power-on page counts, paper tray levels and capacity, cover status, and active alert codes. Broadly supported across HP, Xerox, Canon, Brother, Kyocera, and most SNMP-capable printers. Supply levels use prtMarkerSuppliesSupplyUnit to indicate units (19 = percent). Negative tray values: -2 = no restriction, -3 = unknown.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.2.1.43.5.1.1.16.1",
+    "observer.serial_number": "1.3.6.1.2.1.43.5.1.1.17.1"
+  },
+  "walk": {},
+  "table": {
+    "prtMarkerSuppliesTable": {
+      "columns": {
+        "prtMarkerSuppliesDescription": "1.3.6.1.2.1.43.11.1.1.6",
+        "prtMarkerSuppliesSupplyUnit": "1.3.6.1.2.1.43.11.1.1.7",
+        "prtMarkerSuppliesMaxCapacity": "1.3.6.1.2.1.43.11.1.1.8",
+        "prtMarkerSuppliesLevel": "1.3.6.1.2.1.43.11.1.1.9"
+      }
+    },
+    "prtMarkerTable": {
+      "columns": {
+        "prtMarkerLifeCount": "1.3.6.1.2.1.43.10.2.1.4",
+        "prtMarkerPowerOnCount": "1.3.6.1.2.1.43.10.2.1.5"
+      }
+    },
+    "prtInputTable": {
+      "columns": {
+        "prtInputName": "1.3.6.1.2.1.43.8.2.1.13",
+        "prtInputCurrentLevel": "1.3.6.1.2.1.43.8.2.1.9",
+        "prtInputMaxCapacity": "1.3.6.1.2.1.43.8.2.1.10"
+      }
+    },
+    "prtCoverTable": {
+      "columns": {
+        "prtCoverDescription": "1.3.6.1.2.1.43.6.1.1.2",
+        "prtCoverStatus": "1.3.6.1.2.1.43.6.1.1.3"
+      }
+    },
+    "prtAlertTable": {
+      "columns": {
+        "prtAlertCode": "1.3.6.1.2.1.43.15.1.1.2",
+        "prtAlertDescription": "1.3.6.1.2.1.43.15.1.1.3"
+      }
+    }
+  }
+}

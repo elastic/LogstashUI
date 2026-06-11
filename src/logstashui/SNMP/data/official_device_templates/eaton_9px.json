@@ -1,0 +1,16 @@
+{
+  "name": "eaton_9px",
+  "type": "UPS",
+  "description": "Metrics for Eaton 9PX rack/tower UPS (2200VA–11kVA). Monitors battery health, runtime, input/output power quality per phase, ambient temperature, and active alarms.",
+  "vendor": "Eaton",
+  "product": "9PX",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "eaton_xups"
+  ],
+  "matching_rules": [
+    "9PX",
+    "Eaton 9PX"
+  ]
+}

@@ -228,7 +228,7 @@ def get_device_data_quality():
                     body=query
                 )
                 
-                # Build separate query for interfaces (stored in separate documents with event.category: "interfaces")
+                # Build separate query for interfaces (stored in separate documents with event.category: "interface")
                 interface_query = {
                     "size": 0,
                     "query": {
@@ -249,7 +249,7 @@ def get_device_data_quality():
                                 },
                                 {
                                     "term": {
-                                        "event.category": "interfaces"
+                                        "event.category": "interface"
                                     }
                                 }
                             ]

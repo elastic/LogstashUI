@@ -40,4 +40,22 @@
   </div>
 </div>
 
+<!-- Device preview template (required by snmp_device_visual_preview.js) -->
+{% include 'components/snmp_device_visual_preview.html' %}
+
+<!-- Styles for floating device detail windows spawned by the network map -->
+<style>
+.device-window .resize-handle { position: absolute; z-index: 10; }
+.device-window .resize-handle-n  { top: 0;    left: 0;   right: 0;  height: 5px; cursor: ns-resize;   }
+.device-window .resize-handle-s  { bottom: 0; left: 0;   right: 0;  height: 5px; cursor: ns-resize;   }
+.device-window .resize-handle-e  { top: 0;    right: 0;  bottom: 0; width:  5px; cursor: ew-resize;   }
+.device-window .resize-handle-w  { top: 0;    left: 0;   bottom: 0; width:  5px; cursor: ew-resize;   }
+.device-window .resize-handle-ne { top: 0;    right: 0;  width: 10px; height: 10px; cursor: nesw-resize; }
+.device-window .resize-handle-nw { top: 0;    left: 0;   width: 10px; height: 10px; cursor: nwse-resize; }
+.device-window .resize-handle-se { bottom: 0; right: 0;  width: 10px; height: 10px; cursor: nwse-resize; }
+.device-window .resize-handle-sw { bottom: 0; left: 0;   width: 10px; height: 10px; cursor: nesw-resize; }
+.device-window .window-header    { user-select: none; -webkit-user-select: none; }
+</style>
+
 <script src="{% static 'js/network_map.js' %}"></script>
+<script src="{% static 'js/snmp_device_visual_preview.js' %}"></script>
