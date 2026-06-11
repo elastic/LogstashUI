@@ -76,10 +76,10 @@ class Command(BaseCommand):
             # Call the existing sync function
             sync_official_profiles()
             
-            # Count synced profiles (those marked as official placeholders)
+            # Count synced profiles (those with a stable official_key)
             from SNMP.models import Profile
             count = Profile.objects.filter(
-                profile_data__has_key='is_official_placeholder'
+                official_key__isnull=False
             ).count()
             
             return count

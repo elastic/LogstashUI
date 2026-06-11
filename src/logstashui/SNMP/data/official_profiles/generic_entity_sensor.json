@@ -1,6 +1,7 @@
 {
+  "official_key": "generic_entity_sensor",
   "name": "generic_entity_sensor",
-  "description": "[Official] Physical sensor readings via ENTITY-SENSOR-MIB (RFC 3433) and entity names from ENTITY-MIB (RFC 2737). Captures temperature (°C), fan speed (RPM), power (W), current (A), and voltage (V) for all sensors the device exposes. Broadly supported on enterprise switches, routers, and servers (Cisco, Juniper, Mellanox, HPE, etc.). The entPhySensorValue must be divided by 10^entPhySensorPrecision to get the true reading.",
+  "description": "[Official] Physical sensor readings via ENTITY-SENSOR-MIB (RFC 3433) and entity names from ENTITY-MIB (RFC 2737). Captures temperature (\u00b0C), fan speed (RPM), power (W), current (A), and voltage (V) for all sensors the device exposes. Broadly supported on enterprise switches, routers, and servers (Cisco, Juniper, Mellanox, HPE, etc.). The entPhySensorValue must be divided by 10^entPhySensorPrecision to get the true reading.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",

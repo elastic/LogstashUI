@@ -1,4 +1,5 @@
 {
+  "official_key": "generic_rmon",
   "name": "generic_rmon",
   "description": "[Official] Per-port Ethernet error and traffic statistics from RMON MIB (RFC 2819) etherStatsTable. Provides error detail not available in IF-MIB: CRC/align errors, collisions, jabbers, fragments, undersized/oversized frames, and packet size distribution. Broadly supported on managed switches from Dell, Cisco, HP, and others.",
   "vendor": "Any",

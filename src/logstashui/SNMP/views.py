@@ -47,26 +47,32 @@ def sync_official_profiles():
                 with open(profile_path, 'r') as f:
                     profile_data = json.load(f)
                 
-                # Get or create the profile in database as a placeholder
-                profile, created = Profile.objects.get_or_create(
-                    name=profile_name,
-                    defaults={
-                        'description': profile_data.get('description', ''),
-                        'vendor': profile_data.get('vendor', ''),
-                        'product': profile_data.get('product', ''),
-                        'profile_data': {'is_official_placeholder': True}
-                    }
-                )
+                official_key = profile_data.get('official_key')
+                if not official_key:
+                    print(f"Warning: official profile {filename} has no official_key — skipping")
+                    continue
                 
-                # Update if it already exists (in case JSON was modified)
-                if not created:
-                    profile.description = profile_data.get('description', '')
-                    profile.vendor = profile_data.get('vendor', '')
-                    profile.product = profile_data.get('product', '')
-                    # Ensure it's marked as a placeholder
-                    if not profile.profile_data.get('is_official_placeholder'):
-                        profile.profile_data = {'is_official_placeholder': True}
-                    profile.save()
+                # 1. Already migrated — find by official_key (fast path, rename-safe)
+                try:
+                    profile = Profile.objects.get(official_key=official_key)
+                except Profile.DoesNotExist:
+                    # 2. Upgrade path — old record exists by name but has no official_key yet
+                    try:
+                        profile = Profile.objects.get(name=profile_name, official_key__isnull=True)
+                        profile.official_key = official_key
+                        print(f"Backfilled official_key for existing profile '{profile_name}'")
+                    except Profile.DoesNotExist:
+                        # 3. Genuinely new record
+                        profile = Profile(official_key=official_key, name=profile_name)
+                
+                # Update all mutable fields and save
+                profile.name = profile_name
+                profile.description = profile_data.get('description', '')
+                profile.vendor = profile_data.get('vendor', '')
+                profile.product = profile_data.get('product', '')
+                if not isinstance(profile.profile_data, dict) or not profile.profile_data.get('is_official_placeholder'):
+                    profile.profile_data = {'is_official_placeholder': True}
+                profile.save()
                 
             except Exception as e:
                 print(f"Error syncing official profile {filename}: {e}")
@@ -89,51 +95,68 @@ def sync_official_device_templates():
                 with open(template_path, 'r') as f:
                     template_data = json.load(f)
                 
-                # Get or create the template in database
-                template, created = DeviceTemplate.objects.get_or_create(
-                    name=template_data.get('name', template_name),
-                    defaults={
-                        'description': template_data.get('description', ''),
-                        'vendor': template_data.get('vendor', ''),
-                        'model': template_data.get('model', ''),
-                        'product': template_data.get('product', ''),
-                        'type': template_data.get('type', ''),
-                        'matching_rules': template_data.get('matching_rules', []),
-                        'official': True
-                    }
-                )
+                official_key = template_data.get('official_key')
+                if not official_key:
+                    print(f"Warning: official template {filename} has no official_key — skipping")
+                    continue
                 
-                # Update if it already exists (in case JSON was modified)
-                if not created:
-                    template.description = template_data.get('description', '')
-                    template.vendor = template_data.get('vendor', '')
-                    template.model = template_data.get('model', '')
-                    template.product = template_data.get('product', '')
-                    template.type = template_data.get('type', '')
-                    template.matching_rules = template_data.get('matching_rules', [])
-                    template.official = True
-                    template.save()
+                display_name = template_data.get('name', template_name)
                 
-                # Sync profiles
+                # 1. Already migrated — find by official_key (fast path, rename-safe)
+                try:
+                    template = DeviceTemplate.objects.get(official_key=official_key)
+                except DeviceTemplate.DoesNotExist:
+                    # 2. Upgrade path — old record exists by name but has no official_key yet
+                    try:
+                        template = DeviceTemplate.objects.get(name=display_name, official_key__isnull=True)
+                        template.official_key = official_key
+                        print(f"Backfilled official_key for existing template '{display_name}'")
+                    except DeviceTemplate.DoesNotExist:
+                        # 3. Genuinely new record
+                        template = DeviceTemplate(official_key=official_key, name=display_name)
+                
+                # Update all mutable fields and save
+                template.name = display_name
+                template.description = template_data.get('description', '')
+                template.vendor = template_data.get('vendor', '')
+                template.model = template_data.get('model', '')
+                template.product = template_data.get('product', '')
+                template.type = template_data.get('type', '')
+                template.matching_rules = template_data.get('matching_rules', [])
+                template.official = True
+                template.save()
+                
+                # Sync profiles — look up by official_key first (rename-proof),
+                # with fallbacks for profiles that haven't been migrated yet or are user-created
                 profile_names = template_data.get('profiles', [])
                 if profile_names:
                     template.profiles.clear()
                     profiles_added = 0
                     for profile_name in profile_names:
+                        profile = None
+                        # Try official_key (already migrated official profile)
                         try:
-                            # Official profiles are stored with .json extension in the database
-                            stored_name = f"{profile_name}.json"
-                            profile = Profile.objects.get(name=stored_name)
-                            template.profiles.add(profile)
-                            profiles_added += 1
+                            profile = Profile.objects.get(official_key=profile_name)
                         except Profile.DoesNotExist:
-                            # Try without .json extension (for custom profiles)
+                            pass
+                        # Try name with .json extension (un-migrated official profile)
+                        if profile is None:
+                            try:
+                                profile = Profile.objects.get(name=f"{profile_name}.json")
+                            except Profile.DoesNotExist:
+                                pass
+                        # Try bare name (user-created custom profile)
+                        if profile is None:
                             try:
                                 profile = Profile.objects.get(name=profile_name)
-                                template.profiles.add(profile)
-                                profiles_added += 1
                             except Profile.DoesNotExist:
-                                print(f"Warning: Profile '{profile_name}' (or '{stored_name}') not found in database for template '{template.name}'")
+                                pass
+                        
+                        if profile is not None:
+                            template.profiles.add(profile)
+                            profiles_added += 1
+                        else:
+                            print(f"Warning: Profile '{profile_name}' not found for template '{template.name}'")
                     print(f"Synced template '{template.name}': {profiles_added}/{len(profile_names)} profiles linked")
                 
             except Exception as e:

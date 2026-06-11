@@ -1,4 +1,5 @@
 {
+  "official_key": "dell_idrac_fans",
   "name": "dell_idrac_fans",
   "description": "Fan details",
   "product": "iDRAC",

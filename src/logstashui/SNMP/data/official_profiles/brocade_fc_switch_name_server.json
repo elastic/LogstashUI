@@ -1,4 +1,5 @@
 {
+  "official_key": "brocade_fc_switch_name_server",
   "name": "brocade_fc_switch_name_server",
   "description": "Local Fibre Channel name server entries",
   "product": "FC Switch",

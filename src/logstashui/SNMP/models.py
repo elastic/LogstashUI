@@ -476,6 +476,15 @@ class Profile(models.Model):
         help_text="List of normalizer configurations to apply to profile fields"
     )
     
+    official_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Stable identifier from the official JSON file (e.g. 'generic_interfaces'). Null for user-created profiles."
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -557,6 +566,15 @@ class DeviceTemplate(models.Model):
     official = models.BooleanField(
         default=False,
         help_text="Whether this is an official/built-in template (official templates cannot be edited or deleted)"
+    )
+    
+    official_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Stable identifier from the official JSON file (e.g. 'dell_idrac'). Null for user-created templates."
     )
     
     profiles = models.ManyToManyField(

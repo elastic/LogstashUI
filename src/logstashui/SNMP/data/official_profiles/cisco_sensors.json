@@ -1,4 +1,5 @@
 {
+  "official_key": "cisco_sensors",
   "name": "cisco_cdp",
   "description": "Sensors for temperature gathering purposes",
   "product": "Any",

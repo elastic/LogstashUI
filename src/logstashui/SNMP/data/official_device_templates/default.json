@@ -1,4 +1,5 @@
 {
+  "official_key": "default",
   "name": "Default",
   "type": "None",
   "description": "Default template for when no others are assigned, or can be assigned",

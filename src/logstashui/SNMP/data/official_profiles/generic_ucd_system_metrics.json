@@ -1,6 +1,7 @@
 {
+  "official_key": "generic_ucd_system_metrics",
   "name": "generic_ucd_system_metrics",
-  "description": "[Official] Memory and load average metrics from UCD-SNMP-MIB. Requires Net-SNMP — available on Linux/BSD devices.",
+  "description": "[Official] Memory and load average metrics from UCD-SNMP-MIB. Requires Net-SNMP \u2014 available on Linux/BSD devices.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
