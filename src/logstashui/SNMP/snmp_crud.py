@@ -2957,6 +2957,7 @@ def GetDeviceTemplates(request):
             templates_list.append({
                 'id': template.id,
                 'name': template.name,
+                'display_name': template.name.replace('_', ' ').title(),
                 'vendor': template.vendor,
                 'model': template.model,
                 'product': template.product,

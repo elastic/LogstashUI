@@ -73,6 +73,8 @@ function closeDeviceModal() {
   document.getElementById('deviceFormModal').classList.add('hidden');
   document.getElementById('deviceForm').reset();
   document.getElementById('deviceErrorContainer').innerHTML = '';
+  closeTemplateDropdown();
+  selectTemplateOption('', '', ''); // Reset custom dropdown display
 }
 
 // Load credentials into dropdown
@@ -187,26 +189,95 @@ function refreshNetworks() {
   loadNetworksForDevice(currentValue);
 }
 
-// Load device templates into dropdown
+// Map vendor name to logo filename (mirrors DeviceTemplates.html logic)
+function getVendorLogoFilename(vendor) {
+  if (!vendor) return 'unknown.png';
+  const v = vendor.toLowerCase();
+  if (v === 'cisco') return 'cisco.png';
+  if (v === 'dell') return 'dell.png';
+  if (v === 'brocade') return 'brocade.png';
+  if (v === 'hpe' || v === 'hpe nimble') return 'hpe.png';
+  if (v === 'epson') return 'epson.png';
+  if (v === 'ubiquiti') return 'ubiquiti.png';
+  return 'unknown.png';
+}
+
+// Apply a selection to the custom template dropdown
+function selectTemplateOption(id, displayName, vendor) {
+  const hiddenInput = document.getElementById('deviceTemplateSelect');
+  const img = document.getElementById('deviceTemplateSelectedImg');
+  const text = document.getElementById('deviceTemplateSelectedText');
+  const wrapper = document.getElementById('deviceTemplateDropdownWrapper');
+  const imagesUrl = wrapper ? wrapper.dataset.imagesUrl : '';
+
+  hiddenInput.value = id || '';
+
+  if (id) {
+    img.src = imagesUrl + getVendorLogoFilename(vendor);
+    img.alt = vendor || '';
+    img.classList.remove('hidden');
+    text.textContent = displayName;
+    text.classList.remove('text-gray-400');
+    text.classList.add('text-white');
+  } else {
+    img.src = '';
+    img.classList.add('hidden');
+    text.textContent = 'Select a template...';
+    text.classList.add('text-gray-400');
+    text.classList.remove('text-white');
+  }
+
+  closeTemplateDropdown();
+}
+
+// Open / close the custom template dropdown
+function toggleTemplateDropdown(event) {
+  event.stopPropagation();
+  const list = document.getElementById('deviceTemplateDropdownList');
+  if (list) list.classList.toggle('hidden');
+}
+
+function closeTemplateDropdown() {
+  const list = document.getElementById('deviceTemplateDropdownList');
+  if (list) list.classList.add('hidden');
+}
+
+// Load device templates into the custom dropdown
 function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
-  const templateSelect = document.getElementById('deviceTemplateSelect');
+  const list = document.getElementById('deviceTemplateDropdownList');
+  const wrapper = document.getElementById('deviceTemplateDropdownWrapper');
+  const imagesUrl = wrapper ? wrapper.dataset.imagesUrl : '';
 
   fetch('/SNMP/GetDeviceTemplates/')
     .then(response => response.json())
     .then(data => {
-      // Clear existing options except placeholder
-      templateSelect.innerHTML = '<option value="">Select a template...</option>';
+      list.innerHTML = '';
 
-      // Add templates to dropdown
+      // "No selection" row
+      const clearRow = document.createElement('div');
+      clearRow.className = 'flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:bg-gray-700 cursor-pointer';
+      clearRow.textContent = 'Select a template...';
+      clearRow.onclick = () => selectTemplateOption('', '', '');
+      list.appendChild(clearRow);
+
       const templates = data.templates || [];
       templates.forEach(template => {
-        const option = document.createElement('option');
-        option.value = template.id;
-        option.textContent = template.name;
+        const logoSrc = imagesUrl + getVendorLogoFilename(template.vendor);
+        const displayName = template.display_name || template.name;
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-700 cursor-pointer';
+        row.innerHTML = `
+          <img src="${logoSrc}" alt="${template.vendor || ''}"
+               class="w-5 h-5 object-contain flex-shrink-0 rounded bg-white p-0.5">
+          <span class="truncate">${displayName}</span>
+        `;
+        row.onclick = () => selectTemplateOption(template.id, displayName, template.vendor);
+        list.appendChild(row);
+
         if (selectedTemplateId && template.id == selectedTemplateId) {
-          option.selected = true;
+          selectTemplateOption(template.id, displayName, template.vendor);
         }
-        templateSelect.appendChild(option);
       });
     })
     .catch(error => {
@@ -214,11 +285,18 @@ function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
     });
 }
 
-// Refresh device templates dropdown
+// Refresh device templates dropdown (preserves current selection)
 function refreshDeviceTemplates() {
   const currentValue = document.getElementById('deviceTemplateSelect').value;
   loadDeviceTemplatesForDevice(currentValue);
 }
+
+// Close custom dropdown when clicking outside
+document.addEventListener('click', function (e) {
+  if (!e.target.closest('#deviceTemplateDropdownWrapper')) {
+    closeTemplateDropdown();
+  }
+});
 
 // Track if device modal is open to prevent it from closing
 let deviceModalIsOpen = false;
