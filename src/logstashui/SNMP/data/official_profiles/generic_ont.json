@@ -8,28 +8,36 @@
   "get": {
     "observer.mac_address": "1.3.6.1.4.1.52208.100.1.5.0",
     "observer.chipset": "1.3.6.1.4.1.52208.100.1.11.1.0",
-    "system.cpu.pct.core1": "1.3.6.1.4.1.52208.100.1.11.2.0",
-    "system.cpu.pct.core2": "1.3.6.1.4.1.52208.100.1.11.3.0",
-    "system.cpu.pct.core3": "1.3.6.1.4.1.52208.100.1.11.4.0",
-    "system.cpu.pct.core4": "1.3.6.1.4.1.52208.100.1.11.5.0",
-    "system.memory.total.bytes": "1.3.6.1.4.1.52208.100.1.11.6.0",
-    "system.memory.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0",
-    "system.cpu.num_cpus": "1.3.6.1.4.1.52208.100.1.11.10.0",
-    "observer.firmware_image": "1.3.6.1.4.1.52208.100.1.13.0",
+    "observer.firmware_version": "1.3.6.1.4.1.52208.100.1.13.0",
     "observer.product_id": "1.3.6.1.4.1.52208.100.1.100.0",
-    "observer.serial_number": "1.3.6.1.4.1.52208.100.1.101.0"
+    "observer.serial_number": "1.3.6.1.4.1.52208.100.1.101.0",
+    "system.memory.actual.total.bytes": "1.3.6.1.4.1.52208.100.1.11.6.0",
+    "system.memory.actual.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0"
   },
   "walk": {},
   "table": {
-    "ontPortTable": {
+    "interface": {
       "columns": {
-        "ontPortIndex": "1.3.6.1.4.1.52208.100.3.2.1.1",
-        "ontPortName": "1.3.6.1.4.1.52208.100.3.2.1.2",
-        "ontPortLinkStatus": "1.3.6.1.4.1.52208.100.3.2.1.3",
-        "ontPortAdminStatus": "1.3.6.1.4.1.52208.100.3.2.1.4",
-        "ontPortCurrentSpeedKbps": "1.3.6.1.4.1.52208.100.3.2.1.9",
-        "ontPortMaxSpeedKbps": "1.3.6.1.4.1.52208.100.3.2.1.10"
+        "index": "1.3.6.1.4.1.52208.100.3.2.1.1",
+        "name": "1.3.6.1.4.1.52208.100.3.2.1.2",
+        "status.oper": "1.3.6.1.4.1.52208.100.3.2.1.3",
+        "status.admin": "1.3.6.1.4.1.52208.100.3.2.1.4",
+        "speed_kbps": "1.3.6.1.4.1.52208.100.3.2.1.9",
+        "speed_max_kbps": "1.3.6.1.4.1.52208.100.3.2.1.10"
       }
     }
-  }
+  },
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.bytes",
+        "value2_field": "system.memory.actual.used.bytes",
+        "divide_output_field": "system.memory.actual.used.pct"
+      }
+    }
+  ]
 }

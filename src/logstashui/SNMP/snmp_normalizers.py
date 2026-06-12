@@ -156,7 +156,9 @@ def _generate_ratio_get_filter(normalizers):
         total_output = params.get('total_output_field', '').strip()
         ratio1_output = params.get('ratio1_output_field', '').strip()
         ratio2_output = params.get('ratio2_output_field', '').strip()
-        
+        complement_output = params.get('complement_ratio_output_field', '').strip()
+        divide_output = params.get('divide_output_field', '').strip()
+
         if not value1_field or not value2_field:
             continue
         
@@ -190,7 +192,18 @@ def _generate_ratio_get_filter(normalizers):
         if ratio2_output:
             ratio2_output_path = ''.join(f'[{part}]' for part in ratio2_output.split('.'))
             ruby_code_block += f'    event.set("{ratio2_output_path}", (value2_f{var_suffix} / total_f{var_suffix}))\n'
-        
+
+        # Add complement ratio output if specified: (value1 - value2) / value1
+        # Useful when value1 is total and value2 is free/available, yielding used fraction.
+        if complement_output:
+            complement_output_path = ''.join(f'[{part}]' for part in complement_output.split('.'))
+            ruby_code_block += f'    event.set("{complement_output_path}", (value1_f{var_suffix} - value2_f{var_suffix}) / value1_f{var_suffix})\n'
+
+        # Add divide output if specified: value2 / value1
+        if divide_output:
+            divide_output_path = ''.join(f'[{part}]' for part in divide_output.split('.'))
+            ruby_code_block += f'    event.set("{divide_output_path}", value2_f{var_suffix} / value1_f{var_suffix}) if value1_f{var_suffix} > 0\n'
+
         ruby_code_block += '  end\n'
         ruby_code_block += 'end'
         
@@ -210,15 +223,21 @@ def _generate_ratio_get_filter(normalizers):
         total_output = params.get('total_output_field', '').strip()
         ratio1_output = params.get('ratio1_output_field', '').strip()
         ratio2_output = params.get('ratio2_output_field', '').strip()
-        
+        complement_output = params.get('complement_ratio_output_field', '').strip()
+        divide_output = params.get('divide_output_field', '').strip()
+
         if value1_field and value2_field:
             calc_list.append(f"  Inputs: {value1_field}, {value2_field}")
             if total_output:
                 calc_list.append(f"    → {total_output} = sum")
             if ratio1_output:
-                calc_list.append(f"    → {ratio1_output} = ratio of first value")
+                calc_list.append(f"    → {ratio1_output} = value1 / (value1 + value2)")
             if ratio2_output:
-                calc_list.append(f"    → {ratio2_output} = ratio of second value")
+                calc_list.append(f"    → {ratio2_output} = value2 / (value1 + value2)")
+            if complement_output:
+                calc_list.append(f"    → {complement_output} = (value1 - value2) / value1")
+            if divide_output:
+                calc_list.append(f"    → {divide_output} = value2 / value1")
     
     comment_text = "Normalizer: Ratio\n"
     comment_text += "Calculates ratios and derived fields from two input values:\n"

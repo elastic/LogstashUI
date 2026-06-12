@@ -7,12 +7,11 @@
   "model": "Any",
   "get": {
     "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
     "host.name": "1.3.6.1.2.1.1.5.0",
-    "host.id": "1.3.6.1.2.1.1.2.0",
     "host.uptime": "1.3.6.1.2.1.1.3.0",
-    "system.object_id": "1.3.6.1.2.1.1.2.0",
-    "system.location": "1.3.6.1.2.1.1.6.0",
-    "system.contact": "1.3.6.1.2.1.1.4.0"
+    "host.location": "1.3.6.1.2.1.1.6.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
   },
   "walk": {},
   "table": {}

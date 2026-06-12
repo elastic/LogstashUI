@@ -14,18 +14,5 @@
     "observer.firmware_version": "1.3.6.1.4.1.4413.1.1.1.1.1.13.0"
   },
   "walk": {},
-  "table": {
-    "ubntPortStatsTable": {
-      "columns": {
-        "ubntPortStatsRxBytes": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.1",
-        "ubntPortStatsTxBytes": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.2",
-        "ubntPortStatsRxFrames": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.3",
-        "ubntPortStatsTxFrames": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.4",
-        "ubntPortStatsRxBytesHC": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.9",
-        "ubntPortStatsTxBytesHC": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.10",
-        "ubntPortStatsRxFramesHC": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.11",
-        "ubntPortStatsTxFramesHC": "1.3.6.1.4.1.4413.1.1.1.1.8.1.1.12"
-      }
-    }
-  }
+  "table": {}
 }

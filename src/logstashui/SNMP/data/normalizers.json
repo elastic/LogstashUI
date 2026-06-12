@@ -14,21 +14,21 @@
   },
   "ratio": {
     "label": "Calculate ratio",
-    "description": "Calculates ratio and derived fields from two input values. Computes: total = value1 + value2, ratio1 = value1 / total, ratio2 = value2 / total",
+    "description": "Derives ratios from two input fields. Any two of {used, free, total} are sufficient to compute all percentages.",
     "applies_to": ["get"],
     "has_target_field": false,
     "inputs": {
       "value1_field": {
         "type": "field_selector",
-        "description": "First field name (e.g., system.memory.actual.used.bytes)"
+        "description": "First field (e.g., system.memory.actual.used.bytes)"
       },
       "value2_field": {
         "type": "field_selector",
-        "description": "Second field name (e.g., system.memory.actual.free.bytes)"
+        "description": "Second field (e.g., system.memory.actual.free.bytes)"
       },
       "total_output_field": {
         "type": "string",
-        "description": "Field to store the sum (value1 + value2). Leave empty to skip."
+        "description": "Field to store value1 + value2. Leave empty to skip."
       },
       "ratio1_output_field": {
         "type": "string",
@@ -37,6 +37,14 @@
       "ratio2_output_field": {
         "type": "string",
         "description": "Field to store value2 / (value1 + value2). Leave empty to skip."
+      },
+      "complement_ratio_output_field": {
+        "type": "string",
+        "description": "Field to store (value1 - value2) / value1. Leave empty to skip."
+      },
+      "divide_output_field": {
+        "type": "string",
+        "description": "Field to store value2 / value1. Leave empty to skip."
       }
     }
   }

@@ -23,5 +23,18 @@
     "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
   },
   "walk": {},
-  "table": {}
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
+        "complement_ratio_output_field": "system.memory.actual.used.pct"
+      }
+    }
+  ]
 }
