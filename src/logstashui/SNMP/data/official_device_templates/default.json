@@ -1,8 +1,8 @@
 {
   "official_key": "default",
-  "name": "Default",
+  "name": "default",
   "type": "None",
-  "description": "Default template for when no others are assigned, or can be assigned",
+  "description": "Fallback template applied when no other template matches.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",

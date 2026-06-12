@@ -2,7 +2,7 @@
   "official_key": "epson_printer",
   "name": "epson_printer",
   "type": "Printer",
-  "description": "General metrics for Epson printers",
+  "description": "System info and interface stats for Epson printers.",
   "vendor": "Epson",
   "product": "Any",
   "model": "Any",

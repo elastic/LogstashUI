@@ -1,19 +1,19 @@
 {
   "official_key": "cisco_sensors",
-  "name": "cisco_cdp",
-  "description": "Sensors for temperature gathering purposes",
+  "name": "sensor",
+  "description": "Temperature sensor readings and shutdown thresholds for Cisco devices.",
   "product": "Any",
   "vendor": "Cisco",
   "model": "Any",
   "get": {},
   "walk": {},
   "table": {
-    "sensors": {
+    "component.sensor": {
       "columns": {
         "description": "1.3.6.1.4.1.9.9.13.1.3.1.2",
-        "temp_celsius": "1.3.6.1.4.1.9.9.13.1.3.1.3",
-        "temp_threshold": "1.3.6.1.4.1.9.9.13.1.3.1.4",
-        "temp_last_shutdown": "1.3.6.1.4.1.9.9.13.1.3.1.5",
+        "temp.celsius": "1.3.6.1.4.1.9.9.13.1.3.1.3",
+        "temp.threshold": "1.3.6.1.4.1.9.9.13.1.3.1.4",
+        "temp.last_shutdown": "1.3.6.1.4.1.9.9.13.1.3.1.5",
         "state": "1.3.6.1.4.1.9.9.13.1.3.1.6"
       }
     }

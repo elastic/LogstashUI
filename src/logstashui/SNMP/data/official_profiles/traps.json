@@ -1,8 +1,10 @@
 {
   "official_key": "traps",
   "name": "traps",
-  "description": "[Official] Traps conversion pipeline",
+  "description": "SNMP trap pipeline capturing host identity for inbound trap events.",
   "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
   "get": {
     "host.os.full": "1.3.6.1.2.1.1.1.0",
     "host.name": "1.3.6.1.2.1.1.5.0",

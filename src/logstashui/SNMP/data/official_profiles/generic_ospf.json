@@ -1,0 +1,21 @@
+{
+  "official_key": "generic_ospf",
+  "name": "generic_ospf",
+  "description": "OSPF neighbor adjacencies: state, router ID, priority, and retransmit count.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "ospf_neighbor": {
+      "columns": {
+        "neighbor_ip": "1.3.6.1.2.1.14.10.1.1",
+        "router_id": "1.3.6.1.2.1.14.10.1.3",
+        "priority": "1.3.6.1.2.1.14.10.1.5",
+        "state": "1.3.6.1.2.1.14.10.1.6",
+        "retrans_count": "1.3.6.1.2.1.14.10.1.7"
+      }
+    }
+  }
+}

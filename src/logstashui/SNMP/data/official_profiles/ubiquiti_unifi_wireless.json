@@ -1,7 +1,7 @@
 {
   "official_key": "ubiquiti_unifi_wireless",
   "name": "ubiquiti_unifi_wireless",
-  "description": "[Official] Ubiquiti UniFi AP wireless metrics via UAP-MIB: per-radio stats, per-SSID/VAP client and traffic counters, wired uplink stats, and device firmware info",
+  "description": "Per-radio stats, per-SSID/VAP client and traffic counters, and wired uplink stats for Ubiquiti UniFi APs.",
   "vendor": "Ubiquiti",
   "product": "UniFi AP",
   "model": "Any",

@@ -1,7 +1,7 @@
 {
   "official_key": "generic_system",
   "name": "generic_system",
-  "description": "[Official] Generic details you would want to gather from most/all systems",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
   "product": "Any",
   "vendor": "Any",
   "model": "Any",

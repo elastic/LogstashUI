@@ -199,6 +199,8 @@ function getVendorLogoFilename(vendor) {
   if (v === 'hpe' || v === 'hpe nimble') return 'hpe.png';
   if (v === 'epson') return 'epson.png';
   if (v === 'ubiquiti') return 'ubiquiti.png';
+  if (v === 'hp') return 'hp.png';
+  if (v === 'mellanox') return 'mellanox.png';
   return 'unknown.png';
 }
 

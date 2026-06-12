@@ -2,7 +2,7 @@
   "official_key": "generic_linux",
   "name": "generic_linux",
   "type": "Server",
-  "description": "Metrics for Linux hosts running Net-SNMP (snmpd). Coverage depends entirely on snmpd configuration \u2014 a minimal default config exposes only MIB-II system/interfaces and hrSystem scalars. A fully configured snmpd additionally exposes UCD-SNMP-MIB (memory, load averages, CPU raw counters) and the full HOST-RESOURCES-MIB (storage, per-CPU load). Both profile groups are included here; OIDs that are not configured in snmpd will simply return no data.",
+  "description": "System, interfaces, memory, load averages, CPU, and storage for Linux hosts running Net-SNMP.",
   "vendor": "Any",
   "product": "Linux",
   "model": "Any",

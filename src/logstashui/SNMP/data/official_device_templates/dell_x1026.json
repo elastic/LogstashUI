@@ -2,7 +2,7 @@
   "official_key": "dell_x1026",
   "name": "dell_x1026",
   "type": "Network",
-  "description": "Metrics for Dell Networking X1026 26-port 1GbE switch (Marvell GT-98DX3035B chipset). No vendor-specific SNMP OIDs are exposed \u2014 standard IF-MIB covers the 26 GbE ports, 12 port-channel/LAG interfaces, and VLAN interfaces. A thermal sensor entity is declared in ENTITY-MIB but is not readable via ENTITY-SENSOR-MIB. CPU, memory, and LLDP are not available via SNMP.",
+  "description": "Interface and system info for the Dell Networking X1026 26-port 1GbE switch.",
   "vendor": "Dell",
   "product": "Networking X1026",
   "model": "Any",

@@ -1,8 +1,10 @@
 {
   "official_key": "cisco_system_metrics",
   "name": "cisco_system_metrics",
-  "description": "CPU and Memory for Cisco devices",
+  "description": "CPU utilization and memory used/free/total for Cisco devices.",
   "vendor": "Cisco",
+  "product": "Any",
+  "model": "Any",
   "get": {
     "system.cpu.total.norm.pct": "1.3.6.1.4.1.9.2.1.57.0",
     "system.memory.actual.used.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.5.1",

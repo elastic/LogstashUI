@@ -1,19 +1,19 @@
 {
   "official_key": "dell_idrac_memory",
-  "name": "dell_idrac_memory",
-  "description": "Memory details",
+  "name": "idrac_memory",
+  "description": "DIMM state, location, and size for Dell iDRAC.",
   "product": "iDRAC",
   "vendor": "Dell",
   "model": "Any",
   "get": {},
   "walk": {},
   "table": {
-    "idracMemoryTable": {
+    "component.memory": {
       "columns": {
-        "memoryIndex": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.1",
-        "memoryLocation": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.5",
-        "memoryStatus": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.4",
-        "memorySizeMB": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.14"
+        "index": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.1",
+        "location": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.5",
+        "state": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.4",
+        "size.mb": "1.3.6.1.4.1.674.10892.5.4.1100.50.1.14"
       }
     }
   }

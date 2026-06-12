@@ -2,7 +2,7 @@
   "official_key": "hp_laserjet_mfp_m281cdw",
   "name": "hp_laserjet_mfp_m281cdw",
   "type": "Printer",
-  "description": "Metrics for HP Color LaserJet MFP M281cdw: toner levels (CMYK), lifetime page count, paper tray levels, cover status, and printer alerts via standard Printer MIB. No HP-specific vendor OIDs are exposed \u2014 generic_printer_mib covers everything available.",
+  "description": "Toner levels, page count, paper tray capacity, cover status, and alerts for the HP Color LaserJet MFP M281cdw.",
   "vendor": "HP",
   "product": "Color LaserJet MFP M281cdw",
   "model": "Any",

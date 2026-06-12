@@ -1,7 +1,7 @@
 {
   "official_key": "eaton_xups",
   "name": "eaton_xups",
-  "description": "[Official] Eaton UPS monitoring via XUPS-MIB (1.3.6.1.4.1.534) and MGE UPS MIB (1.3.6.1.4.1.705). Captures battery capacity, runtime remaining, voltage and status; per-phase input/output voltage, current, and watts; overall output load %; ambient temperature and humidity; and active alarm count. Serial number sourced from MGE OID. Applies to any Eaton/Powerware UPS running Network-MS or Gigabit Network Card firmware.",
+  "description": "Battery capacity, runtime, per-phase input/output power, load, environment, and active alarms for Eaton UPS devices.",
   "vendor": "Eaton",
   "product": "Any",
   "model": "Any",
@@ -27,22 +27,21 @@
   },
   "walk": {},
   "table": {
-    "xupsInputTable": {
+    "ups.input.phase": {
       "columns": {
-        "xupsInputPhaseIndex": "1.3.6.1.4.1.534.1.3.4.1.1",
-        "xupsInputVoltage": "1.3.6.1.4.1.534.1.3.4.1.2",
-        "xupsInputCurrent": "1.3.6.1.4.1.534.1.3.4.1.3",
-        "xupsInputWatts": "1.3.6.1.4.1.534.1.3.4.1.4",
-        "xupsInputVoltageStatus": "1.3.6.1.4.1.534.1.3.4.1.5"
+        "index": "1.3.6.1.4.1.534.1.3.4.1.1",
+        "voltage": "1.3.6.1.4.1.534.1.3.4.1.2",
+        "current": "1.3.6.1.4.1.534.1.3.4.1.4",
+        "voltage_status": "1.3.6.1.4.1.534.1.3.4.1.5"
       }
     },
-    "xupsOutputTable": {
+    "ups.output.phase": {
       "columns": {
-        "xupsOutputPhaseIndex": "1.3.6.1.4.1.534.1.4.4.1.1",
-        "xupsOutputVoltage": "1.3.6.1.4.1.534.1.4.4.1.2",
-        "xupsOutputCurrent": "1.3.6.1.4.1.534.1.4.4.1.3",
-        "xupsOutputLoad": "1.3.6.1.4.1.534.1.4.4.1.4",
-        "xupsOutputPower": "1.3.6.1.4.1.534.1.4.4.1.5"
+        "index": "1.3.6.1.4.1.534.1.4.4.1.1",
+        "voltage": "1.3.6.1.4.1.534.1.4.4.1.2",
+        "current": "1.3.6.1.4.1.534.1.4.4.1.3",
+        "load": "1.3.6.1.4.1.534.1.4.4.1.4",
+        "power": "1.3.6.1.4.1.534.1.4.4.1.5"
       }
     }
   }

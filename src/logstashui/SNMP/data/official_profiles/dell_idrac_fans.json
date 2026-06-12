@@ -1,19 +1,19 @@
 {
   "official_key": "dell_idrac_fans",
-  "name": "dell_idrac_fans",
-  "description": "Fan details",
+  "name": "idrac_fans",
+  "description": "Fan state and RPM for Dell iDRAC.",
   "product": "iDRAC",
   "vendor": "Dell",
   "model": "Any",
   "get": {},
   "walk": {},
   "table": {
-    "idracFanTable": {
+    "component.fan": {
       "columns": {
-        "fanIndex": "1.3.6.1.4.1.674.10892.5.4.700.12.1.1",
-        "fanLocation": "1.3.6.1.4.1.674.10892.5.4.700.12.1.7",
-        "fanStatus": "1.3.6.1.4.1.674.10892.5.4.700.12.1.5",
-        "fanReadingRPM": "1.3.6.1.4.1.674.10892.5.4.700.12.1.6"
+        "index": "1.3.6.1.4.1.674.10892.5.4.700.12.1.1",
+        "description": "1.3.6.1.4.1.674.10892.5.4.700.12.1.7",
+        "state": "1.3.6.1.4.1.674.10892.5.4.700.12.1.5",
+        "rpm": "1.3.6.1.4.1.674.10892.5.4.700.12.1.6"
       }
     }
   }

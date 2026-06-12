@@ -1,7 +1,7 @@
 {
   "official_key": "ubiquiti_unifi_switch",
   "name": "ubiquiti_unifi_switch",
-  "description": "[Official] Ubiquiti UniFi Switch system info and per-port traffic counters via the Edgecore/UBNT switch MIB (1.3.6.1.4.1.4413). Note: CPU, memory, PoE power draw, and LLDP are not exposed via SNMP on this firmware.",
+  "description": "System info and per-port traffic counters for Ubiquiti UniFi switches.",
   "vendor": "Ubiquiti",
   "product": "UniFi Switch",
   "model": "Any",

@@ -2,7 +2,7 @@
   "official_key": "ubiquiti_unifi_udm",
   "name": "ubiquiti_unifi_udm",
   "type": "Router",
-  "description": "Metrics for Ubiquiti UniFi Dream Machine (UDM, UDM-Pro, UDM-SE, UDM-Pro-Max). Exposes standard Linux/Net-SNMP MIBs only \u2014 no vendor-specific OIDs available via SNMP.",
+  "description": "System, interfaces, and Linux/Net-SNMP metrics for Ubiquiti UniFi Dream Machine devices.",
   "vendor": "Ubiquiti",
   "product": "UniFi Dream Machine",
   "model": "Any",

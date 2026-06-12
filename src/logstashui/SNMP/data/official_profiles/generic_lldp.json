@@ -1,7 +1,7 @@
 {
   "official_key": "generic_lldp",
   "name": "generic_lldp",
-  "description": "LLDP-MIB local system + local ports + remote neighbors + remote mgmt addresses",
+  "description": "LLDP local system identity, local port table, remote neighbor table, and remote management addresses.",
   "product": "Any",
   "vendor": "Any",
   "model": "Any",

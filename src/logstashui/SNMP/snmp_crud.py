@@ -2533,7 +2533,7 @@ def _get_device_interfaces(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "interface.ifDescr",
+                    "field": "interface.name",
                     "size": 1000
                 },
                 "aggregations": {

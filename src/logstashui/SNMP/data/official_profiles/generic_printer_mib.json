@@ -1,7 +1,7 @@
 {
   "official_key": "generic_printer_mib",
   "name": "generic_printer_mib",
-  "description": "[Official] Standard Printer MIB (RFC 3805, 1.3.6.1.2.1.43): toner/supply levels and descriptions, lifetime and power-on page counts, paper tray levels and capacity, cover status, and active alert codes. Broadly supported across HP, Xerox, Canon, Brother, Kyocera, and most SNMP-capable printers. Supply levels use prtMarkerSuppliesSupplyUnit to indicate units (19 = percent). Negative tray values: -2 = no restriction, -3 = unknown.",
+  "description": "Toner/supply levels, page counts, paper tray capacity, cover status, and active alerts for SNMP-capable printers.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",

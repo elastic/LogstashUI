@@ -1,7 +1,7 @@
 {
   "official_key": "mellanox_mlnx_os",
   "name": "mellanox_mlnx_os",
-  "description": "[Official] Mellanox MLNX-OS system metadata: active firmware version (from partition table), system ready status, and chassis MAC address. Applicable to any Mellanox switch running MLNX-OS (SX/MSX series). CPU and memory are not exposed via SNMP on MLNX-OS.",
+  "description": "Active firmware version, system ready status, and chassis MAC for Mellanox MLNX-OS switches.",
   "vendor": "Mellanox",
   "product": "Any",
   "model": "Any",

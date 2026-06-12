@@ -1,0 +1,19 @@
+{
+  "official_key": "generic_arp",
+  "name": "generic_arp",
+  "description": "ARP table entries mapping IP to MAC per interface — can generate high data volumes on large networks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "arp": {
+      "columns": {
+        "interface_index": "1.3.6.1.2.1.4.22.1.1",
+        "mac_addr": "1.3.6.1.2.1.4.22.1.2",
+        "ip_addr": "1.3.6.1.2.1.4.22.1.3"
+      }
+    }
+  }
+}

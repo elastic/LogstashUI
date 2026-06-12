@@ -2,7 +2,7 @@
   "official_key": "dell_idrac",
   "name": "dell_idrac",
   "type": "Management",
-  "description": "Hardware health: system status, PSU, fans, temperature, memory, CPU, RAID",
+  "description": "Full hardware health: system status, PSU, fans, memory, CPU, and RAID controller for Dell iDRAC.",
   "vendor": "Dell",
   "product": "iDRAC",
   "model": "Any",

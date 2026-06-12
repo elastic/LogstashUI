@@ -2,7 +2,7 @@
   "official_key": "cisco_ios",
   "name": "cisco_ios",
   "type": "Network",
-  "description": "Hardware health and adjacency",
+  "description": "CDP neighbor discovery, fan and temperature health, system metrics, and interface counters for Cisco IOS devices.",
   "vendor": "Cisco",
   "product": "IOS",
   "model": "Any",

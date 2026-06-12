@@ -1,7 +1,7 @@
 {
   "official_key": "hpe_nimble_volumes",
-  "name": "hpe_nimble_volumes",
-  "description": "Storage Array Volumes",
+  "name": "nimble_volumes",
+  "description": "Per-volume capacity, usage, I/O throughput, and read/write latency for HPE Nimble storage arrays.",
   "vendor": "HPE",
   "product": "Nimble",
   "model": "Any",

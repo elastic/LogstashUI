@@ -211,7 +211,7 @@ def get_cdp_adjacencies():
                                 "network.name",
                                 "event.category",
                                 "interface.ifIndex",
-                                "interface.ifDescr"
+                                "interface.name"
                             ],
                             "query": {
                                 "bool": {
@@ -260,7 +260,7 @@ def get_cdp_adjacencies():
                                 device_name = source.get('host', {}).get('name', '')
                                 table_data = source.get('interface', {})
                                 if_index = table_data.get('ifIndex', '')
-                                if_descr = table_data.get('ifDescr', '')
+                                if_descr = table_data.get('name', '')
                                 
                                 if device_name and if_index and if_descr:
                                     lookup_key = f"{device_name}:{if_index}"
