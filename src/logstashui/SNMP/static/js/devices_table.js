@@ -155,12 +155,6 @@ function renderDevices(devices) {
     row.className = 'hover:bg-gray-700/50 transition-colors';
     row.id = `device-row-${device.id}`;
     
-    const createdDate = new Date(device.created_at).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    
     // Render device template badge
     let templateHtml = '';
     if (device.device_template_name) {
@@ -207,7 +201,6 @@ function renderDevices(devices) {
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${templateHtml}
       </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${createdDate}</td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         <div class="action-menu relative">
           <button class="action-menu-button p-1 hover:bg-gray-700 rounded">

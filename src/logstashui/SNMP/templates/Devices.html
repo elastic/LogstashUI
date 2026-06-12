@@ -109,9 +109,10 @@
         <div style="flex: 0 0 13%;">
           <label for="pageSizeSelect" class="block text-sm font-medium text-gray-300 mb-2 text-xs">Rows</label>
           <select id="pageSizeSelect" class="select select-bordered w-full select-sm">
-            <option value="10">10</option>
             <option value="25" selected>25</option>
+            <option value="50">50</option>
             <option value="100">100</option>
+            <option value="200">200</option>
           </select>
         </div>
       </div>
@@ -162,9 +163,6 @@
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Credential</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Device Template</th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('created_at')">
-            Created <span id="sort-created_at" class="ml-1">▼</span>
-          </th>
           <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
         </tr>
       </thead>

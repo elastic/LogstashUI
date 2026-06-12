@@ -489,16 +489,18 @@ def _generate_filters(oid_mappings, network, normalizers=None):
     # Build rename mappings for get OIDs
     get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
 
-    # Build rename mappings for table columns: [table_name][oid] -> [table_name][column_name]
+    # Build rename mappings for table columns using proper bracket notation.
+    # Dotted table/column names are expanded: component.fan -> [component][fan]
     table_renames = {}
     for table_name, table_data in oid_mappings['table'].items():
         if isinstance(table_data, dict) and 'columns' in table_data:
             columns = table_data['columns']
             if isinstance(columns, dict):
                 for column_name, oid in columns.items():
-                    # Create rename from [table_name][oid] to [table_name][column_name]
-                    from_field = f"[{table_name}][{oid}]"
-                    to_field = f"[{table_name}][{column_name}]"
+                    table_bracket = _format_field_name(table_name)
+                    column_bracket = _format_field_name(column_name)
+                    from_field = f"{table_bracket}[{oid}]"
+                    to_field = f"{table_bracket}{column_bracket}"
                     table_renames[from_field] = to_field
 
     filter_components = [
@@ -782,8 +784,59 @@ def _format_field_name(field_name):
         parts = field_name.split('.')
         return ''.join(f'[{part}]' for part in parts)
 
-    # No dots and not in bracket notation, leave alone
-    return field_name
+    # No dots and not in bracket notation, wrap in brackets
+    return f'[{field_name}]'
+
+
+def _ruby_table_nested_entry(table_name, value_expr):
+    """
+    Generate a Ruby hash key-value entry for a (possibly dot-separated) table name.
+    Dot-separated names produce nested Ruby hashes.
+
+    Examples:
+        "ifTable",      "row" -> '"ifTable" => row'
+        "component.fan","row" -> '"component" => { "fan" => row }'
+    """
+    parts = table_name.split('.')
+
+    def build(parts, val):
+        if len(parts) == 1:
+            return f'"{parts[0]}" => {val}'
+        return f'"{parts[0]}" => {{ {build(parts[1:], val)} }}'
+
+    return build(parts, value_expr)
+
+
+def _ruby_row_rename_statements(columns):
+    """
+    Generate Ruby statements that rename OID keys to column names inside a row Hash.
+    Dot-separated column names are expanded into nested hashes.
+
+    Each parent path is initialized with ||= {} only once, regardless of how many
+    columns share that parent.
+
+    Args:
+        columns: Dict of {column_name: oid}
+
+    Returns:
+        Multi-line string of 4-space-indented Ruby statements
+    """
+    statements = []
+    initialized_paths = set()
+    for field_name, oid in columns.items():
+        parts = field_name.split('.')
+        if len(parts) == 1:
+            statements.append(f'    row["{field_name}"] = row.delete("{oid}")')
+        else:
+            # Emit ||= {} for each parent level only the first time it's seen
+            for i in range(1, len(parts)):
+                path = ''.join(f'["{p}"]' for p in parts[:i])
+                if path not in initialized_paths:
+                    statements.append(f'    row{path} ||= {{}}')
+                    initialized_paths.add(path)
+            full_path = ''.join(f'["{p}"]' for p in parts)
+            statements.append(f'    row{full_path} = row.delete("{oid}")')
+    return '\n'.join(statements)
 
 
 def _get_special_case_filters(oid_mappings):
@@ -812,15 +865,21 @@ def _get_special_case_filters(oid_mappings):
         if isinstance(table_data, dict) and 'columns' in table_data:
             columns = table_data.get('columns', {})
             if isinstance(columns, dict) and columns:
-                # Generate the row rename statements using list comprehension
-                rename_statements = '\n'.join([
-                    f"    row[\"{field_name}\"] = row.delete(\"{oid}\")"
-                    for field_name, oid in columns.items()
-                ])
+                # Logstash bracket-notation path for event.get / event.remove.
+                # Dotted table names (e.g. "component.fan") become "[component][fan]".
+                table_field_path = _format_field_name(table_name)
+
+                # Ruby statements that rename OID keys to column names inside each row.
+                # Dotted column names are expanded into nested Ruby hashes.
+                rename_statements = _ruby_row_rename_statements(columns)
+
+                # Ruby hash entry that stores the row under the correct nested key.
+                # "component.fan" -> '"component" => { "fan" => row }'
+                table_hash_entry = _ruby_table_nested_entry(table_name, "row")
 
                 # Build the Ruby code for this table
                 ruby_code = (
-                    f"rows = event.get(\"[{table_name}]\")\n"
+                    f"rows = event.get(\"{table_field_path}\")\n"
                     f"if rows.is_a?(Array)\n"
                     f"  host_name = event.get(\"[host][name]\")\n"
                     f"  host_hostname = event.get(\"[host][hostname]\")\n"
@@ -837,13 +896,13 @@ def _get_special_case_filters(oid_mappings):
                     f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname, \"type\" => host_type }},\n"
                     f"      \"observer\" => {{ \"vendor\" => observer_vendor, \"os\" => {{ \"full\" => observer_os_full }} }},\n"
                     f"      \"network\" => {{ \"name\" => network_name }},\n"
-                    f"      \"{table_name}\" => row,\n"
+                    f"      {table_hash_entry},\n"
                     f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
                     f"      \"event\" => {{ \"category\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
-                    f"  event.remove(\"[{table_name}]\")\n"
+                    f"  event.remove(\"{table_field_path}\")\n"
                     f"  event.set(\"[event][category]\", \"metrics\")\n"
                     f"end"
                 )

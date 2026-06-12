@@ -74,27 +74,28 @@
     <!-- Search, Filter, and Controls -->
     <div id="searchFilterBar" class="bg-gray-800 rounded-lg p-4 mb-4 mt-4 shadow-xl">
       <div class="flex gap-4 items-end">
-        <!-- Search (60%) -->
-        <div style="flex: 0 0 60%;">
+        <!-- Search (50%) -->
+        <div style="flex: 0 0 50%;">
           <label for="searchInput" class="block text-sm font-medium text-gray-300 mb-2">Search</label>
           <input type="text" id="searchInput" placeholder="Search by name or network range..." class="input input-bordered w-full">
         </div>
         
-        <!-- Connection Filter (32%) -->
-        <div style="flex: 0 0 32%;">
+        <!-- Connection Filter (35%) -->
+        <div style="flex: 0 0 35%;">
           <label for="connectionFilter" class="block text-sm font-medium text-gray-300 mb-2">Connection</label>
           <select id="connectionFilter" class="select select-bordered w-full">
             <option value="">All Connections</option>
           </select>
         </div>
         
-        <!-- Page Size (10%) -->
-        <div style="flex: 0 0 8%;">
+        <!-- Page Size (13%) -->
+        <div style="flex: 0 0 13%;">
           <label for="pageSizeSelect" class="block text-sm font-medium text-gray-300 mb-2 text-xs">Rows</label>
           <select id="pageSizeSelect" class="select select-bordered w-full select-sm">
-            <option value="10">10</option>
             <option value="25" selected>25</option>
+            <option value="50">50</option>
             <option value="100">100</option>
+            <option value="200">200</option>
           </select>
         </div>
       </div>

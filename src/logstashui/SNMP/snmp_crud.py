@@ -90,7 +90,10 @@ import traceback
 def GetCredentials(request):
     """Get all SNMP credentials"""
     try:
-        credentials = Credential.objects.all().values('id', 'name', 'version', 'description')
+        from django.db.models import Count
+        credentials = Credential.objects.annotate(
+            device_count=Count('devices')
+        ).values('id', 'name', 'version', 'description', 'security_level', 'device_count')
         return JsonResponse(list(credentials), safe=False, status=200)
     except Exception as e:
         return HttpResponse(f"Error fetching credentials: {str(e)}", status=500)
