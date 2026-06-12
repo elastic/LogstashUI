@@ -243,8 +243,8 @@ function renderDevicePreview(deviceId, device, visualizations) {
 
       // Sort interfaces by index
       const sortedInterfaces = interfacesArray.sort((a, b) => {
-        const indexA = parseInt(a.index) || parseInt(a.ifIndex) || 0;
-        const indexB = parseInt(b.index) || parseInt(b.ifIndex) || 0;
+        const indexA = parseInt(a.index ?? a.ifIndex) || 0;
+        const indexB = parseInt(b.index ?? b.ifIndex) || 0;
         return indexA - indexB;
       });
 
@@ -260,75 +260,86 @@ function renderDevicePreview(deviceId, device, visualizations) {
 function createInterfaceCard(iface) {
   const card = document.createElement('div');
 
-  // Determine status colors based on admin and oper status
-  const adminStatus = parseInt(iface.ifAdminStatus);
-  const operStatus = parseInt(iface.ifOperStatus);
+  // New schema: status is nested under interface.status.{admin,oper}
+  const adminStatus = parseInt(iface.status?.admin ?? iface.ifAdminStatus);
+  const operStatus  = parseInt(iface.status?.oper  ?? iface.ifOperStatus);
 
   // Admin status: 1=Up, 2=Down, 3=Testing
-  // Oper status: 1=Up, 2=Down, 3=Testing, 4=Unknown, 5=Dormant, 6=NotPresent, 7=LowerLayerDown
+  // Oper status:  1=Up, 2=Down, 3=Testing, 4=Unknown, 5=Dormant, 6=NotPresent, 7=LowerLayerDown
 
   let borderClass = 'border-gray-600';
   let statusText = 'Unknown';
   let statusColor = 'bg-gray-500';
 
   if (adminStatus === 2) {
-    // Admin down - gray
     borderClass = 'border-gray-500';
     statusText = 'Admin Down';
     statusColor = 'bg-gray-500';
   } else if (adminStatus === 1 && operStatus === 1) {
-    // Up/Up - green
     borderClass = 'border-green-500';
     statusText = 'Up';
     statusColor = 'bg-green-500';
   } else if (adminStatus === 1 && operStatus === 2) {
-    // Up/Down - red
     borderClass = 'border-red-500';
     statusText = 'Down';
     statusColor = 'bg-red-500';
   } else if (adminStatus === 1 && operStatus === 5) {
-    // Dormant - yellow
     borderClass = 'border-yellow-500';
     statusText = 'Dormant';
     statusColor = 'bg-yellow-500';
   } else if (adminStatus === 3 || operStatus === 3) {
-    // Testing - blue
     borderClass = 'border-blue-500';
     statusText = 'Testing';
     statusColor = 'bg-blue-500';
   }
 
-  // Format speed
-  const speedMbps = iface.ifHighSpeed || (iface.ifSpeed ? iface.ifSpeed / 1000000 : 0);
+  // New schema: speed_high_mbps replaces ifHighSpeed; speed replaces ifSpeed (bps)
+  const speedMbps = iface.speed_high_mbps ?? iface.ifHighSpeed ?? (iface.speed ? iface.speed / 1_000_000 : (iface.ifSpeed ? iface.ifSpeed / 1_000_000 : 0));
   const speedText = speedMbps >= 1000 ? `${speedMbps / 1000}G` : `${speedMbps}M`;
 
-  // Format MAC address
-  const macAddress = iface.ifPhysAddress || 'N/A';
+  // New schema: mac replaces ifPhysAddress
+  const macAddress = iface.mac ?? iface.ifPhysAddress ?? 'N/A';
 
-  // Build detailed tooltip content with better formatting
+  // New schema: name replaces ifDescr/ifName; alias replaces ifAlias
+  const ifaceName  = iface.name ?? iface.alt_name ?? iface.ifName ?? iface.ifDescr ?? '';
+  const ifaceAlias = iface.alias ?? iface.ifAlias ?? '';
+
+  // New schema: traffic.in/out.bytes replace ifHCInOctets/ifHCOutOctets
+  const inBytes  = iface.traffic?.in?.bytes  ?? iface.ifHCInOctets  ?? 0;
+  const outBytes = iface.traffic?.out?.bytes ?? iface.ifHCOutOctets ?? 0;
+
+  // New schema: errors.in/out replace ifInErrors/ifOutErrors
+  const inErrors  = iface.errors?.in  ?? iface.ifInErrors  ?? 0;
+  const outErrors = iface.errors?.out ?? iface.ifOutErrors ?? 0;
+
+  // New schema: mtu, type, index replace ifMtu, ifType, ifIndex
+  const mtu   = iface.mtu   ?? iface.ifMtu   ?? 'N/A';
+  const type  = iface.type  ?? iface.ifType  ?? 'N/A';
+  const index = iface.index ?? iface.ifIndex ?? 'N/A';
+
   const adminStatusText = adminStatus === 1 ? '<span class="text-green-400">Up</span>' : adminStatus === 2 ? '<span class="text-gray-400">Down</span>' : '<span class="text-blue-400">Testing</span>';
-  const operStatusHtml = operStatus === 1 ? '<span class="text-green-400">Up</span>' : operStatus === 2 ? '<span class="text-red-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
+  const operStatusHtml  = operStatus  === 1 ? '<span class="text-green-400">Up</span>' : operStatus  === 2 ? '<span class="text-red-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
 
   const tooltipContent = `
-    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(iface.ifDescr || iface.ifName)}</div>
-    ${iface.ifAlias ? `<div class="text-xs text-gray-400 mb-2 italic">${escapeHtml(iface.ifAlias)}</div>` : ''}
+    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(ifaceName)}</div>
+    ${ifaceAlias ? `<div class="text-xs text-gray-400 mb-2 italic">${escapeHtml(ifaceAlias)}</div>` : ''}
     
     <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mb-2">
       <div><span class="text-gray-400">Admin:</span> ${adminStatusText}</div>
       <div><span class="text-gray-400">Oper:</span> ${operStatusHtml}</div>
       <div><span class="text-gray-400">Speed:</span> <span class="text-white">${speedText}</span></div>
-      <div><span class="text-gray-400">MTU:</span> <span class="text-white">${iface.ifMtu || 'N/A'}</span></div>
+      <div><span class="text-gray-400">MTU:</span> <span class="text-white">${mtu}</span></div>
       <div class="col-span-2"><span class="text-gray-400">MAC:</span> <span class="text-white font-mono text-xs">${escapeHtml(macAddress)}</span></div>
     </div>
     
     <div class="border-t border-gray-700 pt-2 mt-2">
       <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-        <div><span class="text-gray-400">Type:</span> <span class="text-white">${iface.ifType || 'N/A'}</span></div>
-        <div><span class="text-gray-400">Index:</span> <span class="text-white">${iface.ifIndex || 'N/A'}</span></div>
-        <div><span class="text-gray-400">In:</span> <span class="text-green-400">${formatBytes(iface.ifHCInOctets || 0)}</span></div>
-        <div><span class="text-gray-400">Out:</span> <span class="text-blue-400">${formatBytes(iface.ifHCOutOctets || 0)}</span></div>
-        <div><span class="text-gray-400">In Err:</span> <span class="${iface.ifInErrors > 0 ? 'text-red-400' : 'text-white'}">${iface.ifInErrors || 0}</span></div>
-        <div><span class="text-gray-400">Out Err:</span> <span class="${iface.ifOutErrors > 0 ? 'text-red-400' : 'text-white'}">${iface.ifOutErrors || 0}</span></div>
+        <div><span class="text-gray-400">Type:</span> <span class="text-white">${type}</span></div>
+        <div><span class="text-gray-400">Index:</span> <span class="text-white">${index}</span></div>
+        <div><span class="text-gray-400">In:</span> <span class="text-green-400">${formatBytes(inBytes)}</span></div>
+        <div><span class="text-gray-400">Out:</span> <span class="text-blue-400">${formatBytes(outBytes)}</span></div>
+        <div><span class="text-gray-400">In Err:</span> <span class="${inErrors > 0 ? 'text-red-400' : 'text-white'}">${inErrors}</span></div>
+        <div><span class="text-gray-400">Out Err:</span> <span class="${outErrors > 0 ? 'text-red-400' : 'text-white'}">${outErrors}</span></div>
       </div>
     </div>
   `;
@@ -337,7 +348,7 @@ function createInterfaceCard(iface) {
   card.innerHTML = `
     <div class="flex flex-col items-center justify-center h-12">
       <div class="w-2.5 h-2.5 rounded-full ${statusColor} mb-1"></div>
-      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(iface.ifName || iface.ifDescr)}</div>
+      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(ifaceName)}</div>
       <div class="text-xs text-gray-400 text-xs">${speedText}</div>
     </div>
     

@@ -865,17 +865,22 @@ def _get_special_case_filters(oid_mappings):
         if isinstance(table_data, dict) and 'columns' in table_data:
             columns = table_data.get('columns', {})
             if isinstance(columns, dict) and columns:
-                # Logstash bracket-notation path for event.get / event.remove.
-                # Dotted table names (e.g. "component.fan") become "[component][fan]".
-                table_field_path = _format_field_name(table_name)
+                # Literal field path for event.get / event.remove.
+                # The SNMP plugin stores table data under the table name as a single
+                # literal field key (dots included), so "network.neighbor" is stored at
+                # the field "[network.neighbor]", NOT the nested path "[network][neighbor]".
+                table_field_path = f"[{table_name}]"
 
                 # Ruby statements that rename OID keys to column names inside each row.
                 # Dotted column names are expanded into nested Ruby hashes.
                 rename_statements = _ruby_row_rename_statements(columns)
 
-                # Ruby hash entry that stores the row under the correct nested key.
-                # "component.fan" -> '"component" => { "fan" => row }'
-                table_hash_entry = _ruby_table_nested_entry(table_name, "row")
+                # Nested bracket path for new_event.set — dots become separate bracket
+                # pairs so Logstash merges into existing hashes rather than overwriting.
+                # "network.neighbor" -> "[network][neighbor]"
+                # Using event.set instead of hash literals avoids duplicate-key collisions
+                # when the table top-level key matches a standard field (e.g. "network").
+                table_set_path = _format_field_name(table_name)
 
                 # Build the Ruby code for this table
                 ruby_code = (
@@ -895,11 +900,11 @@ def _get_special_case_filters(oid_mappings):
                     f"      \"@timestamp\" => timestamp,\n"
                     f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname, \"type\" => host_type }},\n"
                     f"      \"observer\" => {{ \"vendor\" => observer_vendor, \"os\" => {{ \"full\" => observer_os_full }} }},\n"
-                    f"      \"network\" => {{ \"name\" => network_name }},\n"
-                    f"      {table_hash_entry},\n"
                     f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
                     f"      \"event\" => {{ \"category\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"
+                    f"    new_event.set(\"[network][name]\", network_name)\n"
+                    f"    new_event.set(\"{table_set_path}\", row)\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
                     f"  event.remove(\"{table_field_path}\")\n"

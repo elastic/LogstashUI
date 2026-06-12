@@ -21,11 +21,6 @@ def Networks(request):
     return render(request, 'Networks.html', {'networks': networks, 'form': form})
 
 def Devices(request):
-    # Sync official profiles first (needed for device templates)
-    sync_official_profiles()
-    # Sync official device templates to database
-    sync_official_device_templates()
-    
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     form = ConnectionForm()
@@ -165,11 +160,6 @@ def sync_official_device_templates():
 
 def DeviceTemplates(request):
     from django.db.models import Count
-    
-    # Sync official profiles first (needed for device templates)
-    sync_official_profiles()
-    # Sync official device templates from JSON to database
-    sync_official_device_templates()
     
     # Load all device templates from database (includes synced official templates)
     device_templates = []

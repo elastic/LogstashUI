@@ -837,13 +837,17 @@ async function confirmDeployConfiguration() {
     const originalText = confirmButton.textContent;
 
     // Disable button and show loading state
-    confirmButton.disabled = true;
-    confirmButton.textContent = 'Deploying... (this may take several minutes)';
-    confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
-    
-    // Show progress toast - conditional message based on change count
     const changeCount = window.snmpChangeCount || 0;
-    const message = changeCount > 100 
+    const isLargeDeployment = changeCount > 100;
+
+    confirmButton.disabled = true;
+    confirmButton.textContent = isLargeDeployment
+        ? 'Deploying... (this may take several minutes)'
+        : 'Deploying...';
+    confirmButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+    // Show progress toast - conditional message based on change count
+    const message = isLargeDeployment
         ? 'Deployment started. This may take several minutes for large configurations...'
         : 'Deployment started!';
     showToast(message, 'info');
