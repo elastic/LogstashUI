@@ -781,11 +781,11 @@ function onNormalizerOperationChange(selectElement, existingData = null, isReadO
   
   // Determine initial scope
   let scope = existingScope;
-  if (!scope || !appliesTo.includes(scope === 'table' ? 'table_column' : scope)) {
+  if (!scope || !appliesTo.includes(scope)) {
     // Default to first applicable scope
     if (appliesTo.includes('get')) {
       scope = 'get';
-    } else if (appliesTo.includes('table_column')) {
+    } else if (appliesTo.includes('table')) {
       scope = 'table';
     }
   }
@@ -805,9 +805,8 @@ function onNormalizerOperationChange(selectElement, existingData = null, isReadO
                 onchange="onNormalizerScopeChange(this)"
                 ${isReadOnly ? 'disabled' : ''}>
           ${appliesTo.map(scopeType => {
-            const scopeValue = scopeType === 'table_column' ? 'table' : scopeType;
-            const scopeLabel = scopeType === 'table_column' ? 'Table Column' : 'Get';
-            return `<option value="${scopeValue}" ${scopeValue === scope ? 'selected' : ''}>${scopeLabel}</option>`;
+            const scopeLabel = scopeType === 'get' ? 'Get' : 'Table';
+            return `<option value="${scopeType}" ${scopeType === scope ? 'selected' : ''}>${scopeLabel}</option>`;
           }).join('')}
         </select>
       </div>
@@ -835,6 +834,7 @@ function onNormalizerOperationChange(selectElement, existingData = null, isReadO
             <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
             <select class="select select-bordered select-sm w-full normalizer-param" 
                     data-param-name="${paramName}"
+                    data-field-selector="true"
                     ${isReadOnly ? 'disabled' : ''}>
               <option value="">Select field...</option>
               ${availableFields.map(field => 
@@ -893,32 +893,59 @@ function onNormalizerScopeChange(selectElement) {
   const normalizerItem = selectElement.closest('.normalizer-item');
   const dynamicFieldsContainer = normalizerItem.querySelector('.normalizer-dynamic-fields');
   const scope = selectElement.value;
-  
-  // Find and replace the field selector
+  const availableFields = getAvailableFieldsForScope(scope);
+
+  // Find and replace the target field selector
   const fieldSelectorContainer = dynamicFieldsContainer.querySelector('.normalizer-field')?.closest('div');
   if (fieldSelectorContainer) {
     const newFieldSelector = document.createElement('div');
     newFieldSelector.innerHTML = renderNormalizerFieldSelector(scope, '', false);
     fieldSelectorContainer.replaceWith(newFieldSelector.firstElementChild);
   }
+
+  // Rebuild all field_selector param dropdowns for the new scope
+  dynamicFieldsContainer.querySelectorAll('[data-field-selector="true"]').forEach(select => {
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Select field...</option>' +
+      availableFields.map(field =>
+        `<option value="${field}" ${field === currentValue ? 'selected' : ''}>${field}</option>`
+      ).join('');
+  });
 }
 
 // Refresh all normalizer field dropdowns (called when Get/Table fields change)
 function refreshNormalizerFieldDropdowns() {
   const normalizers = document.querySelectorAll('.normalizer-item');
   normalizers.forEach(normalizerItem => {
+    // Determine current scope for this normalizer
+    const scopeSelect = normalizerItem.querySelector('.normalizer-scope');
     const fieldSelect = normalizerItem.querySelector('.normalizer-field');
+    let scope = 'get';
+    if (scopeSelect) {
+      scope = scopeSelect.value;
+    } else if (fieldSelect) {
+      scope = fieldSelect.dataset.scope || 'get';
+    }
+
+    const availableFields = getAvailableFieldsForScope(scope);
+
+    // Rebuild target field selector
     if (fieldSelect) {
-      const scope = fieldSelect.dataset.scope;
       const currentValue = fieldSelect.value;
-      const availableFields = getAvailableFieldsForScope(scope);
-      
-      // Rebuild options
       fieldSelect.innerHTML = '<option value="">Select field...</option>' +
-        availableFields.map(field => 
+        availableFields.map(field =>
           `<option value="${field}" ${field === currentValue ? 'selected' : ''}>${field}</option>`
         ).join('');
     }
+
+    // Rebuild field_selector type param dropdowns
+    normalizerItem.querySelectorAll('[data-field-selector="true"]').forEach(select => {
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">Select field...</option>' +
+        availableFields.map(field =>
+          `<option value="${field}" ${field === currentValue ? 'selected' : ''}>${field}</option>`
+        ).join('');
+    });
   });
 }
 

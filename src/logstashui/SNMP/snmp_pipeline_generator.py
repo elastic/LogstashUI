@@ -527,11 +527,20 @@ def _generate_filters(oid_mappings, network, normalizers=None):
 
     # Apply normalizers from profiles
     if normalizers:
-        normalizer_filters = _apply_normalizers(normalizers)
+        get_normalizers = [n for n in normalizers if n.get('target', {}).get('scope') == 'get']
+        normalizer_filters = _apply_normalizers(get_normalizers)
         filter_components.extend(normalizer_filters)
 
-    # Apply special case filters (table splitters and legacy normalizations)
+    # Apply special case filters (table splitters)
     filter_components.extend(_get_special_case_filters(oid_mappings))
+
+    # Apply table-scope normalizers AFTER table splitters so they run on the
+    # already-split row events (which have columns as top-level fields).
+    if normalizers:
+        table_normalizers = [n for n in normalizers if n.get('target', {}).get('scope') == 'table']
+        table_normalizer_filters = _apply_normalizers(table_normalizers)
+        filter_components.extend(table_normalizer_filters)
+
     return filter_components
 
 

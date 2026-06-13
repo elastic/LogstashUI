@@ -39,7 +39,7 @@ def _apply_normalizers(normalizers):
     for operation, scopes in grouped.items():
         for scope, normalizer_list in scopes.items():
             if operation == 'multiply':
-                if scope == 'get':
+                if scope in ('get', 'table'):
                     filter_components = _generate_multiply_get_filter(normalizer_list)
                     if filter_components:
                         # Filter generators now return lists (comment + filter)
@@ -48,7 +48,7 @@ def _apply_normalizers(normalizers):
                         else:
                             filters.append(filter_components)
             elif operation == 'ratio':
-                if scope == 'get':
+                if scope in ('get', 'table'):
                     filter_components = _generate_ratio_get_filter(normalizer_list)
                     if filter_components:
                         # Filter generators now return lists (comment + filter)

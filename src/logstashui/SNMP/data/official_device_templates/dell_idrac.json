@@ -17,6 +17,6 @@
     "generic_system"
   ],
   "matching_rules": [
-    "idrac"
+    "iDRAC"
   ]
 }

@@ -1,7 +1,7 @@
 {
   "official_key": "generic_ont",
   "name": "generic_ont",
-  "description": "Per-core CPU load, memory, serial number, and per-port link/speed for generic ONT switches.",
+  "description": "System identity, memory utilization, and per-port link/speed for generic ONT devices.",
   "vendor": "Unknown",
   "product": "Any",
   "model": "Any",

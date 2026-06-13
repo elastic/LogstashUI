@@ -1,7 +1,7 @@
 {
   "official_key": "brocade_fc_switch",
   "name": "brocade_fc_switch",
-  "type": "FC Switch",
+  "type": "Fibre Channel Switch",
   "description": "FC switch system metrics, per-port telemetry, and fabric name server for Brocade FC switches.",
   "vendor": "Brocade",
   "product": "FC Switch",
@@ -13,5 +13,8 @@
     "generic_system",
     "generic_interfaces"
   ],
-  "matching_rules": []
+  "matching_rules": [
+    "Fabric OS",
+    "FabricOS"
+  ]
 }

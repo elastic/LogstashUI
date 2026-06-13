@@ -2,7 +2,7 @@
   "official_key": "generic_ont",
   "name": "generic_ont",
   "type": "Network",
-  "description": "System, interfaces, and ONT-specific CPU/memory/port metrics for generic ONT switches — manual assignment recommended.",
+  "description": "System, interfaces, and ONT-specific memory and port metrics for generic ONT switches — manual assignment recommended.",
   "vendor": "Unknown",
   "product": "Any",
   "model": "Any",

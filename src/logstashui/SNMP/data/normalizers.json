@@ -2,7 +2,7 @@
   "multiply": {
     "label": "Multiply value",
     "description": "Multiplies a numeric SNMP value by a configured number. Useful for converting raw SNMP values into the expected unit.",
-    "applies_to": ["get", "table_column"],
+    "applies_to": ["get", "table"],
     "has_target_field": true,
     "inputs": {
       "multiply_value":{
@@ -15,7 +15,7 @@
   "ratio": {
     "label": "Calculate ratio",
     "description": "Derives ratios from two input fields. Any two of {used, free, total} are sufficient to compute all percentages.",
-    "applies_to": ["get"],
+    "applies_to": ["get", "table"],
     "has_target_field": false,
     "inputs": {
       "value1_field": {

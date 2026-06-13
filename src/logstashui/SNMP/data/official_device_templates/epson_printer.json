@@ -2,7 +2,7 @@
   "official_key": "epson_printer",
   "name": "epson_printer",
   "type": "Printer",
-  "description": "System info and interface stats for Epson printers.",
+  "description": "System identity and interface counters for Epson network printers.",
   "vendor": "Epson",
   "product": "Any",
   "model": "Any",
@@ -11,6 +11,6 @@
     "generic_system"
   ],
   "matching_rules": [
-    "epson"
+    "EPSON"
   ]
 }
