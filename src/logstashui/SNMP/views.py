@@ -23,8 +23,9 @@ def Networks(request):
 def Devices(request):
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
+    credentials = Credential.objects.all().order_by('name')
     form = ConnectionForm()
-    return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'form': form})
+    return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'credentials': credentials, 'form': form})
 
 def sync_official_profiles():
     """Sync official profiles from JSON files to database as placeholders"""

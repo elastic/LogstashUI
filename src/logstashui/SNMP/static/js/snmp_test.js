@@ -5,252 +5,276 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
+    // ─────────────────────────────────────────────────────────────
     // Modal elements
+    // ─────────────────────────────────────────────────────────────
     const snmpTestModal = document.getElementById('snmpTestModal');
     const testSnmpBtn = document.getElementById('testSnmpBtn');
     const closeSnmpTestModal = document.getElementById('closeSnmpTestModal');
 
-    // Form elements
-    const deviceSelect = document.getElementById('snmpTestDeviceSelect');
-    const templateSelect = document.getElementById('snmpTestTemplateSelect');
-    const runTestBtn = document.getElementById('snmpTestRunTestBtn');
-    const runTestBtnText = document.getElementById('snmpTestRunTestBtnText');
-    const deviceInfo = document.getElementById('snmpTestDeviceInfo');
-    const deviceInfoText = document.getElementById('snmpTestDeviceInfoText');
-    const templateInfo = document.getElementById('snmpTestTemplateInfo');
-    const templateInfoText = document.getElementById('snmpTestTemplateInfoText');
-    
-    const loadingState = document.getElementById('snmpTestLoadingState');
-    const resultsContainer = document.getElementById('snmpTestResultsContainer');
-    const errorState = document.getElementById('snmpTestErrorState');
-    const errorMessage = document.getElementById('snmpTestErrorMessage');
-    
-    console.log('SNMP Test elements found:', {
-        deviceSelect: !!deviceSelect,
-        templateSelect: !!templateSelect,
-        runTestBtn: !!runTestBtn,
-        loadingState: !!loadingState
-    });
-
+    // ─────────────────────────────────────────────────────────────
     // Tab elements
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
+    // ─────────────────────────────────────────────────────────────
+    const tabProfile = document.getElementById('snmpTestTabProfile');
+    const tabWalk    = document.getElementById('snmpTestTabWalk');
+    const contentProfile = document.getElementById('snmpTestProfileContent');
+    const contentWalk    = document.getElementById('snmpTestWalkContent');
 
+    function activateTab(tab) {
+        // Reset both tabs
+        [tabProfile, tabWalk].forEach(t => {
+            t.classList.remove('border-primary', 'text-primary');
+            t.classList.add('border-transparent', 'text-gray-400');
+        });
+        // Activate selected
+        tab.classList.add('border-primary', 'text-primary');
+        tab.classList.remove('border-transparent', 'text-gray-400');
+
+        // Show/hide content
+        if (tab === tabProfile) {
+            contentProfile.classList.remove('hidden');
+            contentWalk.classList.add('hidden');
+        } else {
+            contentWalk.classList.remove('hidden');
+            contentProfile.classList.add('hidden');
+        }
+    }
+
+    if (tabProfile) tabProfile.addEventListener('click', () => activateTab(tabProfile));
+    if (tabWalk)    tabWalk.addEventListener('click',    () => activateTab(tabWalk));
+
+    // ─────────────────────────────────────────────────────────────
+    // Profile test form elements
+    // ─────────────────────────────────────────────────────────────
+    const deviceSelect    = document.getElementById('snmpTestDeviceSelect');
+    const templateSelect  = document.getElementById('snmpTestTemplateSelect');
+    const runTestBtn      = document.getElementById('snmpTestRunTestBtn');
+    const runTestBtnText  = document.getElementById('snmpTestRunTestBtnText');
+    const deviceInfo      = document.getElementById('snmpTestDeviceInfo');
+    const deviceInfoText  = document.getElementById('snmpTestDeviceInfoText');
+    const templateInfo    = document.getElementById('snmpTestTemplateInfo');
+    const templateInfoText = document.getElementById('snmpTestTemplateInfoText');
+    const loadingState    = document.getElementById('snmpTestLoadingState');
+    const resultsContainer = document.getElementById('snmpTestResultsContainer');
+    const errorState      = document.getElementById('snmpTestErrorState');
+    const errorMessage    = document.getElementById('snmpTestErrorMessage');
+
+    // ─────────────────────────────────────────────────────────────
+    // Walk form elements
+    // ─────────────────────────────────────────────────────────────
+    const walkHostInput      = document.getElementById('snmpWalkHostInput');
+    const walkCredSelect     = document.getElementById('snmpWalkCredentialSelect');
+    const walkPortInput      = document.getElementById('snmpWalkPortInput');
+    const walkStartOidInput  = document.getElementById('snmpWalkStartOidInput');
+    const walkRunBtn         = document.getElementById('snmpWalkRunBtn');
+    const walkRunBtnText     = document.getElementById('snmpWalkRunBtnText');
+    const walkLoadingState   = document.getElementById('snmpWalkLoadingState');
+    const walkResultsContainer = document.getElementById('snmpWalkResultsContainer');
+    const walkErrorState     = document.getElementById('snmpWalkErrorState');
+    const walkErrorMessage   = document.getElementById('snmpWalkErrorMessage');
+    const walkResultsBody    = document.getElementById('snmpWalkResultsBody');
+    const walkSearchInput    = document.getElementById('snmpWalkSearchInput');
+    const walkCopyBtn        = document.getElementById('snmpWalkCopyBtn');
+
+    // Full walk results data (for filtering)
+    let walkAllResults = [];
+
+    // ─────────────────────────────────────────────────────────────
     // Modal controls
+    // ─────────────────────────────────────────────────────────────
     if (testSnmpBtn) {
         testSnmpBtn.addEventListener('click', function() {
             snmpTestModal.classList.remove('hidden');
             snmpTestModal.classList.add('flex');
-            // Reset form when opening
-            resetModal();
+            resetProfileTab();
+            resetWalkTab();
+            activateTab(tabProfile);
         });
     }
 
     if (closeSnmpTestModal) {
-        closeSnmpTestModal.addEventListener('click', function() {
-            snmpTestModal.classList.add('hidden');
-            snmpTestModal.classList.remove('flex');
-        });
+        closeSnmpTestModal.addEventListener('click', closeModal);
     }
 
-    // Close modal when clicking backdrop
-    const snmpTestModalBackdrop = document.getElementById('snmpTestModalBackdrop');
+    const snmpTestModalBackdrop = document.getElementById('snmpTestBackdrop');
     if (snmpTestModalBackdrop) {
-        snmpTestModalBackdrop.addEventListener('click', function() {
-            snmpTestModal.classList.add('hidden');
-            snmpTestModal.classList.remove('flex');
-        });
+        snmpTestModalBackdrop.addEventListener('click', closeModal);
     }
 
-    // Close modal on Escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && !snmpTestModal.classList.contains('hidden')) {
-            snmpTestModal.classList.add('hidden');
-            snmpTestModal.classList.remove('flex');
+            closeModal();
         }
     });
 
-    // Reset modal function
-    function resetModal() {
-        deviceSelect.value = '';
-        templateSelect.value = '';
-        deviceInfo.classList.add('hidden');
-        templateInfo.classList.add('hidden');
-        resultsContainer.classList.add('hidden');
-        errorState.classList.add('hidden');
-        loadingState.classList.add('hidden');
-        runTestBtn.disabled = true;
+    function closeModal() {
+        snmpTestModal.classList.add('hidden');
+        snmpTestModal.classList.remove('flex');
     }
 
-    // Device selection handler
-    deviceSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        
-        if (this.value) {
-            const ip = selectedOption.dataset.ip;
-            const port = selectedOption.dataset.port;
-            const hasCredential = selectedOption.dataset.hasCredential === 'true';
-            const templateId = selectedOption.dataset.templateId;
-            const templateName = selectedOption.dataset.templateName;
-            
-            if (!hasCredential) {
-                deviceInfoText.textContent = '⚠️ This device has no credential assigned';
-                deviceInfoText.classList.add('text-yellow-400');
-                deviceInfoText.classList.remove('text-gray-400');
+    // ─────────────────────────────────────────────────────────────
+    // Profile tab reset
+    // ─────────────────────────────────────────────────────────────
+    function resetProfileTab() {
+        if (deviceSelect) deviceSelect.value = '';
+        if (templateSelect) templateSelect.value = '';
+        if (deviceInfo) deviceInfo.classList.add('hidden');
+        if (templateInfo) templateInfo.classList.add('hidden');
+        if (resultsContainer) resultsContainer.classList.add('hidden');
+        if (errorState) errorState.classList.add('hidden');
+        if (loadingState) loadingState.classList.add('hidden');
+        if (runTestBtn) runTestBtn.disabled = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Walk tab reset
+    // ─────────────────────────────────────────────────────────────
+    function resetWalkTab() {
+        if (walkHostInput) walkHostInput.value = '';
+        if (walkCredSelect) walkCredSelect.value = '';
+        if (walkPortInput) walkPortInput.value = '161';
+        if (walkStartOidInput) walkStartOidInput.value = '1.3.6.1';
+        if (walkLoadingState) walkLoadingState.classList.add('hidden');
+        if (walkResultsContainer) walkResultsContainer.classList.add('hidden');
+        if (walkErrorState) walkErrorState.classList.add('hidden');
+        if (walkRunBtn) walkRunBtn.disabled = true;
+        walkAllResults = [];
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Profile tab: device & template handlers
+    // ─────────────────────────────────────────────────────────────
+    if (deviceSelect) {
+        deviceSelect.addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            if (this.value) {
+                const ip = opt.dataset.ip;
+                const port = opt.dataset.port;
+                const hasCredential = opt.dataset.hasCredential === 'true';
+                const templateId = opt.dataset.templateId;
+
+                if (!hasCredential) {
+                    deviceInfoText.textContent = '⚠️ This device has no credential assigned';
+                    deviceInfoText.classList.add('text-yellow-400');
+                    deviceInfoText.classList.remove('text-gray-400');
+                } else {
+                    deviceInfoText.textContent = `${ip}:${port}`;
+                    deviceInfoText.classList.remove('text-yellow-400');
+                    deviceInfoText.classList.add('text-gray-400');
+                }
+                deviceInfo.classList.remove('hidden');
+
+                if (templateId && templateSelect.querySelector(`option[value="${templateId}"]`)) {
+                    templateSelect.value = templateId;
+                    templateSelect.dispatchEvent(new Event('change'));
+                }
             } else {
-                deviceInfoText.textContent = `${ip}:${port}`;
-                deviceInfoText.classList.remove('text-yellow-400');
-                deviceInfoText.classList.add('text-gray-400');
+                deviceInfo.classList.add('hidden');
             }
-            deviceInfo.classList.remove('hidden');
-            
-            // Auto-select template if device has one assigned
-            if (templateId && templateSelect.querySelector(`option[value="${templateId}"]`)) {
-                templateSelect.value = templateId;
-                templateSelect.dispatchEvent(new Event('change'));
-            }
-        } else {
-            deviceInfo.classList.add('hidden');
-        }
-        
-        updateRunButton();
-    });
-
-    // Template selection handler
-    templateSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        
-        if (this.value) {
-            const vendor = selectedOption.dataset.vendor;
-            const isOfficial = selectedOption.dataset.official === 'True';
-            
-            templateInfoText.textContent = `${vendor}${isOfficial ? ' (Official)' : ''}`;
-            templateInfo.classList.remove('hidden');
-        } else {
-            templateInfo.classList.add('hidden');
-        }
-        
-        updateRunButton();
-    });
-
-    // Update run button state
-    function updateRunButton() {
-        const deviceSelected = deviceSelect.value !== '';
-        const templateSelected = templateSelect.value !== '';
-        const deviceHasCredential = deviceSelect.value && 
-            deviceSelect.options[deviceSelect.selectedIndex].dataset.hasCredential === 'true';
-        
-        console.log('updateRunButton - Device:', deviceSelected, 'Template:', templateSelected, 'Has Credential:', deviceHasCredential);
-        
-        runTestBtn.disabled = !(deviceSelected && templateSelected && deviceHasCredential);
-        console.log('Run button disabled:', runTestBtn.disabled);
+            updateRunButton();
+        });
     }
 
-    // Run test handler
+    if (templateSelect) {
+        templateSelect.addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            if (this.value) {
+                const vendor = opt.dataset.vendor;
+                const isOfficial = opt.dataset.official === 'True';
+                templateInfoText.textContent = `${vendor}${isOfficial ? ' (Official)' : ''}`;
+                templateInfo.classList.remove('hidden');
+            } else {
+                templateInfo.classList.add('hidden');
+            }
+            updateRunButton();
+        });
+    }
+
+    function updateRunButton() {
+        const deviceSelected = deviceSelect && deviceSelect.value !== '';
+        const templateSelected = templateSelect && templateSelect.value !== '';
+        const deviceHasCredential = deviceSelected &&
+            deviceSelect.options[deviceSelect.selectedIndex].dataset.hasCredential === 'true';
+        if (runTestBtn) {
+            runTestBtn.disabled = !(deviceSelected && templateSelected && deviceHasCredential);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Walk tab: enable/disable button
+    // ─────────────────────────────────────────────────────────────
+    function updateWalkButton() {
+        const hostOk = walkHostInput && walkHostInput.value.trim() !== '';
+        const credOk = walkCredSelect && walkCredSelect.value !== '';
+        if (walkRunBtn) walkRunBtn.disabled = !(hostOk && credOk);
+    }
+
+    if (walkHostInput)  walkHostInput.addEventListener('input', updateWalkButton);
+    if (walkCredSelect) walkCredSelect.addEventListener('change', updateWalkButton);
+
+    // ─────────────────────────────────────────────────────────────
+    // Profile test run handler
+    // ─────────────────────────────────────────────────────────────
     if (runTestBtn) {
-        console.log('Run test button found, attaching listener');
         runTestBtn.addEventListener('click', async function(event) {
             event.preventDefault();
             event.stopPropagation();
-            
-            console.log('=== SNMP TEST RUN BUTTON CLICKED ===');
-            console.log('Event target:', event.target);
-            console.log('Button ID:', this.id);
-        const deviceId = parseInt(deviceSelect.value);
-        const templateId = parseInt(templateSelect.value);
-        
-        console.log('Device ID:', deviceId, 'Template ID:', templateId);
-        
-        if (!deviceId || !templateId) {
-            console.log('Missing device or template, aborting');
-            return;
-        }
 
-        // Hide previous results/errors
-        resultsContainer.classList.add('hidden');
-        errorState.classList.add('hidden');
-        
-        // Show loading state
-        loadingState.classList.remove('hidden');
-        runTestBtn.disabled = true;
-        runTestBtnText.textContent = 'Running...';
+            const deviceId = parseInt(deviceSelect.value);
+            const templateId = parseInt(templateSelect.value);
+            if (!deviceId || !templateId) return;
 
-        console.log('Making request to /SNMP/RunSNMPTest/ at', new Date().toISOString());
-        console.log('CSRF Token:', getCookie('csrftoken'));
-        
-        try {
-            console.log('Calling fetch at', new Date().toISOString());
-            const response = await fetch('/SNMP/RunSNMPTest/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                body: JSON.stringify({
-                    device_id: deviceId,
-                    template_id: templateId
-                })
-            });
-            
-            console.log('Fetch completed, response:', response);
-            console.log('Response status:', response.status);
+            resultsContainer.classList.add('hidden');
+            errorState.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            runTestBtn.disabled = true;
+            runTestBtnText.textContent = 'Running...';
 
-            const data = await response.json();
-            console.log('Response parsed');
-            
-            console.log('Response status:', response.status);
-            console.log('Response data:', data);
-            console.log('data.success:', data.success);
-            console.log('data.error:', data.error);
-            console.log('Full data object:', JSON.stringify(data, null, 2));
+            try {
+                const response = await fetch('/SNMP/RunSNMPTest/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ device_id: deviceId, template_id: templateId })
+                });
 
-            // Show results if we have any data, even with errors
-            // Only show error page if there's a top-level error (no results at all)
-            if (data.results) {
-                displayResults(data);
-            } else if (data.error) {
-                console.error('Server error:', data);
-                displayError(data.error, data);
-            } else {
-                console.error('Unknown error:', data);
-                displayError('Unknown error occurred', data);
+                const data = await response.json();
+
+                if (data.results) {
+                    displayResults(data);
+                } else if (data.error) {
+                    displayError(data.error);
+                } else {
+                    displayError('Unknown error occurred');
+                }
+            } catch (error) {
+                displayError(`Network error: ${error.message}`);
+            } finally {
+                loadingState.classList.add('hidden');
+                runTestBtn.disabled = false;
+                runTestBtnText.textContent = 'Run Test';
             }
-        } catch (error) {
-            console.error('Request error:', error);
-            displayError(`Network error: ${error.message}`, null);
-        } finally {
-            loadingState.classList.add('hidden');
-            runTestBtn.disabled = false;
-            runTestBtnText.textContent = 'Run Test';
-        }
         });
-    } else {
-        console.error('Run test button not found!');
     }
 
-    // Display error state
-    function displayError(errorMsg, data) {
+    function displayError(msg) {
         loadingState.classList.add('hidden');
         resultsContainer.classList.add('hidden');
-        
-        errorMessage.textContent = errorMsg;
+        errorMessage.textContent = msg;
         errorState.classList.remove('hidden');
-        
         errorState.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    // Display results
     function displayResults(data) {
-        // Hide loading and error states
         loadingState.classList.add('hidden');
         errorState.classList.add('hidden');
-        
-        // Update summary
-        document.getElementById('snmpTestSummaryDevice').textContent = 
+
+        document.getElementById('snmpTestSummaryDevice').textContent =
             `${data.device.name} (${data.device.ip_address}:${data.device.port})`;
         document.getElementById('snmpTestSummaryTemplate').textContent = data.template.name;
-        
-        // Show status and execution time
+
         const executionTime = data.execution_time ? `${data.execution_time}s` : 'N/A';
         if (data.has_errors) {
             let statusHtml = `<span class="text-yellow-400">⚠ Partial Success</span><br><span class="text-xs text-gray-400">Completed in ${executionTime}</span>`;
@@ -259,79 +283,55 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             document.getElementById('snmpTestSummaryStatus').innerHTML = statusHtml;
         } else {
-            document.getElementById('snmpTestSummaryStatus').innerHTML = 
+            document.getElementById('snmpTestSummaryStatus').innerHTML =
                 `<span class="text-green-400">✓ Success</span><br><span class="text-xs text-gray-400">Completed in ${executionTime}</span>`;
         }
 
-        // Display GET results
         displayGetResults(data.results.get);
-        
-        // Display WALK results
-        displayWalkResults(data.results.walk);
-        
-        // Display TABLE results
         displayTableResults(data.results.table);
 
         resultsContainer.classList.remove('hidden');
-        
-        // Scroll to results
         resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    // Display GET results
     function displayGetResults(getResults) {
         const container = document.getElementById('snmpTestGetResults');
         container.innerHTML = '';
-
         if (!getResults || Object.keys(getResults).length === 0) {
             container.innerHTML = '<p class="text-gray-400 text-sm col-span-2">No GET results</p>';
             return;
         }
-
         for (const [fieldName, value] of Object.entries(getResults)) {
-            const resultDiv = document.createElement('div');
-            resultDiv.className = 'bg-gray-700/50 rounded p-3';
-            
+            const div = document.createElement('div');
+            div.className = 'bg-gray-700/50 rounded p-3';
             if (typeof value === 'object' && value.error) {
-                resultDiv.innerHTML = `
+                div.innerHTML = `
                     <div class="text-xs text-gray-400 mb-1">${escapeHtml(fieldName)}</div>
-                    <div class="text-sm text-red-400">Error: ${escapeHtml(value.error)}</div>
-                `;
+                    <div class="text-sm text-red-400">Error: ${escapeHtml(value.error)}</div>`;
             } else {
-                resultDiv.innerHTML = `
+                div.innerHTML = `
                     <div class="text-xs text-gray-400 mb-1">${escapeHtml(fieldName)}</div>
-                    <div class="text-sm text-white font-mono break-all">${escapeHtml(String(value))}</div>
-                `;
+                    <div class="text-sm text-white font-mono break-all">${escapeHtml(String(value))}</div>`;
             }
-            
-            container.appendChild(resultDiv);
+            container.appendChild(div);
         }
     }
 
-    // Display WALK results (not used but kept for compatibility)
-    function displayWalkResults(walkResults) {
-        // WALK results are not displayed in the simplified UI
-    }
-
-    // Display TABLE results
     function displayTableResults(tableResults) {
         const container = document.getElementById('snmpTestTableResults');
         container.innerHTML = '';
-
         if (!tableResults || Object.keys(tableResults).length === 0) {
             container.innerHTML = '<p class="text-gray-400 text-sm">No TABLE results</p>';
             return;
         }
-
         for (const [tableName, rows] of Object.entries(tableResults)) {
-            const tableSection = document.createElement('div');
-            tableSection.className = 'border border-gray-600 rounded-lg p-4';
-            
+            const section = document.createElement('div');
+            section.className = 'border border-gray-600 rounded-lg p-4';
+
             if (typeof rows === 'object' && rows.error) {
-                tableSection.innerHTML = `
+                section.innerHTML = `
                     <h4 class="text-base font-semibold text-white mb-2">${escapeHtml(tableName)}</h4>
-                    <div class="text-sm text-red-400">Error: ${escapeHtml(rows.error)}</div>
-                `;
+                    <div class="text-sm text-red-400">Error: ${escapeHtml(rows.error)}</div>`;
             } else if (Array.isArray(rows) && rows.length > 0) {
                 const sectionId = `table-${tableName.replace(/[^a-zA-Z0-9]/g, '-')}`;
                 let html = `
@@ -341,47 +341,162 @@ document.addEventListener('DOMContentLoaded', function() {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                         </svg>
                     </div>
-                    <div id="${sectionId}">
-                `;
-                
-                // Display each row as a card with key-value pairs
+                    <div id="${sectionId}">`;
+
                 rows.forEach((row, index) => {
                     html += `
                         <div class="bg-gray-700/50 rounded p-4 mb-3">
                             <div class="text-xs text-gray-400 mb-3">Row ${index + 1}</div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    `;
-                    
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
                     for (const [key, value] of Object.entries(row)) {
                         html += `
-                            <div>
-                                <div class="text-xs text-gray-400 mb-1">${escapeHtml(key)}</div>
-                                <div class="text-sm text-white font-mono break-all">${escapeHtml(String(value))}</div>
-                            </div>
-                        `;
+                                <div>
+                                    <div class="text-xs text-gray-400 mb-1">${escapeHtml(key)}</div>
+                                    <div class="text-sm text-white font-mono break-all">${escapeHtml(String(value))}</div>
+                                </div>`;
                     }
-                    
-                    html += `
-                            </div>
-                        </div>
-                    `;
+                    html += `</div></div>`;
                 });
-                
-                html += `</div>`; // Close collapsible div
-                
-                tableSection.innerHTML = html;
+
+                html += `</div>`;
+                section.innerHTML = html;
             } else {
-                tableSection.innerHTML = `
+                section.innerHTML = `
                     <h4 class="text-base font-semibold text-white mb-2">${escapeHtml(tableName)}</h4>
-                    <div class="text-sm text-gray-400">No rows</div>
-                `;
+                    <div class="text-sm text-gray-400">No rows</div>`;
             }
-            
-            container.appendChild(tableSection);
+            container.appendChild(section);
         }
     }
 
-    // Helper function to get CSRF token
+    // ─────────────────────────────────────────────────────────────
+    // Walk run handler
+    // ─────────────────────────────────────────────────────────────
+    if (walkRunBtn) {
+        walkRunBtn.addEventListener('click', async function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const host = walkHostInput.value.trim();
+            const credentialId = parseInt(walkCredSelect.value);
+            const port = parseInt(walkPortInput.value) || 161;
+            const startOid = walkStartOidInput.value.trim() || '1.3.6.1';
+
+            if (!host || !credentialId) return;
+
+            walkResultsContainer.classList.add('hidden');
+            walkErrorState.classList.add('hidden');
+            walkLoadingState.classList.remove('hidden');
+            walkRunBtn.disabled = true;
+            walkRunBtnText.textContent = 'Walking...';
+
+            try {
+                const response = await fetch('/SNMP/RunSNMPWalk/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        host: host,
+                        port: port,
+                        credential_id: credentialId,
+                        start_oid: startOid
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.results) {
+                    displayWalkResults(data);
+                } else {
+                    displayWalkError(data.error || 'Unknown error occurred');
+                }
+            } catch (error) {
+                displayWalkError(`Network error: ${error.message}`);
+            } finally {
+                walkLoadingState.classList.add('hidden');
+                walkRunBtn.disabled = false;
+                walkRunBtnText.textContent = 'Run Walk';
+                updateWalkButton();
+            }
+        });
+    }
+
+    function displayWalkError(msg) {
+        walkLoadingState.classList.add('hidden');
+        walkResultsContainer.classList.add('hidden');
+        walkErrorMessage.textContent = msg;
+        walkErrorState.classList.remove('hidden');
+        walkErrorState.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function displayWalkResults(data) {
+        walkLoadingState.classList.add('hidden');
+        walkErrorState.classList.add('hidden');
+
+        document.getElementById('snmpWalkSummaryHost').textContent = `${data.host}:${data.port}`;
+        document.getElementById('snmpWalkSummaryCredential').textContent = data.credential;
+        document.getElementById('snmpWalkSummaryCount').textContent = data.oid_count;
+        document.getElementById('snmpWalkSummaryTime').textContent = `${data.execution_time}s`;
+
+        walkAllResults = data.results || [];
+        renderWalkTable(walkAllResults);
+
+        walkResultsContainer.classList.remove('hidden');
+        walkResultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function renderWalkTable(rows) {
+        walkResultsBody.innerHTML = '';
+        if (rows.length === 0) {
+            walkResultsBody.innerHTML = `
+                <tr>
+                  <td colspan="2" class="px-4 py-6 text-center text-gray-400 text-sm">No OIDs found</td>
+                </tr>`;
+            return;
+        }
+        rows.forEach(function(row, i) {
+            const tr = document.createElement('tr');
+            tr.className = i % 2 === 0 ? 'bg-gray-800/30' : 'bg-gray-900/20';
+            tr.innerHTML = `
+                <td class="px-4 py-2 font-mono text-xs text-blue-300 align-top break-all">${escapeHtml(row.oid)}</td>
+                <td class="px-4 py-2 font-mono text-xs text-gray-200 align-top break-all">${escapeHtml(String(row.value))}</td>`;
+            walkResultsBody.appendChild(tr);
+        });
+    }
+
+    // Walk search / filter
+    if (walkSearchInput) {
+        walkSearchInput.addEventListener('input', function() {
+            const q = this.value.toLowerCase();
+            if (!q) {
+                renderWalkTable(walkAllResults);
+                return;
+            }
+            const filtered = walkAllResults.filter(r =>
+                r.oid.toLowerCase().includes(q) || String(r.value).toLowerCase().includes(q)
+            );
+            renderWalkTable(filtered);
+        });
+    }
+
+    // Copy all walk results
+    if (walkCopyBtn) {
+        walkCopyBtn.addEventListener('click', function() {
+            if (!walkAllResults.length) return;
+            const text = walkAllResults.map(r => `${r.oid}\t${r.value}`).join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = walkCopyBtn.innerHTML;
+                walkCopyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Copied!`;
+                setTimeout(() => { walkCopyBtn.innerHTML = orig; }, 2000);
+            });
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Utility: CSRF cookie
+    // ─────────────────────────────────────────────────────────────
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {

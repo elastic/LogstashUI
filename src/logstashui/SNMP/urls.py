@@ -74,5 +74,6 @@ urlpatterns = [
 
     # SNMP Test endpoints
     path("RunSNMPTest/", snmp_test.RunSNMPTest, name="RunSNMPTest"),
+    path("RunSNMPWalk/", snmp_test.RunSNMPWalk, name="RunSNMPWalk"),
 
 ]

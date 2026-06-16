@@ -5,7 +5,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
-from .models import Device, DeviceTemplate, Profile
+from .models import Device, DeviceTemplate, Profile, Credential
 import json
 import os
 import traceback
@@ -709,4 +709,166 @@ def RunSNMPTest(request):
             'error': str(e),
             'error_type': type(e).__name__,
             'traceback': error_trace
+        }, status=500)
+
+
+async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
+    """Perform a full SNMP walk from a starting OID (async)"""
+    try:
+        auth_data = _create_auth_data(credential)
+    except Exception as e:
+        return {'error': f'Failed to create authentication data: {str(e)}'}
+
+    try:
+        transport = await UdpTransportTarget.create((host, port))
+    except Exception as e:
+        return {'error': f'Failed to create transport: {str(e)}'}
+
+    snmp_engine = SnmpEngine()
+    results = []
+    current_oid = start_oid
+    max_iterations = 10000
+    oid_prefix = start_oid + '.'
+
+    for _ in range(max_iterations):
+        try:
+            errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
+                snmp_engine,
+                auth_data,
+                transport,
+                ContextData(),
+                ObjectType(ObjectIdentity(current_oid)),
+                lexicographic_mode=False
+            )
+        except Exception as e:
+            return {'error': f'SNMP error: {str(e)}', 'results': results}
+
+        if errorIndication:
+            if results:
+                break
+            return {'error': str(errorIndication), 'results': results}
+
+        if errorStatus:
+            if results:
+                break
+            return {'error': f'{errorStatus.prettyPrint()}', 'results': results}
+
+        if not varBinds:
+            break
+
+        varBind = varBinds[0]
+        next_oid_str = str(varBind[0])
+
+        # Stop if we've walked past the starting subtree
+        if not next_oid_str.startswith(oid_prefix):
+            break
+
+        results.append({
+            'oid': next_oid_str,
+            'value': _format_snmp_value(varBind[1])
+        })
+
+        current_oid = next_oid_str
+
+    return {'results': results}
+
+
+def _perform_full_walk(host, port, credential, start_oid='1.3.6.1'):
+    """Synchronous wrapper for the full walk"""
+    import threading
+    result = [None]
+    exception = [None]
+
+    def run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result[0] = loop.run_until_complete(
+                _perform_full_walk_async(host, port, credential, start_oid)
+            )
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.close()
+        except Exception as e:
+            exception[0] = e
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout=300)
+
+    if thread.is_alive():
+        return {'error': 'SNMP walk timed out after 5 minutes - device may be unreachable or the MIB tree is too large'}
+
+    if exception[0]:
+        return {'error': str(exception[0])}
+
+    return result[0] if result[0] is not None else {'error': 'No response from device'}
+
+
+@require_http_methods(["POST"])
+def RunSNMPWalk(request):
+    """
+    Perform a full SNMP walk against a host using a credential.
+
+    Expected POST data:
+    {
+        "host": str,           # IP address or hostname
+        "port": int,           # optional, defaults to 161
+        "credential_id": int,
+        "start_oid": str       # optional, defaults to "1.3.6.1"
+    }
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        data = json.loads(request.body)
+        host = data.get('host', '').strip()
+        port = int(data.get('port', 161))
+        credential_id = data.get('credential_id')
+        start_oid = data.get('start_oid', '1.3.6.1').strip() or '1.3.6.1'
+
+        if not host:
+            return JsonResponse({'success': False, 'error': 'host is required'}, status=400)
+        if not credential_id:
+            return JsonResponse({'success': False, 'error': 'credential_id is required'}, status=400)
+
+        credential = Credential.objects.get(pk=credential_id)
+
+        walk_result = _perform_full_walk(host, port, credential, start_oid)
+
+        execution_time = round(time.time() - start_time, 2)
+
+        if 'error' in walk_result and not walk_result.get('results'):
+            return JsonResponse({
+                'success': False,
+                'error': walk_result['error'],
+                'execution_time': execution_time,
+            })
+
+        results = walk_result.get('results', [])
+        return JsonResponse({
+            'success': True,
+            'execution_time': execution_time,
+            'host': host,
+            'port': port,
+            'start_oid': start_oid,
+            'credential': credential.name,
+            'oid_count': len(results),
+            'results': results,
+            'partial_error': walk_result.get('error'),
+        })
+
+    except Credential.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Credential not found'}, status=404)
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        print(f"SNMP Walk Error: {str(e)}\n{error_trace}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__,
         }, status=500)
