@@ -156,9 +156,9 @@ def get_cdp_adjacencies():
                 }
 
                 cdp_response = es.search(
-                    index="metrics-snmp.polling-default",
-                    body=query
-                )
+                        index="metrics-snmp.polling-*",
+                        body=query
+                    )
 
                 # Collect (device_name, ifIndex) pairs for the interface-name lookup
                 interface_lookup_pairs = []
@@ -224,9 +224,9 @@ def get_cdp_adjacencies():
                     }
 
                     interface_response = es.search(
-                        index="metrics-snmp.polling-default",
-                        body=interface_query
-                    )
+                            index="metrics-snmp.polling-*",
+                            body=interface_query
+                        )
 
                     if 'hits' in interface_response and 'hits' in interface_response['hits']:
                         for hit in interface_response['hits']['hits']:

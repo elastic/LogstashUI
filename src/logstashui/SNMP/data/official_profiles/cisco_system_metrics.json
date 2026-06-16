@@ -31,7 +31,7 @@
       "params": {
         "value1_field": "system.memory.actual.used.bytes",
         "value2_field": "system.memory.actual.free.bytes",
-        "total_output_field": "system.memory.total",
+        "total_output_field": "system.memory.total.bytes",
         "ratio1_output_field": "system.memory.actual.used.pct",
         "ratio2_output_field": "system.memory.actual.free.pct"
       }
