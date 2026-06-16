@@ -101,13 +101,6 @@ function computeLineDiff(oldLines, newLines) {
 
 // ===== END DIFF ALGORITHMS =====
 
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Hide modal
 function hideDeployDiffModal() {
     document.getElementById('deployDiffModal').classList.add('hidden');

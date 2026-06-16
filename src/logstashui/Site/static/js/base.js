@@ -44,8 +44,9 @@ function createToastContainer() {
 
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
   const div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = String(text);
   return div.innerHTML;
 }
 

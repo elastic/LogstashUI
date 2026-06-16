@@ -2090,13 +2090,6 @@ function toggleTokenDisplay(tokenId, rawToken, encodedToken) {
     }
 }
 
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Toggle enrollment token menu dropdown
 function toggleEnrollmentTokenMenu(tokenId) {
     const menu = document.getElementById(`token-menu-${tokenId}`);
