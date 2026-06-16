@@ -236,31 +236,55 @@ function selectTemplateOption(id, displayName, vendor) {
 function toggleTemplateDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('deviceTemplateDropdownList');
-  if (list) list.classList.toggle('hidden');
+  if (!list) return;
+  list.classList.toggle('hidden');
+  if (!list.classList.contains('hidden')) {
+    const searchInput = document.getElementById('deviceTemplateSearch');
+    if (searchInput) setTimeout(() => searchInput.focus(), 50);
+  }
 }
 
 function closeTemplateDropdown() {
   const list = document.getElementById('deviceTemplateDropdownList');
   if (list) list.classList.add('hidden');
+  const searchInput = document.getElementById('deviceTemplateSearch');
+  if (searchInput) {
+    searchInput.value = '';
+    filterTemplateDropdown('');
+  }
+}
+
+// Filter template dropdown rows by substring
+function filterTemplateDropdown(query) {
+  const optionsList = document.getElementById('deviceTemplateOptionsList');
+  if (!optionsList) return;
+  const q = query.toLowerCase();
+  optionsList.querySelectorAll('.template-option-row').forEach(row => {
+    const searchText = row.dataset.searchText || '';
+    // The "clear selection" row (empty searchText) always stays visible
+    row.classList.toggle('hidden', searchText !== '' && !searchText.includes(q));
+  });
 }
 
 // Load device templates into the custom dropdown
 function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
-  const list = document.getElementById('deviceTemplateDropdownList');
   const wrapper = document.getElementById('deviceTemplateDropdownWrapper');
   const imagesUrl = wrapper ? wrapper.dataset.imagesUrl : '';
 
   fetch('/SNMP/GetDeviceTemplates/')
     .then(response => response.json())
     .then(data => {
-      list.innerHTML = '';
+      const optionsList = document.getElementById('deviceTemplateOptionsList');
+      if (!optionsList) return;
+      optionsList.innerHTML = '';
 
-      // "No selection" row
+      // "No selection" row — searchText left empty so it's always visible
       const clearRow = document.createElement('div');
-      clearRow.className = 'flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:bg-gray-700 cursor-pointer';
+      clearRow.className = 'flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:bg-gray-700 cursor-pointer template-option-row';
+      clearRow.dataset.searchText = '';
       clearRow.textContent = 'Select a template...';
       clearRow.onclick = () => selectTemplateOption('', '', '');
-      list.appendChild(clearRow);
+      optionsList.appendChild(clearRow);
 
       const templates = data.templates || [];
       templates.forEach(template => {
@@ -268,14 +292,15 @@ function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
         const displayName = template.display_name || template.name;
 
         const row = document.createElement('div');
-        row.className = 'flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-700 cursor-pointer';
+        row.className = 'flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-700 cursor-pointer template-option-row';
+        row.dataset.searchText = `${displayName} ${template.vendor || ''}`.toLowerCase();
         row.innerHTML = `
           <img src="${logoSrc}" alt="${template.vendor || ''}"
                class="w-5 h-5 object-contain flex-shrink-0 rounded bg-white p-0.5">
           <span class="truncate">${displayName}</span>
         `;
         row.onclick = () => selectTemplateOption(template.id, displayName, template.vendor);
-        list.appendChild(row);
+        optionsList.appendChild(row);
 
         if (selectedTemplateId && template.id == selectedTemplateId) {
           selectTemplateOption(template.id, displayName, template.vendor);
