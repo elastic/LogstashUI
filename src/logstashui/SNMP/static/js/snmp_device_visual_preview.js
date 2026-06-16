@@ -256,6 +256,37 @@ function renderDevicePreview(deviceId, device, visualizations) {
   }
 }
 
+// Abbreviate common interface name prefixes so port numbers are visible in compact cards.
+// The full name is always shown in the hover tooltip.
+function abbreviateIfaceName(name) {
+  if (!name) return name;
+  const prefixes = [
+    // Longest/most-specific matches first to avoid partial replacements
+    [/^TenGigabitEthernet/i,  'Te'],
+    [/^HundredGigE/i,         'Hu'],
+    [/^TwentyFiveGigE/i,      '25G'],
+    [/^FortyGigabitEthernet/i,'Fo'],
+    [/^GigabitEthernet/i,     'Gi'],
+    [/^FastEthernet/i,        'Fa'],
+    [/^Ethernet/i,            'Eth'],
+    [/^Port-channel/i,        'Po'],
+    [/^Bundle-Ether/i,        'BE'],
+    [/^Loopback/i,            'Lo'],
+    [/^Tunnel/i,              'Tu'],
+    [/^Serial/i,              'Se'],
+    [/^Management/i,          'Mg'],
+    [/^Vlan/i,                'Vl'],
+    [/^StackSub-St/i,         'StSub'],
+    [/^StackPort/i,           'StPo'],
+  ];
+  for (const [pattern, abbr] of prefixes) {
+    if (pattern.test(name)) {
+      return name.replace(pattern, abbr);
+    }
+  }
+  return name;
+}
+
 // Create an interface card with status indicators and hover details
 function createInterfaceCard(iface) {
   const card = document.createElement('div');
@@ -271,26 +302,31 @@ function createInterfaceCard(iface) {
   let statusText = 'Unknown';
   let statusColor = 'bg-gray-500';
 
-  if (adminStatus === 2) {
-    borderClass = 'border-gray-500';
-    statusText = 'Admin Down';
-    statusColor = 'bg-gray-500';
-  } else if (adminStatus === 1 && operStatus === 1) {
+  if (adminStatus === 1 && operStatus === 1) {
+    // Admin up / oper up — enabled and active
     borderClass = 'border-green-500';
     statusText = 'Up';
     statusColor = 'bg-green-500';
-  } else if (adminStatus === 1 && operStatus === 2) {
-    borderClass = 'border-red-500';
-    statusText = 'Down';
-    statusColor = 'bg-red-500';
+  } else if (adminStatus === 2 && operStatus === 1) {
+    // Admin down / oper up — inconsistent, worth investigating
+    borderClass = 'border-yellow-500';
+    statusText = 'Admin Down / Link Up';
+    statusColor = 'bg-yellow-500';
   } else if (adminStatus === 1 && operStatus === 5) {
+    // Admin up / oper dormant — link enabled but dormant
     borderClass = 'border-yellow-500';
     statusText = 'Dormant';
     statusColor = 'bg-yellow-500';
   } else if (adminStatus === 3 || operStatus === 3) {
+    // Testing state
     borderClass = 'border-blue-500';
     statusText = 'Testing';
     statusColor = 'bg-blue-500';
+  } else {
+    // Admin down / oper down, admin up / oper down, or unknown — gray (disabled/no link)
+    borderClass = 'border-gray-500';
+    statusText = adminStatus === 2 ? 'Admin Down' : operStatus === 2 ? 'No Link' : 'Unknown';
+    statusColor = 'bg-gray-500';
   }
 
   // New schema: speed_high_mbps replaces ifHighSpeed; speed replaces ifSpeed (bps)
@@ -318,7 +354,7 @@ function createInterfaceCard(iface) {
   const index = iface.index ?? iface.ifIndex ?? 'N/A';
 
   const adminStatusText = adminStatus === 1 ? '<span class="text-green-400">Up</span>' : adminStatus === 2 ? '<span class="text-gray-400">Down</span>' : '<span class="text-blue-400">Testing</span>';
-  const operStatusHtml  = operStatus  === 1 ? '<span class="text-green-400">Up</span>' : operStatus  === 2 ? '<span class="text-red-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
+  const operStatusHtml  = operStatus  === 1 ? '<span class="text-green-400">Up</span>' : operStatus  === 2 ? '<span class="text-gray-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
 
   const tooltipContent = `
     <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(ifaceName)}</div>
@@ -344,11 +380,13 @@ function createInterfaceCard(iface) {
     </div>
   `;
 
+  const displayName = abbreviateIfaceName(ifaceName);
+
   card.className = `relative bg-gray-800 rounded-lg p-1.5 border-2 ${borderClass} hover:shadow-lg transition-all cursor-pointer group`;
   card.innerHTML = `
     <div class="flex flex-col items-center justify-center h-12">
       <div class="w-2.5 h-2.5 rounded-full ${statusColor} mb-1"></div>
-      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(ifaceName)}</div>
+      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(displayName)}</div>
       <div class="text-xs text-gray-400 text-xs">${speedText}</div>
     </div>
     
