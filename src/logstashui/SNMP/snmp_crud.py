@@ -2736,6 +2736,378 @@ def _get_device_sensors(device, es_connection):
     return visualization_data
 
 
+def _get_device_cpu_cores(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.category": "component.cpu"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "cores": {
+                "terms": {
+                    "field": "component.cpu.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": ["component.cpu.index", "component.cpu.load_pct"]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "cores": []
+    }
+
+    for bucket in results['aggregations']['cores']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            cpu = doc['_source'].get('component', {}).get('cpu', {})
+            visualization_data['cores'].append({
+                "index": cpu.get('index', bucket['key']),
+                "load_pct": cpu.get('load_pct', 0)
+            })
+
+    # Sort cores by index so they render in a consistent order
+    visualization_data['cores'].sort(key=lambda c: int(c['index']) if str(c['index']).isdigit() else 0)
+
+    return visualization_data
+
+
+def _get_device_neighbors(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.category": "network.neighbor"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "neighbors": {
+                "terms": {
+                    "field": "network.neighbor.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "network.neighbor.index",
+                                "network.neighbor.device_id",
+                                "network.neighbor.port",
+                                "network.neighbor.platform",
+                                "network.neighbor.version",
+                                "network.neighbor.address",
+                                "network.neighbor.capabilities",
+                                "network.neighbor.local_interface"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "neighbors": []
+    }
+
+    for bucket in results['aggregations']['neighbors']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            neighbor = doc['_source'].get('network', {}).get('neighbor', {})
+            visualization_data['neighbors'].append({
+                "index": neighbor.get('index', bucket['key']),
+                "device_id": neighbor.get('device_id', ''),
+                "port": neighbor.get('port', ''),
+                "platform": neighbor.get('platform', ''),
+                "version": neighbor.get('version', ''),
+                "address": neighbor.get('address', ''),
+                "capabilities": neighbor.get('capabilities', ''),
+                "local_interface": neighbor.get('local_interface', {})
+            })
+
+    visualization_data['neighbors'].sort(key=lambda n: n['device_id'].lower())
+
+    return visualization_data
+
+
+def _get_device_wireless_radios(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.category": "wireless.radio"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "radios": {
+                "terms": {
+                    "field": "wireless.radio.index",
+                    "size": 100
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "wireless.radio.index",
+                                "wireless.radio.name",
+                                "wireless.radio.band",
+                                "wireless.radio.channel",
+                                "wireless.radio.traffic"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "radios": []
+    }
+
+    for bucket in results['aggregations']['radios']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            radio = doc['_source'].get('wireless', {}).get('radio', {})
+            traffic = radio.get('traffic', {})
+            visualization_data['radios'].append({
+                "index": radio.get('index', bucket['key']),
+                "name": radio.get('name', ''),
+                "band": radio.get('band', ''),
+                "channel": radio.get('channel', ''),
+                "traffic": {
+                    "in": {
+                        "bytes": traffic.get('in', {}).get('bytes', 0)
+                    },
+                    "out": {
+                        "bytes": traffic.get('out', {}).get('bytes', 0),
+                        "discards": traffic.get('out', {}).get('discards', 0),
+                        "errors": traffic.get('out', {}).get('errors', 0)
+                    }
+                }
+            })
+
+    visualization_data['radios'].sort(key=lambda r: int(r['index']) if str(r['index']).isdigit() else 0)
+
+    return visualization_data
+
+
+def _get_device_filesystems(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.category": "system.filesystem"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "filesystems": {
+                "terms": {
+                    "field": "system.filesystem.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "system.filesystem.index",
+                                "system.filesystem.mount_point",
+                                "system.filesystem.type",
+                                "system.filesystem.used.pct",
+                                "system.filesystem.used.bytes",
+                                "system.filesystem.total.bytes",
+                                "system.filesystem.allocation_units"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "filesystems": []
+    }
+
+    for bucket in results['aggregations']['filesystems']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            fs = doc['_source'].get('system', {}).get('filesystem', {})
+            visualization_data['filesystems'].append({
+                "index": fs.get('index', bucket['key']),
+                "mount_point": fs.get('mount_point', ''),
+                "type": fs.get('type', ''),
+                "used_pct": fs.get('used', {}).get('pct', 0),
+                "used_bytes": fs.get('used', {}).get('bytes', 0),
+                "total_bytes": fs.get('total', {}).get('bytes', 0),
+                "allocation_units": fs.get('allocation_units', 0)
+            })
+
+    visualization_data['filesystems'].sort(key=lambda f: f['mount_point'])
+
+    return visualization_data
+
+
+def _get_device_printer_supplies(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    {
+                        "term": {
+                            "host.hostname": device.ip_address
+                        }
+                    },
+                    {
+                        "term": {
+                            "event.category": "printer.supply"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "supplies": {
+                "terms": {
+                    "field": "printer.supply.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "printer.supply.index",
+                                "printer.supply.description",
+                                "printer.supply.level",
+                                "printer.supply.capacity_max",
+                                "printer.supply.unit"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "supplies": []
+    }
+
+    for bucket in results['aggregations']['supplies']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            supply = doc['_source'].get('printer', {}).get('supply', {})
+            visualization_data['supplies'].append({
+                "index": supply.get('index', bucket['key']),
+                "description": supply.get('description', ''),
+                "level": supply.get('level', 0),
+                "capacity_max": supply.get('capacity_max', 100),
+                "unit": supply.get('unit', 0)
+            })
+
+    visualization_data['supplies'].sort(key=lambda s: s['description'].lower())
+
+    return visualization_data
+
+
 def generate_visualizations(visualizations, device, es_connection):
     """
     Generate visualization data based on the decided visualizations.
@@ -2749,6 +3121,16 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['fans'] = _get_device_fans(device, es_connection)
     if "interface" in visualizations:
         visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)
+    if "component.cpu" in visualizations:
+        visualization_data['cpu_cores'] = _get_device_cpu_cores(device, es_connection)
+    if "network.neighbor" in visualizations:
+        visualization_data['neighbors'] = _get_device_neighbors(device, es_connection)
+    if "wireless.radio" in visualizations:
+        visualization_data['wireless_radios'] = _get_device_wireless_radios(device, es_connection)
+    if "system.filesystem" in visualizations:
+        visualization_data['filesystems'] = _get_device_filesystems(device, es_connection)
+    if "printer.supply" in visualizations:
+        visualization_data['printer_supplies'] = _get_device_printer_supplies(device, es_connection)
 
     return visualization_data
 
