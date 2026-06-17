@@ -136,15 +136,20 @@ window.PluginConfigModal = (function () {
             const searchContainer = document.createElement('div');
             searchContainer.className = 'mb-4 pb-4 border-b border-gray-700';
             searchContainer.innerHTML = `
-                <div class="relative">
-                    <input type="text" 
-                           id="configFieldSearch" 
-                           placeholder="Search fields..."
-                           class="w-full p-2 pl-10 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                           oninput="PluginConfigModal.filterFields(this.value)">
-                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                <div class="rounded-lg border border-blue-500/40 bg-blue-950/30 px-3 pt-2 pb-3">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-blue-400">Filter Fields</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text"
+                               id="configFieldSearch"
+                               placeholder="Type to filter fields below..."
+                               class="w-full p-2 pl-9 bg-gray-900 border border-blue-500/30 rounded text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               oninput="PluginConfigModal.filterFields(this.value)">
+                        <svg class="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-400/70 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
                 </div>
             `;
             configForm.appendChild(searchContainer);
