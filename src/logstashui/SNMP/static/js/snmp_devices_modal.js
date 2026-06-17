@@ -74,31 +74,101 @@ function closeDeviceModal() {
   document.getElementById('deviceForm').reset();
   document.getElementById('deviceErrorContainer').innerHTML = '';
   closeTemplateDropdown();
-  selectTemplateOption('', '', ''); // Reset custom dropdown display
+  selectTemplateOption('', '', '');
+  closeCredentialDropdown();
+  selectCredentialOption('', '');
+  closeNetworkDropdown();
+  selectNetworkOption('', '');
 }
 
-// Load credentials into dropdown
-function loadCredentialsForDevice(selectedCredentialId = null) {
-  const credentialSelect = document.getElementById('deviceCredentialSelect');
+// Apply a selection to the custom credential dropdown
+function selectCredentialOption(id, displayText) {
+  const hiddenInput = document.getElementById('deviceCredentialSelect');
+  const text = document.getElementById('deviceCredentialSelectedText');
 
+  hiddenInput.value = id || '';
+
+  if (id) {
+    text.textContent = displayText;
+    text.classList.remove('text-gray-400');
+    text.classList.add('text-white');
+  } else {
+    text.textContent = 'Select a credential...';
+    text.classList.add('text-gray-400');
+    text.classList.remove('text-white');
+  }
+
+  closeCredentialDropdown();
+}
+
+function toggleCredentialDropdown(event) {
+  event.stopPropagation();
+  const list = document.getElementById('deviceCredentialDropdownList');
+  if (!list) return;
+  list.classList.toggle('hidden');
+  if (!list.classList.contains('hidden')) {
+    const searchInput = document.getElementById('deviceCredentialSearch');
+    if (searchInput) setTimeout(() => searchInput.focus(), 50);
+  }
+}
+
+function closeCredentialDropdown() {
+  const list = document.getElementById('deviceCredentialDropdownList');
+  if (list) list.classList.add('hidden');
+  const searchInput = document.getElementById('deviceCredentialSearch');
+  if (searchInput) {
+    searchInput.value = '';
+    filterCredentialDropdown('');
+  }
+}
+
+function filterCredentialDropdown(query) {
+  const optionsList = document.getElementById('deviceCredentialOptionsList');
+  if (!optionsList) return;
+  const q = query.toLowerCase();
+  optionsList.querySelectorAll('.credential-option-row').forEach(row => {
+    const searchText = row.dataset.searchText || '';
+    row.classList.toggle('hidden', searchText !== '' && !searchText.includes(q));
+  });
+}
+
+// Load credentials into the custom dropdown
+function loadCredentialsForDevice(selectedCredentialId = null) {
   fetch('/SNMP/GetCredentials/')
     .then(response => response.json())
     .then(credentials => {
-      // Clear existing options except the first two (placeholder and "Add Credential")
-      credentialSelect.innerHTML = `
-        <option value="">Select a credential...</option>
-        <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-      `;
+      const optionsList = document.getElementById('deviceCredentialOptionsList');
+      if (!optionsList) return;
+      optionsList.innerHTML = '';
 
-      // Add credentials to dropdown
+      // "No selection" row
+      const clearRow = document.createElement('div');
+      clearRow.className = 'flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:bg-gray-700 cursor-pointer credential-option-row';
+      clearRow.dataset.searchText = '';
+      clearRow.textContent = 'Select a credential...';
+      clearRow.onclick = () => selectCredentialOption('', '');
+      optionsList.appendChild(clearRow);
+
+      // "Add Credential" row
+      const addRow = document.createElement('div');
+      addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer credential-option-row';
+      addRow.dataset.searchText = 'add credential';
+      addRow.textContent = '+ Add Credential';
+      addRow.onclick = () => { closeCredentialDropdown(); openCredentialModalFromDevice(); };
+      optionsList.appendChild(addRow);
+
       credentials.forEach(credential => {
-        const option = document.createElement('option');
-        option.value = credential.id;
-        option.textContent = `${credential.name} (SNMPv${credential.version})`;
+        const displayText = `${credential.name} (SNMPv${credential.version})`;
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-700 cursor-pointer credential-option-row';
+        row.dataset.searchText = displayText.toLowerCase();
+        row.innerHTML = `<span class="truncate">${displayText}</span>`;
+        row.onclick = () => selectCredentialOption(credential.id, displayText);
+        optionsList.appendChild(row);
+
         if (selectedCredentialId && credential.id == selectedCredentialId) {
-          option.selected = true;
+          selectCredentialOption(credential.id, displayText);
         }
-        credentialSelect.appendChild(option);
       });
     })
     .catch(error => {
@@ -106,53 +176,99 @@ function loadCredentialsForDevice(selectedCredentialId = null) {
     });
 }
 
-// Load networks into dropdown
-function loadNetworksForDevice(selectedNetworkId = null) {
-  const networkSelect = document.getElementById('deviceNetworkSelect');
+// Apply a selection to the custom network dropdown
+function selectNetworkOption(id, displayText) {
+  const hiddenInput = document.getElementById('deviceNetworkSelect');
+  const text = document.getElementById('deviceNetworkSelectedText');
 
+  hiddenInput.value = id || '';
+
+  if (id) {
+    text.textContent = displayText;
+    text.classList.remove('text-gray-400');
+    text.classList.add('text-white');
+  } else {
+    text.textContent = 'Select a network...';
+    text.classList.add('text-gray-400');
+    text.classList.remove('text-white');
+  }
+
+  closeNetworkDropdown();
+}
+
+function toggleNetworkDropdown(event) {
+  event.stopPropagation();
+  const list = document.getElementById('deviceNetworkDropdownList');
+  if (!list) return;
+  list.classList.toggle('hidden');
+  if (!list.classList.contains('hidden')) {
+    const searchInput = document.getElementById('deviceNetworkSearch');
+    if (searchInput) setTimeout(() => searchInput.focus(), 50);
+  }
+}
+
+function closeNetworkDropdown() {
+  const list = document.getElementById('deviceNetworkDropdownList');
+  if (list) list.classList.add('hidden');
+  const searchInput = document.getElementById('deviceNetworkSearch');
+  if (searchInput) {
+    searchInput.value = '';
+    filterNetworkDropdown('');
+  }
+}
+
+function filterNetworkDropdown(query) {
+  const optionsList = document.getElementById('deviceNetworkOptionsList');
+  if (!optionsList) return;
+  const q = query.toLowerCase();
+  optionsList.querySelectorAll('.network-option-row').forEach(row => {
+    const searchText = row.dataset.searchText || '';
+    row.classList.toggle('hidden', searchText !== '' && !searchText.includes(q));
+  });
+}
+
+// Load networks into the custom dropdown
+function loadNetworksForDevice(selectedNetworkId = null) {
   fetch('/SNMP/GetNetworks/')
     .then(response => response.json())
     .then(networks => {
-      // Clear existing options except the first two (placeholder and "Add Network")
-      networkSelect.innerHTML = `
-        <option value="">Select a network...</option>
-        <option value="add_new" class="font-bold text-primary">+ Add Network</option>
-      `;
+      const optionsList = document.getElementById('deviceNetworkOptionsList');
+      if (!optionsList) return;
+      optionsList.innerHTML = '';
 
-      // Add networks to dropdown
+      // "No selection" row
+      const clearRow = document.createElement('div');
+      clearRow.className = 'flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:bg-gray-700 cursor-pointer network-option-row';
+      clearRow.dataset.searchText = '';
+      clearRow.textContent = 'Select a network...';
+      clearRow.onclick = () => selectNetworkOption('', '');
+      optionsList.appendChild(clearRow);
+
+      // "Add Network" row
+      const addRow = document.createElement('div');
+      addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer network-option-row';
+      addRow.dataset.searchText = 'add network';
+      addRow.textContent = '+ Add Network';
+      addRow.onclick = () => { closeNetworkDropdown(); openNetworkModalFromDevice(); };
+      optionsList.appendChild(addRow);
+
       networks.forEach(network => {
-        const option = document.createElement('option');
-        option.value = network.id;
-        option.textContent = `${network.name} (${network.network_range})`;
+        const displayText = `${network.name} (${network.network_range})`;
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-700 cursor-pointer network-option-row';
+        row.dataset.searchText = displayText.toLowerCase();
+        row.innerHTML = `<span class="truncate">${displayText}</span>`;
+        row.onclick = () => selectNetworkOption(network.id, displayText);
+        optionsList.appendChild(row);
+
         if (selectedNetworkId && network.id == selectedNetworkId) {
-          option.selected = true;
+          selectNetworkOption(network.id, displayText);
         }
-        networkSelect.appendChild(option);
       });
     })
     .catch(error => {
       console.error('Error loading networks:', error);
     });
-}
-
-// Handle credential selection change
-function handleDeviceCredentialSelection(event) {
-  if (event.target.value === 'add_new') {
-    // Open credential modal
-    openCredentialModalFromDevice();
-    // Reset selection to empty
-    event.target.value = '';
-  }
-}
-
-// Handle network selection change
-function handleDeviceNetworkSelection(event) {
-  if (event.target.value === 'add_new') {
-    // Open network modal
-    openNetworkModalFromDevice();
-    // Reset selection to empty
-    event.target.value = '';
-  }
 }
 
 // Open credential modal from device modal
@@ -318,10 +434,16 @@ function refreshDeviceTemplates() {
   loadDeviceTemplatesForDevice(currentValue);
 }
 
-// Close custom dropdown when clicking outside
+// Close custom dropdowns when clicking outside
 document.addEventListener('click', function (e) {
   if (!e.target.closest('#deviceTemplateDropdownWrapper')) {
     closeTemplateDropdown();
+  }
+  if (!e.target.closest('#deviceCredentialDropdownWrapper')) {
+    closeCredentialDropdown();
+  }
+  if (!e.target.closest('#deviceNetworkDropdownWrapper')) {
+    closeNetworkDropdown();
   }
 });
 
@@ -365,29 +487,6 @@ window.closeNetworkModal = function () {
     window.lastCreatedNetworkId = null;
   }
 };
-
-// Add event listeners for credential and network selection
-document.addEventListener('DOMContentLoaded', function () {
-  const credentialSelect = document.getElementById('deviceCredentialSelect');
-  if (credentialSelect) {
-    credentialSelect.addEventListener('change', handleDeviceCredentialSelection);
-    // Refresh dropdown when clicked/focused, preserving current selection
-    credentialSelect.addEventListener('focus', function () {
-      const currentValue = this.value;
-      loadCredentialsForDevice(currentValue);
-    });
-  }
-
-  const networkSelect = document.getElementById('deviceNetworkSelect');
-  if (networkSelect) {
-    networkSelect.addEventListener('change', handleDeviceNetworkSelection);
-    // Refresh dropdown when clicked/focused, preserving current selection
-    networkSelect.addEventListener('focus', function () {
-      const currentValue = this.value;
-      loadNetworksForDevice(currentValue);
-    });
-  }
-});
 
 // Handle form submission
 const deviceForm = document.getElementById('deviceForm');

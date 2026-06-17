@@ -44,14 +44,35 @@
 
           <!-- Connection -->
           <div class="mb-4">
-            <label for="networkConnection" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Connection <span class="text-red-500">*</span>
             </label>
             <div class="flex gap-2">
-              <select id="networkConnection" name="connection" class="select select-bordered w-full" required>
-                <option value="">Select a connection...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Connection</option>
-              </select>
+              <input type="hidden" id="networkConnection" name="connection">
+              <div id="networkConnectionDropdownWrapper" class="relative flex-1">
+                <button type="button" id="networkConnectionDropdownTrigger"
+                        onclick="toggleConnectionDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="networkConnectionSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a connection...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="networkConnectionDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="networkConnectionSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search connections..."
+                           autocomplete="off"
+                           oninput="filterConnectionDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="networkConnectionOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
               <button type="button" onclick="refreshConnections()" class="btn btn-square btn-ghost" title="Refresh connections">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -104,14 +125,35 @@
 
           <!-- Discovery Credential Selection (shown only when discovery enabled) -->
           <div id="discoveryCredentialSection" class="mb-4">
-            <label for="discoveryCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Discovery SNMP Credential <span class="text-red-500">*</span>
             </label>
             <div class="flex gap-2">
-              <select id="discoveryCredentialSelect" name="discovery_credential" class="select select-bordered w-full">
-                <option value="">Select a credential...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-              </select>
+              <input type="hidden" id="discoveryCredentialSelect" name="discovery_credential">
+              <div id="discoveryCredentialDropdownWrapper" class="relative flex-1">
+                <button type="button" id="discoveryCredentialDropdownTrigger"
+                        onclick="toggleDiscoveryCredentialDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="discoveryCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="discoveryCredentialDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="discoveryCredentialSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search credentials..."
+                           autocomplete="off"
+                           oninput="filterDiscoveryCredentialDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="discoveryCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
               <button type="button" onclick="refreshDiscoveryCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -141,14 +183,35 @@
 
           <!-- Trap Credential Selection (shown only when traps enabled) -->
           <div id="trapsCredentialSection" class="mb-4 hidden">
-            <label for="networkCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Trap SNMP Credential <span class="text-red-500">*</span>
             </label>
             <div class="flex gap-2">
-              <select id="networkCredentialSelect" name="credential" class="select select-bordered w-full">
-                <option value="">Select a credential...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-              </select>
+              <input type="hidden" id="networkCredentialSelect" name="credential">
+              <div id="trapCredentialDropdownWrapper" class="relative flex-1">
+                <button type="button" id="trapCredentialDropdownTrigger"
+                        onclick="toggleTrapCredentialDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="trapCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="trapCredentialDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="trapCredentialSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search credentials..."
+                           autocomplete="off"
+                           oninput="filterTrapCredentialDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="trapCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
               <button type="button" onclick="refreshNetworkCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

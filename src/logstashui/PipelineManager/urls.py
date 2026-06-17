@@ -26,6 +26,8 @@ urlpatterns = [
 
     path("GetConnections/", connections_crud.GetConnections, name="GetConnections"),
     path("AddConnection", connections_crud.AddConnection, name="AddConnection"),
+    path("GetConnection/<int:connection_id>/", connections_crud.GetConnection, name="GetConnection"),
+    path("UpdateConnection/<int:connection_id>/", connections_crud.UpdateConnection, name="UpdateConnection"),
     path("DeleteConnection/<int:connection_id>/", connections_crud.DeleteConnection, name="DeleteConnection"),
     path("UpgradeAgent/<int:connection_id>/", connections_crud.UpgradeAgent, name="UpgradeAgent"),
     path("ChangeConnectionPolicy/", connections_crud.change_connection_policy, name="ChangeConnectionPolicy"),

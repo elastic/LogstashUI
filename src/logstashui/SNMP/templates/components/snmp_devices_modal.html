@@ -45,14 +45,35 @@
 
           <!-- Credential Selection -->
           <div class="mb-4">
-            <label for="deviceCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               SNMP Credential
             </label>
             <div class="flex gap-2">
-              <select id="deviceCredentialSelect" name="credential" class="select select-bordered w-full">
-                <option value="">Select a credential...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-              </select>
+              <input type="hidden" id="deviceCredentialSelect" name="credential">
+              <div id="deviceCredentialDropdownWrapper" class="relative flex-1">
+                <button type="button" id="deviceCredentialDropdownTrigger"
+                        onclick="toggleCredentialDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="deviceCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="deviceCredentialDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="deviceCredentialSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search credentials..."
+                           autocomplete="off"
+                           oninput="filterCredentialDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="deviceCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
               <button type="button" onclick="refreshCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -64,14 +85,35 @@
 
           <!-- Network Selection -->
           <div class="mb-4">
-            <label for="deviceNetworkSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Network
             </label>
             <div class="flex gap-2">
-              <select id="deviceNetworkSelect" name="network" class="select select-bordered w-full">
-                <option value="">Select a network...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Network</option>
-              </select>
+              <input type="hidden" id="deviceNetworkSelect" name="network">
+              <div id="deviceNetworkDropdownWrapper" class="relative flex-1">
+                <button type="button" id="deviceNetworkDropdownTrigger"
+                        onclick="toggleNetworkDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="deviceNetworkSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a network...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="deviceNetworkDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="deviceNetworkSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search networks..."
+                           autocomplete="off"
+                           oninput="filterNetworkDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="deviceNetworkOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
               <button type="button" onclick="refreshNetworks()" class="btn btn-square btn-ghost" title="Refresh networks">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

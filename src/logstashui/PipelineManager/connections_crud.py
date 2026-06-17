@@ -5,6 +5,7 @@
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.template.loader import get_template
+from django.db import transaction
 
 from PipelineManager.models import Connection as ConnectionTable, Policy, Pipeline
 
@@ -100,6 +101,103 @@ def DeleteConnection(request, connection_id=None):
             }, 500);
         </script>
     """)
+
+
+@require_admin_role
+def GetConnection(request, connection_id):
+    """
+    Return connection details (excluding credentials) for pre-filling the edit modal.
+    Only supports CENTRALIZED connections.
+    """
+    if request.method != "GET":
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
+
+    if connection.connection_type != ConnectionTable.ConnectionType.CENTRALIZED:
+        return JsonResponse({'success': False, 'error': 'Only centralized connections can be edited via this endpoint'}, status=400)
+
+    auth_type = 'apiKey' if connection.api_key else 'basic'
+
+    return JsonResponse({
+        'success': True,
+        'connection': {
+            'id': connection.id,
+            'name': connection.name,
+            'connection_mode': 'cloud' if connection.cloud_id else 'url',
+            'cloud_id': connection.cloud_id or '',
+            'host': connection.host or '',
+            'port': connection.port or '',
+            'auth_type': auth_type,
+            'username': connection.username or '',
+        }
+    })
+
+
+@require_admin_role
+def UpdateConnection(request, connection_id):
+    """
+    Update an existing CENTRALIZED connection.
+    Credentials must be re-supplied — they are tested before the change is committed.
+    On connectivity test failure the database record is rolled back.
+    """
+    if request.method != "POST":
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
+
+    if connection.connection_type != ConnectionTable.ConnectionType.CENTRALIZED:
+        return JsonResponse({'success': False, 'error': 'Only centralized connections can be edited'}, status=400)
+
+    # Enforce credential re-entry
+    auth_type = request.POST.get('auth_type', 'basic')
+    if auth_type == 'basic':
+        if not request.POST.get('password', '').strip():
+            return JsonResponse({'success': False, 'error': 'Password is required when updating a connection'}, status=200)
+    else:
+        if not request.POST.get('api_key', '').strip():
+            return JsonResponse({'success': False, 'error': 'API Key is required when updating a connection'}, status=200)
+
+    # Clear the opposing credential on the instance before form binding so that
+    # ConnectionForm.save()'s "keep existing if empty" logic doesn't silently
+    # preserve a stale credential from the previous auth type.
+    if auth_type == 'basic':
+        connection.api_key = None
+    else:
+        connection.username = None
+        connection.password = None
+
+    form = ConnectionForm(request.POST, instance=connection)
+    if not form.is_valid():
+        logger.warning(f"User '{request.user.username}' submitted invalid update for connection {connection_id}: {form.errors}")
+        return JsonResponse({'success': False, 'error': str(form.errors)}, status=200)
+
+    test_success = False
+    test_message = ""
+    try:
+        with transaction.atomic():
+            updated_connection = form.save()
+            test_success, test_message = manager_views.test_connectivity(updated_connection.id)
+            if not test_success:
+                transaction.set_rollback(True)
+    except Exception as e:
+        logger.error(f"User '{request.user.username}' encountered error updating connection {connection_id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=200)
+
+    if not test_success:
+        logger.warning(f"User '{request.user.username}' failed connectivity test when updating connection {connection_id}")
+        return JsonResponse({'success': False, 'error': str(test_message)}, status=200)
+
+    logger.info(f"User '{request.user.username}' updated connection {connection_id}")
+    return JsonResponse({
+        'success': True,
+        'connection_id': connection_id,
+        'message': 'Connection updated and tested successfully!'
+    }, status=200)
 
 
 @require_admin_role

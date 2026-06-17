@@ -10,7 +10,7 @@
     <div class="absolute inset-y-0 right-0 max-w-full flex">
       <div class="w-[32rem] bg-base-200 shadow-xl flex flex-col h-full">
         <div class="flex justify-between items-center p-6 border-b border-base-300">
-          <h2 class="text-xl font-bold">Add New Connection</h2>
+          <h2 id="connectionModalTitle" class="text-xl font-bold">Add New Connection</h2>
           <button onclick="closeFlyout()" class="btn btn-ghost btn-sm btn-circle">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -33,13 +33,13 @@
                       const response = JSON.parse(event.detail.xhr.responseText);
                       
                       if (response.success) {
-                          // Store the new connection ID for later use
+                          // Store the connection ID so closeFlyout() triggers a page reload
                           window.lastCreatedConnectionId = response.connection_id;
                           
-                          // Show success toast
-                          showToast(response.message || 'Connection created and tested successfully!', 'success');
+                          const isEdit = window.connectionEditMode === 'edit';
+                          showToast(response.message || (isEdit ? 'Connection updated successfully!' : 'Connection created and tested successfully!'), 'success');
                           
-                          // Close the modal
+                          // Close the modal (page reload is handled by the closeFlyout override in pipeline_manager.html)
                           closeFlyout();
                           
                           // Clear the form
@@ -75,6 +75,16 @@
 
               <!-- Hidden connection type field -->
               <input type="hidden" name="connection_type" id="connectionTypeField" value="CENTRALIZED">
+
+              <!-- Credential re-entry notice (edit mode only) -->
+              <div id="credentialReentryHint" class="hidden p-3 mb-4 bg-amber-900/20 border border-amber-600/40 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                  </svg>
+                  <p class="text-amber-300 text-sm">You must re-enter your credentials to save changes. They are tested against the cluster before the update is applied.</p>
+                </div>
+              </div>
 
               <!-- Connection Name Field (only for centralized connections) -->
               <div id="connectionNameField" class="mb-6">
@@ -315,13 +325,143 @@ sudo systemctl start logstash-agent</code></pre>
   </div>
 
   <script>
+    // Track whether the modal is in 'add' or 'edit' mode
+    window.connectionEditMode = 'add';
+    window.editConnectionId = null;
+
     function openFlyout() {
         document.getElementById('connectionFormFlyout').classList.remove('hidden');
     }
 
     function closeFlyout() {
         document.getElementById('connectionFormFlyout').classList.add('hidden');
+        _resetConnectionModalToAddMode();
     }
+
+    function _resetConnectionModalToAddMode() {
+        if (window.connectionEditMode !== 'edit') return;
+
+        window.connectionEditMode = 'add';
+        window.editConnectionId = null;
+
+        // Restore form action to AddConnection
+        const form = document.getElementById('connectionForm');
+        form.setAttribute('hx-post', '/ConnectionManager/AddConnection');
+        htmx.process(form);
+
+        // Restore title and button
+        document.getElementById('connectionModalTitle').textContent = 'Add New Connection';
+        const saveBtn = document.getElementById('saveConnectionBtn');
+        if (saveBtn) saveBtn.textContent = 'Save Connection';
+
+        // Hide credential hint
+        document.getElementById('credentialReentryHint').classList.add('hidden');
+
+        // Reset form values (radios go back to their HTML default but don't fire change events,
+        // so we must explicitly restore field visibility to match those defaults)
+        form.reset();
+        document.getElementById('connectionErrorContainer').innerHTML = '';
+
+        // Restore connection mode visibility to default (Cloud ID selected)
+        document.getElementById('cloudIdField').classList.remove('hidden');
+        document.getElementById('nodeUrlField').classList.add('hidden');
+
+        // Restore auth type visibility to default (Username/Password selected)
+        document.getElementById('basicAuthFields').classList.remove('hidden');
+        document.getElementById('apiKeyField').classList.add('hidden');
+    }
+
+    /**
+     * Open the connection modal in edit mode, pre-filling all non-credential fields.
+     * Only supports CENTRALIZED connections.
+     */
+    window.openEditConnection = async function(connectionId) {
+        try {
+            const response = await fetch(`/ConnectionManager/GetConnection/${connectionId}/`, {
+                headers: { 'X-CSRFToken': getCsrfToken() }
+            });
+            const data = await response.json();
+
+            if (!data.success) {
+                showToast(data.error || 'Failed to load connection details', 'error');
+                return;
+            }
+
+            const conn = data.connection;
+            window.connectionEditMode = 'edit';
+            window.editConnectionId = connectionId;
+
+            // Switch the form action to UpdateConnection
+            const form = document.getElementById('connectionForm');
+            form.setAttribute('hx-post', `/ConnectionManager/UpdateConnection/${connectionId}/`);
+            htmx.process(form);
+
+            // Update title and save button
+            document.getElementById('connectionModalTitle').textContent = 'Edit Connection';
+            const saveBtn = document.getElementById('saveConnectionBtn');
+            if (saveBtn) {
+                saveBtn.textContent = 'Update Connection';
+                saveBtn.classList.remove('hidden');
+            }
+
+            // Lock to centralized mode
+            document.getElementById('connectionTypeField').value = 'CENTRALIZED';
+            document.getElementById('centralizedFields').classList.remove('hidden');
+            document.getElementById('agentFields').classList.add('hidden');
+            document.getElementById('connectionNameField').classList.remove('hidden');
+
+            // Show credential re-entry hint
+            document.getElementById('credentialReentryHint').classList.remove('hidden');
+
+            // Clear any previous errors
+            document.getElementById('connectionErrorContainer').innerHTML = '';
+
+            // -- Pre-fill name --
+            const nameInput = document.querySelector('[name="name"]');
+            if (nameInput) nameInput.value = conn.name;
+
+            // -- Pre-fill connection mode (cloud vs url) --
+            const modeRadios = document.querySelectorAll('input[name="connection_mode"]');
+            modeRadios.forEach(r => { r.checked = r.value === conn.connection_mode; });
+
+            if (conn.connection_mode === 'cloud') {
+                document.getElementById('cloudIdField').classList.remove('hidden');
+                document.getElementById('nodeUrlField').classList.add('hidden');
+                const cloudIdInput = document.querySelector('[name="cloud_id"]');
+                if (cloudIdInput) cloudIdInput.value = conn.cloud_id;
+            } else {
+                document.getElementById('cloudIdField').classList.add('hidden');
+                document.getElementById('nodeUrlField').classList.remove('hidden');
+                const hostInput = document.querySelector('[name="host"]');
+                const portInput = document.querySelector('[name="port"]');
+                if (hostInput) hostInput.value = conn.host;
+                if (portInput) portInput.value = conn.port;
+            }
+
+            // -- Pre-fill auth type (credentials intentionally blank) --
+            const authRadios = document.querySelectorAll('input[name="auth_type"]');
+            authRadios.forEach(r => { r.checked = r.value === conn.auth_type; });
+
+            if (conn.auth_type === 'basic') {
+                document.getElementById('basicAuthFields').classList.remove('hidden');
+                document.getElementById('apiKeyField').classList.add('hidden');
+                const usernameInput = document.querySelector('[name="username"]');
+                const passwordInput = document.querySelector('[name="password"]');
+                if (usernameInput) usernameInput.value = conn.username;
+                if (passwordInput) passwordInput.value = '';
+            } else {
+                document.getElementById('basicAuthFields').classList.add('hidden');
+                document.getElementById('apiKeyField').classList.remove('hidden');
+                const apiKeyInput = document.querySelector('[name="api_key"]');
+                if (apiKeyInput) apiKeyInput.value = '';
+            }
+
+            openFlyout();
+        } catch (err) {
+            console.error('Error loading connection for edit:', err);
+            showToast('Failed to load connection details', 'error');
+        }
+    };
 
 
 
@@ -348,17 +488,20 @@ sudo systemctl start logstash-agent</code></pre>
         const username = document.querySelector('[name="username"]');
         const password = document.querySelector('[name="password"]');
 
+        // In edit mode credentials are always required; in add mode they are always required too
         if (!username.value.trim() || !password.value.trim()) {
           isValid = false;
           if (!username.value.trim()) username.reportValidity();
-          if (!password.value.trim()) password.reportValidity();
+          if (!password.value.trim()) {
+            showToast('Password is required', 'error');
+          }
         }
       } else {
         // Validate API key if API key auth is selected
         const apiKey = document.querySelector('[name="api_key"]');
         if (!apiKey.value.trim()) {
           isValid = false;
-          apiKey.reportValidity();
+          showToast('API Key is required', 'error');
         }
       }
 

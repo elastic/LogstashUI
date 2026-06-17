@@ -7,12 +7,52 @@
 {% load static %}
 <script src="{% static 'js/plugin_config_modal.js' %}"></script>
 
+<!-- Expanded Value Editor Overlay (sits above the plugin config modal) -->
+<div id="expandedValueEditorOverlay" class="hidden fixed inset-0 flex items-center justify-center z-[10100] p-4">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="ExpandedValueEditor.cancel()"></div>
+    <div class="relative z-10 bg-gray-800 rounded-lg w-full flex flex-col shadow-2xl" style="max-width: 860px; max-height: 85vh;">
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-700 flex justify-between items-start flex-shrink-0">
+            <div>
+                <h4 class="text-base font-semibold text-white">Edit Value</h4>
+                <div id="expandedValueEditorContext" class="text-xs text-gray-400 mt-0.5 font-mono"></div>
+            </div>
+            <button onclick="ExpandedValueEditor.cancel()" class="text-gray-400 hover:text-white ml-4 flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <!-- Textarea -->
+        <div class="flex-1 overflow-auto p-4 min-h-0">
+            <textarea id="expandedValueEditorTextarea"
+                      class="w-full bg-gray-900 border border-gray-600 rounded text-white font-mono text-sm p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      style="min-height: 260px; max-height: 55vh;"
+                      placeholder="Enter value..."></textarea>
+        </div>
+        <!-- Footer -->
+        <div class="p-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+            <span id="expandedValueEditorCharCount" class="text-xs text-gray-500 font-mono select-none"></span>
+            <div class="flex gap-2">
+                <button type="button" onclick="ExpandedValueEditor.cancel()"
+                        class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600">
+                    Cancel
+                </button>
+                <button type="button" onclick="ExpandedValueEditor.apply()"
+                        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700">
+                    Apply Value
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Plugin Configuration Modal -->
 <div id="configModal" class="hidden fixed inset-0 flex items-center justify-center z-[10000] p-4">
     <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="PluginConfigModal.cancel()"></div>
-    <div id="configModalContainer" class="bg-gray-800 rounded-lg w-full max-h-[90vh] flex relative z-10" style="max-width: 1400px;">
+    <div id="configModalContainer" class="bg-gray-800 rounded-lg w-full max-h-[90vh] flex relative z-10" style="max-width: 1400px; min-width: 680px;">
         <!-- Left Panel: Configuration Form -->
-        <div class="flex flex-col" style="flex: 1; min-width: 600px;">
+        <div class="flex flex-col" style="flex: 1; min-width: 640px;">
             <!-- Modal Header -->
             <div class="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
                 <div class="flex items-center">
