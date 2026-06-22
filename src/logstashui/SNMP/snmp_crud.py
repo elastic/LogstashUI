@@ -2341,13 +2341,16 @@ def GetDiscoveredDevices(request):
     """
     try:
 
-        # Get all connections
-        connections = Connection.objects.all()
+        # Only query connections that are assigned to SNMP networks
+        connection_ids = Network.objects.filter(
+            connection__isnull=False
+        ).values_list('connection_id', flat=True).distinct()
+        connections = Connection.objects.filter(id__in=connection_ids)
 
         if not connections.exists():
             return JsonResponse({
                 'success': False,
-                'error': 'No Elasticsearch connections configured'
+                'error': 'No Elasticsearch connections associated with SNMP networks'
             }, status=400)
 
         all_discovered_devices = []
