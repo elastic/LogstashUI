@@ -105,10 +105,12 @@ function toggleCredentialDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('deviceCredentialDropdownList');
   if (!list) return;
+  const isOpening = list.classList.contains('hidden');
   list.classList.toggle('hidden');
-  if (!list.classList.contains('hidden')) {
-    const searchInput = document.getElementById('deviceCredentialSearch');
-    if (searchInput) setTimeout(() => searchInput.focus(), 50);
+  if (isOpening) {
+    const currentVal = document.getElementById('deviceCredentialSelect').value || null;
+    loadCredentialsForDevice(currentVal);
+    setTimeout(() => document.getElementById('deviceCredentialSearch')?.focus(), 50);
   }
 }
 
@@ -152,7 +154,7 @@ function loadCredentialsForDevice(selectedCredentialId = null) {
       // "Add Credential" row
       const addRow = document.createElement('div');
       addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer credential-option-row';
-      addRow.dataset.searchText = 'add credential';
+      addRow.dataset.searchText = '';
       addRow.textContent = '+ Add Credential';
       addRow.onclick = () => { closeCredentialDropdown(); openCredentialModalFromDevice(); };
       optionsList.appendChild(addRow);
@@ -200,10 +202,12 @@ function toggleNetworkDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('deviceNetworkDropdownList');
   if (!list) return;
+  const isOpening = list.classList.contains('hidden');
   list.classList.toggle('hidden');
-  if (!list.classList.contains('hidden')) {
-    const searchInput = document.getElementById('deviceNetworkSearch');
-    if (searchInput) setTimeout(() => searchInput.focus(), 50);
+  if (isOpening) {
+    const currentVal = document.getElementById('deviceNetworkSelect').value || null;
+    loadNetworksForDevice(currentVal);
+    setTimeout(() => document.getElementById('deviceNetworkSearch')?.focus(), 50);
   }
 }
 
@@ -247,7 +251,7 @@ function loadNetworksForDevice(selectedNetworkId = null) {
       // "Add Network" row
       const addRow = document.createElement('div');
       addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer network-option-row';
-      addRow.dataset.searchText = 'add network';
+      addRow.dataset.searchText = '';
       addRow.textContent = '+ Add Network';
       addRow.onclick = () => { closeNetworkDropdown(); openNetworkModalFromDevice(); };
       optionsList.appendChild(addRow);
@@ -353,10 +357,12 @@ function toggleTemplateDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('deviceTemplateDropdownList');
   if (!list) return;
+  const isOpening = list.classList.contains('hidden');
   list.classList.toggle('hidden');
-  if (!list.classList.contains('hidden')) {
-    const searchInput = document.getElementById('deviceTemplateSearch');
-    if (searchInput) setTimeout(() => searchInput.focus(), 50);
+  if (isOpening) {
+    const currentVal = document.getElementById('deviceTemplateSelect').value || null;
+    loadDeviceTemplatesForDevice(currentVal);
+    setTimeout(() => document.getElementById('deviceTemplateSearch')?.focus(), 50);
   }
 }
 
@@ -447,46 +453,24 @@ document.addEventListener('click', function (e) {
   }
 });
 
-// Track if device modal is open to prevent it from closing
+// Track if device modal is open
 let deviceModalIsOpen = false;
-window.lastCreatedCredentialId = null;
-window.lastCreatedNetworkId = null;
 
-// Override closeCredentialModal to refresh credentials dropdown in device modal
-const originalCloseCredentialModalForDevice = window.closeCredentialModal;
-window.closeCredentialModal = function () {
+// Refresh credential dropdown when a credential is saved from within this modal
+document.addEventListener('credentialSaved', function(e) {
   const deviceModal = document.getElementById('deviceFormModal');
-  const wasDeviceModalOpen = deviceModal && !deviceModal.classList.contains('hidden');
-
-  if (originalCloseCredentialModalForDevice) {
-    originalCloseCredentialModalForDevice();
+  if (deviceModal && !deviceModal.classList.contains('hidden')) {
+    loadCredentialsForDevice(e.detail.id);
   }
+});
 
-  // If device modal was open, reopen it and refresh credentials
-  if (wasDeviceModalOpen) {
-    deviceModal.classList.remove('hidden');
-    loadCredentialsForDevice(window.lastCreatedCredentialId);
-    window.lastCreatedCredentialId = null;
-  }
-};
-
-// Override closeNetworkModal to refresh networks dropdown in device modal
-const originalCloseNetworkModalForDevice = window.closeNetworkModal;
-window.closeNetworkModal = function () {
+// Refresh network dropdown when a network is saved from within this modal
+document.addEventListener('networkSaved', function(e) {
   const deviceModal = document.getElementById('deviceFormModal');
-  const wasDeviceModalOpen = deviceModal && !deviceModal.classList.contains('hidden');
-
-  if (originalCloseNetworkModalForDevice) {
-    originalCloseNetworkModalForDevice();
+  if (deviceModal && !deviceModal.classList.contains('hidden')) {
+    loadNetworksForDevice(e.detail.id);
   }
-
-  // If device modal was open, reopen it and refresh networks
-  if (wasDeviceModalOpen) {
-    deviceModal.classList.remove('hidden');
-    loadNetworksForDevice(window.lastCreatedNetworkId);
-    window.lastCreatedNetworkId = null;
-  }
-};
+});
 
 // Handle form submission
 const deviceForm = document.getElementById('deviceForm');

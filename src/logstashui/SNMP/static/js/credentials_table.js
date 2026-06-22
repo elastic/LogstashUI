@@ -256,9 +256,6 @@ function updateUIState() {
   }
 }
 
-
-}
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
   await fetchCredentials();

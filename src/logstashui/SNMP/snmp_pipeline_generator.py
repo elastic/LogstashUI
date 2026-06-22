@@ -531,8 +531,8 @@ def _generate_filters(oid_mappings, network, normalizers=None):
         normalizer_filters = _apply_normalizers(get_normalizers)
         filter_components.extend(normalizer_filters)
 
-    # Apply special case filters (table splitters)
-    filter_components.extend(_get_special_case_filters(oid_mappings))
+    # Generate table-split filters
+    filter_components.extend(_generate_table_split_filters(oid_mappings))
 
     # Apply table-scope normalizers AFTER table splitters so they run on the
     # already-split row events (which have columns as top-level fields).
@@ -848,26 +848,24 @@ def _ruby_row_rename_statements(columns):
     return '\n'.join(statements)
 
 
-def _get_special_case_filters(oid_mappings):
+def _generate_table_split_filters(oid_mappings):
     """
-    Generate special case filters.
-    Currently only handles table splitters.
-    CPU normalization and memory calculations have been moved to the normalizers system.
-    """
-    special_case_filters = {
-        'get': {},
-        'walk': {}
-    }
+    Generate Ruby filter components that split SNMP table data into per-row events.
 
+    For each table in oid_mappings, emits a ruby filter that iterates over the
+    array of row hashes produced by the SNMP input plugin, renames OID keys to
+    their human-readable column names (expanding dotted names into nested hashes),
+    creates a new LogStash::Event per row carrying the original event metadata,
+    and removes the raw table field from the original event.
+
+    Args:
+        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID
+                      key-value pairs (only 'table' is used here)
+
+    Returns:
+        List of ruby filter component dicts, one per table that has columns defined
+    """
     special_filters = []
-
-    # Add special case filters for get and walk
-    types = ['get', 'walk']
-    for snmp_type in types:
-        for name_of_oid in oid_mappings[snmp_type]:
-            if name_of_oid in special_case_filters[snmp_type]:
-                for entry in special_case_filters[snmp_type][name_of_oid]:
-                    special_filters.append(entry)
 
     # Generate dynamic table splitters for all tables in oid_mappings
     for table_name, table_data in oid_mappings.get('table', {}).items():

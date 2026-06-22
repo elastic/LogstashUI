@@ -107,10 +107,12 @@ function toggleConnectionDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('networkConnectionDropdownList');
   if (!list) return;
+  const isOpening = list.classList.contains('hidden');
   list.classList.toggle('hidden');
-  if (!list.classList.contains('hidden')) {
-    const search = document.getElementById('networkConnectionSearch');
-    if (search) setTimeout(() => search.focus(), 50);
+  if (isOpening) {
+    const currentVal = document.getElementById('networkConnection').value || null;
+    loadConnections(currentVal);
+    setTimeout(() => document.getElementById('networkConnectionSearch')?.focus(), 50);
   }
 }
 
@@ -149,7 +151,7 @@ function loadConnections(selectedConnectionId = null) {
 
       const addRow = document.createElement('div');
       addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer connection-option-row';
-      addRow.dataset.searchText = 'add connection';
+      addRow.dataset.searchText = '';
       addRow.textContent = '+ Add Connection';
       addRow.onclick = () => { closeConnectionDropdown(); openConnectionModalFromNetwork(); };
       optionsList.appendChild(addRow);
@@ -236,10 +238,12 @@ function toggleDiscoveryCredentialDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('discoveryCredentialDropdownList');
   if (!list) return;
+  const isOpening = list.classList.contains('hidden');
   list.classList.toggle('hidden');
-  if (!list.classList.contains('hidden')) {
-    const search = document.getElementById('discoveryCredentialSearch');
-    if (search) setTimeout(() => search.focus(), 50);
+  if (isOpening) {
+    const currentVal = document.getElementById('discoveryCredentialSelect').value || null;
+    loadDiscoveryCredentials(currentVal);
+    setTimeout(() => document.getElementById('discoveryCredentialSearch')?.focus(), 50);
   }
 }
 
@@ -278,7 +282,7 @@ function loadDiscoveryCredentials(selectedCredentialId = null) {
 
       const addRow = document.createElement('div');
       addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer discovery-credential-option-row';
-      addRow.dataset.searchText = 'add credential';
+      addRow.dataset.searchText = '';
       addRow.textContent = '+ Add Credential';
       addRow.onclick = () => { closeDiscoveryCredentialDropdown(); openCredentialModalFromNetwork(); };
       optionsList.appendChild(addRow);
@@ -327,10 +331,12 @@ function toggleTrapCredentialDropdown(event) {
   event.stopPropagation();
   const list = document.getElementById('trapCredentialDropdownList');
   if (!list) return;
+  const isOpening = list.classList.contains('hidden');
   list.classList.toggle('hidden');
-  if (!list.classList.contains('hidden')) {
-    const search = document.getElementById('trapCredentialSearch');
-    if (search) setTimeout(() => search.focus(), 50);
+  if (isOpening) {
+    const currentVal = document.getElementById('networkCredentialSelect').value || null;
+    loadNetworkCredentials(currentVal);
+    setTimeout(() => document.getElementById('trapCredentialSearch')?.focus(), 50);
   }
 }
 
@@ -369,7 +375,7 @@ function loadNetworkCredentials(selectedCredentialId = null) {
 
       const addRow = document.createElement('div');
       addRow.className = 'flex items-center gap-2 px-3 py-2 text-sm font-bold text-primary hover:bg-gray-700 cursor-pointer trap-credential-option-row';
-      addRow.dataset.searchText = 'add credential';
+      addRow.dataset.searchText = '';
       addRow.textContent = '+ Add Credential';
       addRow.onclick = () => { closeTrapCredentialDropdown(); openCredentialModalFromNetwork(); };
       optionsList.appendChild(addRow);
@@ -407,57 +413,15 @@ function openCredentialModalFromNetwork() {
 
 // Track if network modal is open
 let networkModalIsOpen = false;
-window.lastCreatedCredentialIdForNetwork = null;
 
-// Store original closeFlyout function
-let originalCloseFlyoutForNetwork = null;
-
-// Override closeFlyout to keep network modal open
-if (typeof closeFlyout !== 'undefined') {
-  originalCloseFlyoutForNetwork = closeFlyout;
-}
-
-window.closeFlyout = function () {
-  const connectionModal = document.getElementById('connectionFormFlyout');
+// Refresh credential dropdowns when a credential is saved from within this modal
+document.addEventListener('credentialSaved', function(e) {
   const networkModal = document.getElementById('networkFormModal');
-  const wasNetworkModalOpen = networkModalIsOpen;
-
-  // Close connection modal
-  if (connectionModal) {
-    connectionModal.classList.add('hidden');
+  if (networkModal && !networkModal.classList.contains('hidden')) {
+    loadDiscoveryCredentials(e.detail.id);
+    loadNetworkCredentials(e.detail.id);
   }
-
-  // Call original close function if it exists
-  if (originalCloseFlyoutForNetwork && typeof originalCloseFlyoutForNetwork === 'function') {
-    originalCloseFlyoutForNetwork();
-  }
-
-  // If network modal was open, reopen it and refresh connections
-  if (wasNetworkModalOpen) {
-    networkModal.classList.remove('hidden');
-    loadConnections(window.lastCreatedConnectionId);
-    window.lastCreatedConnectionId = null;
-  }
-};
-
-// Override closeCredentialModal to refresh credentials dropdown in network modal
-const originalCloseCredentialModalForNetwork = window.closeCredentialModal;
-window.closeCredentialModal = function () {
-  const networkModal = document.getElementById('networkFormModal');
-  const wasNetworkModalOpen = networkModal && !networkModal.classList.contains('hidden');
-
-  if (originalCloseCredentialModalForNetwork) {
-    originalCloseCredentialModalForNetwork();
-  }
-
-  // If network modal was open, reopen it and refresh both credential dropdowns
-  if (wasNetworkModalOpen) {
-    networkModal.classList.remove('hidden');
-    loadDiscoveryCredentials(window.lastCreatedCredentialIdForNetwork);
-    loadNetworkCredentials(window.lastCreatedCredentialIdForNetwork);
-    window.lastCreatedCredentialIdForNetwork = null;
-  }
-};
+});
 
 // Close network modal
 function closeNetworkModal() {
@@ -603,33 +567,15 @@ document.getElementById('networkForm').addEventListener('submit', function (e) {
       return response.json();
     })
     .then(data => {
-      // Get the new network ID from response
       const newNetworkId = data.id || data.network_id || null;
-
       showToast(networkId ? 'Network updated successfully!' : 'Network created successfully!', 'success');
-
-      // Trigger check for undeployed changes
       if (typeof window.triggerUndeployedChangesCheck === 'function') {
         window.triggerUndeployedChangesCheck();
       }
-
-      // Check if device modal is open (called from device modal)
-      const deviceModal = document.getElementById('deviceFormModal');
-      const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
-
-      if (isCalledFromDeviceModal) {
-        // Store the new network ID for device modal to use (if we got one)
-        if (newNetworkId) {
-          window.lastCreatedNetworkId = newNetworkId;
-        }
-        closeNetworkModal();
-        // Don't reload - let device modal handle the refresh
-      } else {
-        closeNetworkModal();
-        // Refresh networks data without page reload
-        if (typeof refreshNetworksData === 'function') {
-          refreshNetworksData();
-        }
+      document.dispatchEvent(new CustomEvent('networkSaved', { detail: { id: newNetworkId } }));
+      closeNetworkModal();
+      if (typeof refreshNetworksData === 'function') {
+        refreshNetworksData();
       }
     })
     .catch(error => {
