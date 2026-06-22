@@ -4,6 +4,7 @@
 
 from django.conf import settings
 import os
+import re
 import ipaddress
 import logging
 import json
@@ -16,6 +17,45 @@ from .snmp_normalizers import _apply_normalizers
 
 # Cache for official profile data to avoid repeated file I/O
 _OFFICIAL_PROFILE_CACHE = {}
+
+
+def _normalize_template_name(name: str) -> str:
+    """
+    Normalize a device template name so it is safe to use as an Elasticsearch
+    index name component (e.g. a data stream namespace).
+
+    Rules applied in order:
+      1. Strip surrounding whitespace.
+      2. Lowercase.
+      3. Replace any run of whitespace with a single underscore.
+      4. Replace characters that are illegal in ES index names
+         (*, :, /, \\, ?, ", <, >, |, ,, #, space) with underscores.
+      5. Collapse consecutive underscores/hyphens into one underscore.
+      6. Strip any leading characters that ES forbids at position 0: -, _, +, .
+      7. Truncate to 255 bytes (UTF-8).
+      8. Fall back to 'unknown_template' if the result is empty.
+
+    Returns:
+        A normalized string safe for use as an ES index name / namespace.
+    """
+    if not name:
+        return "unknown_template"
+
+    slug = name.strip()
+    slug = slug.lower()
+    slug = re.sub(r'\s+', '_', slug)
+    # Replace ES-illegal punctuation with underscores
+    slug = re.sub(r'[*:/\\?"<>|,#]', '_', slug)
+    # Collapse runs of underscores or hyphens into a single underscore
+    slug = re.sub(r'[-_]{2,}', '_', slug)
+    # Strip leading forbidden characters (-, _, +, .)
+    slug = slug.lstrip('-_+.')
+    # Truncate to 255 bytes
+    encoded = slug.encode('utf-8')
+    if len(encoded) > 255:
+        slug = encoded[:255].decode('utf-8', errors='ignore')
+
+    return slug or "unknown_template"
 
 
 def _deduplicate_normalizers(normalizers):
@@ -151,6 +191,9 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
                 add_fields["[host][hostname]"] = "%{[@metadata][host_address]}"
                 
                 if template:
+                    # [host][device_template] — normalized slug, safe for use as an ES namespace
+                    add_fields["[host][device_template]"] = _normalize_template_name(template.name)
+
                     # [host][type] from template.type
                     if template.type:
                         add_fields["[host][type]"] = template.type
@@ -284,6 +327,9 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
                 add_fields["[host][hostname]"] = "%{[@metadata][host_address]}"
                 
                 if template:
+                    # [host][device_template] — normalized slug, safe for use as an ES namespace
+                    add_fields["[host][device_template]"] = _normalize_template_name(template.name)
+
                     # [host][type] from template.type
                     if template.type:
                         add_fields["[host][type]"] = template.type
@@ -544,7 +590,7 @@ def _generate_filters(oid_mappings, network, normalizers=None):
     return filter_components
 
 
-def _generate_output(input_data, network_db_object, snmp_type="polling"):
+def _generate_output(input_data, network_db_object, snmp_type="polling", device_template=None):
     """
     Generate Elasticsearch output configuration with data stream settings.
 
@@ -552,6 +598,9 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
         input_data: Dict containing network and device information
         network_db_object: Network model instance
         snmp_type: Type of SNMP operation - "discovery", "traps", or "polling" (default)
+        device_template: Optional DeviceTemplate instance. When provided and
+            network_db_object.namespace_from_device_template is True, the
+            normalized template name is used as the data stream namespace.
 
     Returns:
         List of output components
@@ -575,10 +624,19 @@ def _generate_output(input_data, network_db_object, snmp_type="polling"):
         data_stream_type = "metrics"
         data_stream_dataset = "snmp.polling"
 
+    # Resolve namespace: use normalized template name when the flag is set and
+    # a concrete template is available; fall back to the network's fixed value.
+    if (snmp_type == "polling"
+            and getattr(network_db_object, 'namespace_from_device_template', False)
+            and device_template is not None):
+        namespace = _normalize_template_name(device_template.name)
+    else:
+        namespace = network_db_object.namespace
+
     config = {
         "data_stream": True,
         "data_stream_type": data_stream_type,
-        "data_stream_namespace": network_db_object.namespace,
+        "data_stream_namespace": namespace,
         "data_stream_dataset": data_stream_dataset
     }
 
@@ -896,6 +954,7 @@ def _generate_table_split_filters(oid_mappings):
                     f"  host_name = event.get(\"[host][name]\")\n"
                     f"  host_hostname = event.get(\"[host][hostname]\")\n"
                     f"  host_type = event.get(\"[host][type]\")\n"
+                    f"  host_device_template = event.get(\"[host][device_template]\")\n"
                     f"  observer_vendor = event.get(\"[observer][vendor]\")\n"
                     f"  observer_os_full = event.get(\"[observer][os][full]\")\n"
                     f"  network_name = event.get(\"[network][name]\")\n"
@@ -911,6 +970,7 @@ def _generate_table_split_filters(oid_mappings):
                     f"      \"event\" => {{ \"category\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"
                     f"    new_event.set(\"[network][name]\", network_name)\n"
+                    f"    new_event.set(\"[host][device_template]\", host_device_template) if host_device_template\n"
                     f"    new_event.set(\"{table_set_path}\", row)\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"

@@ -73,7 +73,12 @@ class Network(models.Model):
         default='default',
         help_text="Data stream namespace for organizing data (e.g., dev, prod, qa). Max 100 bytes."
     )
-    
+
+    namespace_from_device_template = models.BooleanField(
+        default=False,
+        help_text="When enabled, the normalized device template name is used as the data stream namespace instead of the fixed namespace value."
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

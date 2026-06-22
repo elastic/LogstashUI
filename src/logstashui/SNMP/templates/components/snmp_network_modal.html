@@ -78,7 +78,7 @@
           </div>
 
           <!-- Namespace -->
-          <div class="mb-4">
+          <div class="mb-2">
             <label for="networkNamespace" class="block text-sm font-medium text-gray-300 mb-2">
               <a href="https://www.elastic.co/docs/reference/fleet/data-streams#data-streams-naming-scheme" target="_blank" class="text-primary hover:text-primary-focus mr-1" title="Learn more about data stream namespaces">
                 <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,6 +89,21 @@
             </label>
             <input type="text" id="networkNamespace" name="namespace" class="input input-bordered w-full" required value="default" maxlength="100" placeholder="default">
             <p class="text-gray-400 text-xs mt-1">User-configurable grouping (e.g., dev, prod, qa). Max 100 bytes.</p>
+          </div>
+
+          <!-- Use device template as namespace toggle -->
+          <div class="mb-4">
+            <!-- Hidden input ensures the field is always present in FormData -->
+            <input type="hidden" name="namespace_from_device_template" value="false">
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" id="namespaceFromTemplate" name="namespace_from_device_template"
+                     value="true" class="toggle toggle-primary toggle-sm"
+                     onchange="toggleNamespaceFromTemplate(this.checked)">
+              <span class="text-sm text-gray-300">Use device template name as namespace</span>
+            </label>
+            <p id="namespaceFromTemplateHint" class="text-gray-500 text-xs mt-1 ml-10 hidden">
+              The normalized template name (e.g. <span class="font-mono">cisco_ios</span>) will be used as the namespace at pipeline generation time. The field above is ignored.
+            </p>
           </div>
 
           <!-- Polling Interval -->

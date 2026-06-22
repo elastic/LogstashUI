@@ -117,247 +117,94 @@ def get_discovered_devices_count():
         }
 
 
-def get_device_data_quality():
+def get_template_data_categories():
     """
-    Check data quality for all devices by querying Elasticsearch for CPU and memory metrics.
-    Returns a list of devices with missing data points.
-    Uses a single aggregated query per connection to check all devices at once.
+    Aggregate data coverage by device template.
+    For each device template seen in the last hour, return which event.category
+    values are present. This gives a high-level picture of what data is flowing
+    per template type rather than per individual device.
     """
     try:
-        # Get all devices with their network connections
-        devices = Device.objects.select_related('network', 'network__connection').all()
-        
-        if not devices.exists():
-            return {
-                'success': True,
-                'devices': []
-            }
-        
-        # Group devices by connection
-        devices_by_connection = {}
-        device_lookup = {}  # Map IP to device info
-        
-        for device in devices:
-            if not device.network or not device.network.connection:
-                continue
-            
-            connection_id = device.network.connection.id
-            if connection_id not in devices_by_connection:
-                devices_by_connection[connection_id] = []
-            
-            devices_by_connection[connection_id].append(device.ip_address)
-            device_lookup[device.ip_address] = {
-                'id': device.id,
-                'name': device.name,
-                'ip_address': device.ip_address,
-                'network_name': device.network.name if device.network else None,
-                'network_id': device.network.id if device.network else None
-            }
-        
-        # Results storage
-        devices_with_issues = []
-        errors = []
-        
-        # Calculate time range (last 15 minutes for recent data)
+        connection_ids = Network.objects.filter(
+            connection__isnull=False
+        ).values_list('connection_id', flat=True).distinct()
+
+        if not connection_ids:
+            return {'success': True, 'templates': []}
+
+        connections = Connection.objects.filter(id__in=connection_ids)
+        if not connections.exists():
+            return {'success': True, 'templates': []}
+
         now = datetime.now(timezone.utc)
-        fifteen_minutes_ago = now - timedelta(minutes=15)
-        
-        # Query each connection
-        for connection_id, device_ips in devices_by_connection.items():
+        one_hour_ago = now - timedelta(hours=1)
+
+        # Merge results across all connections keyed by template name
+        template_categories = {}
+        errors = []
+
+        query = {
+            "size": 0,
+            "query": {
+                "range": {
+                    "@timestamp": {
+                        "gte": one_hour_ago.isoformat(),
+                        "lte": now.isoformat()
+                    }
+                }
+            },
+            "aggs": {
+                "templates": {
+                    "terms": {
+                        "field": "host.device_template",
+                        "size": 100,
+                        "missing": "No Template"
+                    },
+                    "aggs": {
+                        "categories": {
+                            "terms": {
+                                "field": "event.category",
+                                "size": 50
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for connection in connections:
             try:
-                es = get_elastic_connection(connection_id)
-                
-                # Build aggregated query to check all devices at once
-                query = {
-                    "size": 0,
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {
-                                    "range": {
-                                        "@timestamp": {
-                                            "gte": fifteen_minutes_ago.isoformat(),
-                                            "lte": now.isoformat()
-                                        }
-                                    }
-                                },
-                                {
-                                    "terms": {
-                                        "host.hostname": device_ips
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "aggs": {
-                        "devices": {
-                            "terms": {
-                                "field": "host.hostname",
-                                "size": 1000
-                            },
-                            "aggs": {
-                                "has_cpu": {
-                                    "filter": {
-                                        "exists": {
-                                            "field": "system.cpu.total.norm.pct"
-                                        }
-                                    }
-                                },
-                                "has_memory": {
-                                    "filter": {
-                                        "exists": {
-                                            "field": "system.memory.actual.used.bytes"
-                                        }
-                                    }
-                                },
-                                "has_uptime": {
-                                    "filter": {
-                                        "exists": {
-                                            "field": "host.uptime"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                # Execute search for CPU/Memory/Uptime
-                response = es.search(
-                    index="metrics-snmp*",
-                    body=query
-                )
-                
-                # Build separate query for interfaces (stored in separate documents with event.category: "interface")
-                interface_query = {
-                    "size": 0,
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {
-                                    "range": {
-                                        "@timestamp": {
-                                            "gte": fifteen_minutes_ago.isoformat(),
-                                            "lte": now.isoformat()
-                                        }
-                                    }
-                                },
-                                {
-                                    "terms": {
-                                        "host.hostname": device_ips
-                                    }
-                                },
-                                {
-                                    "term": {
-                                        "event.category": "interface"
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "aggs": {
-                        "devices": {
-                            "terms": {
-                                "field": "host.hostname",
-                                "size": 1000
-                            }
-                        }
-                    }
-                }
-                
-                # Execute search for interfaces
-                interface_response = es.search(
-                    index="metrics-snmp*",
-                    body=interface_query
-                )
-                
-                # Build set of devices with interface data
-                devices_with_interfaces = set()
-                if 'aggregations' in interface_response and 'devices' in interface_response['aggregations']:
-                    interface_buckets = interface_response['aggregations']['devices']['buckets']
-                    for bucket in interface_buckets:
-                        devices_with_interfaces.add(bucket['key'])
-                
-                # Process results from CPU/Memory/Uptime query
-                device_metrics = {}  # Store metrics status for each device
-                
-                if 'aggregations' in response and 'devices' in response['aggregations']:
-                    buckets = response['aggregations']['devices']['buckets']
-                    
-                    # Track which devices we found
-                    found_devices = set()
-                    
-                    for bucket in buckets:
-                        device_ip = bucket['key']
-                        found_devices.add(device_ip)
-                        
-                        has_cpu = bucket['has_cpu']['doc_count'] > 0
-                        has_memory = bucket['has_memory']['doc_count'] > 0
-                        has_uptime = bucket['has_uptime']['doc_count'] > 0
-                        has_interfaces = device_ip in devices_with_interfaces
-                        
-                        device_metrics[device_ip] = {
-                            'has_cpu': has_cpu,
-                            'has_memory': has_memory,
-                            'has_uptime': has_uptime,
-                            'has_interfaces': has_interfaces
-                        }
-                        
-                        # Only add to issues list if missing any metric
-                        if not has_cpu or not has_memory or not has_uptime or not has_interfaces:
-                            device_info = device_lookup.get(device_ip, {})
-                            devices_with_issues.append({
-                                'device_id': device_info.get('id'),
-                                'name': device_info.get('name', device_ip),
-                                'ip_address': device_ip,
-                                'network_name': device_info.get('network_name'),
-                                'network_id': device_info.get('network_id'),
-                                'has_cpu': has_cpu,
-                                'has_memory': has_memory,
-                                'has_uptime': has_uptime,
-                                'has_interfaces': has_interfaces
-                            })
-                    
-                    # Check for devices with no data at all
-                    for device_ip in device_ips:
-                        if device_ip not in found_devices:
-                            # Still check if they have interface data
-                            has_interfaces = device_ip in devices_with_interfaces
-                            
-                            device_info = device_lookup.get(device_ip, {})
-                            devices_with_issues.append({
-                                'device_id': device_info.get('id'),
-                                'name': device_info.get('name', device_ip),
-                                'ip_address': device_ip,
-                                'network_name': device_info.get('network_name'),
-                                'network_id': device_info.get('network_id'),
-                                'has_cpu': False,
-                                'has_memory': False,
-                                'has_uptime': False,
-                                'has_interfaces': has_interfaces
-                            })
-                
+                es = get_elastic_connection(connection.id)
+                response = es.search(index="metrics-snmp*", body=query)
+
+                if 'aggregations' in response and 'templates' in response['aggregations']:
+                    for bucket in response['aggregations']['templates']['buckets']:
+                        template_name = bucket['key']
+                        categories = [c['key'] for c in bucket['categories']['buckets']]
+
+                        if template_name not in template_categories:
+                            template_categories[template_name] = set()
+                        template_categories[template_name].update(categories)
+
             except Exception as e:
-                logger.warning(f"Error checking data quality for connection {connection_id}: {str(e)}")
-                errors.append({
-                    'connection_id': connection_id,
-                    'error': str(e)
-                })
+                logger.warning(f"Error querying template data categories for connection {connection.name}: {str(e)}")
+                errors.append({'connection': connection.name, 'error': str(e)})
                 continue
-        
+
+        result = [
+            {'template_name': name, 'categories': sorted(list(cats))}
+            for name, cats in sorted(template_categories.items())
+        ]
+
         return {
             'success': True,
-            'devices': devices_with_issues,
+            'templates': result,
             'errors': errors if errors else None
         }
-    
+
     except Exception as e:
-        logger.error(f"Error getting device data quality: {str(e)}")
-        return {
-            'success': False,
-            'error': str(e),
-            'devices': []
-        }
+        logger.error(f"Error getting template data categories: {str(e)}")
+        return {'success': False, 'error': str(e), 'templates': []}
 
 
 def get_high_resource_usage():

@@ -53,7 +53,12 @@ function openNetworkModal(networkData = null) {
     document.getElementById('networkName').value = networkData.name;
     document.getElementById('networkRange').value = networkData.network_range;
     document.getElementById('networkNamespace').value = networkData.namespace || 'default';
-    
+
+    // Restore namespace-from-template toggle
+    const useTemplate = !!networkData.namespace_from_device_template;
+    document.getElementById('namespaceFromTemplate').checked = useTemplate;
+    toggleNamespaceFromTemplate(useTemplate);
+
     // Set polling interval if present
     if (networkData.interval !== undefined) {
       document.getElementById('pollingInterval').value = networkData.interval;
@@ -71,9 +76,11 @@ function openNetworkModal(networkData = null) {
     toggleDiscoveryCredential();
     toggleTrapsCredential();
   } else {
-    // Add mode
+    // Add mode — reset toggle to off
     modalTitle.textContent = 'Add SNMP Network';
     document.getElementById('networkId').value = '';
+    document.getElementById('namespaceFromTemplate').checked = false;
+    toggleNamespaceFromTemplate(false);
     document.querySelector('input[name="discovery_enabled"][value="true"]').checked = true;
     document.querySelector('input[name="traps_enabled"][value="false"]').checked = true;
 
@@ -83,6 +90,25 @@ function openNetworkModal(networkData = null) {
   }
 
   modal.classList.remove('hidden');
+}
+
+/**
+ * Enable or disable the Namespace input based on the
+ * "Use device template name as namespace" toggle.
+ */
+function toggleNamespaceFromTemplate(enabled) {
+  const namespaceInput = document.getElementById('networkNamespace');
+  const hint = document.getElementById('namespaceFromTemplateHint');
+
+  if (enabled) {
+    namespaceInput.disabled = true;
+    namespaceInput.classList.add('opacity-40', 'cursor-not-allowed');
+    hint.classList.remove('hidden');
+  } else {
+    namespaceInput.disabled = false;
+    namespaceInput.classList.remove('opacity-40', 'cursor-not-allowed');
+    hint.classList.add('hidden');
+  }
 }
 
 // ── Connection custom dropdown ────────────────────────────────────────────────

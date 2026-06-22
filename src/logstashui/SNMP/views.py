@@ -8,7 +8,7 @@ from django.http import JsonResponse
 
 from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
-from .overview import get_discovered_devices_count, get_device_data_quality, get_high_resource_usage
+from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 
 import os
 import json
@@ -323,9 +323,9 @@ def GetOverviewMetrics(request):
         # Get discovered devices count from Elasticsearch
         discovered_result = get_discovered_devices_count()
         
-        # Get device data quality
-        data_quality_result = get_device_data_quality()
-        
+        # Get template data coverage
+        template_coverage_result = get_template_data_categories()
+
         # Get high resource usage
         high_usage_result = get_high_resource_usage()
         
@@ -333,8 +333,8 @@ def GetOverviewMetrics(request):
         all_errors = []
         if discovered_result.get('errors'):
             all_errors.extend(discovered_result.get('errors'))
-        if data_quality_result.get('errors'):
-            all_errors.extend(data_quality_result.get('errors'))
+        if template_coverage_result.get('errors'):
+            all_errors.extend(template_coverage_result.get('errors'))
         if high_usage_result.get('errors'):
             all_errors.extend(high_usage_result.get('errors'))
         
@@ -345,7 +345,7 @@ def GetOverviewMetrics(request):
                 'discovered_devices': discovered_result.get('count', 0)
             },
             'data_quality': {
-                'devices': data_quality_result.get('devices', [])
+                'templates': template_coverage_result.get('templates', [])
             },
             'high_usage': {
                 'high_cpu': high_usage_result.get('high_cpu', []),

@@ -411,6 +411,7 @@ def AddNetwork(request):
         traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         interval = int(request.POST.get('interval', 30))
         namespace = request.POST.get('namespace', 'default')
+        namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
 
         # Create network object
         network = Network(
@@ -419,7 +420,8 @@ def AddNetwork(request):
             discovery_enabled=discovery_enabled,
             traps_enabled=traps_enabled,
             interval=interval,
-            namespace=namespace
+            namespace=namespace,
+            namespace_from_device_template=namespace_from_device_template
         )
 
         # Set connection if provided
@@ -462,6 +464,7 @@ def UpdateNetwork(request, network_id):
         network.name = request.POST.get('name', network.name)
         network.network_range = request.POST.get('network_range', network.network_range)
         network.namespace = request.POST.get('namespace', network.namespace)
+        network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
 
@@ -521,6 +524,7 @@ def GetNetwork(request, network_id):
             'name': network.name,
             'network_range': network.network_range,
             'namespace': network.namespace,
+            'namespace_from_device_template': network.namespace_from_device_template,
             'connection': network.connection_id if network.connection else None,
             'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,
             'credential': network.credential_id if network.credential else None,
@@ -807,7 +811,7 @@ def GetDeployDiff(request):
                 components = {
                     "input": input_components,
                     "filter": filter_components,
-                    "output": _generate_output(input_data, network, snmp_type="polling")
+                    "output": _generate_output(input_data, network, snmp_type="polling", device_template=template)
                 }
 
                 new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
@@ -1379,7 +1383,7 @@ def DeployConfiguration(request):
                         components = {
                             "input": input_components,
                             "filter": filter_components,
-                            "output": _generate_output(template_input_data, network, snmp_type="polling")
+                            "output": _generate_output(template_input_data, network, snmp_type="polling", device_template=template)
                         }
 
                         # Generate pipeline configuration

@@ -27,8 +27,8 @@ function loadOverviewMetrics() {
         updateHighCpuTable(data.high_usage.high_cpu);
         updateHighMemoryTable(data.high_usage.high_memory);
         
-        // Update Data Quality Table
-        updateDataQualityTable(data.data_quality.devices);
+        // Update Template Coverage Table
+        updateDataQualityTable(data.data_quality.templates);
         
         // Show errors if any (but don't fail the whole page)
         if (data.errors && data.errors.length > 0) {
@@ -151,70 +151,126 @@ function formatNumber(num) {
 }
 
 /**
- * Update the data quality table with device information
+ * Category badge color mapping — used for both table badges and filter pills.
  */
-function updateDataQualityTable(devices) {
+const CATEGORY_COLORS = {
+  'metrics':    'bg-blue-600/20 text-blue-300 border border-blue-600/40',
+  'interface':  'bg-purple-600/20 text-purple-300 border border-purple-600/40',
+  'routing':    'bg-teal-600/20 text-teal-300 border border-teal-600/40',
+  'discovery':  'bg-green-600/20 text-green-300 border border-green-600/40',
+  'traps':      'bg-yellow-600/20 text-yellow-300 border border-yellow-600/40',
+};
+
+/** Currently active filter category, or null for "all". */
+let _activeCategoryFilter = null;
+
+/** Full template data — kept so we can re-render on filter change. */
+let _templateData = [];
+
+/**
+ * Return a styled badge for a given event.category value.
+ */
+function categoryBadge(category) {
+  const classes = CATEGORY_COLORS[category] || 'bg-gray-600/20 text-gray-300 border border-gray-600/40';
+  return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${classes}">${escapeHtml(category)}</span>`;
+}
+
+/**
+ * Render template rows, respecting the active category filter.
+ */
+function renderTemplateRows() {
+  const tableBody = document.getElementById('dataQualityTableBody');
+  tableBody.innerHTML = '';
+
+  const visible = _activeCategoryFilter
+    ? _templateData.filter(t => t.categories && t.categories.includes(_activeCategoryFilter))
+    : _templateData;
+
+  if (visible.length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td colspan="2" class="px-6 py-8 text-center text-sm text-gray-500 italic">
+        No templates match the selected category.
+      </td>
+    `;
+    tableBody.appendChild(tr);
+    return;
+  }
+
+  visible.forEach(tpl => {
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-gray-700/50 transition-colors';
+
+    const badges = tpl.categories && tpl.categories.length > 0
+      ? tpl.categories.map(categoryBadge).join(' ')
+      : '<span class="text-gray-500 italic text-xs">none</span>';
+
+    row.innerHTML = `
+      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(tpl.template_name)}</td>
+      <td class="px-6 py-4 text-sm">
+        <div class="flex flex-wrap gap-1.5">${badges}</div>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+/**
+ * Populate the category filter dropdown from the loaded template data.
+ */
+function buildCategoryFilter(templates) {
+  const select = document.getElementById('templateCategoryFilter');
+  if (!select) return;
+
+  const allCategories = [...new Set(
+    templates.flatMap(t => t.categories || [])
+  )].sort();
+
+  if (allCategories.length === 0) {
+    select.classList.add('hidden');
+    return;
+  }
+
+  select.innerHTML = '<option value="">All categories</option>' +
+    allCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+  select.value = _activeCategoryFilter || '';
+  select.classList.remove('hidden');
+}
+
+/**
+ * Called by the select's onchange handler.
+ */
+function onCategoryFilterChange(value) {
+  _activeCategoryFilter = value || null;
+  renderTemplateRows();
+}
+
+/**
+ * Update the template coverage table.
+ */
+function updateDataQualityTable(templates) {
   const loadingDiv = document.getElementById('dataQualityLoading');
   const tableContainer = document.getElementById('dataQualityTableContainer');
   const emptyState = document.getElementById('dataQualityEmpty');
-  const tableBody = document.getElementById('dataQualityTableBody');
-  
-  // Hide loading
+
   loadingDiv.classList.add('hidden');
-  
-  // Check if there are any devices with issues
-  if (!devices || devices.length === 0) {
-    // Show empty state (all devices have complete data)
+  _activeCategoryFilter = null;
+  const select = document.getElementById('templateCategoryFilter');
+  if (select) select.value = '';
+
+  if (!templates || templates.length === 0) {
     emptyState.classList.remove('hidden');
     tableContainer.classList.add('hidden');
     return;
   }
-  
-  // Show table and populate it
+
+  _templateData = templates;
   tableContainer.classList.remove('hidden');
   emptyState.classList.add('hidden');
-  
-  // Clear existing rows
-  tableBody.innerHTML = '';
-  
-  // Add rows for each device with issues
-  devices.forEach(device => {
-    const row = document.createElement('tr');
-    row.className = 'hover:bg-gray-700/50 transition-colors';
-    
-    // Status icons
-    const cpuIcon = device.has_cpu 
-      ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
-      : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
-    
-    const memoryIcon = device.has_memory
-      ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
-      : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
-    
-    const uptimeIcon = device.has_uptime
-      ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
-      : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
-    
-    const interfacesIcon = device.has_interfaces
-      ? '<svg class="w-5 h-5 text-green-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
-      : '<svg class="w-5 h-5 text-red-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
-    
-    row.innerHTML = `
-      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-        <span class="font-mono">${escapeHtml(device.ip_address)}</span>
-      </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${cpuIcon}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${memoryIcon}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${uptimeIcon}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${interfacesIcon}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-        ${device.network_name ? escapeHtml(device.network_name) : '<span class="text-gray-500 italic">None</span>'}
-      </td>
-    `;
-    
-    tableBody.appendChild(row);
-  });
+
+  buildCategoryFilter(templates);
+  renderTemplateRows();
 }
 
 /**
