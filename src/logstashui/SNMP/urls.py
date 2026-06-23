@@ -21,6 +21,8 @@ urlpatterns = [
     
     # Network Map API endpoints
     path("GetNetworkMapData/", network_map.get_network_map_data, name="GetNetworkMapData"),
+    path("GetNetworksList/", network_map.get_networks_list, name="GetNetworksList"),
+    path("GetEdgeInterfaceDetail/", network_map.get_edge_interface_detail, name="GetEdgeInterfaceDetail"),
 
     # SNMP Credential endpoints
     path("GetCredentials/", snmp_crud.GetCredentials, name="GetSNMPCredentials"),

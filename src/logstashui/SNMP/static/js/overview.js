@@ -216,34 +216,80 @@ function renderTemplateRows() {
 }
 
 /**
- * Populate the category filter dropdown from the loaded template data.
+ * Populate the category filter custom dropdown from the loaded template data.
  */
 function buildCategoryFilter(templates) {
-  const select = document.getElementById('templateCategoryFilter');
-  if (!select) return;
+  const wrapper = document.getElementById('templateCategoryFilterWrapper');
+  const optionsEl = document.getElementById('templateCategoryOptions');
+  if (!wrapper || !optionsEl) return;
 
   const allCategories = [...new Set(
     templates.flatMap(t => t.categories || [])
   )].sort();
 
   if (allCategories.length === 0) {
-    select.classList.add('hidden');
+    wrapper.classList.add('hidden');
     return;
   }
 
-  select.innerHTML = '<option value="">All categories</option>' +
-    allCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  // "All categories" entry + one per category
+  const allOption = document.createElement('button');
+  allOption.type = 'button';
+  allOption.className = 'tpl-cat-option w-full text-left px-3 py-1.5 text-sm text-white hover:bg-gray-700/60 transition-colors';
+  allOption.textContent = 'All categories';
+  allOption.dataset.value = '';
+  allOption.addEventListener('click', () => _selectTplCategory(''));
+  optionsEl.appendChild(allOption);
 
-  select.value = _activeCategoryFilter || '';
-  select.classList.remove('hidden');
+  allCategories.forEach(c => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tpl-cat-option w-full text-left px-3 py-1.5 text-sm text-white hover:bg-gray-700/60 transition-colors';
+    btn.textContent = c;
+    btn.dataset.value = c;
+    btn.addEventListener('click', () => _selectTplCategory(c));
+    optionsEl.appendChild(btn);
+  });
+
+  _updateTplCategoryLabel();
+  wrapper.classList.remove('hidden');
 }
 
+function _selectTplCategory(value) {
+  _activeCategoryFilter = value || null;
+  _updateTplCategoryLabel();
+  // Close the dropdown
+  const dd = document.getElementById('templateCategoryDropdown');
+  if (dd) dd.classList.add('hidden');
+  renderTemplateRows();
+}
+
+function _updateTplCategoryLabel() {
+  const label = document.getElementById('templateCategoryFilterLabel');
+  if (!label) return;
+  label.textContent = _activeCategoryFilter || 'All categories';
+}
+
+function toggleTplCategoryDropdown(event) {
+  event.stopPropagation();
+  const dd = document.getElementById('templateCategoryDropdown');
+  if (dd) dd.classList.toggle('hidden');
+}
+
+// Close when clicking outside
+document.addEventListener('click', function(e) {
+  const wrapper = document.getElementById('templateCategoryFilterWrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    const dd = document.getElementById('templateCategoryDropdown');
+    if (dd) dd.classList.add('hidden');
+  }
+});
+
 /**
- * Called by the select's onchange handler.
+ * Called by the select's onchange handler (kept for compatibility).
  */
 function onCategoryFilterChange(value) {
-  _activeCategoryFilter = value || null;
-  renderTemplateRows();
+  _selectTplCategory(value);
 }
 
 /**
@@ -256,8 +302,7 @@ function updateDataQualityTable(templates) {
 
   loadingDiv.classList.add('hidden');
   _activeCategoryFilter = null;
-  const select = document.getElementById('templateCategoryFilter');
-  if (select) select.value = '';
+  _updateTplCategoryLabel();
 
   if (!templates || templates.length === 0) {
     emptyState.classList.remove('hidden');

@@ -6,6 +6,7 @@ GET scalar fields have no table prefix. Table fields are written as `<table>.<fi
 
 ---
 
+- [LogstashUI Enrichment Fields](#logstashui-enrichment-fields)
 - [System Identity](#system-identity)
 - [System Metrics](#system-metrics)
 - [Network Interfaces](#network-interfaces)
@@ -31,6 +32,20 @@ GET scalar fields have no table prefix. Table fields are written as `<table>.<fi
 
 ---
 
+## LogstashUI Enrichment Fields
+
+These fields are injected by the LogstashUI pipeline generator and are not sourced from any SNMP MIB. They are derived from the device record in the LogstashUI database or from the mechanics of the polling process itself.
+
+| Field | Source | Description |
+|---|---|---|
+| `host.name` | LogstashUI database | The friendly name you assigned to the device in LogstashUI. Always present on every polled event. |
+| `host.hostname` | Polling pipeline | DNS hostname of the device. Set when the polled address is not a bare IP (i.e. a hostname was configured on the device record). |
+| `host.sysname` | SNMPv2-MIB `1.3.6.1.2.1.1.5.0` | The system name the device reports for itself via sysName. Set via the System profile. |
+| `host.polled_address` | SNMP input plugin | The exact address or hostname used to reach the device during polling (`%{[@metadata][host_address]}`). Useful for correlating events back to a specific poll target. |
+| `host.ip` | Polling pipeline | IP address of the device. Copied from `host.polled_address` when that value is a bare IPv4 or IPv6 address. |
+
+---
+
 ## System Identity
 
 Standard device identity fields present on virtually all SNMP-capable devices. Source: **SNMPv2-MIB**.
@@ -39,7 +54,7 @@ Standard device identity fields present on virtually all SNMP-capable devices. S
 |---|---|---|---|
 | `observer.sys_descr` | `1.3.6.1.2.1.1.1.0` | SNMPv2-MIB | Full hardware/software description string |
 | `observer.object_id` | `1.3.6.1.2.1.1.2.0` | SNMPv2-MIB | Vendor-assigned OID identifying device type |
-| `host.name` | `1.3.6.1.2.1.1.5.0` | SNMPv2-MIB | Configured hostname |
+| `host.sysname` | `1.3.6.1.2.1.1.5.0` | SNMPv2-MIB | System name configured on the device (sysName). See `host.name` in [LogstashUI Enrichment Fields](#logstashui-enrichment-fields) for the LogstashUI-assigned name. |
 | `host.uptime` | `1.3.6.1.2.1.1.3.0` | SNMPv2-MIB | Time since last reboot (hundredths of a second) |
 | `host.location` | `1.3.6.1.2.1.1.6.0` | SNMPv2-MIB | Configured physical location string |
 | `host.contact` | `1.3.6.1.2.1.1.4.0` | SNMPv2-MIB | Configured admin contact string |

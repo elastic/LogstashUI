@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_cdp_adjacencies():
+def get_cdp_adjacencies(network_ids=None):
     """
     Query all Elasticsearch clusters for CDP/LLDP neighbor data.
     Builds an adjacency table structure for network topology visualization.
@@ -21,14 +21,21 @@ def get_cdp_adjacencies():
     network.neighbor documents do NOT carry a network.name field, so we
     query without that filter and resolve each device's network via the DB.
 
+    Args:
+        network_ids: Optional list of Network PKs to restrict scope. When provided
+                     only devices belonging to those networks are considered managed,
+                     and only adjacency entries for those networks appear in the result.
+
     Returns:
         dict: Adjacency table structure organized by network -> device -> interface
     """
     try:
         # Step 1: Get connections that have at least one SNMP network
-        connection_ids = Network.objects.filter(
-            connection__isnull=False
-        ).values_list('connection_id', flat=True).distinct()
+        networks_qs = Network.objects.filter(connection__isnull=False)
+        if network_ids:
+            networks_qs = networks_qs.filter(id__in=network_ids)
+
+        connection_ids = networks_qs.values_list('connection_id', flat=True).distinct()
 
         if not connection_ids:
             return {
@@ -50,10 +57,16 @@ def get_cdp_adjacencies():
         # network.name being present in every document type.
         device_network_map = {}    # device.name (display) → "NetworkName (range)"
         device_poll_target_map = {}  # hostname or ip_address → "NetworkName (range)"
+        # Track which network labels are in-scope so we can filter adjacency entries
+        scoped_network_labels = set()
         try:
-            for dev in Device.objects.select_related('network').all():
+            devices_qs = Device.objects.select_related('network').all()
+            if network_ids:
+                devices_qs = devices_qs.filter(network__id__in=network_ids)
+            for dev in devices_qs:
                 if dev.network:
                     net_label = f"{dev.network.name} ({dev.network.network_range})"
+                    scoped_network_labels.add(net_label)
                     if dev.name:
                         device_network_map[dev.name] = net_label
                     poll_target = dev.hostname or dev.ip_address
@@ -253,6 +266,11 @@ def get_cdp_adjacencies():
                     # Prefer network.name from the document itself; fall back to DB lookup
                     network_name = doc_network_name or resolve_network(device_name, polled_address)
 
+                    # When a network filter is active, skip devices outside the scope
+                    if network_ids and scoped_network_labels and network_name not in scoped_network_labels:
+                        logger.debug(f"Skipping {device_name} — network '{network_name}' not in filter scope")
+                        continue
+
                     if_index = table_index.split('.')[0] if '.' in table_index else table_index
                     friendly_interface_name = interface_name_lookup.get(
                         f"{device_name}:{if_index}", table_index
@@ -421,10 +439,17 @@ def get_network_map_data(request):
     """
     Django view endpoint to fetch network map data.
     Returns CDP adjacency data as JSON for frontend visualization.
+
+    Optional GET params:
+        networks: one or more Network PKs to restrict scope, e.g. ?networks=1&networks=2
     """
     try:
+        # Parse optional network filter
+        raw_ids = request.GET.getlist('networks')
+        network_ids = [int(i) for i in raw_ids if i.isdigit()] or None
+
         # Get CDP adjacency data
-        result = get_cdp_adjacencies()
+        result = get_cdp_adjacencies(network_ids=network_ids)
         
         if result['success'] and result['adjacency_table']:
             # Convert adjacency table to graph structure
@@ -454,3 +479,125 @@ def get_network_map_data(request):
                 'edges': []
             }
         }, status=500)
+
+
+def get_networks_list(request):
+    """
+    Return a lightweight list of all SNMP Networks for the topology filter dropdown.
+    Includes device_count (from the DB, no ES query) so the JS can auto-select the
+    most-populated network by default.
+    Response: { networks: [{id, name, network_range, device_count}, ...] }
+    """
+    try:
+        from django.db.models import Count
+        networks = list(
+            Network.objects.annotate(device_count=Count('devices'))
+                           .order_by('name')
+                           .values('id', 'name', 'network_range', 'device_count')
+        )
+        return JsonResponse({'success': True, 'networks': networks})
+    except Exception as e:
+        logger.error(f"Error in get_networks_list: {str(e)}")
+        return JsonResponse({'success': False, 'error': str(e), 'networks': []}, status=500)
+
+
+def get_edge_interface_detail(request):
+    """
+    Query Elasticsearch for live interface data on both ends of a topology edge.
+
+    GET params:
+        source      — host.sysname of the source device
+        source_iface — interface name on the source side
+        target      — host.sysname of the target device
+        target_iface — interface name on the target side
+
+    Response: {
+        success: bool,
+        source: { sysname, iface_name, interface: {...} | null },
+        target: { sysname, iface_name, interface: {...} | null },
+    }
+    """
+    source_sysname  = request.GET.get('source', '').strip()
+    source_iface    = request.GET.get('source_iface', '').strip()
+    target_sysname  = request.GET.get('target', '').strip()
+    target_iface    = request.GET.get('target_iface', '').strip()
+
+    if not (source_sysname and source_iface):
+        return JsonResponse({'success': False, 'error': 'source and source_iface are required'}, status=400)
+
+    try:
+        connection_ids = Network.objects.filter(
+            connection__isnull=False
+        ).values_list('connection_id', flat=True).distinct()
+        connections = Connection.objects.filter(id__in=connection_ids)
+
+        if not connections.exists():
+            return JsonResponse({'success': False, 'error': 'No Elasticsearch connections configured'}, status=400)
+
+        now = datetime.now(timezone.utc)
+        one_hour_ago = now - timedelta(hours=1)
+
+        def _fetch_interface(es, sysname, iface_name):
+            """Return the most-recent interface document for a given device + interface."""
+            if not sysname or not iface_name:
+                return None
+            try:
+                resp = es.search(
+                    index="metrics-snmp*",
+                    body={
+                        "size": 1,
+                        "track_total_hits": False,
+                        "_source": ["interface"],
+                        "query": {
+                            "bool": {
+                                "filter": [
+                                    {"term": {"event.category": "interface"}},
+                                    {"term": {"host.sysname": sysname}},
+                                    {"term": {"interface.name": iface_name}},
+                                    {"range": {"@timestamp": {"gte": one_hour_ago.isoformat()}}},
+                                ]
+                            }
+                        },
+                        "sort": [{"@timestamp": {"order": "desc"}}],
+                    }
+                )
+                hits = resp.get('hits', {}).get('hits', [])
+                if hits:
+                    return hits[0]['_source'].get('interface')
+            except Exception as ex:
+                logger.warning(f"Interface lookup failed for {sysname}/{iface_name}: {ex}")
+            return None
+
+        source_iface_data = None
+        target_iface_data = None
+
+        for connection in connections:
+            try:
+                es = get_elastic_connection(connection.id)
+                if source_iface_data is None:
+                    source_iface_data = _fetch_interface(es, source_sysname, source_iface)
+                if target_iface_data is None and target_sysname and target_iface:
+                    target_iface_data = _fetch_interface(es, target_sysname, target_iface)
+                if source_iface_data is not None and (not target_sysname or target_iface_data is not None):
+                    break
+            except Exception as ex:
+                logger.warning(f"Connection {connection.name} failed in edge interface detail: {ex}")
+                continue
+
+        return JsonResponse({
+            'success': True,
+            'source': {
+                'sysname':    source_sysname,
+                'iface_name': source_iface,
+                'interface':  source_iface_data,
+            },
+            'target': {
+                'sysname':    target_sysname,
+                'iface_name': target_iface,
+                'interface':  target_iface_data,
+            },
+        })
+
+    except Exception as e:
+        logger.error(f"Error in get_edge_interface_detail: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

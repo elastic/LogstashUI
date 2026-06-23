@@ -543,16 +543,19 @@ def _generate_discovery_filters(oid_mappings, network):
 
 def _generate_device_enrichment_filters(input_data):
     """
-    Generate translate filter blocks that enrich each polled event with
-    per-device location and metadata stored on the Device model.
+    Generate filter blocks that enrich each polled event with per-device
+    name, location, and metadata stored on the Device model.
 
-    Two translate blocks are emitted (each only when at least one device
-    has the relevant data):
-      1. [host][polled_address] -> [host][location]
-         Dictionary value: Logstash hash of {site, building, room, geo}
-         where geo is a hash string: {"lat" => "<lat>" "lon" => "<lon>"}
-      2. [host][polled_address] -> [host][metadata]
-         Dictionary value: Logstash hash of all key-value pairs in device.metadata
+    A single translate block maps [host][polled_address] to
+    [@metadata][device_enrichment], whose dictionary value is a hash with
+    up to three sub-keys:
+      - name:     the device's display name (always present when device has a name)
+      - location: {site, building, room, geo} (omitted when no location data)
+      - metadata: user-supplied KV pairs     (omitted when device.metadata is empty)
+
+    A ruby filter then scatters the sub-keys to their final destinations
+    ([host][name], [host][location], [host][metadata]) only when they are
+    present, so no existing [host] fields are clobbered.
 
     The polling address key matches what the SNMP input plugin exposes via
     %{[@metadata][host_address]} — the hostname if one is set, otherwise the IP.
@@ -577,10 +580,21 @@ def _generate_device_enrichment_filters(input_data):
 
     filters = []
 
-    # ── Location translate ────────────────────────────────────────────────────
-    location_dict = {}
+    # ── Combined enrichment translate ─────────────────────────────────────────
+    # Build one dictionary entry per device containing all enrichment sub-keys
+    # (name, location, metadata).  Writing to [@metadata][device_enrichment]
+    # keeps the payload completely out of the [host] namespace until we
+    # deliberately copy each sub-field in the ruby block below.
+    enrichment_dict = {}
 
     for address, device in all_devices.items():
+        entry = {}
+
+        # name — always present
+        if device.name:
+            entry['name'] = device.name
+
+        # location — only when at least one location field is set
         loc = {}
         if device.site:
             loc['site'] = device.site
@@ -594,37 +608,41 @@ def _generate_device_enrichment_filters(input_data):
                 'lon': str(device.longitude),
             }
         if loc:
-            location_dict[address] = loc
+            entry['location'] = loc
 
-    if location_dict:
+        # metadata — user-supplied KV pairs; all values coerced to strings so
+        # the serialiser produces valid Logstash hash syntax
+        if device.metadata:
+            entry['metadata'] = {str(k): str(v) for k, v in device.metadata.items()}
+
+        if entry:
+            enrichment_dict[address] = entry
+
+    if enrichment_dict:
         filters.append({
-            "id": "filter_translate_location",
+            "id": "filter_translate_device_enrichment",
             "type": "filter",
             "plugin": "translate",
             "config": {
                 "source": "[host][polled_address]",
-                "destination": "[host][location]",
-                "dictionary": location_dict
+                "destination": "[@metadata][device_enrichment]",
+                "dictionary": enrichment_dict
             }
         })
 
-    # ── Metadata translate ────────────────────────────────────────────────────
-    metadata_dict = {}
-    for address, device in all_devices.items():
-        if device.metadata:
-            # Ensure all values are strings so the serialiser produces valid
-            # Logstash hash syntax (the serialiser calls _format_string_value per entry)
-            metadata_dict[address] = {str(k): str(v) for k, v in device.metadata.items()}
-
-    if metadata_dict:
+        # ── Scatter enrichment sub-fields to their final [host] destinations ──
+        # mutate copy is pure-Java (no JRuby overhead) and silently skips any
+        # source path that doesn't exist, so no conditional guards are needed.
         filters.append({
-            "id": "filter_translate_metadata",
+            "id": "filter_mutate_device_enrichment_copy",
             "type": "filter",
-            "plugin": "translate",
+            "plugin": "mutate",
             "config": {
-                "source": "[host][polled_address]",
-                "destination": "[host][metadata]",
-                "dictionary": metadata_dict
+                "copy": {
+                    "[@metadata][device_enrichment][name]":     "[host][name]",
+                    "[@metadata][device_enrichment][location]": "[host][location]",
+                    "[@metadata][device_enrichment][metadata]": "[host][metadata]",
+                }
             }
         })
 
