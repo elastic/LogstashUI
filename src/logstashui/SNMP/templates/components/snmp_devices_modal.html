@@ -34,13 +34,28 @@
             <p class="text-gray-400 text-xs mt-1">A descriptive name for this device</p>
           </div>
 
-          <!-- IP Address / Hostname -->
-          <div class="mb-4">
-            <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
-              IP Address / Hostname <span class="text-red-500">*</span>
-            </label>
-            <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" required placeholder="192.168.1.1 or switch.local">
-            <p class="text-gray-400 text-xs mt-1">IP address or hostname of the device</p>
+          <!-- Device Identifiers -->
+          <div class="mb-4 bg-base-300 rounded-lg p-4 border border-base-content/10">
+            <p class="text-sm font-semibold text-gray-200 mb-1">Device Identifiers</p>
+            <p class="text-xs text-gray-400 mb-3">At least one of the following is required</p>
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Hostname -->
+              <div>
+                <label for="deviceHostname" class="block text-sm font-medium text-gray-300 mb-2">
+                  Hostname
+                </label>
+                <input type="text" id="deviceHostname" name="hostname" class="input input-bordered w-full" placeholder="switch.corp.local">
+                <p class="text-gray-400 text-xs mt-1">DNS hostname</p>
+              </div>
+              <!-- IP Address -->
+              <div>
+                <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
+                  IP Address
+                </label>
+                <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" placeholder="192.168.1.1">
+                <p class="text-gray-400 text-xs mt-1">IPv4 or IPv6</p>
+              </div>
+            </div>
           </div>
 
           <!-- Credential Selection -->
@@ -181,6 +196,108 @@
               <input type="number" id="deviceTimeout" name="timeout" class="input input-bordered w-full" value="1000" min="100" step="100" placeholder="1000">
               <p class="text-gray-400 text-xs mt-1">Default: 1000</p>
             </div>
+          </div>
+
+          <!-- Location -->
+          <div class="mb-4 bg-base-300 rounded-lg p-4 border border-base-content/10">
+            <p class="text-sm font-semibold text-gray-200 mb-1">Location</p>
+            <p class="text-xs text-gray-400 mb-3">Optional physical location details for this device</p>
+
+            <div class="grid grid-cols-1 gap-3">
+              <!-- Site combobox -->
+              <div>
+                <label for="deviceSite" class="block text-sm font-medium text-gray-300 mb-1">Site</label>
+                <div class="relative" id="deviceSiteWrapper">
+                  <input type="text" id="deviceSite" name="site"
+                         class="input input-bordered w-full"
+                         placeholder="e.g., HQ Campus"
+                         autocomplete="off"
+                         oninput="onSiteInput(this.value)"
+                         onfocus="onSiteFocus()">
+                  <div id="deviceSiteDropdown"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  </div>
+                </div>
+              </div>
+              <!-- Building combobox (disabled until Site is filled) -->
+              <div>
+                <label for="deviceBuilding" class="block text-sm font-medium text-gray-300 mb-1">Building</label>
+                <div class="relative" id="deviceBuildingWrapper">
+                  <input type="text" id="deviceBuilding" name="building"
+                         class="input input-bordered w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                         placeholder="Select a Site first"
+                         autocomplete="off"
+                         disabled
+                         oninput="onBuildingInput(this.value)"
+                         onfocus="onBuildingFocus()">
+                  <div id="deviceBuildingDropdown"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  </div>
+                </div>
+              </div>
+              <!-- Room combobox (disabled until Building is filled) -->
+              <div>
+                <label for="deviceRoom" class="block text-sm font-medium text-gray-300 mb-1">Room</label>
+                <div class="relative" id="deviceRoomWrapper">
+                  <input type="text" id="deviceRoom" name="room"
+                         class="input input-bordered w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                         placeholder="Select a Building first"
+                         autocomplete="off"
+                         disabled
+                         oninput="onRoomInput(this.value)"
+                         onfocus="onRoomFocus()">
+                  <div id="deviceRoomDropdown"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Coordinates -->
+            <div class="mt-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-medium text-gray-300">Coordinates</span>
+                <button type="button" onclick="openGmapsModal()"
+                        class="btn btn-ghost btn-xs flex items-center gap-1.5 text-gray-400 hover:text-white border border-base-content/10 hover:border-base-content/30">
+                  <!-- Google Maps pin icon -->
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+                    <circle cx="12" cy="9" r="2.5" fill="white"/>
+                  </svg>
+                  Pick from Google Maps
+                </button>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label for="deviceLatitude" class="block text-xs text-gray-400 mb-1">Latitude</label>
+                  <input type="number" id="deviceLatitude" name="latitude" class="input input-bordered w-full font-mono"
+                         step="any" min="-90" max="90" placeholder="e.g., 37.774929">
+                </div>
+                <div>
+                  <label for="deviceLongitude" class="block text-xs text-gray-400 mb-1">Longitude</label>
+                  <input type="number" id="deviceLongitude" name="longitude" class="input input-bordered w-full font-mono"
+                         step="any" min="-180" max="180" placeholder="e.g., -122.419416">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Device Metadata -->
+          <div class="mb-4 bg-base-300 rounded-lg p-4 border border-base-content/10">
+            <p class="text-sm font-semibold text-gray-200 mb-1">Device Metadata</p>
+            <p class="text-xs text-gray-400 mb-3">Arbitrary key-value pairs for custom device attributes</p>
+
+            <div id="deviceMetadataRows" class="flex flex-col gap-2">
+              <!-- Rows injected by JS -->
+            </div>
+
+            <button type="button" onclick="addMetadataRow()"
+                    class="btn btn-ghost btn-xs mt-2 text-primary border border-primary/30 hover:bg-primary/10">
+              + Add Field
+            </button>
+
+            <!-- Hidden field serialized to JSON on submit -->
+            <input type="hidden" id="deviceMetadataJson" name="metadata">
           </div>
 
           <div class="form-actions pt-6 mt-6 border-t border-gray-700">

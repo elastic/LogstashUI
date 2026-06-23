@@ -8,8 +8,7 @@
   "get": {
     "observer.model": "1.3.6.1.4.1.41112.1.6.3.3.0",
     "observer.firmware_version": "1.3.6.1.4.1.41112.1.6.3.6.0",
-    "observer.uplink_interface": "1.3.6.1.4.1.41112.1.6.3.4.0",
-    "host.uptime": "1.3.6.1.4.1.41112.1.6.3.5.0"
+    "observer.uplink_interface": "1.3.6.1.4.1.41112.1.6.3.4.0"
   },
   "walk": {},
   "table": {

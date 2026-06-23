@@ -157,11 +157,15 @@
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('name')">
             Name <span id="sort-name" class="ml-1"></span>
           </th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('hostname')">
+            Hostname <span id="sort-hostname" class="ml-1"></span>
+          </th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('ip_address')">
             IP Address <span id="sort-ip_address" class="ml-1"></span>
           </th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Credential</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network</th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Device Template</th>
           <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
         </tr>
@@ -306,6 +310,9 @@
 
 <!-- Discovered Devices Modal -->
 {% include 'components/discovered_devices_modal.html' %}
+
+<!-- Google Maps Lat/Lon Picker -->
+{% include 'components/gmaps_latlon_modal.html' %}
 
 <!-- Device Visual Preview Component -->
 {% include 'components/snmp_device_visual_preview.html' %}

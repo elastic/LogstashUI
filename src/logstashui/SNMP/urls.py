@@ -45,6 +45,7 @@ urlpatterns = [
     path("DeployConfiguration/", snmp_crud.DeployConfiguration, name="DeployConfiguration"),
 
     # SNMP Device endpoints
+    path("GetDeviceLocationData/", snmp_crud.GetDeviceLocationData, name="GetDeviceLocationData"),
     path("GetDevices/", snmp_crud.GetDevices, name="GetSNMPDevices"),
     path("AddDevice/", snmp_crud.AddDevice, name="AddSNMPDevice"),
     path("UpdateDevice/<int:device_id>/", snmp_crud.UpdateDevice, name="UpdateSNMPDevice"),

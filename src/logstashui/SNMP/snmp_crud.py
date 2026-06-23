@@ -806,7 +806,7 @@ def GetDeployDiff(request):
                 input_components, oid_mappings, normalizers = _generate_input(
                     input_data, profile_cache, template_filter=template_id
                 )
-                filter_components = _generate_filters(oid_mappings, network, normalizers)
+                filter_components = _generate_filters(oid_mappings, network, normalizers, input_data=input_data)
 
                 components = {
                     "input": input_components,
@@ -1378,7 +1378,7 @@ def DeployConfiguration(request):
                         input_components, oid_mappings, normalizers = _generate_input(
                             template_input_data, template_filter=template_id
                         )
-                        filter_components = _generate_filters(oid_mappings, network, normalizers)
+                        filter_components = _generate_filters(oid_mappings, network, normalizers, input_data=template_input_data)
 
                         components = {
                             "input": input_components,
@@ -1761,16 +1761,17 @@ def GetDevices(request):
 
         # Start with all devices - only fetch needed fields for performance
         queryset = Device.objects.select_related('credential', 'network', 'device_template').only(
-            'id', 'name', 'ip_address', 'port', 'retries', 'timeout', 'created_at',
+            'id', 'name', 'ip_address', 'hostname', 'port', 'retries', 'timeout', 'created_at',
+            'site', 'building', 'room',
             'credential__id', 'credential__name',
             'network__id', 'network__name',
             'device_template__id', 'device_template__name'
         )
 
-        # Apply search filter (name or IP address)
+        # Apply search filter (name, IP address, or hostname)
         if search:
             queryset = queryset.filter(
-                Q(name__icontains=search) | Q(ip_address__icontains=search)
+                Q(name__icontains=search) | Q(ip_address__icontains=search) | Q(hostname__icontains=search)
             )
 
         # Apply network filter
@@ -1778,7 +1779,7 @@ def GetDevices(request):
             queryset = queryset.filter(network_id=network_filter)
 
         # Apply sorting
-        valid_sort_fields = ['name', '-name', 'ip_address', '-ip_address', 'created_at', '-created_at']
+        valid_sort_fields = ['name', '-name', 'ip_address', '-ip_address', 'hostname', '-hostname', 'created_at', '-created_at']
         if sort_by in valid_sort_fields:
             queryset = queryset.order_by(sort_by)
 
@@ -1809,6 +1810,7 @@ def GetDevices(request):
                 'id': device.id,
                 'name': device.name,
                 'ip_address': device.ip_address,
+                'hostname': device.hostname,
                 'port': device.port,
                 'retries': device.retries,
                 'timeout': device.timeout,
@@ -1818,6 +1820,9 @@ def GetDevices(request):
                 'network_name': device.network.name if device.network else None,
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
+                'site': device.site,
+                'building': device.building,
+                'room': device.room,
                 'created_at': device.created_at.isoformat(),
             })
 
@@ -1841,7 +1846,8 @@ def AddDevice(request):
     try:
         # Extract form data
         name = request.POST.get('name')
-        ip_address = request.POST.get('ip_address')
+        ip_address = request.POST.get('ip_address') or None
+        hostname = request.POST.get('hostname') or None
         port = request.POST.get('port', 161)
         retries = request.POST.get('retries', 2)
         timeout = request.POST.get('timeout', 1000)
@@ -1854,6 +1860,7 @@ def AddDevice(request):
         device = Device(
             name=name,
             ip_address=ip_address,
+            hostname=hostname,
             port=int(port) if port else 161,
             retries=int(retries) if retries else 2,
             timeout=int(timeout) if timeout else 1000
@@ -1866,6 +1873,22 @@ def AddDevice(request):
             device.network_id = network_id
         if device_template_id:
             device.device_template_id = device_template_id
+
+        # Location fields
+        device.site = request.POST.get('site') or None
+        device.building = request.POST.get('building') or None
+        device.room = request.POST.get('room') or None
+        _lat = request.POST.get('latitude') or None
+        _lon = request.POST.get('longitude') or None
+        device.latitude = round(float(_lat), 6) if _lat else None
+        device.longitude = round(float(_lon), 6) if _lon else None
+
+        # Metadata JSON blob
+        metadata_raw = request.POST.get('metadata', '{}')
+        try:
+            device.metadata = json.loads(metadata_raw) if metadata_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            device.metadata = {}
 
         # Save (this will trigger validation)
         device.save()
@@ -1896,7 +1919,8 @@ def UpdateDevice(request, device_id):
 
         # Update fields
         device.name = request.POST.get('name', device.name)
-        device.ip_address = request.POST.get('ip_address', device.ip_address)
+        device.ip_address = request.POST.get('ip_address') or None
+        device.hostname = request.POST.get('hostname') or None
         port = request.POST.get('port')
         if port:
             device.port = int(port)
@@ -1926,6 +1950,20 @@ def UpdateDevice(request, device_id):
         else:
             device.device_template = None
 
+        # Location fields
+        device.site = request.POST.get('site') or None
+        device.building = request.POST.get('building') or None
+        device.room = request.POST.get('room') or None
+        device.latitude = request.POST.get('latitude') or None
+        device.longitude = request.POST.get('longitude') or None
+
+        # Metadata JSON blob
+        metadata_raw = request.POST.get('metadata', '{}')
+        try:
+            device.metadata = json.loads(metadata_raw) if metadata_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            device.metadata = {}
+
         # Save (this will trigger validation)
         device.save()
         
@@ -1949,6 +1987,52 @@ def UpdateDevice(request, device_id):
         return HttpResponse(f"Error updating device: {str(e)}", status=500)
 
 
+def GetDeviceLocationData(request):
+    """
+    Return aggregated location data from all devices so the modal can build
+    hierarchical combobox suggestions without a dedicated location table.
+
+    Response shape:
+      {
+        "sites":         ["HQ", ...],                              # all unique non-null site values
+        "site_building": [{"site": "HQ", "building": "Bld A"}, ...]  # all (site, building) pairs
+        "full":          [{"site":…, "building":…, "room":…, "latitude":…, "longitude":…}, ...]
+      }
+    """
+    from django.db.models import Q
+
+    sites = list(
+        Device.objects
+        .exclude(site__isnull=True).exclude(site='')
+        .values_list('site', flat=True)
+        .distinct()
+        .order_by('site')
+    )
+
+    site_building = list(
+        Device.objects
+        .exclude(building__isnull=True).exclude(building='')
+        .values('site', 'building')
+        .distinct()
+        .order_by('site', 'building')
+    )
+
+    full = list(
+        Device.objects
+        .exclude(room__isnull=True).exclude(room='')
+        .values('site', 'building', 'room', 'latitude', 'longitude')
+        .distinct()
+        .order_by('site', 'building', 'room')
+    )
+
+    # Coerce Decimal to str so JsonResponse can serialise them
+    for entry in full:
+        entry['latitude'] = str(entry['latitude']) if entry['latitude'] is not None else None
+        entry['longitude'] = str(entry['longitude']) if entry['longitude'] is not None else None
+
+    return JsonResponse({'sites': sites, 'site_building': site_building, 'full': full})
+
+
 def GetDevice(request, device_id):
     """Get a single device"""
     try:
@@ -1958,12 +2042,19 @@ def GetDevice(request, device_id):
             'id': device.id,
             'name': device.name,
             'ip_address': device.ip_address,
+            'hostname': device.hostname,
             'port': device.port,
             'retries': device.retries,
             'timeout': device.timeout,
             'credential': device.credential_id if device.credential else None,
             'network': device.network_id if device.network else None,
             'device_template': device.device_template_id if device.device_template else None,
+            'site': device.site,
+            'building': device.building,
+            'room': device.room,
+            'latitude': str(device.latitude) if device.latitude is not None else None,
+            'longitude': str(device.longitude) if device.longitude is not None else None,
+            'metadata': device.metadata,
         }
 
         return JsonResponse(data)
@@ -2211,6 +2302,20 @@ def GetAllProfiles(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+def _device_host_filter(device):
+    """Return an ES filter matching a device by its SNMP poll address.
+
+    The polling pipeline records the raw address used to reach the device in
+    ``host.polled_address`` (the hostname when one is configured, otherwise the
+    IP).  Querying this single field is simpler and more reliable than checking
+    both ``host.ip`` and ``host.hostname``.
+    """
+    identifier = device.hostname or device.ip_address
+    if not identifier:
+        return {"match_none": {}}
+    return {"term": {"host.polled_address": identifier}}
+
+
 def GetDevicesStatus(request):
     """
     Check online status for multiple devices in batch.
@@ -2386,7 +2491,7 @@ def GetDiscoveredDevices(request):
                     "aggs": {
                         "devices_by_host": {
                             "terms": {
-                                "field": "host.name",
+                                "field": "host.ip",
                                 "size": 1000
                             },
                             "aggs": {
@@ -2402,7 +2507,7 @@ def GetDiscoveredDevices(request):
                                         ],
                                         "_source": {
                                             "includes": [
-                                                "host.name",
+                                                "host.sysname",
                                                 "host.hostname",
                                                 "host.ip",
                                                 "network.name",
@@ -2478,7 +2583,7 @@ def GetDiscoveredDevices(request):
                                             pass
                                 
                                 device = {
-                                    'host_name': source.get('host', {}).get('name', 'Unknown'),
+                                    'host_name': source.get('host', {}).get('sysname', 'Unknown'),
                                     'host_hostname': source.get('host', {}).get('hostname', ''),
                                     'sys_descr': sys_descr,
                                     'host_ip': source.get('host', {}).get('ip', ''),
@@ -2527,11 +2632,7 @@ def _get_device_interfaces(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "interface"
@@ -2584,11 +2685,7 @@ def _get_device_metrics(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "metrics"
@@ -2642,11 +2739,7 @@ def _get_device_fans(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "fans"
@@ -2700,11 +2793,7 @@ def _get_device_sensors(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "sensors"
@@ -2757,11 +2846,7 @@ def _get_device_cpu_cores(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "component.cpu"
@@ -2821,11 +2906,7 @@ def _get_device_neighbors(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "network.neighbor"
@@ -2899,11 +2980,7 @@ def _get_device_wireless_radios(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "wireless.radio"
@@ -2981,11 +3058,7 @@ def _get_device_filesystems(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "system.filesystem"
@@ -3057,11 +3130,7 @@ def _get_device_printer_supplies(device, es_connection):
                             }
                         }
                     },
-                    {
-                        "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
+                    _device_host_filter(device),
                     {
                         "term": {
                             "event.category": "printer.supply"
@@ -3173,12 +3242,18 @@ def get_devices_online_batch(devices):
         try:
             es = get_elastic_connection(connection_id)
 
-            # Build list of IP addresses to check
-            ip_addresses = [device.ip_address for device in device_list]
+            # Each device is polled by hostname (if set) or IP - that value is
+            # stored verbatim in host.polled_address
+            poll_addresses = [d.hostname or d.ip_address for d in device_list if d.hostname or d.ip_address]
+            addr_to_device = {(d.hostname or d.ip_address): d for d in device_list if d.hostname or d.ip_address}
 
-            # Single query checking all IPs at once
+            if not poll_addresses:
+                for device in device_list:
+                    results[device.id] = False
+                continue
+
             search_results = es.search(
-                size=0,  # We only need aggregations, not actual documents
+                size=0,
                 query={
                     "bool": {
                         "filter": [
@@ -3191,7 +3266,7 @@ def get_devices_online_batch(devices):
                             },
                             {
                                 "terms": {
-                                    "host.hostname": ip_addresses
+                                    "host.polled_address": poll_addresses
                                 }
                             }
                         ]
@@ -3200,22 +3275,21 @@ def get_devices_online_batch(devices):
                 aggregations={
                     "online_devices": {
                         "terms": {
-                            "field": "host.hostname",
-                            "size": len(ip_addresses)
+                            "field": "host.polled_address",
+                            "size": len(poll_addresses)
                         }
                     }
                 }
             )
 
-            # Extract which IPs have data (are online)
-            online_ips = set()
+            online_addresses = set()
             if 'aggregations' in search_results and 'online_devices' in search_results['aggregations']:
                 for bucket in search_results['aggregations']['online_devices']['buckets']:
-                    online_ips.add(bucket['key'])
+                    online_addresses.add(bucket['key'])
 
-            # Map back to device IDs
             for device in device_list:
-                results[device.id] = device.ip_address in online_ips
+                addr = device.hostname or device.ip_address
+                results[device.id] = addr in online_addresses if addr else False
 
         except Exception as e:
             # If query fails, mark all devices on this connection as offline
@@ -3265,11 +3339,7 @@ def decide_visualizations(device, es):
                                 }
                             }
                         },
-                        {
-                            "term": {
-                                "host.hostname": device.ip_address
-                            }
-                        }
+                        _device_host_filter(device)
                     ]
                 }
             },

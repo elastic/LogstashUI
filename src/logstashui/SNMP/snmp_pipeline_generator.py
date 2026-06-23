@@ -166,7 +166,7 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
             for device in group_data['devices']:
                 credential = device.credential
                 hosts.append({
-                    "host": f"udp:{device.ip_address}/{device.port}",
+                    "host": f"udp:{device.hostname or device.ip_address}/{device.port}",
                     "community": credential.get_community(),
                     "version": credential.version,
                     "timeout": device.timeout,
@@ -186,10 +186,11 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
 
                 # Add ECS field enrichment from device template
                 add_fields = {}
-                
-                # Use SNMP plugin's built-in metadata field for host IP
-                add_fields["[host][hostname]"] = "%{[@metadata][host_address]}"
-                
+
+                # Record the raw poll address permanently - the filter will also
+                # copy it to [host][ip] or [host][hostname] as appropriate
+                add_fields["[host][polled_address]"] = "%{[@metadata][host_address]}"
+
                 if template:
                     # [host][device_template] — normalized slug, safe for use as an ES namespace
                     add_fields["[host][device_template]"] = _normalize_template_name(template.name)
@@ -291,7 +292,7 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
 
             for device in group_data['devices']:
                 hosts.append({
-                    "host": f"udp:{device.ip_address}/{device.port}",
+                    "host": f"udp:{device.hostname or device.ip_address}/{device.port}",
                     "version": device.credential.version,
                     "timeout": device.timeout,
                     "retries": device.retries
@@ -322,10 +323,11 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
 
                 # Add ECS field enrichment from device template
                 add_fields = {}
-                
-                # Use SNMP plugin's built-in metadata field for host IP
-                add_fields["[host][hostname]"] = "%{[@metadata][host_address]}"
-                
+
+                # Expose the SNMP plugin's host address as a plain [host] field so
+                # the downstream if/else filter can rename it to [host][ip] or [host][hostname]
+                add_fields["[host][polled_address]"] = "%{[@metadata][host_address]}"
+
                 if template:
                     # [host][device_template] — normalized slug, safe for use as an ES namespace
                     add_fields["[host][device_template]"] = _normalize_template_name(template.name)
@@ -499,8 +501,27 @@ def _generate_discovery_filters(oid_mappings, network):
             "plugin": "mutate",
             "config": {
                 "rename": {
-                              "host": "[host][hostname]"
+                              "host": "[host][ip]"
                           } | get_renames
+            }
+        },
+        {
+            "id": "filter_mutate_discovery_hostname",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "copy": {
+                    "[host][ip]": "[host][hostname]"
+                }
+            }
+        },
+        {
+            "id": "comp_1782149786510",
+            "type": "filter",
+            "plugin": "dns",
+            "config": {
+                "action": "replace",
+                "reverse": ["[host][hostname]"]
             }
         },
         {
@@ -520,7 +541,97 @@ def _generate_discovery_filters(oid_mappings, network):
     return filter_components
 
 
-def _generate_filters(oid_mappings, network, normalizers=None):
+def _generate_device_enrichment_filters(input_data):
+    """
+    Generate translate filter blocks that enrich each polled event with
+    per-device location and metadata stored on the Device model.
+
+    Two translate blocks are emitted (each only when at least one device
+    has the relevant data):
+      1. [host][polled_address] -> [host][location]
+         Dictionary value: Logstash hash of {site, building, room, geo}
+         where geo is a hash string: {"lat" => "<lat>" "lon" => "<lon>"}
+      2. [host][polled_address] -> [host][metadata]
+         Dictionary value: Logstash hash of all key-value pairs in device.metadata
+
+    The polling address key matches what the SNMP input plugin exposes via
+    %{[@metadata][host_address]} — the hostname if one is set, otherwise the IP.
+
+    Args:
+        input_data: Dict containing 'devices' with 'v1_v2c' and 'v3' sub-dicts
+                    of {device_name: Device} mappings.
+
+    Returns:
+        List of filter component dicts (may be empty).
+    """
+    # Merge v1/v2c and v3 into a single address → device map.
+    # Use hostname-first to match what the SNMP input's host field uses.
+    all_devices = {}
+    for device in (
+        list(input_data['devices']['v1_v2c'].values())
+        + list(input_data['devices']['v3'].values())
+    ):
+        address = device.hostname or device.ip_address
+        if address:
+            all_devices[address] = device
+
+    filters = []
+
+    # ── Location translate ────────────────────────────────────────────────────
+    location_dict = {}
+
+    for address, device in all_devices.items():
+        loc = {}
+        if device.site:
+            loc['site'] = device.site
+        if device.building:
+            loc['building'] = device.building
+        if device.room:
+            loc['room'] = device.room
+        if device.latitude is not None and device.longitude is not None:
+            loc['geo'] = {
+                'lat': str(device.latitude),
+                'lon': str(device.longitude),
+            }
+        if loc:
+            location_dict[address] = loc
+
+    if location_dict:
+        filters.append({
+            "id": "filter_translate_location",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "source": "[host][polled_address]",
+                "destination": "[host][location]",
+                "dictionary": location_dict
+            }
+        })
+
+    # ── Metadata translate ────────────────────────────────────────────────────
+    metadata_dict = {}
+    for address, device in all_devices.items():
+        if device.metadata:
+            # Ensure all values are strings so the serialiser produces valid
+            # Logstash hash syntax (the serialiser calls _format_string_value per entry)
+            metadata_dict[address] = {str(k): str(v) for k, v in device.metadata.items()}
+
+    if metadata_dict:
+        filters.append({
+            "id": "filter_translate_metadata",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "source": "[host][polled_address]",
+                "destination": "[host][metadata]",
+                "dictionary": metadata_dict
+            }
+        })
+
+    return filters
+
+
+def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     """
     Generate filter components based on OID mappings from profiles.
 
@@ -528,6 +639,8 @@ def _generate_filters(oid_mappings, network, normalizers=None):
         oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
         network: Network object for accessing network name and other properties
         normalizers: List of normalizer configurations from profiles
+        input_data: Optional input_data dict; when provided, per-device location and
+                    metadata translate blocks are appended to the filter list.
 
     Returns:
         List of filter components
@@ -550,6 +663,40 @@ def _generate_filters(oid_mappings, network, normalizers=None):
                     table_renames[from_field] = to_field
 
     filter_components = [
+        {
+            "id": "condition-1782151148927",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": r"[host][polled_address] =~ /^\d+\.\d+\.\d+\.\d+$/ or [host][polled_address] =~ /^[0-9a-fA-F]+:[0-9a-fA-F:]*$/",
+                "plugins": [
+                    {
+                        "id": "plugin-1782151166081",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "copy": {
+                                "[host][polled_address]": "[host][ip]"
+                            }
+                        }
+                    }
+                ],
+                "else": {
+                    "plugins": [
+                        {
+                            "id": "plugin-1782151183285",
+                            "type": "filter",
+                            "plugin": "mutate",
+                            "config": {
+                                "copy": {
+                                    "[host][polled_address]": "[host][hostname]"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
         {
             "id": "filter_mutate_1",
             "type": "filter",
@@ -586,6 +733,10 @@ def _generate_filters(oid_mappings, network, normalizers=None):
         table_normalizers = [n for n in normalizers if n.get('target', {}).get('scope') == 'table']
         table_normalizer_filters = _apply_normalizers(table_normalizers)
         filter_components.extend(table_normalizer_filters)
+
+    # Append per-device location and metadata enrichment translate blocks.
+    if input_data is not None:
+        filter_components.extend(_generate_device_enrichment_filters(input_data))
 
     return filter_components
 
@@ -953,6 +1104,8 @@ def _generate_table_split_filters(oid_mappings):
                     f"if rows.is_a?(Array)\n"
                     f"  host_name = event.get(\"[host][name]\")\n"
                     f"  host_hostname = event.get(\"[host][hostname]\")\n"
+                    f"  host_sysname = event.get(\"[host][sysname]\")\n"
+                    f"  host_polled_address = event.get(\"[host][polled_address]\")\n"
                     f"  host_type = event.get(\"[host][type]\")\n"
                     f"  host_device_template = event.get(\"[host][device_template]\")\n"
                     f"  observer_vendor = event.get(\"[observer][vendor]\")\n"
@@ -971,6 +1124,8 @@ def _generate_table_split_filters(oid_mappings):
                     f"    }})\n"
                     f"    new_event.set(\"[network][name]\", network_name)\n"
                     f"    new_event.set(\"[host][device_template]\", host_device_template) if host_device_template\n"
+                    f"    new_event.set(\"[host][sysname]\", host_sysname) if host_sysname\n"
+                    f"    new_event.set(\"[host][polled_address]\", host_polled_address) if host_polled_address\n"
                     f"    new_event.set(\"{table_set_path}\", row)\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"

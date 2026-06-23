@@ -226,18 +226,22 @@ def get_high_resource_usage():
         
         # Group devices by connection
         devices_by_connection = {}
-        device_lookup = {}  # Map IP to device info
-        
+        device_lookup = {}  # Map poll_target to device info
+
         for device in devices:
             if not device.network or not device.network.connection:
                 continue
-            
+
+            poll_target = device.hostname or device.ip_address
+            if not poll_target:
+                continue
+
             connection_id = device.network.connection.id
             if connection_id not in devices_by_connection:
                 devices_by_connection[connection_id] = []
-            
-            devices_by_connection[connection_id].append(device.ip_address)
-            device_lookup[device.ip_address] = {
+
+            devices_by_connection[connection_id].append(poll_target)
+            device_lookup[poll_target] = {
                 'id': device.id,
                 'name': device.name,
                 'ip_address': device.ip_address,
@@ -274,7 +278,7 @@ def get_high_resource_usage():
                                 },
                                 {
                                     "terms": {
-                                        "host.hostname": device_ips
+                                        "host.polled_address": device_ips
                                     }
                                 }
                             ]
@@ -283,7 +287,7 @@ def get_high_resource_usage():
                     "aggs": {
                         "devices": {
                             "terms": {
-                                "field": "host.hostname",
+                                "field": "host.polled_address",
                                 "size": 1000
                             },
                             "aggs": {

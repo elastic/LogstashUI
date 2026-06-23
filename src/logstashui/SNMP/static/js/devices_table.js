@@ -90,7 +90,7 @@ function loadDevices() {
       loadingState.classList.add('hidden');
       tableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="px-6 py-8 text-center text-red-400">
+          <td colspan="8" class="px-6 py-8 text-center text-red-400">
             Error loading devices: ${error.message}
           </td>
         </tr>
@@ -181,7 +181,10 @@ function renderDevices(devices) {
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-        <span class="font-mono">${escapeHtml(device.ip_address)}</span>
+        ${device.hostname ? `<span class="font-mono">${escapeHtml(device.hostname)}</span>` : '<span class="text-gray-500 italic">—</span>'}
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+        <span class="font-mono">${escapeHtml(device.ip_address || '—')}</span>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.credential_name ? escapeHtml(device.credential_name) : '<span class="text-gray-500 italic">None</span>'}
@@ -197,6 +200,15 @@ function renderDevices(devices) {
             ` : ''}
           </div>
         ` : '<span class="text-gray-500 italic">None</span>'}
+      </td>
+      <td class="px-6 py-4 text-sm text-gray-300 max-w-[180px]">
+        ${(() => {
+          const parts = [device.site, device.building, device.room].filter(Boolean);
+          if (!parts.length) return '<span class="text-gray-500 italic">—</span>';
+          const full = parts.join(' › ');
+          const short = full.length > 28 ? full.slice(0, 27) + '…' : full;
+          return `<span class="block truncate cursor-default" title="${escapeHtml(full)}">${escapeHtml(short)}</span>`;
+        })()}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${templateHtml}
@@ -243,7 +255,7 @@ function renderDevices(devices) {
     expandRow.id = `device-preview-${device.id}`;
     expandRow.className = 'hidden bg-gray-900';
     expandRow.innerHTML = `
-      <td colspan="8">
+      <td colspan="10">
         <div class="p-4">
           <div class="htmx-indicator">
             <div class="flex justify-center items-center py-4">

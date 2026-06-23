@@ -24,7 +24,7 @@ condition: CMP_OPERATORS
 else_if_condition: "else" "if" condition "{" [statement+] "}"
 else_condition: "else" "{" [statement+] "}"
 
-CMP_OPERATORS: /(?:[^\n{"']|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+/  // Matches anything except newline and unquoted {, handles quoted strings
+CMP_OPERATORS: /(?:[^\n{"'\/]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^\/\\]|\\.)*\/)+/  // Matches anything except newline and unquoted {, handles quoted strings and /regex/ literals
 section_type: "input" -> input_section
             | "filter" -> filter_section
             | "output" -> output_section
@@ -852,6 +852,33 @@ class ComponentToPipeline:
         # Generate ID in format: section_pluginname_count
         return f"{section}_{plugin_name}_{self.plugin_counters[counter_key]}"
 
+    def _format_hash_block(self, d, indent):
+        """Recursively format a Python dict as a Logstash hash block.
+
+        Returns a string starting with '{' and ending with '}' (no trailing newline),
+        suitable for inline use after a '=>' on the same line.
+
+        Args:
+            d: The dict to format.
+            indent: The tab depth of the *opening brace* line. Inner pairs are
+                    at indent+1, and the closing brace is at indent.
+        """
+        tabs = '\t' * indent
+        inner_tabs = '\t' * (indent + 1)
+        lines = ['{']
+        for k, v in d.items():
+            if isinstance(v, dict):
+                nested = self._format_hash_block(v, indent + 1)
+                lines.append(f'{inner_tabs}"{k}" => {nested}')
+            elif isinstance(v, bool):
+                lines.append(f'{inner_tabs}"{k}" => {str(v).lower()}')
+            elif isinstance(v, (int, float)):
+                lines.append(f'{inner_tabs}"{k}" => {v}')
+            else:
+                lines.append(f'{inner_tabs}"{k}" => {self._format_string_value(v)}')
+        lines.append(f'{tabs}}}')
+        return '\n'.join(lines)
+
     def _format_string_value(self, value):
         """Format a string value for Logstash config, choosing appropriate quoting.
         
@@ -971,12 +998,8 @@ class ComponentToPipeline:
                                 config += f'\t\t\t{json.dumps(item)}{comma}\n'
                         config += "\t\t]\n"
                     elif type(dict_value) is dict:
-                        # Nested hash - recursively format it
-                        config += f'\t\t"{dict_key}" => {{\n'
-                        for nested_key in dict_value:
-                            formatted_nested_value = self._format_string_value(dict_value[nested_key])
-                            config += f'\t\t\t"{nested_key}" => {formatted_nested_value}\n'
-                        config += "\t\t}\n"
+                        block = self._format_hash_block(dict_value, indent=2)
+                        config += f'\t\t"{dict_key}" => {block}\n'
                     elif type(dict_value) is bool:
                         config += f'\t\t"{dict_key}" => {str(dict_value).lower()}\n'
                     elif type(dict_value) in [int, float]:

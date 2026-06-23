@@ -122,7 +122,16 @@ class Device(models.Model):
     
     ip_address = models.CharField(
         max_length=255,
-        help_text="IP address or hostname of the device"
+        null=True,
+        blank=True,
+        help_text="IP address of the device (optional if hostname is provided)"
+    )
+
+    hostname = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="DNS hostname of the device (optional if IP address is provided)"
     )
     
     port = models.IntegerField(
@@ -166,7 +175,52 @@ class Device(models.Model):
         related_name='devices',
         help_text="Device template assigned to this device (defaults to 'Default' template if not specified)"
     )
-    
+
+    # Location fields
+    site = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Site or campus this device is located at"
+    )
+
+    building = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Building within the site"
+    )
+
+    room = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Room or rack location within the building"
+    )
+
+    latitude = models.DecimalField(
+        max_digits=15,
+        decimal_places=10,
+        null=True,
+        blank=True,
+        help_text="Geographic latitude of the device location"
+    )
+
+    longitude = models.DecimalField(
+        max_digits=15,
+        decimal_places=10,
+        null=True,
+        blank=True,
+        help_text="Geographic longitude of the device location"
+    )
+
+    # Arbitrary user-defined key/value metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Arbitrary key-value metadata for this device"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -177,30 +231,43 @@ class Device(models.Model):
         indexes = [
             models.Index(fields=['name']),
             models.Index(fields=['ip_address']),
+            models.Index(fields=['hostname']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['network', 'name']),
         ]
     
     def __str__(self):
-        return f"{self.name} ({self.ip_address})"
+        identifier = self.ip_address or self.hostname or 'no address'
+        return f"{self.name} ({identifier})"
     
     def clean(self):
         """
         Validate device fields
         """
         super().clean()
-        
-        # Validate IP address or hostname
+
+        # At least one of ip_address or hostname must be provided
+        if not self.ip_address and not self.hostname:
+            raise ValidationError(
+                'At least one of IP address or hostname must be provided.'
+            )
+
+        # Validate IP address format when present
         if self.ip_address:
             try:
-                # Try to parse as IP address
                 ipaddress.ip_address(self.ip_address)
             except ValueError:
-                # If not a valid IP, check if it's a reasonable hostname
-                if not self.ip_address.replace('-', '').replace('.', '').replace('_', '').isalnum():
-                    raise ValidationError({
-                        'ip_address': 'Must be a valid IP address or hostname'
-                    })
+                # Not a valid IP address
+                raise ValidationError({
+                    'ip_address': 'Must be a valid IP address (e.g. 192.168.1.1)'
+                })
+
+        # Validate hostname format when present
+        if self.hostname:
+            if not self.hostname.replace('-', '').replace('.', '').replace('_', '').isalnum():
+                raise ValidationError({
+                    'hostname': 'Must be a valid hostname'
+                })
     
     def save(self, *args, **kwargs):
         # If no device template is assigned, use the Default template

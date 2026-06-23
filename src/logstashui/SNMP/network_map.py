@@ -45,26 +45,27 @@ def get_cdp_adjacencies():
                 'adjacency_table': {}
             }
 
-        # Build host.name → network_name lookup from the Device inventory so we
-        # can assign each device to its network without relying on network.name
-        # being present in every document type.
-        device_network_map = {}   # host.name  → "NetworkName (range)"
-        device_hostname_map = {}  # host.hostname (IP) → "NetworkName (range)"
+        # Build lookup maps from the Device inventory so we can assign each
+        # device to its network using host.polled_address without relying on
+        # network.name being present in every document type.
+        device_network_map = {}    # device.name (display) → "NetworkName (range)"
+        device_poll_target_map = {}  # hostname or ip_address → "NetworkName (range)"
         try:
             for dev in Device.objects.select_related('network').all():
                 if dev.network:
                     net_label = f"{dev.network.name} ({dev.network.network_range})"
                     if dev.name:
                         device_network_map[dev.name] = net_label
-                    if dev.ip_address:
-                        device_hostname_map[dev.ip_address] = net_label
+                    poll_target = dev.hostname or dev.ip_address
+                    if poll_target:
+                        device_poll_target_map[poll_target] = net_label
         except Exception as e:
             logger.warning(f"Could not build device→network lookup: {e}")
 
-        def resolve_network(host_name, host_hostname):
+        def resolve_network(host_name, host_poll_target):
             return (
                 device_network_map.get(host_name)
-                or device_hostname_map.get(host_hostname)
+                or device_poll_target_map.get(host_poll_target)
                 or 'Unknown Network'
             )
 
@@ -108,7 +109,7 @@ def get_cdp_adjacencies():
                                     {
                                         "host_name": {
                                             "terms": {
-                                                "field": "host.name"
+                                                "field": "host.sysname"
                                             }
                                         }
                                     },
@@ -135,8 +136,9 @@ def get_cdp_adjacencies():
                                             "_source": {
                                                 "includes": [
                                                     "@timestamp",
-                                                    "host.name",
+                                                    "host.polled_address",
                                                     "host.hostname",
+                                                    "host.sysname",
                                                     "network.name",
                                                     "network.neighbor.index",
                                                     "network.neighbor.device_id",
@@ -172,20 +174,22 @@ def get_cdp_adjacencies():
                             hit = bucket['latest']['hits']['hits'][0]
                             source = hit['_source']
 
-                            device_name     = source.get('host', {}).get('name', '')
-                            host_hostname   = source.get('host', {}).get('hostname', '')
+                            device_name      = source.get('host', {}).get('sysname', '')
+                            polled_address   = source.get('host', {}).get('polled_address', '')
+                            host_hostname    = source.get('host', {}).get('hostname', '')
                             doc_network_name = source.get('network', {}).get('name', '')
-                            neighbor_data   = source.get('network', {}).get('neighbor', {})
-                            table_index     = neighbor_data.get('index', '')
+                            neighbor_data    = source.get('network', {}).get('neighbor', {})
+                            table_index      = neighbor_data.get('index', '')
 
                             # network.neighbor.index format: "ifIndex.cdpCacheIfIndex"
                             if device_name and '.' in table_index:
                                 if_index = table_index.split('.')[0]
-                                interface_lookup_pairs.append((device_name, if_index, host_hostname))
+                                interface_lookup_pairs.append((device_name, if_index, polled_address))
 
                                 key = f"{device_name}:{table_index}"
                                 cdp_data_by_device_index[key] = {
                                     'neighbor': neighbor_data,
+                                    'polled_address': polled_address,
                                     'host_hostname': host_hostname,
                                     'doc_network_name': doc_network_name
                                 }
@@ -200,7 +204,7 @@ def get_cdp_adjacencies():
                         should_clauses.append({
                             "bool": {
                                 "filter": [
-                                    {"term": {"host.name": device_name}},
+                                    {"term": {"host.sysname": device_name}},
                                     {"term": {"interface.index": int(if_index)}}
                                 ]
                             }
@@ -209,7 +213,7 @@ def get_cdp_adjacencies():
                     interface_query = {
                         "size": 500,
                         "track_total_hits": False,
-                        "_source": ["host.name", "interface.index", "interface.name"],
+                        "_source": ["host.sysname", "interface.index", "interface.name"],
                         "query": {
                             "bool": {
                                 "filter": [
@@ -231,7 +235,7 @@ def get_cdp_adjacencies():
                     if 'hits' in interface_response and 'hits' in interface_response['hits']:
                         for hit in interface_response['hits']['hits']:
                             src = hit['_source']
-                            dn  = src.get('host', {}).get('name', '')
+                            dn  = src.get('host', {}).get('sysname', '')
                             ifd = src.get('interface', {})
                             idx = ifd.get('index', '')
                             nm  = ifd.get('name', '')
@@ -242,11 +246,12 @@ def get_cdp_adjacencies():
                 for key, entry in cdp_data_by_device_index.items():
                     device_name, table_index = key.split(':', 1)
                     cdp_data         = entry['neighbor']
+                    polled_address   = entry['polled_address']
                     host_hostname    = entry['host_hostname']
                     doc_network_name = entry['doc_network_name']
 
                     # Prefer network.name from the document itself; fall back to DB lookup
-                    network_name = doc_network_name or resolve_network(device_name, host_hostname)
+                    network_name = doc_network_name or resolve_network(device_name, polled_address)
 
                     if_index = table_index.split('.')[0] if '.' in table_index else table_index
                     friendly_interface_name = interface_name_lookup.get(
@@ -384,16 +389,21 @@ def convert_adjacency_to_graph(adjacency_table):
     nodes_list = list(nodes.values())
     
     # Enrich managed nodes with database device IDs for click-through detail panel.
-    # SNMP host.name is typically the device's IP address as polled; fall back to
-    # matching by device name for cases where hostnames are used instead.
+    # node_id is now host.sysname — try matching against device display name, then
+    # hostname, then IP as fallbacks.
     try:
-        db_devices = list(Device.objects.values('id', 'name', 'ip_address'))
-        ip_to_device_id = {d['ip_address']: d['id'] for d in db_devices}
-        name_to_device_id = {d['name']: d['id'] for d in db_devices}
+        db_devices = list(Device.objects.values('id', 'name', 'ip_address', 'hostname'))
+        name_to_device_id     = {d['name']: d['id'] for d in db_devices}
+        hostname_to_device_id = {d['hostname']: d['id'] for d in db_devices if d['hostname']}
+        ip_to_device_id       = {d['ip_address']: d['id'] for d in db_devices if d['ip_address']}
 
         for node in nodes_list:
             node_id = node['id']
-            device_id = ip_to_device_id.get(node_id) or name_to_device_id.get(node_id)
+            device_id = (
+                name_to_device_id.get(node_id)
+                or hostname_to_device_id.get(node_id)
+                or ip_to_device_id.get(node_id)
+            )
             if device_id:
                 node['device_id'] = device_id
     except Exception as e:
