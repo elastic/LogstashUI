@@ -64,10 +64,11 @@ def sync_official_profiles():
                 # Update all mutable fields and save
                 profile.name = profile_name
                 profile.description = profile_data.get('description', '')
-                profile.vendor = profile_data.get('vendor', '')
+                profile.vendor = profile_data.get('vendor', 'Any')
                 profile.product = profile_data.get('product', '')
-                if not isinstance(profile.profile_data, dict) or not profile.profile_data.get('is_official_placeholder'):
-                    profile.profile_data = {'is_official_placeholder': True}
+                # Always reset to a clean placeholder — clears any stale flags such as
+                # 'is_orphaned' that may have been set during a previous cleanup run.
+                profile.profile_data = {'is_official_placeholder': True}
                 profile.save()
                 
             except Exception as e:
@@ -114,7 +115,7 @@ def sync_official_device_templates():
                 # Update all mutable fields and save
                 template.name = display_name
                 template.description = template_data.get('description', '')
-                template.vendor = template_data.get('vendor', '')
+                template.vendor = template_data.get('vendor', 'Any')
                 template.model = template_data.get('model', '')
                 template.product = template_data.get('product', '')
                 template.type = template_data.get('type', '')
