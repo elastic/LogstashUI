@@ -3005,7 +3005,10 @@ def _get_device_wireless_radios(device, es_connection):
                                 "wireless.radio.name",
                                 "wireless.radio.band",
                                 "wireless.radio.channel",
-                                "wireless.radio.traffic"
+                                "wireless.radio.in_bytes",
+                                "wireless.radio.out_bytes",
+                                "wireless.radio.out_discards",
+                                "wireless.radio.out_errors"
                             ]
                         }
                     }
@@ -3021,22 +3024,15 @@ def _get_device_wireless_radios(device, es_connection):
     for bucket in results['aggregations']['radios']['buckets']:
         for doc in bucket['latest_doc']['hits']['hits']:
             radio = doc['_source'].get('wireless', {}).get('radio', {})
-            traffic = radio.get('traffic', {})
             visualization_data['radios'].append({
                 "index": radio.get('index', bucket['key']),
                 "name": radio.get('name', ''),
                 "band": radio.get('band', ''),
                 "channel": radio.get('channel', ''),
-                "traffic": {
-                    "in": {
-                        "bytes": traffic.get('in', {}).get('bytes', 0)
-                    },
-                    "out": {
-                        "bytes": traffic.get('out', {}).get('bytes', 0),
-                        "discards": traffic.get('out', {}).get('discards', 0),
-                        "errors": traffic.get('out', {}).get('errors', 0)
-                    }
-                }
+                "in_bytes": radio.get('in_bytes', 0),
+                "out_bytes": radio.get('out_bytes', 0),
+                "out_discards": radio.get('out_discards', 0),
+                "out_errors": radio.get('out_errors', 0)
             })
 
     visualization_data['radios'].sort(key=lambda r: int(r['index']) if str(r['index']).isdigit() else 0)

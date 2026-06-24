@@ -243,8 +243,8 @@ function renderDevicePreview(deviceId, device, visualizations) {
 
       // Sort interfaces by index
       const sortedInterfaces = interfacesArray.sort((a, b) => {
-        const indexA = parseInt(a.index ?? a.ifIndex) || 0;
-        const indexB = parseInt(b.index ?? b.ifIndex) || 0;
+        const indexA = parseInt(a.index) || 0;
+        const indexB = parseInt(b.index) || 0;
         return indexA - indexB;
       });
 
@@ -376,33 +376,30 @@ function abbreviateIfaceName(name) {
 function createInterfaceCard(iface) {
   const card = document.createElement('div');
 
-  // New schema: status is nested under interface.status.{admin,oper}
-  const adminStatus = parseInt(iface.status?.admin ?? iface.ifAdminStatus);
-  const operStatus  = parseInt(iface.status?.oper  ?? iface.ifOperStatus);
-
-  // Admin status: 1=Up, 2=Down, 3=Testing
-  // Oper status:  1=Up, 2=Down, 3=Testing, 4=Unknown, 5=Dormant, 6=NotPresent, 7=LowerLayerDown
+  // admin_status / oper_status are stored as strings (UP/DOWN/TESTING/...)
+  const adminStatus = iface.admin_status;
+  const operStatus  = iface.oper_status;
 
   let borderClass = 'border-gray-600';
   let statusText = 'Unknown';
   let statusColor = 'bg-gray-500';
 
-  if (adminStatus === 1 && operStatus === 1) {
+  if (adminStatus === 'UP' && operStatus === 'UP') {
     // Admin up / oper up — enabled and active
     borderClass = 'border-green-500';
     statusText = 'Up';
     statusColor = 'bg-green-500';
-  } else if (adminStatus === 2 && operStatus === 1) {
+  } else if (adminStatus === 'DOWN' && operStatus === 'UP') {
     // Admin down / oper up — inconsistent, worth investigating
     borderClass = 'border-yellow-500';
     statusText = 'Admin Down / Link Up';
     statusColor = 'bg-yellow-500';
-  } else if (adminStatus === 1 && operStatus === 5) {
+  } else if (adminStatus === 'UP' && operStatus === 'DORMANT') {
     // Admin up / oper dormant — link enabled but dormant
     borderClass = 'border-yellow-500';
     statusText = 'Dormant';
     statusColor = 'bg-yellow-500';
-  } else if (adminStatus === 3 || operStatus === 3) {
+  } else if (adminStatus === 'TESTING' || operStatus === 'TESTING') {
     // Testing state
     borderClass = 'border-blue-500';
     statusText = 'Testing';
@@ -410,36 +407,37 @@ function createInterfaceCard(iface) {
   } else {
     // Admin down / oper down, admin up / oper down, or unknown — gray (disabled/no link)
     borderClass = 'border-gray-500';
-    statusText = adminStatus === 2 ? 'Admin Down' : operStatus === 2 ? 'No Link' : 'Unknown';
+    statusText = adminStatus === 'DOWN' ? 'Admin Down' : operStatus === 'DOWN' ? 'No Link' : 'Unknown';
     statusColor = 'bg-gray-500';
   }
 
-  // New schema: speed_high_mbps replaces ifHighSpeed; speed replaces ifSpeed (bps)
-  const speedMbps = iface.speed_high_mbps ?? iface.ifHighSpeed ?? (iface.speed ? iface.speed / 1_000_000 : (iface.ifSpeed ? iface.ifSpeed / 1_000_000 : 0));
+  const speedMbps = iface.speed_high_mbps ?? (iface.speed ? iface.speed / 1_000_000 : 0);
   const speedText = speedMbps >= 1000 ? `${speedMbps / 1000}G` : `${speedMbps}M`;
 
-  // New schema: mac replaces ifPhysAddress
-  const macAddress = iface.mac ?? iface.ifPhysAddress ?? 'N/A';
+  const macAddress = iface.mac ?? 'N/A';
 
-  // New schema: name replaces ifDescr/ifName; alias replaces ifAlias
-  const ifaceName  = iface.name ?? iface.alt_name ?? iface.ifName ?? iface.ifDescr ?? '';
-  const ifaceAlias = iface.alias ?? iface.ifAlias ?? '';
+  const ifaceName  = iface.name ?? iface.alt_name ?? '';
+  const ifaceAlias = iface.alias ?? '';
 
-  // New schema: traffic.in/out.bytes replace ifHCInOctets/ifHCOutOctets
-  const inBytes  = iface.traffic?.in?.bytes  ?? iface.ifHCInOctets  ?? 0;
-  const outBytes = iface.traffic?.out?.bytes ?? iface.ifHCOutOctets ?? 0;
+  const inBytes  = iface.in_octets  ?? 0;
+  const outBytes = iface.out_octets ?? 0;
 
-  // New schema: errors.in/out replace ifInErrors/ifOutErrors
-  const inErrors  = iface.errors?.in  ?? iface.ifInErrors  ?? 0;
-  const outErrors = iface.errors?.out ?? iface.ifOutErrors ?? 0;
+  const inErrors  = iface.in_errors  ?? 0;
+  const outErrors = iface.out_errors ?? 0;
 
-  // New schema: mtu, type, index replace ifMtu, ifType, ifIndex
-  const mtu   = iface.mtu   ?? iface.ifMtu   ?? 'N/A';
-  const type  = iface.type  ?? iface.ifType  ?? 'N/A';
-  const index = iface.index ?? iface.ifIndex ?? 'N/A';
+  const mtu   = iface.mtu   ?? 'N/A';
+  const type  = iface.type  ?? 'N/A';
+  const index = iface.index ?? 'N/A';
 
-  const adminStatusText = adminStatus === 1 ? '<span class="text-green-400">Up</span>' : adminStatus === 2 ? '<span class="text-gray-400">Down</span>' : '<span class="text-blue-400">Testing</span>';
-  const operStatusHtml  = operStatus  === 1 ? '<span class="text-green-400">Up</span>' : operStatus  === 2 ? '<span class="text-gray-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
+  const adminStatusText = adminStatus === 'UP'   ? '<span class="text-green-400">Up</span>'
+                        : adminStatus === 'DOWN' ? '<span class="text-gray-400">Down</span>'
+                        :                         '<span class="text-blue-400">Testing</span>';
+  const operStatusHtml  = operStatus === 'UP'               ? '<span class="text-green-400">Up</span>'
+                        : operStatus === 'DOWN'             ? '<span class="text-gray-400">Down</span>'
+                        : operStatus === 'LOWER_LAYER_DOWN' ? '<span class="text-orange-400">Lower Layer Down</span>'
+                        : operStatus === 'DORMANT'          ? '<span class="text-yellow-400">Dormant</span>'
+                        : operStatus === 'NOT_PRESENT'      ? '<span class="text-gray-500">Not Present</span>'
+                        :                                     `<span class="text-yellow-400">${escapeHtml(statusText)}</span>`;
 
   const tooltipContent = `
     <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(ifaceName)}</div>
@@ -973,10 +971,10 @@ function createWirelessRadioCard(radio) {
   const card = document.createElement('div');
 
   const bandInfo = decodeWirelessBand(radio.band);
-  const inBytes  = radio.traffic?.in?.bytes  || 0;
-  const outBytes = radio.traffic?.out?.bytes || 0;
-  const outDiscards = radio.traffic?.out?.discards || 0;
-  const outErrors   = radio.traffic?.out?.errors   || 0;
+  const inBytes     = radio.in_bytes     || 0;
+  const outBytes    = radio.out_bytes    || 0;
+  const outDiscards = radio.out_discards || 0;
+  const outErrors   = radio.out_errors   || 0;
   const hasErrors   = outDiscards > 0 || outErrors > 0;
 
   card.className = 'bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-colors w-64 flex-shrink-0';

@@ -688,7 +688,7 @@ async function addNormalizer(normalizerData = null, isReadOnly = false) {
 }
 
 // Generate HTML for normalizer parameters based on operation
-function generateNormalizerParamsHTML(operation, params = {}, isReadOnly = false) {
+function generateNormalizerParamsHTML(operation, params = {}, isReadOnly = false, scope = 'get') {
   if (!normalizerDefinitions[operation]) {
     return '<p class="text-gray-500 text-xs">Unknown operation</p>';
   }
@@ -704,19 +704,48 @@ function generateNormalizerParamsHTML(operation, params = {}, isReadOnly = false
   
   for (const [paramName, paramDef] of Object.entries(inputs)) {
     const value = params[paramName] !== undefined ? params[paramName] : (paramDef.default || '');
-    
-    html += `
-      <div>
-        <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
-        <input type="${paramDef.type === 'float' ? 'number' : 'text'}" 
-               class="input input-bordered input-sm w-full normalizer-param" 
-               data-param-name="${paramName}"
-               placeholder="${paramDef.default || ''}"
-               value="${value}"
-               ${paramDef.type === 'float' ? 'step="any"' : ''}
-               ${isReadOnly ? 'readonly' : ''}>
-      </div>
-    `;
+
+    if (paramDef.type === 'field_selector') {
+      const availableFields = getAvailableFieldsForScope(scope);
+      html += `
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+          <select class="select select-bordered select-sm w-full normalizer-param"
+                  data-param-name="${paramName}" data-field-selector="true"
+                  ${isReadOnly ? 'disabled' : ''}>
+            <option value="">Select field...</option>
+            ${availableFields.map(f => `<option value="${f}" ${f === value ? 'selected' : ''}>${f}</option>`).join('')}
+          </select>
+        </div>
+      `;
+    } else if (paramDef.type === 'key_value_pairs') {
+      const existingMapping = (typeof value === 'object' && value !== null) ? value : {};
+      const rowsHtml = Object.entries(existingMapping).map(([k, v]) =>
+        _kvPairRowHtml(k, v, isReadOnly)
+      ).join('');
+      html += `
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+          <div class="normalizer-kv-pairs space-y-1" data-param-name="${paramName}">
+            ${rowsHtml}
+          </div>
+          ${isReadOnly ? '' : `<button type="button" class="btn btn-ghost btn-xs text-blue-400 mt-1" onclick="addKvPairRow(this)">+ Add mapping</button>`}
+        </div>
+      `;
+    } else {
+      html += `
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+          <input type="${paramDef.type === 'float' ? 'number' : 'text'}" 
+                 class="input input-bordered input-sm w-full normalizer-param" 
+                 data-param-name="${paramName}"
+                 placeholder="${paramDef.default || ''}"
+                 value="${value}"
+                 ${paramDef.type === 'float' ? 'step="any"' : ''}
+                 ${isReadOnly ? 'readonly' : ''}>
+        </div>
+      `;
+    }
   }
   
   html += '</div>';
@@ -841,6 +870,20 @@ function onNormalizerOperationChange(selectElement, existingData = null, isReadO
                 `<option value="${field}" ${field === value ? 'selected' : ''}>${field}</option>`
               ).join('')}
             </select>
+          </div>
+        `;
+      } else if (paramDef.type === 'key_value_pairs') {
+        const existingMapping = (typeof value === 'object' && value !== null) ? value : {};
+        const rowsHtml = Object.entries(existingMapping).map(([k, v]) =>
+          _kvPairRowHtml(k, v, isReadOnly)
+        ).join('');
+        html += `
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">${paramDef.description || paramName}</label>
+            <div class="normalizer-kv-pairs space-y-1" data-param-name="${paramName}">
+              ${rowsHtml}
+            </div>
+            ${isReadOnly ? '' : `<button type="button" class="btn btn-ghost btn-xs text-blue-400 mt-1" onclick="addKvPairRow(this)">+ Add mapping</button>`}
           </div>
         `;
       } else {
@@ -977,6 +1020,27 @@ function clearNormalizersContainer() {
 }
 
 // Serialize normalizers
+function _kvPairRowHtml(key = '', value = '', isReadOnly = false) {
+  return `
+    <div class="kv-pair-row flex items-center gap-1">
+      <input type="text" class="input input-bordered input-xs flex-1 kv-pair-key font-mono"
+             placeholder="key" value="${escapeHtml(String(key))}" ${isReadOnly ? 'readonly' : ''}>
+      <span class="text-gray-500 text-xs px-0.5">-></span>
+      <input type="text" class="input input-bordered input-xs flex-1 kv-pair-value font-mono"
+             placeholder="value" value="${escapeHtml(String(value))}" ${isReadOnly ? 'readonly' : ''}>
+      ${isReadOnly ? '' : `<button type="button" class="btn btn-ghost btn-xs text-red-400 px-1" onclick="this.closest('.kv-pair-row').remove()">✕</button>`}
+    </div>
+  `;
+}
+
+function addKvPairRow(btn) {
+  const container = btn.previousElementSibling;
+  const row = document.createElement('div');
+  row.innerHTML = _kvPairRowHtml();
+  container.appendChild(row.firstElementChild);
+  container.querySelector('.kv-pair-row:last-child .kv-pair-key')?.focus();
+}
+
 function serializeNormalizers() {
   const container = document.getElementById('normalizersContainer');
   const normalizers = container.querySelectorAll('.normalizer-item');
@@ -1019,6 +1083,20 @@ function serializeNormalizers() {
           value = parseFloat(value);
         }
         params[paramName] = value;
+      }
+    });
+
+    // Collect key_value_pairs params
+    normalizerItem.querySelectorAll('.normalizer-kv-pairs').forEach(container => {
+      const paramName = container.dataset.paramName;
+      const mapping = {};
+      container.querySelectorAll('.kv-pair-row').forEach(row => {
+        const k = row.querySelector('.kv-pair-key')?.value.trim();
+        const v = row.querySelector('.kv-pair-value')?.value.trim();
+        if (k) mapping[k] = v || '';
+      });
+      if (Object.keys(mapping).length > 0) {
+        params[paramName] = mapping;
       }
     });
     

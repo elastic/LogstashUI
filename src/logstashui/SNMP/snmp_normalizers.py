@@ -56,6 +56,14 @@ def _apply_normalizers(normalizers):
                             filters.extend(filter_components)
                         else:
                             filters.append(filter_components)
+            elif operation == 'translate':
+                if scope in ('get', 'table'):
+                    filter_components = _generate_translate_filter(normalizer_list)
+                    if filter_components:
+                        if isinstance(filter_components, list):
+                            filters.extend(filter_components)
+                        else:
+                            filters.append(filter_components)
     
     return filters
 
@@ -261,3 +269,55 @@ def _generate_ratio_get_filter(normalizers):
             }
         }
     ]
+
+
+def _generate_translate_filter(normalizers):
+    """
+    Generate Logstash translate plugin filters for value-mapping operations.
+    Each normalizer produces its own translate filter that maps raw SNMP values
+    (typically integers) to human-readable strings in-place.
+
+    Args:
+        normalizers: List of translate normalizers
+
+    Returns:
+        List of Logstash filter component dicts, or None
+    """
+    if not normalizers:
+        return None
+
+    components = []
+
+    for normalizer in normalizers:
+        field = normalizer.get('target', {}).get('field')
+        mapping = normalizer.get('params', {}).get('mapping', {})
+
+        if not field or not mapping:
+            continue
+
+        field_path = ''.join(f'[{part}]' for part in field.split('.'))
+
+        pairs = ', '.join(f'{k}→{v}' for k, v in mapping.items())
+        comment_text = f"Normalizer: Translate\nMaps {field}: {pairs}"
+
+        components.append({
+            "id": f"normalizer_translate_{field.replace('.', '_')}_comment",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": comment_text
+            }
+        })
+        components.append({
+            "id": f"normalizer_translate_{field.replace('.', '_')}",
+            "type": "filter",
+            "plugin": "translate",
+            "config": {
+                "source": field_path,
+                "destination": field_path,
+                "dictionary": mapping,
+                "override": True
+            }
+        })
+
+    return components if components else None

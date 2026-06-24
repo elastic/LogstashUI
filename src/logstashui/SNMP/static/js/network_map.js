@@ -928,52 +928,54 @@ function _renderEdgeDetailBody(d, data) {
             return `<p class="text-xs text-gray-500 italic mt-1">No interface data found in Elasticsearch</p>`;
         }
 
-        const adminStatus = parseInt(iface.status?.admin ?? iface.ifAdminStatus);
-        const operStatus  = parseInt(iface.status?.oper  ?? iface.ifOperStatus);
-        const upColor     = (adminStatus === 1 && operStatus === 1) ? 'text-green-400' : 'text-gray-400';
-        const adminTxt    = adminStatus === 1 ? '<span class="text-green-400">Up</span>'
-                          : adminStatus === 2 ? '<span class="text-gray-400">Down</span>'
-                          :                    '<span class="text-yellow-400">Testing</span>';
-        const operTxt     = operStatus  === 1 ? '<span class="text-green-400">Up</span>'
-                          : operStatus  === 2 ? '<span class="text-gray-400">Down</span>'
-                          :                    `<span class="text-yellow-400">Other (${operStatus})</span>`;
+        const adminStatus = iface.admin_status;
+        const operStatus  = iface.oper_status;
+        const upColor     = (adminStatus === 'UP' && operStatus === 'UP') ? 'text-green-400' : 'text-gray-400';
+        const adminTxt    = adminStatus === 'UP'   ? '<span class="text-green-400">Up</span>'
+                          : adminStatus === 'DOWN' ? '<span class="text-gray-400">Down</span>'
+                          :                         '<span class="text-yellow-400">Testing</span>';
+        const operTxt     = operStatus === 'UP'               ? '<span class="text-green-400">Up</span>'
+                          : operStatus === 'DOWN'             ? '<span class="text-gray-400">Down</span>'
+                          : operStatus === 'LOWER_LAYER_DOWN' ? '<span class="text-orange-400">Lower Layer Down</span>'
+                          : operStatus === 'DORMANT'          ? '<span class="text-yellow-400">Dormant</span>'
+                          : operStatus === 'NOT_PRESENT'      ? '<span class="text-gray-500">Not Present</span>'
+                          :                                     `<span class="text-yellow-400">${escapeHtml(operStatus ?? 'Unknown')}</span>`;
 
-        const speedMbps = iface.speed_high_mbps ?? iface.ifHighSpeed
-                        ?? (iface.speed ? Math.round(iface.speed / 1e6) : null);
+        const speedMbps = iface.speed_high_mbps ?? (iface.speed ? Math.round(iface.speed / 1e6) : null);
         const speedTxt  = speedMbps == null ? null
                         : speedMbps >= 1000 ? `${speedMbps / 1000}G`
                         : speedMbps > 0     ? `${speedMbps}M`
                         : null;
 
-        // Byte counters — correct path per schema (traffic.in.bytes / traffic.out.bytes)
-        const inBytes   = iface.traffic?.in?.bytes  ?? iface.ifHCInOctets  ?? null;
-        const outBytes  = iface.traffic?.out?.bytes ?? iface.ifHCOutOctets ?? null;
+        // Byte counters
+        const inBytes   = iface.in_octets  ?? null;
+        const outBytes  = iface.out_octets ?? null;
 
-        // Error / discard counters — correct path: traffic.in.errors, not errors.in
-        const inErrors   = iface.traffic?.in?.errors   ?? iface.ifInErrors    ?? null;
-        const outErrors  = iface.traffic?.out?.errors  ?? iface.ifOutErrors   ?? null;
-        const inDisc     = iface.traffic?.in?.discards  ?? iface.ifInDiscards  ?? null;
-        const outDisc    = iface.traffic?.out?.discards ?? iface.ifOutDiscards ?? null;
+        // Error / discard counters
+        const inErrors   = iface.in_errors   ?? null;
+        const outErrors  = iface.out_errors  ?? null;
+        const inDisc     = iface.in_discards  ?? null;
+        const outDisc    = iface.out_discards ?? null;
 
         // Packet counters
-        const inUcast   = iface.traffic?.in?.unicast_packets   ?? null;
-        const outUcast  = iface.traffic?.out?.unicast_packets  ?? null;
-        const inMcast   = iface.traffic?.in?.multicast_packets ?? null;
-        const outMcast  = iface.traffic?.out?.multicast_packets ?? null;
-        const inBcast   = iface.traffic?.in?.broadcast_packets ?? null;
-        const outBcast  = iface.traffic?.out?.broadcast_packets ?? null;
+        const inUcast   = iface.in_unicast_pkts    ?? null;
+        const outUcast  = iface.out_unicast_pkts   ?? null;
+        const inMcast   = iface.in_multicast_pkts  ?? null;
+        const outMcast  = iface.out_multicast_pkts ?? null;
+        const inBcast   = iface.in_broadcast_pkts  ?? null;
+        const outBcast  = iface.out_broadcast_pkts ?? null;
 
-        const alias      = iface.alias   ?? iface.ifAlias   ?? '';
+        const alias      = iface.alias    ?? '';
         const altName    = iface.alt_name ?? '';
-        const desc       = iface.description ?? iface.ifDescr ?? '';
-        const mtu        = iface.mtu     ?? iface.ifMtu     ?? null;
-        const mac        = iface.mac     ?? iface.ifPhysAddress ?? null;
+        const desc       = iface.description ?? '';
+        const mtu        = iface.mtu     ?? null;
+        const mac        = iface.mac     ?? null;
         const vlanId     = iface.vlan_id ?? null;
-        const ifIndex    = iface.index   ?? iface.ifIndex   ?? null;
+        const ifIndex    = iface.index   ?? null;
         const lastChange = iface.last_change ?? null;  // sysUpTime hundredths
 
         // SNMP ifType → human-readable (common values only)
-        const ifTypeNum = iface.type ?? iface.ifType ?? null;
+        const ifTypeNum = iface.type ?? null;
         const IF_TYPES  = {6:'ethernetCsmacd', 24:'softwareLoopback', 53:'propVirtual',
                            131:'tunnel', 161:'ieee8023adLag', 166:'mpls'};
         const ifTypeTxt = ifTypeNum != null
