@@ -30,6 +30,18 @@
   },
   "normalizers": [
     {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
       "operation": "multiply",
       "target": {
         "scope": "table",

@@ -495,6 +495,7 @@ def _generate_discovery_filters(oid_mappings, network):
     get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
 
     filter_components = [
+        _generate_snmp_error_cleanup_filter(),
         {
             "id": "filter_mutate_discovery_1",
             "type": "filter",
@@ -681,6 +682,7 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
                     table_renames[from_field] = to_field
 
     filter_components = [
+        _generate_snmp_error_cleanup_filter(),
         {
             "id": "condition-1782151148927",
             "type": "filter",
@@ -737,18 +739,24 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     ]
 
     # Apply normalizers from profiles
+    average_normalizers = []
     if normalizers:
         get_normalizers = [n for n in normalizers if n.get('target', {}).get('scope') == 'get']
         normalizer_filters = _apply_normalizers(get_normalizers)
         filter_components.extend(normalizer_filters)
+        average_normalizers = [n for n in normalizers if n.get('operation') == 'average']
 
-    # Generate table-split filters
-    filter_components.extend(_generate_table_split_filters(oid_mappings))
+    # Generate table-split filters, injecting average normalizer logic where applicable.
+    filter_components.extend(_generate_table_split_filters(oid_mappings, average_normalizers))
 
     # Apply table-scope normalizers AFTER table splitters so they run on the
     # already-split row events (which have columns as top-level fields).
+    # Average normalizers are handled inside the split block and are excluded here.
     if normalizers:
-        table_normalizers = [n for n in normalizers if n.get('target', {}).get('scope') == 'table']
+        table_normalizers = [
+            n for n in normalizers
+            if n.get('target', {}).get('scope') == 'table' and n.get('operation') != 'average'
+        ]
         table_normalizer_filters = _apply_normalizers(table_normalizers)
         filter_components.extend(table_normalizer_filters)
 
@@ -1075,7 +1083,7 @@ def _ruby_row_rename_statements(columns):
     return '\n'.join(statements)
 
 
-def _generate_table_split_filters(oid_mappings):
+def _generate_table_split_filters(oid_mappings, average_normalizers=None):
     """
     Generate Ruby filter components that split SNMP table data into per-row events.
 
@@ -1085,14 +1093,22 @@ def _generate_table_split_filters(oid_mappings):
     creates a new LogStash::Event per row carrying the original event metadata,
     and removes the raw table field from the original event.
 
+    If average_normalizers are provided, their accumulation logic is injected
+    directly into each table's Ruby block. Accumulators are declared before the
+    loop, values are collected inside the loop (after column rename), and the
+    computed average is written to the original event (the metrics doc) after the
+    loop and after the raw table array is removed.
+
     Args:
         oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID
                       key-value pairs (only 'table' is used here)
+        average_normalizers: Optional list of average normalizer configs from profiles
 
     Returns:
         List of ruby filter component dicts, one per table that has columns defined
     """
     special_filters = []
+    average_normalizers = average_normalizers or []
 
     # Generate dynamic table splitters for all tables in oid_mappings
     for table_name, table_data in oid_mappings.get('table', {}).items():
@@ -1116,6 +1132,27 @@ def _generate_table_split_filters(oid_mappings):
                 # when the table top-level key matches a standard field (e.g. "network").
                 table_set_path = _format_field_name(table_name)
 
+                # Collect average normalizers that target columns in this table.
+                # Table names may be dotted (e.g. "component.cpu"), so match by checking
+                # that the target field starts with the full table name followed by a dot.
+                table_averages = [
+                    n for n in average_normalizers
+                    if n.get('target', {}).get('field', '').startswith(table_name + '.')
+                ]
+
+                # Build pre-loop accumulator declarations for each average normalizer.
+                avg_pre_loop = _ruby_avg_pre_loop(table_averages)
+
+                # Build in-loop accumulation statements (run after rename_statements).
+                # Pass table_name so the column path is stripped correctly for dotted
+                # table names (e.g. "component.cpu") regardless of whether the
+                # normalizer stores target.table.
+                avg_in_loop = _ruby_avg_in_loop(table_averages, table_name)
+
+                # Build post-loop event.set calls (written after event.remove so the
+                # raw table array is gone and the namespace is free for scalar fields).
+                avg_post_loop = _ruby_avg_post_loop(table_averages)
+
                 # Build the Ruby code for this table
                 ruby_code = (
                     f"rows = event.get(\"{table_field_path}\")\n"
@@ -1130,10 +1167,12 @@ def _generate_table_split_filters(oid_mappings):
                     f"  observer_os_full = event.get(\"[observer][os][full]\")\n"
                     f"  network_name = event.get(\"[network][name]\")\n"
                     f"  timestamp = event.get(\"@timestamp\")\n"
-                    f"  rows.each do |row|\n"
+                    + (f"{avg_pre_loop}\n" if avg_pre_loop else "")
+                    + f"  rows.each do |row|\n"
                     f"    next unless row.is_a?(Hash)\n"
                     f"{rename_statements}\n"
-                    f"    new_event = LogStash::Event.new({{\n"
+                    + (f"{avg_in_loop}\n" if avg_in_loop else "")
+                    + f"    new_event = LogStash::Event.new({{\n"
                     f"      \"@timestamp\" => timestamp,\n"
                     f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname, \"type\" => host_type }},\n"
                     f"      \"observer\" => {{ \"vendor\" => observer_vendor, \"os\" => {{ \"full\" => observer_os_full }} }},\n"
@@ -1148,7 +1187,8 @@ def _generate_table_split_filters(oid_mappings):
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
                     f"  event.remove(\"{table_field_path}\")\n"
-                    f"  event.set(\"[event][category]\", \"metrics\")\n"
+                    + (f"{avg_post_loop}\n" if avg_post_loop else "")
+                    + f"  event.set(\"[event][category]\", \"metrics\")\n"
                     f"end"
                 )
 
@@ -1162,3 +1202,181 @@ def _generate_table_split_filters(oid_mappings):
                 })
 
     return special_filters
+
+
+def _ruby_avg_pre_loop(table_averages):
+    """
+    Generate Ruby variable declarations for average accumulators, placed before
+    the row iteration loop inside a table-split Ruby block.
+
+    Each average normalizer gets a unique sum and count variable derived from
+    a sanitized version of the output field name.
+
+    Args:
+        table_averages: List of average normalizer configs targeting this table
+
+    Returns:
+        Indented Ruby string, or empty string if no averages
+    """
+    if not table_averages:
+        return ""
+    lines = []
+    for normalizer in table_averages:
+        var = _avg_var_name(normalizer)
+        lines.append(f"  {var}_sum = 0.0")
+        lines.append(f"  {var}_count = 0")
+    return "\n".join(lines)
+
+
+def _ruby_avg_in_loop(table_averages, table_name):
+    """
+    Generate Ruby accumulation statements to be injected inside the row loop,
+    after rename_statements have run so column friendly names are available.
+
+    The column path within the row hash is derived by stripping the full
+    table_name prefix from the target field. table_name is passed explicitly
+    from _generate_table_split_filters so dotted names (e.g. "component.cpu")
+    are handled correctly regardless of whether the normalizer stores target.table.
+
+    e.g. table_name="component.cpu", field="component.cpu.load_pct" → row["load_pct"]
+    e.g. table_name="interface",     field="interface.in_octets"     → row["in_octets"]
+
+    Args:
+        table_averages: List of average normalizer configs targeting this table
+        table_name: The table name string from oid_mappings (may contain dots)
+
+    Returns:
+        Indented Ruby string, or empty string if no averages
+    """
+    if not table_averages:
+        return ""
+    lines = []
+    prefix = table_name + '.'
+    for normalizer in table_averages:
+        target_field = normalizer.get('target', {}).get('field', '')
+        col_path = target_field[len(prefix):] if target_field.startswith(prefix) else target_field
+        col_parts = col_path.split('.') if col_path else [target_field]
+        row_accessor = ''.join(f'["{p}"]' for p in col_parts)
+        var = _avg_var_name(normalizer)
+        lines.append(f"    _avg_v = row{row_accessor}")
+        lines.append(f"    if _avg_v.is_a?(Numeric)")
+        lines.append(f"      {var}_sum += _avg_v.to_f")
+        lines.append(f"      {var}_count += 1")
+        lines.append(f"    end")
+    return "\n".join(lines)
+
+
+def _ruby_avg_post_loop(table_averages):
+    """
+    Generate Ruby event.set calls that write computed averages to the original
+    event (the metrics doc). These run after event.remove() clears the raw table
+    array, so the namespace is free for scalar fields.
+
+    Args:
+        table_averages: List of average normalizer configs targeting this table
+
+    Returns:
+        Indented Ruby string, or empty string if no averages
+    """
+    if not table_averages:
+        return ""
+    lines = []
+    for normalizer in table_averages:
+        params = normalizer.get('params', {})
+        output_field = params.get('output_field', '').strip()
+        if not output_field:
+            continue
+        output_path = _format_field_name(output_field)
+        var = _avg_var_name(normalizer)
+        multiply_value = params.get('multiply_value')
+        if multiply_value is not None and float(multiply_value) != 1.0:
+            lines.append(f"  event.set(\"{output_path}\", ({var}_sum / {var}_count) * {multiply_value}) if {var}_count > 0")
+        else:
+            lines.append(f"  event.set(\"{output_path}\", {var}_sum / {var}_count) if {var}_count > 0")
+    return "\n".join(lines)
+
+
+def _avg_var_name(normalizer):
+    """
+    Derive a safe Ruby variable name prefix from the normalizer's output field.
+
+    e.g. "interface.avg_in_octets" → "avg_interface_avg_in_octets"
+
+    Args:
+        normalizer: Average normalizer config dict
+
+    Returns:
+        String safe for use as a Ruby local variable prefix
+    """
+    output_field = normalizer.get('params', {}).get('output_field', '').strip()
+    if output_field:
+        sanitized = output_field.replace('.', '_').replace('-', '_')
+        return f"avg_{sanitized}"
+    # Fallback using target field if output_field is somehow missing
+    target_field = normalizer.get('target', {}).get('field', 'unknown').replace('.', '_')
+    return f"avg_{target_field}"
+
+
+def _generate_snmp_error_cleanup_filter():
+    """
+    Generate a Ruby filter component that strips SNMP error response strings from
+    all event fields before OID renaming or normalization.
+
+    The SNMP input plugin emits string values like "error: no such instance currently
+    exists at this OID" when a device does not support a polled OID. If these strings
+    reach Elasticsearch they cause document_parsing_exception errors because the mapped
+    field type (e.g. long, float) does not accept strings.
+
+    The helper method is defined in 'init' (runs once at pipeline start) to avoid Ruby
+    method-redefinition warnings that would occur if 'def' appeared in the per-event
+    'code' block.
+
+    The event is tagged with '_snmp_oid_error' when at least one field was removed so
+    operators can identify partially-incomplete poll responses.
+
+    Returns:
+        Logstash filter component dict
+    """
+    ruby_init = (
+        "def snmp_remove_errors(obj)\n"
+        "  found = false\n"
+        "  case obj\n"
+        "  when Hash\n"
+        "    obj.keys.each do |k|\n"
+        "      v = obj[k]\n"
+        "      if v.is_a?(String) && v =~ /\\Aerror: (no such instance|no such object|end of mib view)/i\n"
+        "        obj.delete(k)\n"
+        "        found = true\n"
+        "      elsif v.is_a?(Hash) || v.is_a?(Array)\n"
+        "        found = true if snmp_remove_errors(v)\n"
+        "      end\n"
+        "    end\n"
+        "  when Array\n"
+        "    obj.each { |item| found = true if snmp_remove_errors(item) }\n"
+        "  end\n"
+        "  found\n"
+        "end"
+    )
+    ruby_code = (
+        "had_errors = false\n"
+        "event.to_hash.each do |k, v|\n"
+        "  next if k.start_with?(\"@\")\n"
+        "  if v.is_a?(String) && v =~ /\\Aerror: (no such instance|no such object|end of mib view)/i\n"
+        "    event.remove(k)\n"
+        "    had_errors = true\n"
+        "  elsif snmp_remove_errors(v)\n"
+        "    event.set(k, v)\n"
+        "    had_errors = true\n"
+        "  end\n"
+        "end\n"
+        "event.tag(\"_snmp_oid_error\") if had_errors"
+    )
+    return {
+        "id": "snmp_error_cleanup",
+        "type": "filter",
+        "plugin": "ruby",
+        "config": {
+            "init": ruby_init,
+            "code": ruby_code
+        }
+    }
