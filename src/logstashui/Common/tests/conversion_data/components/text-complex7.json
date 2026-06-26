@@ -17,7 +17,8 @@
                     "beats_input",
                     "app_log"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_udp_1",
@@ -37,7 +38,8 @@
                     "udp_input",
                     "unstructured"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_jdbc_2",
@@ -61,7 +63,8 @@
                     "jdbc_input",
                     "audit"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -77,7 +80,8 @@
                 "add_field": {
                     "severity": "INFO"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_4",
@@ -108,7 +112,8 @@
                                         "remove_tag": [
                                             "_jsonparsefailure"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -134,7 +139,8 @@
                                         "copy": {
                                             "log_level": "severity"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -161,7 +167,8 @@
                                             "continent_code",
                                             "location"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_translate_11",
@@ -174,7 +181,8 @@
                                         "dictionary_path": "/etc/logstash/dictionaries/service_codes.csv",
                                         "fallback": "Unknown Service",
                                         "refresh_interval": "300"
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -191,7 +199,8 @@
                                 "message",
                                 "agent"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -210,7 +219,8 @@
                                     "on_failure": [
                                         "_netflowparsefailure"
                                     ]
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_if_14",
@@ -238,7 +248,8 @@
                                                 "replace": {
                                                     "message": "Truncated unparsed flow data."
                                                 }
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [],
@@ -259,7 +270,8 @@
                                                     "timeout_tags": [
                                                         "_aggregate_timeout"
                                                     ]
-                                                }
+                                                },
+                                                "comments": []
                                             }
                                         ]
                                     }
@@ -291,7 +303,8 @@
                                                 "remove_field": [
                                                     "change_timestamp"
                                                 ]
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_if_19",
@@ -307,7 +320,8 @@
                                                         "config": {
                                                             "id": "filter_ruby_1",
                                                             "code": "event.set('user_hash', Digest::MD5.hexdigest(event.get('user_name')))"
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     },
                                                     {
                                                         "id": "filter_mutate_21",
@@ -318,7 +332,8 @@
                                                             "remove_field": [
                                                                 "user_name"
                                                             ]
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     }
                                                 ],
                                                 "else_ifs": [],
@@ -352,7 +367,8 @@
                             "add_field": {
                                 "log_status": "FAILED_TO_PARSE"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -367,7 +383,8 @@
                                 "add_field": {
                                     "log_status": "PROCESSED"
                                 }
-                            }
+                            },
+                            "comments": []
                         }
                     ]
                 }
@@ -386,7 +403,8 @@
                         "plugin": "drop",
                         "config": {
                             "id": "filter_drop_1"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -417,7 +435,8 @@
                             "ssl": "true",
                             "cacert": "/etc/logstash/certs/ca.crt",
                             "action": "index"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -440,7 +459,8 @@
                                     "cacert": "/etc/logstash/certs/ca.crt",
                                     "workers": "4",
                                     "ilm_enabled": "false"
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -470,7 +490,8 @@
                             "add_tag": [
                                 "dlq_routed"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -499,7 +520,8 @@
                                 }
                             },
                             "socket_timeout": "5"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -524,7 +546,8 @@
                                     "metadata": "true"
                                 }
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],

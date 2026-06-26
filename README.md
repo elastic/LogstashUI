@@ -143,13 +143,25 @@ start_logstashui.bat --update
 ```
 
 ## Limitations
-- Currently, the translation engine cannot process comments inside plugin blocks. For example:
+- Comments inside plugin blocks (inline and standalone) are preserved through parsing and serialization, but their exact position relative to config keys is not guaranteed. All comments are grouped at the top of the plugin block in the output.
 
 ```
 input {
-    udp { # Translation engine doesn't like this
-		port => 5119 # This is a comment that we can't convert
-	}
+    udp { # inline comments are moved
+        port => 5119 # inline comments are moved
+    }
+}
+```
+
+Becomes:
+
+```
+input {
+    udp {
+        # inline comments are moved
+        # inline comments are moved
+        port => 5119
+    }
 }
 ```
 

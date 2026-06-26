@@ -14,7 +14,8 @@
                 "connect_timeout_seconds": "120",
                 "request_timeout_seconds": "600",
                 "socket_timeout_seconds": "600"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -26,7 +27,8 @@
                 "add_field": {
                     "test": "test"
                 }
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -39,7 +41,8 @@
                     "test"
                 ],
                 "path": "/home/ubuntu/test.csv"
-            }
+            },
+            "comments": []
         }
     ]
 }

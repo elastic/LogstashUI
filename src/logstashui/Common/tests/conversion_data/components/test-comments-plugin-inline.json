@@ -1,0 +1,111 @@
+{
+    "input": [
+        {
+            "id": "input_udp_0",
+            "type": "input",
+            "plugin": "udp",
+            "config": {
+                "port": 5140,
+                "buffer_size": 65536,
+                "tags": [
+                    "udp",
+                    "syslog"
+                ]
+            },
+            "comments": [
+                "inline comment on plugin opener",
+                "inline comment on a scalar value",
+                "another scalar inline comment",
+                "inline comment after an array"
+            ]
+        },
+        {
+            "id": "input_comment_1",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "inline comment on plugin closer \u2014 becomes section-level comment"
+            }
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_mutate_2",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "first": "value1",
+                    "second": "value2"
+                },
+                "remove_field": [
+                    "unwanted",
+                    "junk"
+                ],
+                "rename": {
+                    "old_name": "new_name"
+                }
+            },
+            "comments": [
+                "opener comment",
+                "inline comment on hash opener",
+                "inline comment on hash pair",
+                "another hash pair comment",
+                "inline comment on hash closer",
+                "inline on array",
+                "another hash opener with inline",
+                "pair comment",
+                "hash closer comment"
+            ]
+        },
+        {
+            "id": "filter_comment_3",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "plugin closer \u2014 section-level"
+            }
+        },
+        {
+            "id": "filter_drop_4",
+            "type": "filter",
+            "plugin": "drop",
+            "config": {},
+            "comments": [
+                "opener comment on empty plugin"
+            ]
+        },
+        {
+            "id": "filter_comment_5",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "closer comment on empty plugin"
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_stdout_6",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            },
+            "comments": [
+                "output plugin with inline",
+                "inline on codec line"
+            ]
+        },
+        {
+            "id": "output_comment_7",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "closer"
+            }
+        }
+    ]
+}

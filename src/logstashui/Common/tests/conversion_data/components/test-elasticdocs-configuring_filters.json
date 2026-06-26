@@ -4,7 +4,8 @@
             "id": "input_stdin_0",
             "type": "input",
             "plugin": "stdin",
-            "config": {}
+            "config": {},
+            "comments": []
         }
     ],
     "filter": [
@@ -16,7 +17,8 @@
                 "match": {
                     "message": "%{COMBINEDAPACHELOG}"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_date_2",
@@ -27,7 +29,8 @@
                     "timestamp",
                     "dd/MMM/yyyy:HH:mm:ss Z"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -39,7 +42,8 @@
                 "hosts": [
                     "localhost:9200"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_stdout_4",
@@ -49,7 +53,8 @@
                 "codec": {
                     "rubydebug": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

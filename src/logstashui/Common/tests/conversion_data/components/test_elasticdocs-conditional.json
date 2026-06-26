@@ -6,7 +6,8 @@
             "plugin": "file",
             "config": {
                 "path": "/tmp/*_log"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -25,7 +26,8 @@
                             "replace": {
                                 "type": "apache_access"
                             }
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_grok_3",
@@ -35,7 +37,8 @@
                             "match": {
                                 "message": "%{COMBINEDAPACHELOG}"
                             }
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_date_4",
@@ -46,7 +49,8 @@
                                 "timestamp",
                                 "dd/MMM/yyyy:HH:mm:ss Z"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -61,7 +65,8 @@
                                     "replace": {
                                         "type": "apache_error"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -76,7 +81,8 @@
                                 "replace": {
                                     "type": "random_logs"
                                 }
-                            }
+                            },
+                            "comments": []
                         }
                     ]
                 }
@@ -92,7 +98,8 @@
                 "hosts": [
                     "localhost:9200"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_stdout_8",
@@ -102,7 +109,8 @@
                 "codec": {
                     "rubydebug": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

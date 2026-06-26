@@ -7,7 +7,8 @@
             "config": {
                 "path": "/tmp/access_log",
                 "start_position": "beginning"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -26,7 +27,8 @@
                             "replace": {
                                 "type": "apache_access"
                             }
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_grok_3",
@@ -36,7 +38,8 @@
                             "match": {
                                 "message": "%{COMBINEDAPACHELOG}"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -52,7 +55,8 @@
                     "timestamp",
                     "dd/MMM/yyyy:HH:mm:ss Z"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -64,7 +68,8 @@
                 "hosts": [
                     "localhost:9200"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_stdout_6",
@@ -74,7 +79,8 @@
                 "codec": {
                     "rubydebug": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

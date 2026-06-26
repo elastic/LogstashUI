@@ -7,7 +7,8 @@
             "config": {
                 "port": 5044,
                 "host": "0.0.0.0"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -36,7 +37,8 @@
                                             ]
                                         },
                                         "remove_field": "message"
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_mutate_4",
@@ -46,7 +48,8 @@
                                         "add_field": {
                                             "read_timestamp": "%{@timestamp}"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_date_5",
@@ -58,7 +61,8 @@
                                             "dd/MMM/YYYY:H:m:s Z"
                                         ],
                                         "remove_field": "[nginx][access][time]"
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_useragent_6",
@@ -68,7 +72,8 @@
                                         "source": "[nginx][access][agent]",
                                         "target": "[nginx][access][user_agent]",
                                         "remove_field": "[nginx][access][agent]"
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_geoip_7",
@@ -77,7 +82,8 @@
                                     "config": {
                                         "source": "[nginx][access][remote_ip]",
                                         "target": "[nginx][access][geoip]"
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [
@@ -95,7 +101,8 @@
                                                     ]
                                                 },
                                                 "remove_field": "message"
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_mutate_9",
@@ -105,7 +112,8 @@
                                                 "rename": {
                                                     "@timestamp": "read_timestamp"
                                                 }
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_date_10",
@@ -117,7 +125,8 @@
                                                     "YYYY/MM/dd H:m:s"
                                                 ],
                                                 "remove_field": "[nginx][error][time]"
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ]
                                 }
@@ -140,7 +149,8 @@
                 "hosts": "localhost",
                 "manage_template": "false",
                 "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
-            }
+            },
+            "comments": []
         }
     ]
 }

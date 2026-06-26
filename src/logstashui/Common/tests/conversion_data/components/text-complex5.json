@@ -10,7 +10,8 @@
                 "lines": [
                     "path=\"C:\\Program Files\\App\\\" msg=\"quote:\" and backslash:\\\\\""
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -29,7 +30,8 @@
             "config": {
                 "id": "ruby_edgecase_3",
                 "code": "\n      # Double quotes inside single-quoted LSCL string\n      event.set(\"[edge][note]\", \"He said: \"hello\"\")\n      # Single quote inside Ruby string\n      event.set(\"[edge][apostrophe]\", \"it's fine\")\n      # Trailing backslash in a field value (nasty for serializers)\n      event.set(\"[edge][trail]\", \"C:\temp\")\n    "
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_3",
@@ -48,7 +50,8 @@
                 "source": "message",
                 "value_split": "=",
                 "field_split_pattern": "\\s+"
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_5",
@@ -69,7 +72,8 @@
                     "\\\\",
                     "/"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -83,7 +87,8 @@
                         "metadata": "true"
                     }
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

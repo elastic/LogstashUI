@@ -24,7 +24,8 @@
                 ],
                 "oauth_token": "${TWITTER_API_OAUTH_TOKEN}",
                 "oauth_token_secret": "${TWITTER_API_OAUTH_TOKEN_SECRET}"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -36,7 +37,8 @@
                 "match": {
                     "message": "%{WORD:is_rt}"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_3",
@@ -51,7 +53,8 @@
                         "plugin": "drop",
                         "config": {
                             "id": "drop_all_RTs"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -68,7 +71,8 @@
                 "codec": {
                     "dots": {}
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_elasticsearch_6",
@@ -78,7 +82,8 @@
                 "user": "elastic",
                 "password": "changeme",
                 "index": "tweets"
-            }
+            },
+            "comments": []
         }
     ]
 }
