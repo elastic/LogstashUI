@@ -14,7 +14,12 @@ class Network(models.Model):
     """
     SNMP Network model for defining networks to monitor
     """
-    
+
+    DEPLOYMENT_MODE_CHOICES = [
+        ('CENTRALIZED', 'Centralized Pipeline Management'),
+        ('AGENT', 'LogstashAgent'),
+    ]
+
     name = models.CharField(
         max_length=255,
         unique=True,
@@ -25,14 +30,40 @@ class Network(models.Model):
         max_length=50,
         help_text="Network in CIDR notation (e.g., 192.168.1.0/24)"
     )
-    
+
+    deployment_mode = models.CharField(
+        max_length=20,
+        choices=DEPLOYMENT_MODE_CHOICES,
+        default='CENTRALIZED',
+        help_text="Deployment mode for this network (Centralized Pipeline Management or LogstashAgent)"
+    )
+
+    credential_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('KEYSTORE', 'Manage Keystore Manually'),
+            ('PLAINTEXT', 'Plaintext Credentials'),
+        ],
+        default='KEYSTORE',
+        help_text="How credentials are supplied to pipelines (Centralized Pipeline Management mode only)"
+    )
+
     connection = models.ForeignKey(
         Connection,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='snmp_networks',
-        help_text="Logstash connection that will monitor this network"
+        help_text="Elasticsearch connection for this network"
+    )
+
+    agent_connection = models.ForeignKey(
+        Connection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='agent_snmp_networks',
+        help_text="LogstashAgent connection for deployment (AGENT mode only)"
     )
     
     discovery_enabled = models.BooleanField(

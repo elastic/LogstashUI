@@ -106,7 +106,7 @@ def GetNetworks(request):
         import logging
         logger = logging.getLogger(__name__)
         
-        networks = Network.objects.select_related('connection').annotate(
+        networks = Network.objects.select_related('connection', 'agent_connection').annotate(
             device_count=Count('devices')
         ).all()
         networks_data = []
@@ -126,6 +126,10 @@ def GetNetworks(request):
                 'credential': network.credential_id,
                 'connection': network.connection_id,
                 'connection_name': network.connection.name if network.connection else None,
+                'deployment_mode': network.deployment_mode,
+                'credential_mode': network.credential_mode,
+                'agent_connection': network.agent_connection_id,
+                'agent_connection_name': network.agent_connection.name if network.agent_connection else None,
                 'device_count': network.device_count
             }
             logger.info(f"Network dict: {network_dict}")
@@ -405,6 +409,7 @@ def AddNetwork(request):
         name = request.POST.get('name')
         network_range = request.POST.get('network_range')
         connection_id = request.POST.get('connection')
+        agent_connection_id = request.POST.get('agent_connection')
         credential_id = request.POST.get('credential')
         discovery_credential_id = request.POST.get('discovery_credential')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
@@ -412,6 +417,8 @@ def AddNetwork(request):
         interval = int(request.POST.get('interval', 30))
         namespace = request.POST.get('namespace', 'default')
         namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
+        deployment_mode = request.POST.get('deployment_mode', 'CENTRALIZED')
+        credential_mode = request.POST.get('credential_mode', 'KEYSTORE')
 
         # Create network object
         network = Network(
@@ -421,12 +428,18 @@ def AddNetwork(request):
             traps_enabled=traps_enabled,
             interval=interval,
             namespace=namespace,
-            namespace_from_device_template=namespace_from_device_template
+            namespace_from_device_template=namespace_from_device_template,
+            deployment_mode=deployment_mode,
+            credential_mode=credential_mode,
         )
 
         # Set connection if provided
         if connection_id:
             network.connection_id = connection_id
+
+        # Set agent connection if provided (AGENT mode only)
+        if agent_connection_id:
+            network.agent_connection_id = agent_connection_id
 
         # Set discovery credential if provided
         if discovery_credential_id:
@@ -467,6 +480,8 @@ def UpdateNetwork(request, network_id):
         network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
+        network.deployment_mode = request.POST.get('deployment_mode', network.deployment_mode)
+        network.credential_mode = request.POST.get('credential_mode', network.credential_mode)
 
         # Update interval (convert to int)
         interval = request.POST.get('interval')
@@ -479,6 +494,13 @@ def UpdateNetwork(request, network_id):
             network.connection_id = connection_id
         else:
             network.connection = None
+
+        # Update agent connection
+        agent_connection_id = request.POST.get('agent_connection')
+        if agent_connection_id:
+            network.agent_connection_id = agent_connection_id
+        else:
+            network.agent_connection = None
 
         # Update discovery credential
         discovery_credential_id = request.POST.get('discovery_credential')
@@ -525,7 +547,10 @@ def GetNetwork(request, network_id):
             'network_range': network.network_range,
             'namespace': network.namespace,
             'namespace_from_device_template': network.namespace_from_device_template,
+            'deployment_mode': network.deployment_mode,
+            'credential_mode': network.credential_mode,
             'connection': network.connection_id if network.connection else None,
+            'agent_connection': network.agent_connection_id if network.agent_connection else None,
             'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,
             'credential': network.credential_id if network.credential else None,
             'discovery_enabled': network.discovery_enabled,

@@ -42,14 +42,38 @@
             <p class="text-gray-400 text-xs mt-1">Network in CIDR notation (e.g., 192.168.1.0/24)</p>
           </div>
 
-          <!-- Connection -->
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-300 mb-2">
-              Connection <span class="text-red-500">*</span>
-            </label>
-            <div class="flex gap-2">
-              <input type="hidden" id="networkConnection" name="connection">
-              <div id="networkConnectionDropdownWrapper" class="relative flex-1">
+          <!-- Shared hidden inputs (written by whichever dropdown is active) -->
+          <input type="hidden" id="networkConnection" name="connection">
+          <input type="hidden" id="networkAgentConnection" name="agent_connection">
+
+          <!-- Deployment Mode + Connection (unified dark card) -->
+          <div class="mb-4 bg-base-300 rounded-lg border border-base-content/10 p-4 flex flex-col gap-4">
+
+            <!-- Deployment Mode radios -->
+            <div>
+              <label class="block text-sm font-semibold text-gray-300 mb-2">
+                Deployment Mode <span class="text-red-500">*</span>
+              </label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="deployment_mode" value="CENTRALIZED" class="radio radio-primary radio-sm" checked
+                         onchange="toggleDeploymentMode(this.value)">
+                  <span class="text-xs text-gray-300">Centralized Pipeline Management</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="deployment_mode" value="AGENT" class="radio radio-primary radio-sm"
+                         onchange="toggleDeploymentMode(this.value)">
+                  <span class="text-xs text-gray-300">Logstash Agent</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Centralized Connection (default) -->
+            <div id="centralizedConnectionSection">
+              <label class="block text-sm font-medium text-gray-300 mb-2">
+                Connection <span class="text-red-500">*</span>
+              </label>
+              <div id="networkConnectionDropdownWrapper" class="relative">
                 <button type="button" id="networkConnectionDropdownTrigger"
                         onclick="toggleConnectionDropdown(event)"
                         class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
@@ -73,8 +97,109 @@
                   </div>
                 </div>
               </div>
+              <p class="text-gray-400 text-xs mt-1">Elasticsearch connection for centralized pipeline management</p>
+
+              <!-- Credential Mode (Centralized only) -->
+              <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Credential Mode <span class="text-red-500">*</span></label>
+                <div class="flex flex-col gap-2">
+
+                  <!-- Manage Keystore Manually -->
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="credential_mode" value="KEYSTORE" class="radio radio-primary radio-sm" checked>
+                    <span class="text-xs text-gray-300">Manage Keystore Manually</span>
+                    <span class="relative inline-block group cursor-help">
+                      <span class="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-base-content/20 text-base-content/60 font-bold leading-none">?</span>
+                      <div class="absolute hidden group-hover:block z-50 w-56 p-3 text-xs text-gray-300 bg-gray-800 border border-gray-600 rounded-lg shadow-xl bottom-6 left-1/2 -translate-x-1/2">
+                        LogstashAgent can't manage your keystore for you in this mode. We supply you with the necessary commands for adding credentials to your keystore. If you do not apply them, your pipelines will fail.
+                      </div>
+                    </span>
+                  </label>
+
+                  <!-- Plaintext Credentials -->
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="credential_mode" value="PLAINTEXT" class="radio radio-primary radio-sm">
+                    <span class="text-xs text-gray-300">Plaintext Credentials</span>
+                    <span class="relative inline-block group cursor-help">
+                      <span class="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-base-content/20 text-base-content/60 font-bold leading-none">?</span>
+                      <div class="absolute hidden group-hover:block z-50 w-56 p-3 text-xs text-gray-300 bg-gray-800 border border-gray-600 rounded-lg shadow-xl bottom-6 left-1/2 -translate-x-1/2">
+                        We highly recommend that you do not select this option. We will place your plaintext credentials into the Logstash pipeline.
+                      </div>
+                    </span>
+                  </label>
+
+                </div>
+              </div>
             </div>
-            <p class="text-gray-400 text-xs mt-1">Connection to centralized pipeline management cluster</p>
+
+            <!-- Agent Mode connections (hidden by default) -->
+            <div id="agentConnectionSection" class="hidden flex flex-col gap-4">
+
+              <!-- LogstashAgent Connection -->
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">
+                  LogstashAgent Connection <span class="text-red-500">*</span>
+                </label>
+                <div id="networkAgentConnectionDropdownWrapper" class="relative">
+                  <button type="button" id="networkAgentConnectionDropdownTrigger"
+                          onclick="toggleAgentConnectionDropdown(event)"
+                          class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                    <span id="networkAgentConnectionSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a LogstashAgent connection...</span>
+                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                  <div id="networkAgentConnectionDropdownList"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                    <div class="p-2 border-b border-gray-700">
+                      <input type="text" id="networkAgentConnectionSearch"
+                             class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                             placeholder="Search LogstashAgent connections..."
+                             autocomplete="off"
+                             oninput="filterAgentConnectionDropdown(this.value)"
+                             onclick="event.stopPropagation()">
+                    </div>
+                    <div id="networkAgentConnectionOptionsList" class="max-h-48 overflow-y-auto">
+                      <!-- Options populated by JS -->
+                    </div>
+                  </div>
+                </div>
+                <p class="text-gray-400 text-xs mt-1">The LogstashAgent that will run the pipeline on this network</p>
+              </div>
+
+              <!-- Elasticsearch Connection (agent mode) -->
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">
+                  Elasticsearch Connection <span class="text-red-500">*</span>
+                </label>
+                <div id="networkAgentEsConnectionDropdownWrapper" class="relative">
+                  <button type="button" id="networkAgentEsConnectionDropdownTrigger"
+                          onclick="toggleAgentEsConnectionDropdown(event)"
+                          class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                    <span id="networkAgentEsConnectionSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select an Elasticsearch connection...</span>
+                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                  <div id="networkAgentEsConnectionDropdownList"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                    <div class="p-2 border-b border-gray-700">
+                      <input type="text" id="networkAgentEsConnectionSearch"
+                             class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                             placeholder="Search connections..."
+                             autocomplete="off"
+                             oninput="filterAgentEsConnectionDropdown(this.value)"
+                             onclick="event.stopPropagation()">
+                    </div>
+                    <div id="networkAgentEsConnectionOptionsList" class="max-h-48 overflow-y-auto">
+                      <!-- Options populated by JS -->
+                    </div>
+                  </div>
+                </div>
+                <p class="text-gray-400 text-xs mt-1">Elasticsearch instance to send SNMP data to</p>
+              </div>
+
+            </div>
           </div>
 
           <!-- Namespace -->
