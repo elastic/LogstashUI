@@ -56,17 +56,5 @@
         "out_errors": "1.3.6.1.4.1.41112.1.6.2.1.1.13"
       }
     }
-  },
-  "normalizers": [
-    {
-      "operation": "multiply",
-      "target": {
-        "scope": "get",
-        "field": "host.uptime"
-      },
-      "params": {
-        "multiply_value": 100
-      }
-    }
-  ]
+  }
 }

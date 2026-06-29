@@ -100,13 +100,10 @@ function closeDeviceModal() {
   updateLocationFieldStates();
 }
 
-// Apply a selection to the custom credential dropdown
-function selectCredentialOption(id, displayText) {
+function _setCredentialValue(id, displayText) {
   const hiddenInput = document.getElementById('deviceCredentialSelect');
   const text = document.getElementById('deviceCredentialSelectedText');
-
   hiddenInput.value = id || '';
-
   if (id) {
     text.textContent = displayText;
     text.classList.remove('text-gray-400');
@@ -116,7 +113,11 @@ function selectCredentialOption(id, displayText) {
     text.classList.add('text-gray-400');
     text.classList.remove('text-white');
   }
+}
 
+// Apply a selection to the custom credential dropdown
+function selectCredentialOption(id, displayText) {
+  _setCredentialValue(id, displayText);
   closeCredentialDropdown();
 }
 
@@ -188,7 +189,7 @@ function loadCredentialsForDevice(selectedCredentialId = null) {
         optionsList.appendChild(row);
 
         if (selectedCredentialId && credential.id == selectedCredentialId) {
-          selectCredentialOption(credential.id, displayText);
+          _setCredentialValue(credential.id, displayText);
         }
       });
     })
@@ -197,13 +198,10 @@ function loadCredentialsForDevice(selectedCredentialId = null) {
     });
 }
 
-// Apply a selection to the custom network dropdown
-function selectNetworkOption(id, displayText) {
+function _setNetworkValue(id, displayText) {
   const hiddenInput = document.getElementById('deviceNetworkSelect');
   const text = document.getElementById('deviceNetworkSelectedText');
-
   hiddenInput.value = id || '';
-
   if (id) {
     text.textContent = displayText;
     text.classList.remove('text-gray-400');
@@ -213,7 +211,11 @@ function selectNetworkOption(id, displayText) {
     text.classList.add('text-gray-400');
     text.classList.remove('text-white');
   }
+}
 
+// Apply a selection to the custom network dropdown
+function selectNetworkOption(id, displayText) {
+  _setNetworkValue(id, displayText);
   closeNetworkDropdown();
 }
 
@@ -285,7 +287,7 @@ function loadNetworksForDevice(selectedNetworkId = null) {
         optionsList.appendChild(row);
 
         if (selectedNetworkId && network.id == selectedNetworkId) {
-          selectNetworkOption(network.id, displayText);
+          _setNetworkValue(network.id, displayText);
         }
       });
     })
@@ -343,8 +345,7 @@ function getVendorLogoFilename(vendor) {
   return 'unknown.png';
 }
 
-// Apply a selection to the custom template dropdown
-function selectTemplateOption(id, displayName, vendor) {
+function _setTemplateValue(id, displayName, vendor) {
   const hiddenInput = document.getElementById('deviceTemplateSelect');
   const img = document.getElementById('deviceTemplateSelectedImg');
   const text = document.getElementById('deviceTemplateSelectedText');
@@ -367,7 +368,11 @@ function selectTemplateOption(id, displayName, vendor) {
     text.classList.add('text-gray-400');
     text.classList.remove('text-white');
   }
+}
 
+// Apply a selection to the custom template dropdown
+function selectTemplateOption(id, displayName, vendor) {
+  _setTemplateValue(id, displayName, vendor);
   closeTemplateDropdown();
 }
 
@@ -444,7 +449,7 @@ function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
         optionsList.appendChild(row);
 
         if (selectedTemplateId && template.id == selectedTemplateId) {
-          selectTemplateOption(template.id, displayName, template.vendor);
+          _setTemplateValue(template.id, displayName, template.vendor);
         }
       });
     })

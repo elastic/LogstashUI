@@ -113,7 +113,7 @@ function toggleNamespaceFromTemplate(enabled) {
 
 // ── Connection custom dropdown ────────────────────────────────────────────────
 
-function selectConnectionOption(id, displayText) {
+function _setConnectionValue(id, displayText) {
   const hiddenInput = document.getElementById('networkConnection');
   const text = document.getElementById('networkConnectionSelectedText');
   hiddenInput.value = id || '';
@@ -126,6 +126,10 @@ function selectConnectionOption(id, displayText) {
     text.classList.add('text-gray-400');
     text.classList.remove('text-white');
   }
+}
+
+function selectConnectionOption(id, displayText) {
+  _setConnectionValue(id, displayText);
   closeConnectionDropdown();
 }
 
@@ -192,7 +196,7 @@ function loadConnections(selectedConnectionId = null) {
         row.onclick = () => selectConnectionOption(connection.id, displayText);
         optionsList.appendChild(row);
         if (selectedConnectionId && connection.id == selectedConnectionId) {
-          selectConnectionOption(connection.id, displayText);
+          _setConnectionValue(connection.id, displayText);
         }
       });
     })
@@ -244,7 +248,7 @@ function toggleTrapsCredential() {
 
 // ── Discovery credential custom dropdown ──────────────────────────────────────
 
-function selectDiscoveryCredentialOption(id, displayText) {
+function _setDiscoveryCredentialValue(id, displayText) {
   const hiddenInput = document.getElementById('discoveryCredentialSelect');
   const text = document.getElementById('discoveryCredentialSelectedText');
   hiddenInput.value = id || '';
@@ -257,6 +261,10 @@ function selectDiscoveryCredentialOption(id, displayText) {
     text.classList.add('text-gray-400');
     text.classList.remove('text-white');
   }
+}
+
+function selectDiscoveryCredentialOption(id, displayText) {
+  _setDiscoveryCredentialValue(id, displayText);
   closeDiscoveryCredentialDropdown();
 }
 
@@ -322,7 +330,7 @@ function loadDiscoveryCredentials(selectedCredentialId = null) {
         row.onclick = () => selectDiscoveryCredentialOption(credential.id, displayText);
         optionsList.appendChild(row);
         if (selectedCredentialId && credential.id == selectedCredentialId) {
-          selectDiscoveryCredentialOption(credential.id, displayText);
+          _setDiscoveryCredentialValue(credential.id, displayText);
         }
       });
     })
@@ -337,7 +345,7 @@ function refreshDiscoveryCredentials() {
 
 // ── Trap credential custom dropdown ───────────────────────────────────────────
 
-function selectTrapCredentialOption(id, displayText) {
+function _setTrapCredentialValue(id, displayText) {
   const hiddenInput = document.getElementById('networkCredentialSelect');
   const text = document.getElementById('trapCredentialSelectedText');
   hiddenInput.value = id || '';
@@ -350,6 +358,10 @@ function selectTrapCredentialOption(id, displayText) {
     text.classList.add('text-gray-400');
     text.classList.remove('text-white');
   }
+}
+
+function selectTrapCredentialOption(id, displayText) {
+  _setTrapCredentialValue(id, displayText);
   closeTrapCredentialDropdown();
 }
 
@@ -415,7 +427,7 @@ function loadNetworkCredentials(selectedCredentialId = null) {
         row.onclick = () => selectTrapCredentialOption(credential.id, displayText);
         optionsList.appendChild(row);
         if (selectedCredentialId && credential.id == selectedCredentialId) {
-          selectTrapCredentialOption(credential.id, displayText);
+          _setTrapCredentialValue(credential.id, displayText);
         }
       });
     })
