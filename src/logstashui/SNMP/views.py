@@ -16,25 +16,34 @@ import json
 
 # Create your views here.
 def Networks(request):
+    from PipelineManager.models import Connection
     networks = Network.objects.select_related('connection').all()
     form = ConnectionForm()
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     credentials = Credential.objects.all().order_by('name')
+    connections = Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED
+    ).values('id', 'name', 'cloud_id')
     return render(request, 'Networks.html', {
         'networks': networks,
         'form': form,
         'devices': devices,
         'templates': templates,
         'credentials': credentials,
+        'connections': connections,
     })
 
 def Devices(request):
+    from PipelineManager.models import Connection
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     credentials = Credential.objects.all().order_by('name')
     form = ConnectionForm()
-    return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'credentials': credentials, 'form': form})
+    connections = Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED
+    ).values('id', 'name', 'cloud_id')
+    return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'credentials': credentials, 'form': form, 'connections': connections})
 
 def sync_official_profiles():
     """Sync official profiles from JSON files to database as placeholders"""
@@ -329,13 +338,18 @@ def Profiles(request):
 
 def Credentials(request):
     from django.db.models import Count
+    from PipelineManager.models import Connection
     credentials = Credential.objects.annotate(device_count=Count('devices')).order_by('name')
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
+    connections = Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED
+    ).values('id', 'name', 'cloud_id')
     return render(request, 'Credentials.html', {
         'credentials': credentials,
         'devices': devices,
         'templates': templates,
+        'connections': connections,
     })
 
 def Overview(request):

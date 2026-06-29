@@ -307,7 +307,7 @@
               <input type="text" id="snmpWalkSearchInput" placeholder="Filter OIDs or values..."
                      class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-500">
             </div>
-            <button id="snmpWalkGenerateTemplateBtn" class="hidden btn border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-x-2 text-sm">
+            <button id="snmpWalkGenerateTemplateBtn" onclick="snmpWalkLaunchAiModal()" class="btn border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-x-2 text-sm">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
@@ -355,3 +355,42 @@
     </div>
   </div>
 </div>
+
+<script>
+function snmpWalkLaunchAiModal() {
+  // Prefer the JS-state results stored by snmp_test.js; fall back to reading the DOM table.
+  var results = window._snmpWalkResults;
+  var walkText = '';
+
+  if (results && results.length) {
+    walkText = results.map(function(r) { return r.oid + ' = ' + r.value; }).join('\n');
+  } else {
+    // DOM fallback: read every rendered row from the OID table.
+    var rows = document.querySelectorAll('#snmpWalkResultsBody tr');
+    var lines = [];
+    rows.forEach(function(tr) {
+      var cells = tr.querySelectorAll('td');
+      if (cells.length >= 2) {
+        var oid = cells[0].textContent.trim();
+        var val = cells[1].textContent.trim();
+        if (oid) lines.push(oid + ' = ' + val);
+      }
+    });
+    walkText = lines.join('\n');
+  }
+
+  if (!walkText) return;
+
+  // Close the SNMP Test modal.
+  var snmpModal = document.getElementById('snmpTestModal');
+  if (snmpModal) {
+    snmpModal.classList.add('hidden');
+    snmpModal.classList.remove('flex');
+  }
+
+  // Open the AI template modal, pre-filled with the walk output.
+  if (typeof window.openAiDeviceTemplateModal === 'function') {
+    window.openAiDeviceTemplateModal(walkText);
+  }
+}
+</script>
