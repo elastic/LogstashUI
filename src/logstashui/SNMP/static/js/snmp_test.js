@@ -74,7 +74,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const walkErrorMessage   = document.getElementById('snmpWalkErrorMessage');
     const walkResultsBody    = document.getElementById('snmpWalkResultsBody');
     const walkSearchInput    = document.getElementById('snmpWalkSearchInput');
-    const walkCopyBtn        = document.getElementById('snmpWalkCopyBtn');
+    const walkCopyBtn             = document.getElementById('snmpWalkCopyBtn');
+    const walkGenerateTemplateBtn = document.getElementById('snmpWalkGenerateTemplateBtn');
 
     // Full walk results data (for filtering)
     let walkAllResults = [];
@@ -138,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (walkResultsContainer) walkResultsContainer.classList.add('hidden');
         if (walkErrorState) walkErrorState.classList.add('hidden');
         if (walkRunBtn) walkRunBtn.disabled = true;
+        if (walkGenerateTemplateBtn) walkGenerateTemplateBtn.classList.add('hidden');
         walkAllResults = [];
     }
 
@@ -443,6 +445,8 @@ document.addEventListener('DOMContentLoaded', function() {
         walkAllResults = data.results || [];
         renderWalkTable(walkAllResults);
 
+        if (walkGenerateTemplateBtn) walkGenerateTemplateBtn.classList.remove('hidden');
+
         walkResultsContainer.classList.remove('hidden');
         walkResultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -491,6 +495,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 walkCopyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Copied!`;
                 setTimeout(() => { walkCopyBtn.innerHTML = orig; }, 2000);
             });
+        });
+    }
+
+    // Generate Template and Profiles — close walk modal, open AI modal with walk data pre-filled
+    if (walkGenerateTemplateBtn) {
+        walkGenerateTemplateBtn.addEventListener('click', function() {
+            if (!walkAllResults.length) return;
+            const walkText = walkAllResults.map(r => `${r.oid} = ${r.value}`).join('\n');
+            closeModal();
+            if (typeof openAiDeviceTemplateModal === 'function') {
+                openAiDeviceTemplateModal(walkText);
+            }
         });
     }
 

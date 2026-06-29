@@ -79,4 +79,8 @@ urlpatterns = [
     path("RunSNMPTest/", snmp_test.RunSNMPTest, name="RunSNMPTest"),
     path("RunSNMPWalk/", snmp_test.RunSNMPWalk, name="RunSNMPWalk"),
 
+    # AI Template Generation endpoints
+    path("CheckAgentBuilderResources/", views.CheckAgentBuilderResources, name="CheckAgentBuilderResources"),
+    path("InstallAgentBuilderPackage/", views.InstallAgentBuilderPackage, name="InstallAgentBuilderPackage"),
+
 ]

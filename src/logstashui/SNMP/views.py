@@ -18,7 +18,16 @@ import json
 def Networks(request):
     networks = Network.objects.select_related('connection').all()
     form = ConnectionForm()
-    return render(request, 'Networks.html', {'networks': networks, 'form': form})
+    devices = Device.objects.all().select_related('credential', 'network', 'device_template')
+    templates = DeviceTemplate.objects.all().order_by('-official', 'name')
+    credentials = Credential.objects.all().order_by('name')
+    return render(request, 'Networks.html', {
+        'networks': networks,
+        'form': form,
+        'devices': devices,
+        'templates': templates,
+        'credentials': credentials,
+    })
 
 def Devices(request):
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
@@ -162,6 +171,7 @@ def sync_official_device_templates():
 
 def DeviceTemplates(request):
     from django.db.models import Count
+    from PipelineManager.models import Connection
     
     # Load all device templates from database (includes synced official templates)
     device_templates = []
@@ -249,9 +259,20 @@ def DeviceTemplates(request):
     all_profiles = official_profiles + user_profiles
     all_profiles.sort(key=lambda x: x['display_name'])
     
+    connections = Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED
+    ).values('id', 'name', 'cloud_id')
+
+    devices = Device.objects.all().select_related('credential', 'network', 'device_template')
+    snmp_test_templates = DeviceTemplate.objects.all().order_by('-official', 'name')
+    snmp_test_credentials = Credential.objects.all().order_by('name')
     return render(request, 'DeviceTemplates.html', {
         'device_templates': device_templates,
-        'profiles': all_profiles
+        'profiles': all_profiles,
+        'connections': connections,
+        'devices': devices,
+        'templates': snmp_test_templates,
+        'credentials': snmp_test_credentials,
     })
 
 def Profiles(request):
@@ -309,7 +330,13 @@ def Profiles(request):
 def Credentials(request):
     from django.db.models import Count
     credentials = Credential.objects.annotate(device_count=Count('devices')).order_by('name')
-    return render(request, 'Credentials.html', {'credentials': credentials})
+    devices = Device.objects.all().select_related('credential', 'network', 'device_template')
+    templates = DeviceTemplate.objects.all().order_by('-official', 'name')
+    return render(request, 'Credentials.html', {
+        'credentials': credentials,
+        'devices': devices,
+        'templates': templates,
+    })
 
 def Overview(request):
     """SNMP Overview page with metrics and statistics"""
@@ -414,4 +441,95 @@ def suggest_device_template(device_info):
     return all_matches + partial_match_ids
 
 
+def CheckAgentBuilderResources(request):
+    """
+    Check whether the SNMP AI template generation resources (tools, skills, agents)
+    exist in Kibana and whether they match our expected definitions.
+
+    POST body (JSON):
+        connection_id  – int, required
+        kibana_url     – str, optional override for URL-based connections
+
+    Returns JSON matching the shape from AgentBuilder.check_resources().
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_id  = data.get('connection_id')
+    kibana_url     = data.get('kibana_url') or None
+
+    if not connection_id:
+        return JsonResponse({'error': 'connection_id is required'}, status=400)
+
+    try:
+        from Common.ai.agent_builder import AgentBuilder, load_resources_from_directory
+
+        _ai_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'device_template_generation')
+        tools, skills, agents = load_resources_from_directory(_ai_dir)
+
+        builder = AgentBuilder(
+            connection_id=int(connection_id),
+            kibana_url_override=kibana_url,
+        )
+        results = builder.check_resources(
+            tools=tools,
+            skills=skills,
+            agents=agents,
+        )
+        return JsonResponse(results)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e), 'api_available': False}, status=500)
+
+
+def InstallAgentBuilderPackage(request):
+    """
+    Create or overwrite ALL Agent Builder resources for SNMP AI template
+    generation in Kibana (tools → skills → agents order).
+
+    POST body (JSON):
+        connection_id – int, required
+        kibana_url    – str, optional override for URL-based connections
+
+    Returns:
+        { success: bool, results: [ { type, id, action, success, error? } ] }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_id = data.get('connection_id')
+    kibana_url    = data.get('kibana_url') or None
+
+    if not connection_id:
+        return JsonResponse({'error': 'connection_id is required'}, status=400)
+
+    try:
+        from Common.ai.agent_builder import AgentBuilder, load_resources_from_directory
+
+        _ai_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'device_template_generation')
+        tools, skills, agents = load_resources_from_directory(_ai_dir)
+
+        builder = AgentBuilder(
+            connection_id=int(connection_id),
+            kibana_url_override=kibana_url,
+        )
+        result = builder.apply_all_resources(
+            tools=tools,
+            skills=skills,
+            agents=agents,
+        )
+        return JsonResponse(result)
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
