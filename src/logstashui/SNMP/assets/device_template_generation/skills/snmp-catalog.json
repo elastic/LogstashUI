@@ -1,0 +1,9 @@
+{
+  "_comment": "Knowledge skill: full catalog of LogstashUI SNMP device templates and profiles. Content is loaded at apply-time from template_profile_context.md via _content_from_file so it stays in sync with the generated catalog.",
+  "_content_from_file": "../../../data/template_profile_context.md",
+  "id": "snmp-catalog",
+  "name": "SNMP Catalog",
+  "description": "Full catalog of every SNMP device template and profile that already exists in LogstashUI. Consult this skill before authoring any new profile to reuse verified OIDs, field names, normalizers, and matching rules.",
+  "tool_ids": [],
+  "referenced_content": []
+}

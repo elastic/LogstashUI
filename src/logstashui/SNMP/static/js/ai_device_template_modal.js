@@ -26,6 +26,107 @@
   let _connectionId = null;
   let _kibanaUrl    = null;
 
+  // ── Step icon SVG snippets ────────────────────────────────────────────────────
+
+  const ICON = {
+    spinner: `<svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>`,
+    check:   `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>`,
+    xmark:   `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>`,
+    link:    `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+              </svg>`,
+    bulb:    `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>`,
+    chat:    `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>`,
+    tool:    `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>`,
+  };
+
+  // ── Inference model helpers ───────────────────────────────────────────────────
+
+  function _isSonnet46(name) {
+    const lower = (name || '').toLowerCase();
+    return lower.includes('claude') && lower.includes('sonnet') && lower.includes('4.6');
+  }
+
+  function _isSonnet(name) {
+    const lower = (name || '').toLowerCase();
+    return lower.includes('claude') && lower.includes('sonnet');
+  }
+
+  function showModelSelector(visible) {
+    const container = document.getElementById('aiTemplateModelContainer');
+    if (container) container.classList.toggle('hidden', !visible);
+  }
+
+  function setModelLoading(loading) {
+    const spinner = document.getElementById('aiTemplateModelLoading');
+    if (spinner) spinner.classList.toggle('hidden', !loading);
+  }
+
+  function fetchAndPopulateModels(connectionId) {
+    const select   = document.getElementById('aiTemplateModelSelect');
+    const errorEl  = document.getElementById('aiTemplateModelError');
+    if (!select) return;
+
+    showModelSelector(true);
+    setModelLoading(true);
+    if (errorEl) errorEl.classList.add('hidden');
+
+    select.innerHTML = '<option value="" disabled selected>Loading models…</option>';
+
+    fetch(`/AI/IntegrationFactory/models/?connection_id=${connectionId}`)
+      .then(r => r.json())
+      .then(data => {
+        setModelLoading(false);
+        const models = data.models || [];
+
+        if (!models.length) {
+          select.innerHTML = '<option value="" disabled selected>No models available</option>';
+          if (errorEl) errorEl.classList.remove('hidden');
+          return;
+        }
+
+        select.innerHTML = '';
+        let sonnet46Option = null;
+        let sonnetFallback = null;
+
+        models.forEach(model => {
+          const opt       = document.createElement('option');
+          opt.value       = model.inference_id;
+          opt.textContent = model.name || model.inference_id;
+          select.appendChild(opt);
+          if (!sonnet46Option && _isSonnet46(model.name)) {
+            sonnet46Option = opt;
+          } else if (!sonnetFallback && _isSonnet(model.name)) {
+            sonnetFallback = opt;
+          }
+        });
+
+        // Prefer Claude Sonnet 4.6 → any Sonnet → first model
+        const defaultOption = sonnet46Option || sonnetFallback || select.options[0];
+        if (defaultOption) defaultOption.selected = true;
+
+        _updateGenerateBtnState();
+      })
+      .catch(() => {
+        setModelLoading(false);
+        select.innerHTML = '<option value="" disabled selected>Failed to load models</option>';
+        if (errorEl) errorEl.classList.remove('hidden');
+      });
+  }
+
   // ── Open / Close ──────────────────────────────────────────────────────────────
 
   function openAiDeviceTemplateModal(prefillWalkData) {
@@ -40,6 +141,21 @@
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     _updateGenerateBtnState();
+
+    // If a connection is already selected (modal re-opened), restore state.
+    const connectionSelect = document.getElementById('aiTemplateConnectionSelect');
+    if (connectionSelect && connectionSelect.value) {
+      updateKibanaUrlVisibility();
+      const selected   = connectionSelect.options[connectionSelect.selectedIndex];
+      const hasCloudId = selected && selected.dataset.hasCloudId === 'true';
+      const connId     = parseInt(connectionSelect.value, 10);
+
+      fetchAndPopulateModels(connId);
+
+      if (hasCloudId) {
+        checkAgentBuilderResources(connId, null);
+      }
+    }
   }
 
   function closeAiDeviceTemplateModal() {
@@ -48,13 +164,20 @@
     modal.classList.add('hidden');
     document.body.style.overflow = '';
 
-    // Reset Kibana URL field
     const kibanaUrlContainer = document.getElementById('aiTemplateKibanaUrlContainer');
     if (kibanaUrlContainer) kibanaUrlContainer.classList.add('hidden');
     const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
     if (kibanaUrlInput) kibanaUrlInput.value = '';
 
-    // Reset resource status
+    if (_activeReader) {
+      _activeReader.cancel();
+      _activeReader = null;
+    }
+
+    const genPanel = document.getElementById('aiTemplateGenerationPanel');
+    if (genPanel) genPanel.classList.add('hidden');
+
+    showModelSelector(false);
     hideResourceStatus();
     _connectionId = null;
     _kibanaUrl    = null;
@@ -103,7 +226,6 @@
     if (panel) panel.classList.remove('hidden');
   }
 
-  // Track whether any resource is missing — updated by renderResourceStatus
   let _hasMissingResources = false;
 
   function setGenerateBtnBlocked(blocked) {
@@ -112,18 +234,22 @@
   }
 
   function _updateGenerateBtnState() {
-    const btn      = document.getElementById('aiTemplateGenerateBtn');
-    const walkInput = document.getElementById('aiTemplateWalkInput');
+    const btn         = document.getElementById('aiTemplateGenerateBtn');
+    const walkInput   = document.getElementById('aiTemplateWalkInput');
+    const modelSelect = document.getElementById('aiTemplateModelSelect');
     if (!btn) return;
 
-    const walkEmpty = !walkInput || !walkInput.value.trim();
-    const blocked   = _hasMissingResources || walkEmpty;
+    const walkEmpty  = !walkInput  || !walkInput.value.trim();
+    const noModel    = !modelSelect || !modelSelect.value;
+    const blocked    = _hasMissingResources || walkEmpty || noModel;
 
     btn.disabled = blocked;
     if (blocked) {
       btn.classList.add('opacity-50', 'cursor-not-allowed');
       if (_hasMissingResources) {
         btn.title = 'Install all required Elastic Agent Builder resources before generating';
+      } else if (noModel) {
+        btn.title = 'Select an inference model before generating';
       } else {
         btn.title = 'Paste your SNMP walk output before generating';
       }
@@ -173,7 +299,7 @@
       if (unavailableMsg) unavailableMsg.textContent =
         results.error || 'Elastic Agent Builder API is not available (requires Kibana ≥ 9.2).';
       setInstallBtnVisible(false);
-      setGenerateBtnBlocked(false); // Don't permanently block if we can't check
+      setGenerateBtnBlocked(false);
       return;
     }
 
@@ -218,11 +344,8 @@
       list.appendChild(row);
     });
 
-    // Show the single package button only when action is needed
     const needsAction = hasMissing || hasDiffers;
     setInstallBtnVisible(needsAction, !hasMissing && hasDiffers);
-
-    // Block the Generate button when any resource is missing
     setGenerateBtnBlocked(hasMissing);
   }
 
@@ -287,7 +410,6 @@
           const firstError = (result.results || []).find(r => !r.success);
           showToast(firstError ? firstError.error : 'Install failed', 'error');
         }
-        // Re-check so status rows refresh
         checkAgentBuilderResources(_connectionId, _kibanaUrl);
       })
       .catch(err => {
@@ -301,34 +423,34 @@
 
   document.addEventListener('DOMContentLoaded', function () {
 
-    // Open button
     const openBtn = document.getElementById('generateTemplateBtn');
     if (openBtn) openBtn.addEventListener('click', () => openAiDeviceTemplateModal());
 
-    // Close button & backdrop
     const closeBtn = document.getElementById('closeAiDeviceTemplateModal');
     if (closeBtn) closeBtn.addEventListener('click', closeAiDeviceTemplateModal);
 
     const backdrop = document.getElementById('aiDeviceTemplateBackdrop');
     if (backdrop) backdrop.addEventListener('click', closeAiDeviceTemplateModal);
 
-    // Connection select → show/hide Kibana URL + trigger check
     const connectionSelect = document.getElementById('aiTemplateConnectionSelect');
     if (connectionSelect) {
       connectionSelect.addEventListener('change', function () {
         updateKibanaUrlVisibility();
         hideResourceStatus();
+        showModelSelector(false);
 
         const selected   = this.options[this.selectedIndex];
         const hasCloudId = selected && selected.dataset.hasCloudId === 'true';
 
-        if (selected && selected.value && hasCloudId) {
-          checkAgentBuilderResources(parseInt(selected.value, 10), null);
+        if (selected && selected.value) {
+          fetchAndPopulateModels(parseInt(selected.value, 10));
+          if (hasCloudId) {
+            checkAgentBuilderResources(parseInt(selected.value, 10), null);
+          }
         }
       });
     }
 
-    // Kibana URL input → debounced check
     const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
     if (kibanaUrlInput) {
       const debouncedCheck = debounce(function () {
@@ -343,24 +465,452 @@
       kibanaUrlInput.addEventListener('input', debouncedCheck);
     }
 
-    // Single install / update package button
     const installBtn = document.getElementById('aiTemplateInstallBtn');
     if (installBtn) installBtn.addEventListener('click', installAgentBuilderPackage);
 
-    // Walk input → re-evaluate generate button on every keystroke
     const walkInput = document.getElementById('aiTemplateWalkInput');
     if (walkInput) {
       walkInput.addEventListener('input', _updateGenerateBtnState);
     }
 
-    // Generate button — not wired yet
     const generateBtn = document.getElementById('aiTemplateGenerateBtn');
     if (generateBtn) {
-      generateBtn.addEventListener('click', function () {
-        // TODO: wire up generation logic
-      });
+      generateBtn.addEventListener('click', startGeneration);
     }
   });
+
+  // ── Generation pipeline ───────────────────────────────────────────────────────
+
+  let _activeReader = null;
+
+  // ── JSON extraction ───────────────────────────────────────────────────────────
+  // Tries to pull a valid JSON object from raw agent text, tolerating markdown fences.
+
+  function _extractJSON(text) {
+    if (!text) return null;
+    // Direct parse first
+    try { return JSON.parse(text.trim()); } catch (_) {}
+    // Try stripping a ```json ... ``` or ``` ... ``` fence
+    const fenced = text.match(/```(?:json)?\s*([\s\S]+?)```/);
+    if (fenced) {
+      try { return JSON.parse(fenced[1].trim()); } catch (_) {}
+    }
+    // Try extracting the outermost {...} block
+    const braceStart = text.indexOf('{');
+    const braceEnd   = text.lastIndexOf('}');
+    if (braceStart !== -1 && braceEnd > braceStart) {
+      try { return JSON.parse(text.slice(braceStart, braceEnd + 1)); } catch (_) {}
+    }
+    return null;
+  }
+
+  // ── Structured response renderer ─────────────────────────────────────────────
+
+  function _oidCount(obj) {
+    if (!obj || typeof obj !== 'object') return 0;
+    return Object.keys(obj).length;
+  }
+
+  function _renderProfileCard(profile) {
+    const getCount   = _oidCount(profile.get);
+    const walkCount  = _oidCount(profile.walk);
+    const tableCount = _oidCount(profile.table);
+    const normCount  = Array.isArray(profile.normalizers) ? profile.normalizers.length : 0;
+
+    const metaChips = [
+      profile.vendor  && `<span class="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${escapeHtml(profile.vendor)}</span>`,
+      profile.product && `<span class="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${escapeHtml(profile.product)}</span>`,
+    ].filter(Boolean).join('');
+
+    const oidSummary = [
+      getCount   && `<span class="text-gray-400"><span class="text-white font-medium">${getCount}</span> get</span>`,
+      walkCount  && `<span class="text-gray-400"><span class="text-white font-medium">${walkCount}</span> walk</span>`,
+      tableCount && `<span class="text-gray-400"><span class="text-white font-medium">${tableCount}</span> ${tableCount === 1 ? 'table' : 'tables'}</span>`,
+      normCount  && `<span class="text-gray-400"><span class="text-white font-medium">${normCount}</span> ${normCount === 1 ? 'normalizer' : 'normalizers'}</span>`,
+    ].filter(Boolean).join('<span class="text-gray-600 mx-1">·</span>');
+
+    const jsonId  = `profile-json-${Math.random().toString(36).slice(2)}`;
+    const jsonStr = JSON.stringify(profile, null, 2);
+
+    const card = document.createElement('div');
+    card.className = 'bg-gray-900/60 border border-gray-700 rounded-lg overflow-hidden';
+    card.innerHTML = `
+      <div class="p-4 flex flex-col gap-2">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex flex-col gap-1 min-w-0">
+            <span class="text-sm font-semibold text-white font-mono truncate">${escapeHtml(profile.name || '')}</span>
+            ${profile.description ? `<span class="text-xs text-gray-400 leading-relaxed">${escapeHtml(profile.description)}</span>` : ''}
+          </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end text-xs">
+            ${metaChips}
+          </div>
+        </div>
+        ${oidSummary ? `<div class="flex items-center gap-1 text-xs flex-wrap">${oidSummary}</div>` : ''}
+        <button
+          type="button"
+          onclick="(function(btn){var el=document.getElementById('${jsonId}');if(!el)return;var open=el.classList.toggle('hidden');btn.textContent=open?'View JSON ▸':'Hide JSON ▾';})(this)"
+          class="text-xs text-purple-400 hover:text-purple-300 text-left mt-1 w-fit">
+          View JSON ▸
+        </button>
+      </div>
+      <div id="${jsonId}" class="hidden border-t border-gray-700">
+        <pre class="p-4 text-xs text-gray-300 font-mono overflow-x-auto max-h-72 overflow-y-auto bg-gray-950/60 whitespace-pre">${escapeHtml(jsonStr)}</pre>
+      </div>
+    `;
+    return card;
+  }
+
+  function _renderTemplateCard(template) {
+    const matchingRules = Array.isArray(template.matching_rules) ? template.matching_rules : [];
+    const profiles      = Array.isArray(template.profiles)       ? template.profiles       : [];
+
+    const matchingHtml = matchingRules.length
+      ? matchingRules.map(r => `<span class="px-1.5 py-0.5 rounded bg-gray-700 text-xs text-gray-300 font-mono">${escapeHtml(r)}</span>`).join(' ')
+      : '<span class="text-xs text-gray-500 italic">none</span>';
+
+    const profilesHtml = profiles.length
+      ? profiles.map(p => `<span class="px-1.5 py-0.5 rounded bg-purple-900/40 border border-purple-500/20 text-xs text-purple-300 font-mono">${escapeHtml(p)}</span>`).join(' ')
+      : '<span class="text-xs text-gray-500 italic">none</span>';
+
+    const meta = [template.vendor, template.product, template.model].filter(Boolean).join(' · ');
+
+    const card = document.getElementById('aiTemplateTemplateCard');
+    if (!card) return;
+
+    card.innerHTML = `
+      <div class="flex flex-col gap-3">
+        <div>
+          <div class="text-base font-semibold text-white font-mono">${escapeHtml(template.name || '')}</div>
+          ${meta ? `<div class="text-xs text-gray-400 mt-0.5">${escapeHtml(meta)}</div>` : ''}
+          ${template.description ? `<div class="text-xs text-gray-300 mt-1 leading-relaxed">${escapeHtml(template.description)}</div>` : ''}
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Matching Rules</span>
+          <div class="flex flex-wrap gap-1.5">${matchingHtml}</div>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs text-gray-500 uppercase tracking-wide">Profiles (${profiles.length})</span>
+          <div class="flex flex-wrap gap-1.5">${profilesHtml}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function _renderStructuredResponse(parsed, rawJson) {
+    const structuredEl = document.getElementById('aiTemplateStructuredResponse');
+    if (!structuredEl) return;
+
+    // Explanation
+    const explanationText = document.getElementById('aiTemplateExplanationText');
+    if (explanationText) {
+      explanationText.textContent = parsed.explanation || '';
+    }
+
+    // Profiles
+    const profilesSection  = document.getElementById('aiTemplateProfilesSection');
+    const profilesHeader   = document.getElementById('aiTemplateProfilesHeader');
+    const profilesAccordion = document.getElementById('aiTemplateProfilesAccordion');
+    const profiles = Array.isArray(parsed.profiles) ? parsed.profiles : [];
+
+    if (profilesSection && profilesAccordion) {
+      if (profiles.length > 0) {
+        profilesSection.classList.remove('hidden');
+        if (profilesHeader) profilesHeader.textContent = `New Profiles (${profiles.length})`;
+        profilesAccordion.innerHTML = '';
+        profiles.forEach(p => profilesAccordion.appendChild(_renderProfileCard(p)));
+      } else {
+        profilesSection.classList.remove('hidden');
+        profilesAccordion.innerHTML = '<p class="text-xs text-gray-500 italic px-1">No new profiles needed — all required profiles already exist in the catalog.</p>';
+      }
+    }
+
+    // Device Template
+    const templateSection = document.getElementById('aiTemplateTemplateSection');
+    if (parsed.device_template && templateSection) {
+      templateSection.classList.remove('hidden');
+      _renderTemplateCard(parsed.device_template);
+    }
+
+    // Show the structured panel
+    structuredEl.classList.remove('hidden');
+
+    // Wire up Copy JSON button
+    const copyJsonBtn = document.getElementById('aiTemplateCopyJsonBtn');
+    if (copyJsonBtn) {
+      copyJsonBtn.onclick = function () {
+        navigator.clipboard.writeText(rawJson || JSON.stringify(parsed, null, 2)).then(() => {
+          const orig = copyJsonBtn.textContent.trim();
+          copyJsonBtn.textContent = 'Copied!';
+          setTimeout(() => {
+            copyJsonBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg> Copy JSON`;
+          }, 2000);
+        });
+      };
+    }
+
+    // Import button placeholder (wired later when backend endpoints exist)
+    const importBtn = document.getElementById('aiTemplateImportBtn');
+    if (importBtn) {
+      importBtn.onclick = function () {
+        showToast('Import is not yet implemented.', 'info');
+      };
+    }
+  }
+
+  // ── Generation start ──────────────────────────────────────────────────────────
+
+  function startGeneration() {
+    const connectionSelect = document.getElementById('aiTemplateConnectionSelect');
+    const walkInput        = document.getElementById('aiTemplateWalkInput');
+    const kibanaUrlInput   = document.getElementById('aiTemplateKibanaUrl');
+    const modelSelect      = document.getElementById('aiTemplateModelSelect');
+
+    if (!connectionSelect || !connectionSelect.value || !walkInput || !walkInput.value.trim()) return;
+
+    const connectionId = parseInt(connectionSelect.value, 10);
+    const walkText     = walkInput.value;
+    const kibanaUrl    = (kibanaUrlInput && kibanaUrlInput.value.trim()) || null;
+    const inferenceId  = (modelSelect && modelSelect.value) || null;
+
+    // Reset and show the generation panel
+    const panel = document.getElementById('aiTemplateGenerationPanel');
+    if (panel) panel.classList.remove('hidden');
+
+    const stepsEl      = document.getElementById('aiTemplateProgressSteps');
+    const responseEl   = document.getElementById('aiTemplateResponseContainer');
+    const outputEl     = document.getElementById('aiTemplateResponseOutput');
+    const structuredEl = document.getElementById('aiTemplateStructuredResponse');
+
+    if (stepsEl)      stepsEl.innerHTML = '';
+    if (outputEl)     outputEl.textContent = '';
+    if (responseEl)   responseEl.classList.add('hidden');
+    if (structuredEl) structuredEl.classList.add('hidden');
+
+    // Clear structured sub-sections so they don't bleed between runs
+    const profilesSection  = document.getElementById('aiTemplateProfilesSection');
+    const templateSection  = document.getElementById('aiTemplateTemplateSection');
+    const profilesAccordion = document.getElementById('aiTemplateProfilesAccordion');
+    const templateCard     = document.getElementById('aiTemplateTemplateCard');
+    if (profilesSection)   profilesSection.classList.add('hidden');
+    if (templateSection)   templateSection.classList.add('hidden');
+    if (profilesAccordion) profilesAccordion.innerHTML = '';
+    if (templateCard)      templateCard.innerHTML = '';
+
+    const generateBtn = document.getElementById('aiTemplateGenerateBtn');
+    if (generateBtn) {
+      generateBtn.disabled = true;
+      generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+
+    // ── Step helpers ──────────────────────────────────────────────────────────
+
+    function _stepRow(icon, message, colorClass) {
+      const row = document.createElement('div');
+      row.className = `flex items-start gap-2.5 text-xs ${colorClass}`;
+      row.innerHTML = `<span class="step-icon flex-shrink-0 mt-0.5">${icon}</span><span class="step-text leading-relaxed">${escapeHtml(message)}</span>`;
+      if (stepsEl) {
+        stepsEl.appendChild(row);
+        stepsEl.scrollTop = stepsEl.scrollHeight;
+      }
+      return row;
+    }
+
+    function _createStep(message) {
+      return _stepRow(ICON.spinner, message, 'text-gray-400');
+    }
+
+    function _resolveStep(step, success, appendMsg) {
+      if (!step) return;
+      const iconEl = step.querySelector('.step-icon');
+      const textEl = step.querySelector('.step-text');
+      if (success) {
+        step.className = 'flex items-start gap-2.5 text-xs text-green-400';
+        if (iconEl) iconEl.innerHTML = ICON.check;
+      } else {
+        step.className = 'flex items-start gap-2.5 text-xs text-red-400';
+        if (iconEl) iconEl.innerHTML = ICON.xmark;
+        if (appendMsg && textEl) textEl.textContent += `: ${appendMsg}`;
+      }
+    }
+
+    // ── Chunk handler ─────────────────────────────────────────────────────────
+
+    let accumulatedResponse = '';
+    let _pendingStep        = null;
+    let _streamingStep      = null; // "Receiving response..." indicator
+
+    function handleChunk(event) {
+      switch (event.phase) {
+
+        case 'indexing':
+          _pendingStep = _createStep(event.message);
+          break;
+
+        case 'indexing_done':
+          _resolveStep(_pendingStep, true);
+          _pendingStep = null;
+          break;
+
+        case 'invoking':
+          _pendingStep = _createStep(event.message);
+          break;
+
+        case 'conversation_link': {
+          _resolveStep(_pendingStep, true);
+          _pendingStep = null;
+          if (stepsEl && event.url) {
+            const linkRow = document.createElement('div');
+            linkRow.className = 'flex items-center gap-2.5 text-xs text-purple-400';
+            linkRow.innerHTML = `
+              <span class="flex-shrink-0">${ICON.link}</span>
+              <a href="${escapeHtml(event.url)}" target="_blank" rel="noopener"
+                 class="underline hover:text-purple-300 truncate">${escapeHtml(event.url)}</a>`;
+            stepsEl.appendChild(linkRow);
+            stepsEl.scrollTop = stepsEl.scrollHeight;
+          }
+          break;
+        }
+
+        case 'conversation_title': {
+          if (stepsEl && event.title) {
+            const titleRow = document.createElement('div');
+            titleRow.className = 'flex items-center gap-2.5 text-xs text-gray-500';
+            titleRow.innerHTML = `<span class="flex-shrink-0">${ICON.chat}</span><span class="italic">${escapeHtml(event.title)}</span>`;
+            stepsEl.appendChild(titleRow);
+            stepsEl.scrollTop = stepsEl.scrollHeight;
+          }
+          break;
+        }
+
+        case 'reasoning': {
+          if (stepsEl && event.message) {
+            const reasonRow = document.createElement('div');
+            reasonRow.className = 'flex items-start gap-2.5 text-xs text-gray-500';
+            reasonRow.innerHTML = `<span class="flex-shrink-0 mt-0.5">${ICON.bulb}</span><span class="italic leading-relaxed">${escapeHtml(event.message)}</span>`;
+            stepsEl.appendChild(reasonRow);
+            stepsEl.scrollTop = stepsEl.scrollHeight;
+          }
+          break;
+        }
+
+        case 'tool_call':
+          _pendingStep = document.createElement('div');
+          _pendingStep.className = 'flex items-start gap-2.5 text-xs text-gray-400';
+          _pendingStep.innerHTML = `<span class="step-icon flex-shrink-0 mt-0.5">${ICON.spinner}</span><span class="step-text leading-relaxed">${escapeHtml(event.message || 'Calling tool…')}</span>`;
+          if (stepsEl) { stepsEl.appendChild(_pendingStep); stepsEl.scrollTop = stepsEl.scrollHeight; }
+          break;
+
+        case 'tool_done':
+          _resolveStep(_pendingStep, true);
+          _pendingStep = null;
+          break;
+
+        case 'agent_chunk': {
+          const text = event.data?.text ?? null;
+          if (text) {
+            // Show a "receiving" indicator the first time a chunk arrives
+            if (!_streamingStep) {
+              _streamingStep = _createStep('Receiving response…');
+            }
+            accumulatedResponse += text;
+          }
+          break;
+        }
+
+        case 'done': {
+          _resolveStep(_pendingStep, true);
+          _pendingStep = null;
+
+          // Resolve the streaming indicator and parse the response
+          if (_streamingStep) {
+            _resolveStep(_streamingStep, true);
+            _streamingStep = null;
+          }
+
+          if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+          }
+
+          if (accumulatedResponse) {
+            const parsed = _extractJSON(accumulatedResponse);
+            if (parsed) {
+              _renderStructuredResponse(parsed, accumulatedResponse);
+            } else {
+              // Fallback: show the raw text
+              if (responseEl) responseEl.classList.remove('hidden');
+              if (outputEl)   outputEl.textContent = accumulatedResponse;
+            }
+          }
+          break;
+        }
+
+        case 'error': {
+          const errMsg = typeof event.message === 'string'
+            ? event.message
+            : JSON.stringify(event.message);
+          _resolveStep(_pendingStep, false, errMsg);
+          _pendingStep = null;
+          if (_streamingStep) {
+            _resolveStep(_streamingStep, false);
+            _streamingStep = null;
+          }
+          if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+          }
+          break;
+        }
+      }
+    }
+
+    const body = { connection_id: connectionId, walk_text: walkText };
+    if (kibanaUrl)    body.kibana_url    = kibanaUrl;
+    if (inferenceId)  body.inference_id  = inferenceId;
+
+    fetch('/SNMP/GenerateTemplateAndProfiles/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify(body),
+    })
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const reader = response.body.getReader();
+        _activeReader = reader;
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function pump() {
+          return reader.read().then(({ done, value }) => {
+            if (done) { _activeReader = null; return; }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data: ')) continue;
+              const jsonStr = trimmed.slice(6).trim();
+              if (!jsonStr) continue;
+              try { handleChunk(JSON.parse(jsonStr)); } catch (_) {}
+            }
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(err => {
+        if (stepsEl) {
+          const errRow = document.createElement('div');
+          errRow.className = 'flex items-start gap-2.5 text-xs text-red-400';
+          errRow.innerHTML = `<span class="flex-shrink-0">${ICON.xmark}</span><span>Request failed: ${escapeHtml(err.message)}</span>`;
+          stepsEl.appendChild(errRow);
+        }
+        if (generateBtn) {
+          generateBtn.disabled = false;
+          generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      });
+  }
 
   // ── Global exports ─────────────────────────────────────────────────────────────
 

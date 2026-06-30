@@ -68,6 +68,24 @@
           </p>
           {% endif %}
 
+          <!-- Inference model selector -->
+          <div id="aiTemplateModelContainer" class="hidden flex flex-col gap-2 mt-1">
+            <label class="text-sm font-medium text-gray-300 flex items-center gap-1">
+              Inference Model
+              <span class="text-red-400">*</span>
+            </label>
+            <div class="relative">
+              <select id="aiTemplateModelSelect" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
+                <option value="" disabled selected>Loading models…</option>
+              </select>
+              <svg id="aiTemplateModelLoading" class="hidden animate-spin absolute right-8 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-purple-400" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <p id="aiTemplateModelError" class="hidden text-xs text-yellow-400">Could not load models from the Inference Service.</p>
+          </div>
+
           <!-- Kibana URL — only shown when the selected connection uses a URL instead of a Cloud ID -->
           <div id="aiTemplateKibanaUrlContainer" class="hidden mt-3 flex flex-col gap-2">
             <label for="aiTemplateKibanaUrl" class="text-sm font-medium text-gray-300 flex items-center gap-1">
@@ -154,6 +172,93 @@
           </svg>
           Generate Template and Profiles
         </button>
+      </div>
+
+      <!-- Generation Progress & Response -->
+      <div id="aiTemplateGenerationPanel" class="hidden mt-5 flex flex-col gap-4">
+
+        <!-- Progress steps — timeline style -->
+        <div id="aiTemplateProgressSteps" class="flex flex-col gap-1 border-l-2 border-gray-700 pl-4 ml-1"></div>
+
+        <!-- ── Structured response (shown when JSON is parsed successfully) ── -->
+        <div id="aiTemplateStructuredResponse" class="hidden flex flex-col gap-4">
+
+          <!-- Explanation card -->
+          <div class="bg-purple-950/20 border border-purple-500/20 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span class="text-xs font-semibold text-purple-300 uppercase tracking-wide">Analysis</span>
+            </div>
+            <p id="aiTemplateExplanationText" class="text-sm text-gray-300 leading-relaxed"></p>
+          </div>
+
+          <!-- New Profiles section -->
+          <div id="aiTemplateProfilesSection" class="hidden flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
+              <span id="aiTemplateProfilesHeader" class="text-xs font-semibold text-gray-400 uppercase tracking-wide">New Profiles</span>
+            </div>
+            <div id="aiTemplateProfilesAccordion" class="flex flex-col gap-2"></div>
+          </div>
+
+          <!-- Device Template section -->
+          <div id="aiTemplateTemplateSection" class="hidden flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+              </svg>
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Device Template</span>
+            </div>
+            <div id="aiTemplateTemplateCard" class="bg-gray-900/50 border border-gray-700 rounded-lg p-4"></div>
+          </div>
+
+          <!-- Action row -->
+          <div class="flex items-center justify-between pt-1">
+            <button
+              id="aiTemplateCopyJsonBtn"
+              type="button"
+              class="btn btn-xs border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 flex items-center gap-1.5">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              Copy JSON
+            </button>
+            <button
+              id="aiTemplateImportBtn"
+              type="button"
+              class="btn btn-sm border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              Import Profiles &amp; Template
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Raw fallback (shown only when JSON parse fails) ── -->
+        <div id="aiTemplateResponseContainer" class="hidden flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Agent Response</span>
+            <button
+              id="aiTemplateCopyBtn"
+              type="button"
+              class="btn btn-xs border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              Copy
+            </button>
+          </div>
+          <pre
+            id="aiTemplateResponseOutput"
+            class="bg-gray-900 border border-gray-700 rounded-lg p-4 text-xs text-gray-300 max-h-96 overflow-y-auto whitespace-pre-wrap break-words font-mono"
+          ></pre>
+        </div>
+
       </div>
 
     </div>

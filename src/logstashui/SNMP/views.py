@@ -4,12 +4,13 @@
 
 from django.shortcuts import render
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 
 from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 
+import datetime
 import os
 import json
 
@@ -483,8 +484,8 @@ def CheckAgentBuilderResources(request):
     try:
         from Common.ai.agent_builder import AgentBuilder, load_resources_from_directory
 
-        _ai_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'device_template_generation')
-        tools, skills, agents = load_resources_from_directory(_ai_dir)
+        _assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'device_template_generation')
+        tools, skills, agents = load_resources_from_directory(_assets_dir)
 
         builder = AgentBuilder(
             connection_id=int(connection_id),
@@ -530,8 +531,8 @@ def InstallAgentBuilderPackage(request):
     try:
         from Common.ai.agent_builder import AgentBuilder, load_resources_from_directory
 
-        _ai_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'device_template_generation')
-        tools, skills, agents = load_resources_from_directory(_ai_dir)
+        _assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'device_template_generation')
+        tools, skills, agents = load_resources_from_directory(_assets_dir)
 
         builder = AgentBuilder(
             connection_id=int(connection_id),
@@ -546,4 +547,189 @@ def InstallAgentBuilderPackage(request):
 
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def GenerateTemplateAndProfiles(request):
+    """
+    Orchestrate SNMP AI template/profile generation.
+
+    1. Splits the raw walk into 5 000-line chunks.
+    2. Bulk-indexes the chunks into a timestamped ES index.
+    3. Invokes the ``snmp-profile-author`` Agent Builder agent with the index
+       name as context and streams its response back to the browser via SSE.
+
+    POST body (JSON):
+        connection_id – int, required
+        kibana_url    – str, optional (URL-based connections only)
+        walk_text     – str, required (raw SNMP walk output)
+
+    Response: text/event-stream — each event is a JSON object:
+        {"phase": "indexing",      "message": "..."}
+        {"phase": "indexing_done", "message": "..."}
+        {"phase": "invoking",      "message": "..."}
+        {"phase": "agent_chunk",   "data":    <raw chunk dict from Kibana>}
+        {"phase": "done"}
+        {"phase": "error",         "message": "..."}
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_id = data.get('connection_id')
+    kibana_url    = data.get('kibana_url') or None
+    walk_text     = data.get('walk_text', '')
+    inference_id  = data.get('inference_id') or None
+
+    if not connection_id:
+        return JsonResponse({'error': 'connection_id is required'}, status=400)
+    if not walk_text.strip():
+        return JsonResponse({'error': 'walk_text is required'}, status=400)
+
+    def _sse(payload):
+        return f"data: {json.dumps(payload)}\n\n"
+
+    def _stream():
+        from Common.elastic_utils import bulk_index_documents
+        from Common.ai.agent_builder import AgentBuilder
+
+        if not inference_id:
+            yield _sse({"phase": "error", "message": "No inference model selected."})
+            return
+
+        # ── 1. Chunk the walk into 5 000-line documents ───────────────────────
+        lines      = walk_text.splitlines()
+        chunk_size = 5000
+        chunks     = [
+            {"message": "\n".join(lines[i:i + chunk_size])}
+            for i in range(0, len(lines), chunk_size)
+        ]
+
+        ts         = datetime.datetime.utcnow().strftime('%Y%m%dt%H%M%Sz')
+        index_name = f"snmp-template_generation-{ts}"
+
+        yield _sse({
+            "phase":   "indexing",
+            "message": f"Indexing walk data into Elasticsearch ({len(chunks)} chunk(s) → {index_name})…",
+        })
+
+        # ── 2. Bulk index ─────────────────────────────────────────────────────
+        try:
+            bulk_index_documents(int(connection_id), index_name, chunks)
+        except Exception as exc:
+            yield _sse({"phase": "error", "message": f"Indexing failed: {exc}"})
+            return
+
+        yield _sse({"phase": "indexing_done"})
+
+        # ── 3. Build the agent prompt ─────────────────────────────────────────
+        user_message = (
+            f"I have indexed a raw SNMP walk into Elasticsearch index `{index_name}`. "
+            f"The walk is split into {len(chunks)} document(s) of up to 5,000 lines each, "
+            f"stored in the `message` field. "
+            f"Please analyse the OIDs present and generate a LogstashUI device template "
+            f"with the appropriate profiles. Consult the SNMP Catalog knowledge in your "
+            f"instructions to reuse any existing OIDs and profiles, then produce JSON for "
+            f"any new profiles required."
+        )
+
+        # Build configuration_overrides: agent instructions + full catalog appended.
+        # Skills can't be linked to agents via the API, so we inject the catalog here.
+        _base = os.path.dirname(os.path.abspath(__file__))
+        _agent_json = os.path.join(_base, 'assets', 'device_template_generation', 'agents', 'snmp-profile-author.json')
+        _catalog_md = os.path.join(_base, 'data', 'template_profile_context.md')
+        try:
+            with open(_agent_json, 'r', encoding='utf-8') as fh:
+                _agent_def = json.load(fh)
+            _base_instructions = _agent_def.get('configuration', {}).get('instructions', '')
+        except Exception:
+            _base_instructions = ''
+        try:
+            with open(_catalog_md, 'r', encoding='utf-8') as fh:
+                _catalog = fh.read()
+        except Exception:
+            _catalog = ''
+
+        _full_instructions = _base_instructions
+        if _catalog:
+            _full_instructions += f"\n\n---\n\n## SNMP Catalog\n\n{_catalog}"
+
+        configuration_overrides = {"instructions": _full_instructions} if _full_instructions else None
+
+        yield _sse({
+            "phase":   "invoking",
+            "message": f"Invoking SNMP Profile Author ({inference_id})…",
+        })
+
+        # ── 4. Stream agent response ──────────────────────────────────────────
+        try:
+            builder = AgentBuilder(
+                connection_id=int(connection_id),
+                kibana_url_override=kibana_url,
+            )
+            kibana_base = builder._kibana_url
+            for chunk in builder.invoke_agent(
+                'snmp-profile-author', user_message,
+                inference_id=inference_id,
+                configuration_overrides=configuration_overrides,
+            ):
+                err = chunk.get('error')
+                if err:
+                    msg = err if isinstance(err, str) else json.dumps(err)
+                    yield _sse({"phase": "error", "message": msg})
+                    return
+
+                event_type = chunk.get('event')
+                # Agent Builder wraps the actual payload one level deep:
+                # SSE data line parses to {"data": {<actual content>}}
+                outer_data = chunk.get('data') or {}
+                data       = outer_data.get('data') if isinstance(outer_data.get('data'), dict) else outer_data
+
+                if event_type == 'conversation_id_set':
+                    conv_id = data.get('conversation_id', '')
+                    if conv_id:
+                        conv_url = (
+                            f"{kibana_base}/app/agent_builder/agents"
+                            f"/snmp-profile-author/conversations/{conv_id}"
+                        )
+                        yield _sse({"phase": "conversation_link", "url": conv_url, "conversation_id": conv_id})
+
+                elif event_type == 'conversation_created':
+                    title = data.get('title', '')
+                    if title:
+                        yield _sse({"phase": "conversation_title", "title": title})
+
+                elif event_type == 'reasoning':
+                    reasoning_text = data.get('reasoning', '')
+                    if reasoning_text and not data.get('transient', False):
+                        yield _sse({"phase": "reasoning", "message": reasoning_text})
+
+                elif event_type == 'message_chunk':
+                    text = data.get('text_chunk', '')
+                    if text:
+                        yield _sse({"phase": "agent_chunk", "data": {"text": text}})
+
+                elif event_type == 'tool_call':
+                    tool_id = data.get('tool_id', 'unknown')
+                    yield _sse({"phase": "tool_call", "message": f"Calling tool: {tool_id}…"})
+
+                elif event_type == 'tool_result':
+                    yield _sse({"phase": "tool_done"})
+
+                elif event_type in ('message_complete', 'round_complete', 'thinking_complete'):
+                    pass  # Redundant / very large — content already built from message_chunk events
+
+        except Exception as exc:
+            yield _sse({"phase": "error", "message": f"Agent invocation failed: {exc}"})
+            return
+
+        yield _sse({"phase": "done"})
+
+    response = StreamingHttpResponse(_stream(), content_type='text/event-stream')
+    response['X-Accel-Buffering'] = 'no'
+    response['Cache-Control']     = 'no-cache'
+    return response
 

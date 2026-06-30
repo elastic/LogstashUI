@@ -82,5 +82,6 @@ urlpatterns = [
     # AI Template Generation endpoints
     path("CheckAgentBuilderResources/", views.CheckAgentBuilderResources, name="CheckAgentBuilderResources"),
     path("InstallAgentBuilderPackage/", views.InstallAgentBuilderPackage, name="InstallAgentBuilderPackage"),
+    path("GenerateTemplateAndProfiles/", views.GenerateTemplateAndProfiles, name="GenerateTemplateAndProfiles"),
 
 ]

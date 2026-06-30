@@ -477,6 +477,41 @@ def ingest_to_data_stream(connection_id, data_stream_name, documents, pipeline_n
         raise
 
 
+def bulk_index_documents(connection_id, index_name, documents):
+    """
+    Bulk index documents into a regular Elasticsearch index.
+
+    Args:
+        connection_id: ES connection ID
+        index_name:    Target index name (must be lowercase, no spaces)
+        documents:     List of dicts to index.  String values are wrapped in
+                       {"message": value} automatically.
+
+    Returns:
+        Bulk response dict from Elasticsearch
+    """
+    try:
+        es_client = get_elastic_connection(connection_id)
+
+        bulk_body = []
+        for doc in documents:
+            bulk_body.append({"index": {"_index": index_name}})
+            bulk_body.append({"message": doc} if isinstance(doc, str) else doc)
+
+        response = es_client.bulk(body=bulk_body, refresh=True)
+        response_dict = dict(response)
+
+        if response_dict.get('errors'):
+            logger.error("Bulk index had errors for %s: %s", index_name, response_dict)
+        else:
+            logger.info("Indexed %d documents into %s", len(documents), index_name)
+
+        return response_dict
+    except Exception as e:
+        logger.error("Error bulk indexing to %s: %s", index_name, e, exc_info=True)
+        raise
+
+
 def get_kibana_url(connection_id):
     """
     Get Kibana URL from Elasticsearch connection

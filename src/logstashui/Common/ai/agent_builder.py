@@ -10,7 +10,7 @@ API reference: https://www.elastic.co/docs/explore-analyze/ai-features/agent-bui
 
 Typical usage
 ─────────────
-    from Common.ai.agent_builder import AgentBuilder, RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT
+    from Common.assets.agent_builder import AgentBuilder, RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT
 
     builder = AgentBuilder(connection_id=42)
     # or, for URL-based connections:
@@ -78,7 +78,17 @@ def load_resources_from_directory(base_dir):
                 with open(filepath, 'r', encoding='utf-8') as fh:
                     raw = json.load(fh)
 
-                # Strip internal annotation keys (e.g. _comment)
+                # _content_from_file: load a sibling file's text into the `content` field.
+                # The path is resolved relative to the JSON file's own directory.
+                if '_content_from_file' in raw:
+                    content_path = os.path.join(os.path.dirname(filepath), raw['_content_from_file'])
+                    try:
+                        with open(content_path, 'r', encoding='utf-8') as cf:
+                            raw['content'] = cf.read()
+                    except Exception as ce:
+                        logger.warning("_content_from_file for %s failed: %s", filepath, ce)
+
+                # Strip internal annotation keys (e.g. _comment, _content_from_file)
                 definition = {k: v for k, v in raw.items() if not k.startswith('_')}
 
                 if 'id' not in definition:
@@ -397,6 +407,91 @@ class AgentBuilder:
             except Exception:
                 return True, {}
         return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
+
+    def invoke_agent(self, agent_id, message, stream=True, conversation_id=None, inference_id=None, configuration_overrides=None):
+        """
+        Send a user message to an Agent Builder agent via the converse API.
+
+        Sync  (stream=False): POST /api/agent_builder/converse
+        Async (stream=True):  POST /api/agent_builder/converse/async  ← preferred
+
+        Parameters
+        ──────────
+        agent_id        – the ``id`` of the agent (must already exist in Kibana)
+        message         – plain-text user message (``input`` field)
+        stream          – use the async/streaming endpoint (default: True)
+        conversation_id – optional; pass to continue an existing conversation
+        inference_id    – reserved for future use; not currently sent to Kibana
+
+        Streaming mode (stream=True)
+        ────────────────────────────
+        Yields dicts parsed from each ``data:`` SSE line.  Unparseable lines
+        are yielded as ``{'raw': <line>}``.  Errors yield ``{'error': <msg>}``.
+
+        Non-streaming mode (stream=False)
+        ──────────────────────────────────
+        Returns ``(True, response_dict)`` on success or
+        ``(False, error_str)`` on failure.
+        """
+        if stream:
+            path = '/api/agent_builder/converse/async'
+        else:
+            path = '/api/agent_builder/converse'
+
+        url  = f"{self._kibana_url}{path}"
+        body = {"input": message, "agent_id": agent_id}
+        if conversation_id:
+            body["conversation_id"] = conversation_id
+        if inference_id:
+            body["inference_id"] = inference_id
+        if configuration_overrides:
+            body["configuration_overrides"] = configuration_overrides
+
+        headers = {**self._write_headers}
+        logger.debug("invoke_agent → POST %s (agent=%s, inference_id=%s)", url, agent_id, inference_id)
+
+        if stream:
+            headers['Accept'] = 'text/event-stream'
+            try:
+                resp = requests.post(
+                    url, json=body, headers=headers, auth=self._auth,
+                    verify=False, timeout=300, stream=True,
+                )
+                if not resp.ok:
+                    logger.error("invoke_agent %s → HTTP %s: %s", url, resp.status_code, resp.text[:500])
+                    yield {'error': f"HTTP {resp.status_code} — URL: {url} — {resp.text[:300]}"}
+                    return
+
+                # SSE events have both an `event:` type line and a `data:` payload line.
+                # Buffer the event type so we can attach it to the parsed data dict.
+                current_event = None
+                for raw_line in resp.iter_lines():
+                    if not raw_line:
+                        current_event = None  # blank line = SSE event separator
+                        continue
+                    line = raw_line.decode('utf-8') if isinstance(raw_line, bytes) else raw_line
+                    logger.debug("agent_builder SSE raw: %s", line[:300])
+                    if line.startswith('event: '):
+                        current_event = line[7:].strip()
+                        continue
+                    if line.startswith('data: '):
+                        payload = line[6:]
+                        if not payload or payload == '[DONE]':
+                            continue
+                        try:
+                            yield {'event': current_event, 'data': json.loads(payload)}
+                        except json.JSONDecodeError:
+                            yield {'event': current_event, 'raw': payload}
+            except Exception as exc:
+                yield {'error': str(exc)}
+        else:
+            resp = requests.post(
+                url, json=body, headers=headers, auth=self._auth,
+                verify=False, timeout=300,
+            )
+            if resp.ok:
+                return True, resp.json()
+            return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
     def apply_all_resources(self, tools=None, skills=None, agents=None):
         """
