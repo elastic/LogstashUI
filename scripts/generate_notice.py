@@ -33,7 +33,8 @@ CUSTOM_DEPENDENCIES = {
     # Example: "my-custom-package": "owner/repo" or "https://github.com/owner/repo/blob/main/LICENSE"
     "d3": "https://github.com/d3/d3/blob/main/LICENSE",
     "codemirror": "https://github.com/codemirror/dev/blob/main/LICENSE",
-    "js-yaml": "https://github.com/nodeca/js-yaml/blob/master/LICENSE"
+    "js-yaml": "https://github.com/nodeca/js-yaml/blob/master/LICENSE",
+    "markedjs": "https://github.com/markedjs/marked/blob/master/LICENSE"
 }
 
 # Repository mappings for dependencies (fallback when automatic lookup fails)

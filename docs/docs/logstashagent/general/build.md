@@ -66,6 +66,7 @@ docker run -p 9650:9650 -p 9449:9449 -p 9500:9500 \
 - Python 3.12+
 - Logstash 9.x installed locally
 - `uv` (recommended) or `pip`
+- NPM
 
 ### Install Dependencies
 
@@ -83,13 +84,20 @@ pip install -e .
 
 ### Configure
 
-Copy and edit the example config:
+(OPTIONAL) Copy and edit the example config:
 
 ```bash
 cp src/logstashagent/config/logstashagent.example.yml src/logstashagent/config/logstashagent.yml
 ```
 
 Edit `logstashagent.yml` to point to your local Logstash installation.
+
+```bash
+uv run manage.py migrate
+uv run manage.py tailwind install
+uv run manage.py tailwind build
+uv run manage.py collectstatic --noinput
+uv run manage.py sync_snmp_official_data --cleanup```
 
 ### Run
 
