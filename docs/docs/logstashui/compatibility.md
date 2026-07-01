@@ -1,8 +1,14 @@
 # Logstash Version Compatibility
 
-## Recommended Version
+It's very frequently asked if we can support 7.x and 8.x versions of Logstash. In most cases, those versions will work. We DO NOT test against those versions. You may, see plugin options that don't exist in earlier versions, and that's something you'll want to look out for.
 
-**LogstashUI is optimized for Logstash 9.3** — this is the recommended version for the best experience and full feature compatibility.
+## Compatibility Matrix
+
+| LogstashUI Version | Logstash Version |
+|--------------------|------------------|
+| 0.4.x              | Logstash 9.3.x   |
+| 0.5.x              | Logstash 9.4.x   |
+
 
 ## Version Support
 
@@ -15,16 +21,7 @@ LogstashUI's primary focus is compatibility with **Logstash version 9**. We stro
 - All configuration options available
 - Optimal performance and stability
 
-### Logstash 8.x (Limited Support)
 
-LogstashUI is compatible with Logstash version 8, but **requires the use of Logstash Agent**.
-
-**Important considerations for version 8:**
-
-- Requires Logstash Agent for proper integration
-- Limited feature set compared to version 9
-- Some configuration options in the pipeline editor may not be available
-- Not the primary development focus
 
 ## Upgrading to Version 9
 
