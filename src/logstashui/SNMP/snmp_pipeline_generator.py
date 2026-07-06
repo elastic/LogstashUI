@@ -732,7 +732,9 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
             "config": {
                 "add_field": {
                     "[network][name]": f"{network}",
-                    "[metricset][module]": "system"
+                    "[metricset][module]": "system",
+                    "[tsds][category]": "metrics",
+                    "[tsds][index]": "metrics"
                 }
             }
         }
@@ -1167,6 +1169,7 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                     f"  observer_os_full = event.get(\"[observer][os][full]\")\n"
                     f"  network_name = event.get(\"[network][name]\")\n"
                     f"  timestamp = event.get(\"@timestamp\")\n"
+                    f"  _row_counter = 0\n"
                     + (f"{avg_pre_loop}\n" if avg_pre_loop else "")
                     + f"  rows.each do |row|\n"
                     f"    next unless row.is_a?(Hash)\n"
@@ -1184,6 +1187,9 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                     f"    new_event.set(\"[host][sysname]\", host_sysname) if host_sysname\n"
                     f"    new_event.set(\"[host][polled_address]\", host_polled_address) if host_polled_address\n"
                     f"    new_event.set(\"{table_set_path}\", row)\n"
+                    f"    new_event.set(\"[tsds][category]\", \"{table_name.lower()}\")\n"
+                    f"    new_event.set(\"[tsds][index]\", _row_counter.to_s)\n"
+                    f"    _row_counter += 1\n"
                     f"    new_event_block.call(new_event)\n"
                     f"  end\n"
                     f"  event.remove(\"{table_field_path}\")\n"

@@ -733,3 +733,153 @@ def GenerateTemplateAndProfiles(request):
     response['Cache-Control']     = 'no-cache'
     return response
 
+
+_SNMP_TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'snmp_template.json')
+
+
+def _load_snmp_template():
+    with open(_SNMP_TEMPLATE_PATH, 'r', encoding='utf-8') as fh:
+        return json.load(fh)
+
+
+def CheckSNMPIndexTemplate(request):
+    """
+    Check whether the SNMP index template is installed and up to date on each
+    of the supplied Elasticsearch connections.
+
+    POST body (JSON):
+        connection_ids – [int, ...], required
+
+    Returns:
+        {
+            "results": [
+                {
+                    "connection_id": int,
+                    "connection_name": str,
+                    "status": "not_installed" | "installed" | "installed_but_outdated" | "error",
+                    "differences": [str],
+                    "error": str | null
+                }
+            ]
+        }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_ids = data.get('connection_ids', [])
+    if not connection_ids:
+        return JsonResponse({'error': 'connection_ids is required'}, status=400)
+
+    from Common.elastic_utils import check_index_template
+    from PipelineManager.models import Connection
+
+    try:
+        template_definition = _load_snmp_template()
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to load SNMP template: {e}'}, status=500)
+
+    template_name = template_definition.get('_meta', {}).get('template_name', 'metrics-snmp.polling')
+
+    results = []
+    for conn_id in connection_ids:
+        try:
+            conn = Connection.objects.get(id=int(conn_id))
+            result = check_index_template(int(conn_id), template_name, template_definition)
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': conn.name,
+                **result,
+            })
+        except Connection.DoesNotExist:
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'status': 'error',
+                'differences': [],
+                'error': f'Connection {conn_id} not found',
+            })
+        except Exception as e:
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'status': 'error',
+                'differences': [],
+                'error': str(e),
+            })
+
+    return JsonResponse({'results': results})
+
+
+def InstallSNMPIndexTemplate(request):
+    """
+    Install or update the SNMP index template on each of the supplied
+    Elasticsearch connections.
+
+    POST body (JSON):
+        connection_ids – [int, ...], required
+
+    Returns:
+        {
+            "success": bool,
+            "results": [
+                { "connection_id": int, "connection_name": str, "success": bool, "error": str? }
+            ]
+        }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_ids = data.get('connection_ids', [])
+    if not connection_ids:
+        return JsonResponse({'error': 'connection_ids is required'}, status=400)
+
+    from Common.elastic_utils import create_index_template
+    from PipelineManager.models import Connection
+
+    try:
+        template_definition = _load_snmp_template()
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Failed to load SNMP template: {e}'}, status=500)
+
+    template_name = template_definition.get('_meta', {}).get('template_name', 'metrics-snmp.polling')
+
+    overall_success = True
+    results = []
+    for conn_id in connection_ids:
+        try:
+            conn = Connection.objects.get(id=int(conn_id))
+            create_index_template(int(conn_id), template_name, template_definition)
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': conn.name,
+                'success': True,
+            })
+        except Connection.DoesNotExist:
+            overall_success = False
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'success': False,
+                'error': f'Connection {conn_id} not found',
+            })
+        except Exception as e:
+            overall_success = False
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'success': False,
+                'error': str(e),
+            })
+
+    return JsonResponse({'success': overall_success, 'results': results})
+

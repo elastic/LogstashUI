@@ -156,7 +156,7 @@ def get_template_data_categories():
             "aggs": {
                 "templates": {
                     "terms": {
-                        "field": "host.device_template",
+                        "field": "host.device_template.keyword",
                         "size": 100,
                         "missing": "No Template"
                     },
@@ -287,7 +287,7 @@ def get_high_resource_usage():
                     "aggs": {
                         "devices": {
                             "terms": {
-                                "field": "host.polled_address",
+                                "field": "host.polled_address.keyword",
                                 "size": 1000
                             },
                             "aggs": {

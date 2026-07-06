@@ -98,6 +98,174 @@ function computeLineDiff(oldLines, newLines) {
 
 // ===== END DIFF ALGORITHMS =====
 
+// ===== SNMP INDEX TEMPLATE STATUS =====
+
+// connection_ids involved in the current diff (populated after GetDeployDiff)
+let _snmpDiffConnectionIds = [];
+
+// true when at least one connection is missing the template (blocks deploy)
+let _snmpTemplateBlocked = false;
+
+// true when the "no changes" path has disabled the button
+let _snmpNoChangesBlocked = false;
+
+function _updateDeployButtonState() {
+    const btn = document.getElementById('confirmDeployButton');
+    if (!btn) return;
+
+    if (_snmpTemplateBlocked) {
+        btn.classList.add('hidden');
+        btn.disabled = true;
+    } else if (_snmpNoChangesBlocked) {
+        btn.classList.remove('hidden');
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        btn.classList.remove('hidden');
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+function _templateStatusBadge(status) {
+    const cfg = {
+        installed:              { dot: 'bg-green-400', text: 'text-green-300',  label: 'Installed'         },
+        installed_but_outdated: { dot: 'bg-yellow-400', text: 'text-yellow-300', label: 'Needs update'      },
+        not_installed:          { dot: 'bg-red-400',   text: 'text-red-300',    label: 'Not installed'     },
+        error:                  { dot: 'bg-gray-500',  text: 'text-gray-400',   label: 'Check failed'      },
+    };
+    const c = cfg[status] || cfg.error;
+    return `<span class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full ${c.dot} flex-shrink-0"></span>
+              <span class="text-xs ${c.text} font-medium">${c.label}</span>
+            </span>`;
+}
+
+function _renderTemplateStatusPanel(results) {
+    const list    = document.getElementById('snmpTemplateStatusList');
+    const loading = document.getElementById('snmpTemplateStatusLoading');
+    const panel   = document.getElementById('snmpTemplateStatusPanel');
+    const btn     = document.getElementById('snmpTemplateInstallBtn');
+    const label   = document.getElementById('snmpTemplateInstallBtnLabel');
+
+    if (loading) loading.classList.add('hidden');
+    if (!list) return;
+
+    list.innerHTML = '';
+
+    let hasMissing  = false;
+    let hasOutdated = false;
+
+    results.forEach(r => {
+        if (r.status === 'not_installed') hasMissing  = true;
+        if (r.status === 'installed_but_outdated') hasOutdated = true;
+
+        const diffHint = r.differences && r.differences.length
+            ? `<span class="text-xs text-gray-500 ml-1">(${r.differences.join(', ')})</span>`
+            : '';
+        const errorHint = r.error
+            ? `<span class="text-xs text-red-400 ml-1 truncate" title="${escapeHtml(r.error)}">${escapeHtml(r.error)}</span>`
+            : '';
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between px-4 py-2.5 gap-4';
+        row.innerHTML = `
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="text-sm text-white truncate">${escapeHtml(r.connection_name || String(r.connection_id))}</span>
+                ${diffHint}${errorHint}
+            </div>
+            <div class="flex-shrink-0">
+                ${_templateStatusBadge(r.status)}
+            </div>
+        `;
+        list.appendChild(row);
+    });
+
+    // Show/hide the install button and update its label
+    const needsAction = hasMissing || hasOutdated;
+    if (btn) {
+        if (needsAction) {
+            btn.classList.remove('hidden');
+            if (label) label.textContent = hasMissing ? 'Install Template' : 'Update Template';
+        } else {
+            btn.classList.add('hidden');
+        }
+    }
+
+    // Gate the deploy button when any connection is missing the template
+    _snmpTemplateBlocked = hasMissing;
+    _updateDeployButtonState();
+}
+
+async function checkSNMPIndexTemplateStatus(connectionIds) {
+    if (!connectionIds || connectionIds.length === 0) return;
+
+    const panel   = document.getElementById('snmpTemplateStatusPanel');
+    const loading = document.getElementById('snmpTemplateStatusLoading');
+    const list    = document.getElementById('snmpTemplateStatusList');
+
+    if (panel)   panel.classList.remove('hidden');
+    if (loading) loading.classList.remove('hidden');
+    if (list)    list.innerHTML = '';
+
+    try {
+        const response = await fetch('/SNMP/CheckSNMPIndexTemplate/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ connection_ids: connectionIds }),
+        });
+        const data = await response.json();
+        _renderTemplateStatusPanel(data.results || []);
+    } catch (err) {
+        if (loading) loading.classList.add('hidden');
+        _snmpTemplateBlocked = false;
+        _updateDeployButtonState();
+        console.error('Error checking SNMP index template:', err);
+    }
+}
+
+async function installSNMPIndexTemplate() {
+    if (!_snmpDiffConnectionIds || _snmpDiffConnectionIds.length === 0) return;
+
+    const btn   = document.getElementById('snmpTemplateInstallBtn');
+    const label = document.getElementById('snmpTemplateInstallBtnLabel');
+    const loading = document.getElementById('snmpTemplateStatusLoading');
+
+    if (btn)   btn.disabled = true;
+    if (label) label.textContent = 'Installing…';
+    if (loading) loading.classList.remove('hidden');
+
+    try {
+        const response = await fetch('/SNMP/InstallSNMPIndexTemplate/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ connection_ids: _snmpDiffConnectionIds }),
+        });
+        const result = await response.json();
+
+        if (!result.success) {
+            const firstError = (result.results || []).find(r => !r.success);
+            showToast(firstError ? firstError.error : 'Template install failed', 'error');
+        } else {
+            showToast('SNMP index template installed successfully', 'success');
+        }
+    } catch (err) {
+        showToast(`Template install failed: ${err.message}`, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+        // Re-check status after install attempt
+        await checkSNMPIndexTemplateStatus(_snmpDiffConnectionIds);
+    }
+}
+
+// ===== END SNMP INDEX TEMPLATE STATUS =====
+
 function hideSnmpDiffModal() {
     document.getElementById('snmpDiffModal').classList.add('hidden');
 }
@@ -117,6 +285,17 @@ async function prepareSnmpDiffModal() {
     // Show loading state
     document.getElementById('snmpDiffLoading').classList.remove('hidden');
     document.getElementById('snmpDiffContainer').classList.add('hidden');
+
+    // Reset template status panel
+    _snmpDiffConnectionIds = [];
+    _snmpTemplateBlocked   = false;
+    _snmpNoChangesBlocked  = false;
+    const templatePanel = document.getElementById('snmpTemplateStatusPanel');
+    if (templatePanel) templatePanel.classList.add('hidden');
+    const templateList = document.getElementById('snmpTemplateStatusList');
+    if (templateList) templateList.innerHTML = '';
+    const templateBtn = document.getElementById('snmpTemplateInstallBtn');
+    if (templateBtn) templateBtn.classList.add('hidden');
     
     // Reset the deploy button to enabled state (in case it was disabled from a previous deployment)
     const confirmButton = document.getElementById('confirmDeployButton');
@@ -159,6 +338,12 @@ async function prepareSnmpDiffModal() {
 
         // Store change count for deployment message
         window.snmpChangeCount = diffData.networks.length;
+
+        // Kick off index template status check for all involved connections
+        if (diffData.connections && diffData.connections.length > 0) {
+            _snmpDiffConnectionIds = diffData.connections.map(c => c.id);
+            checkSNMPIndexTemplateStatus(_snmpDiffConnectionIds);
+        }
 
         // Display overall stats
         const newPipelines = diffData.networks.filter(n => !n.current || n.current.trim() === '').length;
@@ -756,11 +941,8 @@ function displayNetworkDiffs(networks) {
         `;
 
         // Disable the deploy button since there's nothing to deploy
-        const deployButton = document.getElementById('confirmDeployButton');
-        if (deployButton) {
-            deployButton.disabled = true;
-            deployButton.classList.add('opacity-50', 'cursor-not-allowed');
-        }
+        _snmpNoChangesBlocked = true;
+        _updateDeployButtonState();
         return;
     }
 

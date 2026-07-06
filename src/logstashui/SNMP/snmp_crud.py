@@ -715,6 +715,7 @@ def GetDeployDiff(request):
 
         # Collect all pipeline names we need to fetch from ES
         pipeline_names_by_connection = {}
+        connection_name_map = {}
         network_pipeline_map = {}
 
         for network in networks:
@@ -722,6 +723,7 @@ def GetDeployDiff(request):
                 conn_id = network.connection.id
                 if conn_id not in pipeline_names_by_connection:
                     pipeline_names_by_connection[conn_id] = []
+                connection_name_map[conn_id] = network.connection.name
 
                 # Get unique templates for this network
                 devices = network.devices.all()
@@ -1144,7 +1146,11 @@ def GetDeployDiff(request):
         return JsonResponse({
             'success': True,
             'networks': network_diffs,
-            'has_changes': has_actual_changes
+            'has_changes': has_actual_changes,
+            'connections': [
+                {'id': conn_id, 'name': name}
+                for conn_id, name in connection_name_map.items()
+            ]
         })
 
     except Exception as e:
@@ -3296,7 +3302,7 @@ def get_devices_online_batch(devices):
                 aggregations={
                     "online_devices": {
                         "terms": {
-                            "field": "host.polled_address",
+                            "field": "host.polled_address.keyword",
                             "size": len(poll_addresses)
                         }
                     }

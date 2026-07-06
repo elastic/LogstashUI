@@ -84,4 +84,8 @@ urlpatterns = [
     path("InstallAgentBuilderPackage/", views.InstallAgentBuilderPackage, name="InstallAgentBuilderPackage"),
     path("GenerateTemplateAndProfiles/", views.GenerateTemplateAndProfiles, name="GenerateTemplateAndProfiles"),
 
+    # SNMP Index Template management endpoints
+    path("CheckSNMPIndexTemplate/", views.CheckSNMPIndexTemplate, name="CheckSNMPIndexTemplate"),
+    path("InstallSNMPIndexTemplate/", views.InstallSNMPIndexTemplate, name="InstallSNMPIndexTemplate"),
+
 ]
