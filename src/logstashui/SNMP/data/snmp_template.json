@@ -7,16 +7,18 @@
     "description": "SNMP polling metrics index template for LogstashUI. Extends the built-in metrics component templates with TSDS mode, a geo_point location field, and time-series metric/dimension annotations.",
     "managed_by": "LogstashUI",
     "template_name": "metrics-snmp.polling",
-    "version": "1.3"
+    "version": "1.6"
   },
   "template": {
     "settings": {
-      "index.mode": "time_series",
-      "index.routing_path": [
-        "host.polled_address",
-        "tsds.category",
-        "tsds.index"
-      ]
+      "index": {
+        "mode": "time_series",
+        "routing_path": [
+          "host.polled_address",
+          "tsds.category"
+        ]
+      }
+
     },
     "mappings": {
       "dynamic_templates": [

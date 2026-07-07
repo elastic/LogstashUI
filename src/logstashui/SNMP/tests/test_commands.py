@@ -4,7 +4,7 @@
 
 """
 Tests for the sync_snmp_official_data management command and the
-sync_official_profiles / sync_official_device_templates view-level helpers
+sync_official_profiles / sync_official_device_templates snmp_crud helpers
 it delegates to.
 
 Test categories:
@@ -21,7 +21,7 @@ import pytest
 from django.core.management import call_command
 from io import StringIO
 
-from SNMP.views import sync_official_profiles, sync_official_device_templates
+from SNMP.snmp_crud import sync_official_profiles, sync_official_device_templates
 from SNMP.models import Profile, DeviceTemplate
 
 

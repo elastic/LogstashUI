@@ -136,12 +136,12 @@ class Command(BaseCommand):
         return keys
 
     # ------------------------------------------------------------------
-    # Sync helpers (delegate to views.py functions)
+    # Sync helpers (delegate to snmp_crud functions)
     # ------------------------------------------------------------------
 
     def _sync_official_profiles(self):
         """Sync official profiles and return the count of official profiles in DB."""
-        from SNMP.views import sync_official_profiles
+        from SNMP.snmp_crud import sync_official_profiles
         from SNMP.models import Profile
         try:
             sync_official_profiles()
@@ -152,7 +152,7 @@ class Command(BaseCommand):
 
     def _sync_official_device_templates(self):
         """Sync official device templates and return the count of official templates in DB."""
-        from SNMP.views import sync_official_device_templates
+        from SNMP.snmp_crud import sync_official_device_templates
         from SNMP.models import DeviceTemplate
         try:
             sync_official_device_templates()
