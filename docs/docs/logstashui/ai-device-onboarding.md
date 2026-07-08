@@ -35,11 +35,16 @@ verbatim*, so a KB out of sync with the repo silently degrades authoring quality
    the AI + SNMP migrations, including `DraftDefinition.normalizers`).
 2. **AI Agent Settings** — set the Agent Builder base URL, API key, and agent id
    (`snmp-profile-author`) under AI Onboarding → AI Agent Settings (or seed `AISettings`).
-3. **Agent + tool** — from the AB-tool, deploy the agent and its `search_snmp_profiles` tool
-   (PUT-in-place, idempotent):
+3. **Agent + tool** — push the `snmp-profile-author` agent and its `search_snmp_profiles` tool
+   (PUT-in-place, idempotent, never deletes). The agent is a build artifact — deploy it with the
+   dedicated script:
    ```bash
-   ./deploy.sh          # reads .creds (ES/KB/KEY); upserts index, tool, agent — never deletes
+   export KB_URL="https://<cluster>.kb.<region>.cloud.es.io" KB_API_KEY="<agent-builder key>"
+   python3 deploy-agent.py            # upsert tool + agent to the target cluster
+   python3 deploy-agent.py --check    # drift gate: exit 0 = in sync, 1 = differs
    ```
+   (`deploy.sh` remains the full one-shot installer — index + tool + agent + KB seed — for a fresh
+   cluster; `deploy-agent.py` is the focused, cluster-parameterized agent push for the build/CI path.)
 4. **Sync the KB from the repo (source of truth):**
    ```bash
    export ES_URL="https://<cluster>.es.<region>.cloud.es.io" ES_API_KEY="<write key>"
