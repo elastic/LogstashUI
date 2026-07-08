@@ -443,3 +443,91 @@ class TestViewContextContent:
         user_profiles = [p for p in response.context['profiles'] if not p['is_official']]
         display_names = [p['display_name'] for p in user_profiles]
         assert display_names == sorted(display_names)
+
+
+class TestGenerateTemplateGroundingInline:
+    """GenerateTemplateAndProfiles reduces the walk to MIB-grounded columns and passes
+    them INLINE to the agent. It must NOT stage the walk in a backend ES index — the
+    record of truth stays local to LogstashUI, which may connect to multiple backends,
+    so per-backend staging (residue + backend-dependent output) is disallowed."""
+
+    # Mixed walk: SNMPv2 + IF-MIB columns (grounded) plus an enterprise OID (ungrounded).
+    WALK = "\n".join([
+        "1.3.6.1.2.1.1.1.0 = Cisco IOS Software, C2960X Software",
+        "1.3.6.1.2.1.1.3.0 = 44266130",
+        "1.3.6.1.2.1.1.5.0 = homelab-switch1",
+        "1.3.6.1.2.1.2.2.1.10.1 = 12345",   # ifInOctets col (IF-MIB) -> grounded, instances=2
+        "1.3.6.1.2.1.2.2.1.10.2 = 67890",
+        "1.3.6.1.4.1.9.9.999.1.0 = 1",       # enterprise -> no compiled MIB -> ungrounded
+    ])
+
+    def _post(self, client, connection_id):
+        resp = client.post(
+            '/SNMP/GenerateTemplateAndProfiles/',
+            data=json.dumps({
+                'connection_id': connection_id,
+                'walk_text': self.WALK,
+                'inference_id': '.rainbow-sprinkles-elastic',
+            }),
+            content_type='application/json',
+        )
+        # Drain the SSE stream.
+        return b''.join(resp.streaming_content).decode()
+
+    @patch('Common.elastic_utils.bulk_index_documents')
+    @patch('Common.ai.agent_builder.AgentBuilder')
+    def test_grounded_columns_inline_no_backend_write(
+        self, MockAgentBuilder, mock_bulk, authenticated_client, test_connection
+    ):
+        instance = MockAgentBuilder.return_value
+        instance._kibana_url = 'https://kb.example'
+        captured = {}
+
+        def _invoke(agent_id, message, **kwargs):
+            captured['agent_id'] = agent_id
+            captured['message'] = message
+            return iter(())  # empty agent stream is fine for this assertion
+
+        instance.invoke_agent.side_effect = _invoke
+
+        body = self._post(authenticated_client, test_connection.id)
+
+        # 1. Nothing is written to any backend — no bulk index, no temp index name anywhere.
+        mock_bulk.assert_not_called()
+        assert 'snmp-template_generation' not in body
+        assert 'snmp-template_generation' not in captured['message']
+
+        # 2. The agent received the grounded columns INLINE (not an index to query).
+        assert 'grounded_columns' in captured['message']
+        payload = json.loads(captured['message'][captured['message'].index('{'):])
+        names = {c['name'] for c in payload['grounded_columns']}
+        assert 'sysDescr' in names      # SNMPv2-MIB scalar grounded
+        assert 'ifInOctets' in names    # IF-MIB table column grounded (multi-instance)
+        assert next(c for c in payload['grounded_columns'] if c['name'] == 'ifInOctets')['instances'] == 2
+        # The enterprise OID had no compiled MIB -> reported for MIB-loading, not authored.
+        assert any(u['prefix'].startswith('1.3.6.1.4.1.9') for u in payload['ungrounded_subtrees'])
+
+        # 3. SSE reports the grounding phase and never the old indexing phase.
+        assert '"phase": "grounding"' in body
+        assert 'indexing' not in body
+
+    @patch('Common.elastic_utils.bulk_index_documents')
+    @patch('Common.ai.agent_builder.AgentBuilder')
+    def test_empty_grounding_errors_without_backend_write(
+        self, MockAgentBuilder, mock_bulk, authenticated_client, test_connection
+    ):
+        # A walk with only un-grounded enterprise OIDs -> no columns to author.
+        resp = authenticated_client.post(
+            '/SNMP/GenerateTemplateAndProfiles/',
+            data=json.dumps({
+                'connection_id': test_connection.id,
+                'walk_text': '1.3.6.1.4.1.9999.1.2.3.0 = 5',
+                'inference_id': '.rainbow-sprinkles-elastic',
+            }),
+            content_type='application/json',
+        )
+        body = b''.join(resp.streaming_content).decode()
+
+        assert '"phase": "error"' in body
+        mock_bulk.assert_not_called()
+        MockAgentBuilder.return_value.invoke_agent.assert_not_called()

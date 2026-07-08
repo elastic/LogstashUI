@@ -742,11 +742,11 @@
     function handleChunk(event) {
       switch (event.phase) {
 
-        case 'indexing':
+        case 'grounding':
           _pendingStep = _createStep(event.message);
           break;
 
-        case 'indexing_done':
+        case 'grounding_done':
           _resolveStep(_pendingStep, true);
           _pendingStep = null;
           break;
