@@ -2492,10 +2492,9 @@ def GetDiscoveredDevices(request):
         all_discovered_devices = []
         errors = []
 
-        # Calculate time range (last 2 hours)
+        # Calculate time range (last 10 minutes)
         now = datetime.now(timezone.utc)
         ten_minutes_ago = now - timedelta(minutes=10)
-        #two_hours_ago = now - timedelta(hours=2)
 
         # Query each connection for discovered devices
         for connection in connections:

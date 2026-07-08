@@ -1361,3 +1361,67 @@ class TestDeleteNetworkPipelinePaths:
         data = json.loads(response.content)
         assert data['success'] is True
         assert not Network.objects.filter(id=network_id).exists()
+
+
+class TestDefaultTemplateAssignment:
+    """Tests for automatic Default template assignment (Device.save / DeviceTemplate.delete)"""
+
+    @pytest.fixture
+    def default_template(self, db):
+        """Create the official default template as synced from default.json"""
+        return DeviceTemplate.objects.create(
+            name='default',
+            description='Fallback template applied when no other template matches.',
+            vendor='Any',
+            official=True
+        )
+
+    def test_device_without_template_gets_default(self, default_template, test_network, test_credential_v2c):
+        """A device saved with no template is auto-assigned the official default template"""
+        device = Device.objects.create(
+            name='No Template Device',
+            ip_address='192.168.1.150',
+            credential=test_credential_v2c,
+            network=test_network
+        )
+        assert device.device_template == default_template
+
+    def test_device_keeps_explicit_template(self, default_template, test_network, test_credential_v2c):
+        """A device saved with an explicit template is not reassigned to default"""
+        other_template = DeviceTemplate.objects.create(
+            name='custom_template',
+            vendor='Any',
+            official=False
+        )
+        device = Device.objects.create(
+            name='Templated Device',
+            ip_address='192.168.1.151',
+            credential=test_credential_v2c,
+            network=test_network,
+            device_template=other_template
+        )
+        assert device.device_template == other_template
+
+    def test_default_template_cannot_be_deleted(self, default_template):
+        """The official default template is protected from deletion"""
+        from django.core.exceptions import ValidationError
+        with pytest.raises(ValidationError):
+            default_template.delete()
+
+    def test_deleting_template_reassigns_devices_to_default(self, default_template, test_network, test_credential_v2c):
+        """Deleting a template moves its devices onto the default template"""
+        doomed_template = DeviceTemplate.objects.create(
+            name='doomed_template',
+            vendor='Any',
+            official=False
+        )
+        device = Device.objects.create(
+            name='Orphaned Device',
+            ip_address='192.168.1.152',
+            credential=test_credential_v2c,
+            network=test_network,
+            device_template=doomed_template
+        )
+        doomed_template.delete()
+        device.refresh_from_db()
+        assert device.device_template == default_template
