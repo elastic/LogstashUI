@@ -63,6 +63,7 @@ class DraftDefinition(models.Model):
     status = models.CharField(max_length=16, choices=STATUS, default="pending")
 
     profile_json = models.JSONField(default=dict, help_text="Authored {get, walk, table} blob")
+    normalizers = models.JSONField(default=list, help_text="Authored normalizer ops (multiply/ratio/...)")
     unverified = models.JSONField(default=list, help_text="OIDs the agent could not verify")
     walk_summary = models.TextField(blank=True, help_text="OIDs found on the live snmpwalk")
     agent_notes = models.TextField(blank=True, help_text="Agent explanation / provenance")

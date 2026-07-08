@@ -128,6 +128,7 @@ def GenerateDraft(request):
         draft = DraftDefinition.objects.create(
             device=device, target_ip=device.ip_address, sys_descr=sys_descr, vendor=result["vendor"],
             proposed_name=result["name"], status="pending", profile_json=result["profile_json"],
+            normalizers=result.get("normalizers", []),
             unverified=result["unverified"], walk_summary=summary, agent_notes=result["agent_notes"])
         return JsonResponse({"success": True, "draft_id": draft.id,
                              "unverified_count": len(result["unverified"])})
@@ -156,7 +157,8 @@ def ApproveDraft(request):
 
         profile = Profile.objects.create(
             name=draft.proposed_name, description=f"[AI-authored] {draft.vendor}".strip(),
-            vendor=draft.vendor or "", product="", profile_data=draft.profile_json)
+            vendor=draft.vendor or "", product="", profile_data=draft.profile_json,
+            normalizers=draft.normalizers or [])
 
         tpl_name = f"{draft.proposed_name}_template"
         template = DeviceTemplate.objects.create(

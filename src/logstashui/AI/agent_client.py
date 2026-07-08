@@ -105,6 +105,11 @@ def generate_profile(settings, *, sys_descr, walk_summary, vendor, proposed_name
 
     unverified = profile.pop("_unverified", []) or []
     profile_json = {k: profile.get(k, {}) for k in ("get", "walk", "table")}
+    # Carry the agent-authored normalizers so approved profiles ship SCALED metrics
+    # (paired with _get_device_profiles reading Profile.normalizers at pipeline gen).
+    normalizers = profile.get("normalizers", []) or []
+    if not isinstance(normalizers, list):
+        normalizers = []
     # final assistant text for provenance display
     notes = ""
     for o in _iter_json_objects(json.dumps(resp)):
@@ -120,6 +125,7 @@ def generate_profile(settings, *, sys_descr, walk_summary, vendor, proposed_name
         "vendor": profile.get("vendor", vendor),
         "description": profile.get("description", ""),
         "profile_json": profile_json,
+        "normalizers": normalizers,
         "unverified": unverified,
         "agent_notes": notes,
     }
