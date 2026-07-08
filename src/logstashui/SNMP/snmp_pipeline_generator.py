@@ -938,9 +938,15 @@ def _get_device_profiles(device, profile_cache=None):
         if 'table' in profile_data and isinstance(profile_data['table'], dict):
             merged_oids['table'].update(profile_data['table'])
         
-        # Collect normalizers from this profile
-        if 'normalizers' in profile_data and isinstance(profile_data['normalizers'], list):
-            all_normalizers.extend(profile_data['normalizers'])
+        # Collect normalizers from this profile.
+        # FIX (MA 2026-06-19): official profiles carry normalizers inline in profile_data (loaded
+        # from disk JSON), but USER-authored profiles store them in the separate `normalizers` model
+        # column -> they were being dropped from generated pipelines. Fall back to the model field.
+        prof_norms = profile_data.get('normalizers')
+        if not prof_norms:
+            prof_norms = getattr(profile, 'normalizers', None) or []
+        if isinstance(prof_norms, list):
+            all_normalizers.extend(prof_norms)
 
     return (profile_ids, merged_oids, all_normalizers)
 
