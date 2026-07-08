@@ -100,7 +100,7 @@ def test_network(db, test_connection, test_credential):
 @pytest.fixture
 def test_device(db, test_network, test_credential):
     """Create a test SNMP device"""
-    device = Device.objects.create(
+    return Device.objects.create(
         name='Test Device',
         ip_address='192.168.1.100',
         port=161,
@@ -109,16 +109,6 @@ def test_device(db, test_network, test_credential):
         credential=test_credential,
         network=test_network
     )
-    # Add system profile
-    system_profile, _ = Profile.objects.get_or_create(
-        name='generic_system.json',
-        defaults={
-            'profile_data': {'is_official_placeholder': True},
-            'description': 'Official profile'
-        }
-    )
-    device.profiles.add(system_profile)
-    return device
 
 
 @pytest.fixture
@@ -127,7 +117,6 @@ def test_profile(db):
     return Profile.objects.create(
         name='custom_profile',
         description='Custom test profile',
-        type='Network',
         vendor='Generic',
         profile_data={
             'get': {
@@ -209,71 +198,52 @@ class TestDevicesView:
 
 @pytest.mark.django_db
 class TestProfilesView:
-    """Test Profiles page view"""
+    """Test DeviceTemplates page (profiles now live there; /SNMP/Profiles/ no longer exists)"""
 
-    def test_profiles_view_requires_authentication(self, client):
-        """Test that Profiles view requires authentication"""
-        response = client.get('/SNMP/Profiles/')
-        assert response.status_code == 302
-        assert '/Management/Login/' in response.url
-
-    def test_profiles_view_accessible_to_admin(self, authenticated_client):
-        """Test that admin users can access Profiles view"""
-        response = authenticated_client.get('/SNMP/Profiles/')
+    def test_device_templates_accessible_to_admin(self, authenticated_client):
+        """Admin users can access DeviceTemplates (the new home for profiles)"""
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
 
-    def test_profiles_view_accessible_to_readonly(self, readonly_client):
-        """Test that readonly users can access Profiles view"""
-        response = readonly_client.get('/SNMP/Profiles/')
+    def test_device_templates_accessible_to_readonly(self, readonly_client):
+        """Readonly users can access DeviceTemplates"""
+        response = readonly_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
 
-    def test_profiles_view_displays_official_profiles(self, authenticated_client):
-        """Test that Profiles view displays official profiles from JSON files"""
-        response = authenticated_client.get('/SNMP/Profiles/')
+    def test_device_templates_exposes_profiles_in_context(self, authenticated_client):
+        """DeviceTemplates view includes 'profiles' list in its context"""
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
-        # Should have profiles in context
         assert 'profiles' in response.context
-        profiles = response.context['profiles']
-        # Should have at least one profile (system profile if it exists in the data directory)
-        assert len(profiles) >= 0  # May be empty if no official profiles exist in test environment
 
-    def test_profiles_view_displays_user_profiles(self, authenticated_client, test_profile):
-        """Test that Profiles view displays user-created profiles"""
-        response = authenticated_client.get('/SNMP/Profiles/')
+    def test_device_templates_displays_user_profiles(self, authenticated_client, test_profile):
+        """User-created profiles appear in the DeviceTemplates context"""
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
         profiles = response.context['profiles']
-        # Should include custom profile
         assert any(p['name'] == 'custom_profile' for p in profiles)
 
-    def test_profiles_view_excludes_placeholder_profiles(self, authenticated_client):
-        """Test that placeholder profiles are excluded from display"""
-        # Create a placeholder profile
+    def test_device_templates_excludes_placeholder_profiles(self, authenticated_client):
+        """Placeholder profiles are excluded from the profiles list on DeviceTemplates"""
         Profile.objects.create(
             name='placeholder.json',
+            vendor='Generic',
             profile_data={'is_official_placeholder': True},
             description='Placeholder'
         )
-        
-        response = authenticated_client.get('/SNMP/Profiles/')
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
         profiles = response.context['profiles']
-        # Placeholder should not be in user profiles list
         user_profiles = [p for p in profiles if not p['is_official']]
         assert not any(p['name'] == 'placeholder.json' for p in user_profiles)
 
-    def test_profiles_view_sorts_by_pinned_then_alphabetically(self, authenticated_client):
-        """Test that profiles are sorted with pinned first, then alphabetically"""
-        response = authenticated_client.get('/SNMP/Profiles/')
+    def test_device_templates_profiles_sorted_alphabetically(self, authenticated_client):
+        """Profiles are sorted alphabetically by display_name on DeviceTemplates"""
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
         profiles = response.context['profiles']
-        
-        # Pinned profiles should come first
-        pinned_profiles = [p for p in profiles if p.get('pinned', False)]
-        unpinned_profiles = [p for p in profiles if not p.get('pinned', False)]
-        
-        # If there are pinned profiles, they should be at the start
-        if pinned_profiles:
-            assert profiles[0] in pinned_profiles
+        display_names = [p['display_name'] for p in profiles]
+        assert display_names == sorted(display_names)
 
 
 @pytest.mark.django_db
@@ -319,27 +289,17 @@ class TestViewsEdgeCases:
         assert 'networks' in response.context
         assert len(response.context['networks']) == 0
 
-    def test_profiles_view_with_missing_json_files(self, authenticated_client, tmp_path):
-        """Test Profiles view handles missing JSON files gracefully"""
-        # This should not crash even if some JSON files are missing
-        response = authenticated_client.get('/SNMP/Profiles/')
-        assert response.status_code == 200
-
-    def test_profiles_view_with_invalid_json_file(self, authenticated_client, settings, tmp_path):
-        """Test Profiles view handles invalid JSON files gracefully"""
-        # Create an invalid JSON file
+    def test_device_templates_with_invalid_json_file(self, authenticated_client, settings):
+        """DeviceTemplates handles malformed official profile JSON files gracefully"""
         official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
         if os.path.exists(official_profiles_dir):
             invalid_file = os.path.join(official_profiles_dir, 'test_invalid.json')
             try:
                 with open(invalid_file, 'w') as f:
                     f.write('{ invalid json }')
-                
-                response = authenticated_client.get('/SNMP/Profiles/')
-                # Should handle gracefully and still return 200
+                response = authenticated_client.get('/SNMP/DeviceTemplates/')
                 assert response.status_code == 200
             finally:
-                # Cleanup
                 if os.path.exists(invalid_file):
                     os.remove(invalid_file)
 
@@ -389,39 +349,37 @@ class TestViewContextContent:
         cred_names = [c.name for c in response.context['credentials']]
         assert 'Test Credential' in cred_names
 
-    def test_profiles_view_user_profile_fields(self, authenticated_client, test_profile):
-        """User profile dicts always have pinned=False"""
-        response = authenticated_client.get('/SNMP/Profiles/')
+    def test_device_templates_user_profile_required_fields(self, authenticated_client, test_profile):
+        """User profile dicts in DeviceTemplates context contain all required fields"""
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
         user_profiles = [p for p in response.context['profiles'] if not p['is_official']]
         for p in user_profiles:
-            assert p['pinned'] is False
+            for key in ('name', 'display_name', 'description', 'vendor', 'is_official'):
+                assert key in p
 
-    def test_profiles_view_official_profile_fields(self, authenticated_client):
-        """Official profiles parsed from JSON always have is_official=True"""
-        response = authenticated_client.get('/SNMP/Profiles/')
+    def test_device_templates_official_profile_fields(self, authenticated_client):
+        """Official profiles in DeviceTemplates context always have is_official=True"""
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
         official_profiles = [p for p in response.context['profiles'] if p['is_official']]
         for p in official_profiles:
             assert p['is_official'] is True
-            # Must have all required keys
-            for key in ('name', 'display_name', 'description', 'type', 'vendor', 'pinned'):
+            for key in ('name', 'display_name', 'description', 'vendor'):
                 assert key in p
 
-    def test_profiles_view_invalid_json_handled_gracefully(self, authenticated_client, settings, tmp_path):
-        """Profiles view gracefully ignores JSON files that cannot be parsed"""
+    def test_device_templates_invalid_json_handled_gracefully(self, authenticated_client, settings, tmp_path):
+        """DeviceTemplates gracefully skips official profile JSON files that cannot be parsed"""
         official_dir = tmp_path / 'official_profiles'
         official_dir.mkdir()
         (official_dir / 'broken.json').write_text('{ not valid json }')
 
         with patch('SNMP.views.os.path.exists', return_value=True), \
              patch('SNMP.views.os.listdir', return_value=['broken.json']):
-            response = authenticated_client.get('/SNMP/Profiles/')
+            response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
-        # Broken file's profile should still appear (with empty fields) thanks to the except: pass
         profiles = response.context['profiles']
         official_names = [p['name'] for p in profiles if p['is_official']]
-        # 'broken' should appear because the entry is always appended before reading JSON
         assert 'broken' in official_names
         broken = next(p for p in profiles if p['name'] == 'broken')
         assert broken['description'] == ''
@@ -433,12 +391,12 @@ class TestViewContextContent:
         assert isinstance(response.context['form'], ConnectionForm)
 
     def test_profiles_alphabetical_sort_among_unpinned(self, authenticated_client):
-        """Unpinned profiles are sorted alphabetically by display_name"""
+        """User profiles are sorted alphabetically by display_name on DeviceTemplates"""
         Profile.objects.all().delete()  # start clean for this test
-        Profile.objects.create(name='zebra_profile', description='', profile_data={'get': {}})
-        Profile.objects.create(name='alpha_profile', description='', profile_data={'get': {}})
+        Profile.objects.create(name='zebra_profile', vendor='Generic', description='', profile_data={'get': {}})
+        Profile.objects.create(name='alpha_profile', vendor='Generic', description='', profile_data={'get': {}})
 
-        response = authenticated_client.get('/SNMP/Profiles/')
+        response = authenticated_client.get('/SNMP/DeviceTemplates/')
         assert response.status_code == 200
         user_profiles = [p for p in response.context['profiles'] if not p['is_official']]
         display_names = [p['display_name'] for p in user_profiles]

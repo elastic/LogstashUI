@@ -27,7 +27,8 @@ def mock_connection(db):
         connection_type='CENTRALIZED',
         host='https://localhost:9200',
         username='elastic',
-        password='changeme'
+        password='changeme',
+        port=None,  # host already contains the port; avoid double-appending
     )
     return connection
 

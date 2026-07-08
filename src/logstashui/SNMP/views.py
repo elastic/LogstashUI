@@ -152,58 +152,6 @@ def DeviceTemplates(request):
         'credentials': snmp_test_credentials,
     })
 
-def Profiles(request):
-    # Load official profiles from JSON files
-    official_profiles = []
-    official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-    
-    if os.path.exists(official_profiles_dir):
-        for filename in os.listdir(official_profiles_dir):
-            if filename.endswith('.json'):
-                profile_name = filename[:-5]  # Remove .json extension
-                # Convert filename to display name (e.g., cisco_ios -> Cisco Ios)
-                display_name = profile_name.replace('_', ' ').title()
-                
-                # Load the JSON file to get description and vendor
-                profile_path = os.path.join(official_profiles_dir, filename)
-                description = ''
-                vendor = ''
-                try:
-                    with open(profile_path, 'r') as f:
-                        profile_data = json.load(f)
-                        description = profile_data.get('description', '')
-                        vendor = profile_data.get('vendor', '')
-                except Exception:
-                    pass  # If we can't load the file, just use empty values
-                
-                official_profiles.append({
-                    'name': profile_name,
-                    'display_name': display_name,
-                    'is_official': True,
-                    'description': description,
-                    'vendor': vendor
-                })
-    
-    # Load user profiles from database (exclude placeholders)
-    user_profiles = []
-    for profile in Profile.objects.all():
-        # Skip placeholder profiles (those with is_official_placeholder flag)
-        if profile.profile_data.get('is_official_placeholder'):
-            continue
-        user_profiles.append({
-            'name': profile.name,
-            'display_name': profile.name.replace('_', ' ').title(),
-            'is_official': False,
-            'description': profile.description,
-            'vendor': profile.vendor
-        })
-    
-    # Combine and sort profiles alphabetically
-    all_profiles = official_profiles + user_profiles
-    all_profiles.sort(key=lambda x: x['display_name'])
-    
-    return render(request, 'Profiles.html', {'profiles': all_profiles})
-
 def Credentials(request):
     from django.db.models import Count
     from PipelineManager.models import Connection
