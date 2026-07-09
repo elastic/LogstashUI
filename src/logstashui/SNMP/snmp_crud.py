@@ -3497,6 +3497,7 @@ def GetDeviceTemplate(request, template_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def AddDeviceTemplate(request):
     """Add a new device template"""
     if request.method != 'POST':
@@ -3571,6 +3572,7 @@ def AddDeviceTemplate(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def UpdateDeviceTemplate(request, template_id):
     """Update an existing device template"""
     if request.method != 'POST':
@@ -3646,6 +3648,7 @@ def UpdateDeviceTemplate(request, template_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def DeleteDeviceTemplate(request, template_id):
     """Delete a device template"""
     if request.method != 'POST':

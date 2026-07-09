@@ -9,6 +9,7 @@ from django.http import JsonResponse, StreamingHttpResponse
 from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
+from Common.decorators import require_admin_role
 
 import datetime
 import os
@@ -265,6 +266,7 @@ def CheckAgentBuilderResources(request):
         return JsonResponse({'error': str(e), 'api_available': False}, status=500)
 
 
+@require_admin_role
 def InstallAgentBuilderPackage(request):
     """
     Create or overwrite ALL Agent Builder resources for SNMP AI template
@@ -312,6 +314,7 @@ def InstallAgentBuilderPackage(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+@require_admin_role
 def GenerateTemplateAndProfiles(request):
     """
     Orchestrate SNMP AI template/profile generation.
@@ -578,6 +581,7 @@ def CheckSNMPIndexTemplate(request):
     return JsonResponse({'results': results})
 
 
+@require_admin_role
 def InstallSNMPIndexTemplate(request):
     """
     Install or update the SNMP index template on each of the supplied
