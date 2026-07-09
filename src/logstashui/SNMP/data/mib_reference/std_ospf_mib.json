@@ -1,0 +1,55 @@
+{
+  "name": "std_ospf_mib",
+  "description": "OSPF-MIB (RFC 1850 / 4444) neighbor state, interface state, and area tables. ospfNbrState 8=Full (healthy), 1=Down. Supported on Cisco IOS/NX-OS, Juniper Junos, Arista EOS, Nokia SR Linux, FRR.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "ospf.router.id": "1.3.6.1.2.1.14.1.1.0",
+    "ospf.admin.status": "1.3.6.1.2.1.14.1.2.0",
+    "ospf.version.number": "1.3.6.1.2.1.14.1.3.0",
+    "ospf.area.border.router.status": "1.3.6.1.2.1.14.1.4.0",
+    "ospf.as.boundary.router.status": "1.3.6.1.2.1.14.1.7.0"
+  },
+  "walk": {},
+  "table": {
+    "ospfNbrTable": {
+      "columns": {
+        "ospfNbrIpAddr": "1.3.6.1.2.1.14.10.1.1",
+        "ospfNbrAddressLessIndex": "1.3.6.1.2.1.14.10.1.2",
+        "ospfNbrRtrId": "1.3.6.1.2.1.14.10.1.3",
+        "ospfNbrOptions": "1.3.6.1.2.1.14.10.1.4",
+        "ospfNbrPriority": "1.3.6.1.2.1.14.10.1.5",
+        "ospfNbrState": "1.3.6.1.2.1.14.10.1.6",
+        "ospfNbrEvents": "1.3.6.1.2.1.14.10.1.12",
+        "ospfNbrLsRetransQLen": "1.3.6.1.2.1.14.10.1.13",
+        "ospfNbmaNbrPermanence": "1.3.6.1.2.1.14.10.1.14",
+        "ospfNbrHelloSuppressed": "1.3.6.1.2.1.14.10.1.15"
+      }
+    },
+    "ospfIfTable": {
+      "columns": {
+        "ospfIfIpAddress": "1.3.6.1.2.1.14.7.1.1",
+        "ospfAddressLessIf": "1.3.6.1.2.1.14.7.1.2",
+        "ospfIfAdminStat": "1.3.6.1.2.1.14.7.1.5",
+        "ospfIfAreaId": "1.3.6.1.2.1.14.7.1.6",
+        "ospfIfType": "1.3.6.1.2.1.14.7.1.7",
+        "ospfIfState": "1.3.6.1.2.1.14.7.1.12",
+        "ospfIfDesignatedRouter": "1.3.6.1.2.1.14.7.1.13",
+        "ospfIfRetransInterval": "1.3.6.1.2.1.14.7.1.4"
+      }
+    },
+    "ospfAreaTable": {
+      "columns": {
+        "ospfAreaId": "1.3.6.1.2.1.14.2.1.1",
+        "ospfAuthType": "1.3.6.1.2.1.14.2.1.3",
+        "ospfImportAsExtern": "1.3.6.1.2.1.14.2.1.4",
+        "ospfSpfRuns": "1.3.6.1.2.1.14.2.1.5",
+        "ospfAreaBdrRtrCount": "1.3.6.1.2.1.14.2.1.6",
+        "ospfAsBdrRtrCount": "1.3.6.1.2.1.14.2.1.7",
+        "ospfAreaLsaCount": "1.3.6.1.2.1.14.2.1.8",
+        "ospfAreaStatus": "1.3.6.1.2.1.14.2.1.12"
+      }
+    }
+  }
+}

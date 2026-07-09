@@ -2,13 +2,22 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 """
-Client for the external AI authoring agent (Elastic Agent Builder).
-Calls POST {agent_url}/api/agent_builder/converse and extracts the authored
-SNMP profile JSON from the response.
+Client for the AI SNMP profile authoring LLM.
+
+Grounding is INLINE (see inline_grounding): the authoring instructions + reference
+profiles + field schema travel with each request via converse
+`configuration_overrides`, so there is no stored-agent-prompt or KB dependency.
+
+Agent Builder is the current transport (a convenient LLM host). The split into
+assemble_request() (backend-agnostic) + send_via_agent_builder() (transport) keeps
+that seam thin, so a different LLM backend can be dropped in later without touching
+the caller (GenerateDraft) or the request assembly.
 """
 import json
 import re
 import requests
+
+from . import inline_grounding
 
 
 def _build_prompt(sys_descr, walk_summary, vendor, proposed_name):
@@ -80,11 +89,18 @@ def _extract_profile(resp_json, proposed_name):
     return None
 
 
-def generate_profile(settings, *, sys_descr, walk_summary, vendor, proposed_name, timeout_s=120):
-    """
-    Returns dict: {profile_json:{get,walk,table}, unverified:[], agent_notes:str, vendor, name}
-    Raises RuntimeError on transport / auth / parse failure.
-    """
+def assemble_request(sys_descr, walk_summary, vendor, proposed_name):
+    """Backend-agnostic: build (system_instructions, user_message). The inline
+    grounding lives in the system instructions; the per-device task is the message."""
+    system = inline_grounding.load_instructions() + "\n\n" + inline_grounding.build_grounding(vendor)
+    user = _build_prompt(sys_descr, walk_summary, vendor, proposed_name)
+    return system, user
+
+
+def send_via_agent_builder(settings, system, user, timeout_s=120):
+    """Transport (swappable). Sends an inline request to Agent Builder converse,
+    overriding the stored agent instructions and disabling tools so grounding is
+    entirely inline (no KB). Returns the parsed JSON response."""
     base = settings.agent_url.rstrip("/")
     url = f"{base}/api/agent_builder/converse"
     headers = {
@@ -92,13 +108,25 @@ def generate_profile(settings, *, sys_descr, walk_summary, vendor, proposed_name
         "kbn-xsrf": "true",
         "Content-Type": "application/json",
     }
-    payload = {"agent_id": settings.agent_id,
-               "input": _build_prompt(sys_descr, walk_summary, vendor, proposed_name)}
+    payload = {
+        "agent_id": settings.agent_id,
+        "input": user,
+        "configuration_overrides": {"instructions": system, "tools": []},
+    }
     r = requests.post(url, headers=headers, data=json.dumps(payload),
                       verify=settings.verify_tls, timeout=timeout_s)
     if r.status_code != 200:
         raise RuntimeError(f"Agent call failed (HTTP {r.status_code}): {r.text[:300]}")
-    resp = r.json()
+    return r.json()
+
+
+def generate_profile(settings, *, sys_descr, walk_summary, vendor, proposed_name, timeout_s=120):
+    """
+    Returns dict: {profile_json:{get,walk,table}, normalizers:[], unverified:[], agent_notes, vendor, name}
+    Raises RuntimeError on transport / auth / parse failure.
+    """
+    system, user = assemble_request(sys_descr, walk_summary, vendor, proposed_name)
+    resp = send_via_agent_builder(settings, system, user, timeout_s)
     profile = _extract_profile(resp, proposed_name)
     if not profile:
         raise RuntimeError("Could not extract a profile from the agent response")

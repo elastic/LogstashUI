@@ -1,0 +1,28 @@
+{
+  "name": "std_entity_sensors",
+  "description": "ENTITY-SENSOR-MIB (RFC 3433) + ENTITY-MIB (RFC 4133) standard physical sensors: temperature, fan, voltage, current, power supply. Vendor-neutral health table used by Arista, Juniper, Cisco IOS-XR/NX-OS and others. Correlate entPhySensor* with entPhysical* by shared entPhysicalIndex.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "entPhysical": {
+      "columns": {
+        "entPhysicalDescr": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "entPhysicalClass": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "entPhysicalName": "1.3.6.1.2.1.47.1.1.1.1.7"
+      }
+    },
+    "entPhySensor": {
+      "columns": {
+        "entPhySensorType": "1.3.6.1.2.1.99.1.1.1.1",
+        "entPhySensorScale": "1.3.6.1.2.1.99.1.1.1.2",
+        "entPhySensorPrecision": "1.3.6.1.2.1.99.1.1.1.3",
+        "entPhySensorValue": "1.3.6.1.2.1.99.1.1.1.4",
+        "entPhySensorOperStatus": "1.3.6.1.2.1.99.1.1.1.5",
+        "entPhySensorUnitsDisplay": "1.3.6.1.2.1.99.1.1.1.6"
+      }
+    }
+  }
+}
