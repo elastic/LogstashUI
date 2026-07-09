@@ -147,24 +147,34 @@ def ApproveDraft(request):
         draft = DraftDefinition.objects.get(pk=json.loads(request.body).get("draft_id"))
         if draft.status != "pending":
             return JsonResponse({"success": False, "error": f"Draft already {draft.status}"}, status=400)
-        if Profile.objects.filter(name=draft.proposed_name).exists():
-            return JsonResponse({"success": False, "error": "A profile with that name already exists"}, status=400)
+        # The proposed name is deterministic per device, so re-onboarding collides with the
+        # prior profile. Refresh an existing AI/user profile in place instead of dead-ending;
+        # only an OFFICIAL profile is protected from overwrite.
+        existing = Profile.objects.filter(name=draft.proposed_name).first()
+        if existing and existing.official_key:
+            return JsonResponse({"success": False, "error":
+                f"'{draft.proposed_name}' is an official profile and cannot be overwritten."}, status=400)
         # Check B (at approval): refuse if the device's IP became monitored since the draft was created.
         if draft.device and _ip_already_monitored(draft.device.ip_address, exclude_device_id=draft.device.id):
             return JsonResponse({"success": False, "error":
                 f"IP {draft.device.ip_address} is now monitored by another device — not attaching a "
                 f"duplicate. Reject this draft or remove the other device first."}, status=400)
 
-        profile = Profile.objects.create(
-            name=draft.proposed_name, description=f"[AI-authored] {draft.vendor}".strip(),
-            vendor=draft.vendor or "", product="", profile_data=draft.profile_json,
-            normalizers=draft.normalizers or [])
+        profile = existing or Profile(name=draft.proposed_name)
+        profile.description = f"[AI-authored] {draft.vendor}".strip()
+        profile.vendor = draft.vendor or ""
+        profile.product = ""
+        profile.profile_data = draft.profile_json
+        profile.normalizers = draft.normalizers or []
+        profile.save()
 
         tpl_name = f"{draft.proposed_name}_template"
-        template = DeviceTemplate.objects.create(
-            name=tpl_name, vendor=draft.vendor or "Any", official=False,
-            matching_rules=[draft.vendor] if draft.vendor else [])
-        template.profiles.add(profile)
+        template = DeviceTemplate.objects.filter(name=tpl_name, official=False).first()
+        if template is None:
+            template = DeviceTemplate.objects.create(
+                name=tpl_name, vendor=draft.vendor or "Any", official=False,
+                matching_rules=[draft.vendor] if draft.vendor else [])
+        template.profiles.set([profile])
 
         if draft.device:
             draft.device.device_template = template
