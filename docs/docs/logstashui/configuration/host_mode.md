@@ -2,7 +2,7 @@
 
 ## What is Host Mode?
 
-Host mode runs the LogstashAgent **natively** on your host machine instead of inside a Docker container. This provides more rliable pipeline simulations, making it ideal for users who frequently test and iterate on pipeline configurations.
+Host mode runs the LogstashAgent **natively** on your host machine instead of inside a Docker container. This provides more reliable pipeline simulations, making it ideal for users who frequently test and iterate on pipeline configurations.
 
 ### Embedded Mode vs Host Mode
 
@@ -29,7 +29,7 @@ Host mode runs the LogstashAgent **natively** on your host machine instead of in
 ### Software Requirements
 1. **[Docker](https://www.docker.com/get-started/)** - For running the LogstashUI and Nginx containers
 2. **[Python 3.12+](https://www.python.org/downloads/)** - For running the native LogstashAgent
-3. **[Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)** - Dedicated instance for simulation (must not be running)
+3. **[Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)** - Dedicated instance for simulation (must not be running)
 
 ---
 
@@ -84,7 +84,7 @@ python3 --version
 
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd logstashui
+cd LogstashUI
 ```
 
 ---
@@ -142,7 +142,7 @@ start_logstashui.bat
 ### Linux
 
 ```bash
-cd logstashui/bin
+cd LogstashUI/bin
 ./start_logstashui.sh
 ```
 
@@ -153,6 +153,9 @@ cd logstashui/bin
 3. **LogstashAgent starts natively** on your host machine (port 9501)
 4. **Docker containers start** for LogstashUI (Django) and Nginx
 5. **Nginx proxies** simulation requests from port 9500 to the native agent at 9501
+
+> [!NOTE]
+> The native agent's bind address differs by platform: on **Linux** it binds to `0.0.0.0:9501` (reachable from other machines), while on **Windows** it binds to `127.0.0.1:9501` (localhost only). Nginx reaches it via `host.docker.internal:9501` in both cases, so LogstashUI works the same either way.
 
 ### Verify Host Mode is Running
 

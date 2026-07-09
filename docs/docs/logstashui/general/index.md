@@ -1,18 +1,30 @@
 # General
 
-General guides for building, running, and maintaining LogstashUI.
+General guides for deploying, building, and maintaining LogstashUI.
 
 ---
 
-## **[Building and Running](/docs/docs/logstashui/general/build.md)**
+## **[Deploying LogstashUI](/docs/docs/logstashui/general/deploy.md)**
 
-Instructions for running LogstashUI in different modes.
+All the ways to deploy LogstashUI.
 
 **Covers:**
-- Docker Compose deployment (production/testing)
-- Local development setup
-- Prerequisites and dependencies
+- Standard Docker deployment (recommended)
+- Host-backed simulation
+- Source development setup
+
+**📖 [View deployment guide →](/docs/docs/logstashui/general/deploy.md)**
+
+---
+
+## **[Building from Source](/docs/docs/logstashui/general/build.md)**
+
+Instructions for building and running LogstashUI from source.
+
+**Covers:**
+- Local development setup and prerequisites
 - Running the development server
+- Building the Docker image locally
 
 **📖 [View build guide →](/docs/docs/logstashui/general/build.md)**
 

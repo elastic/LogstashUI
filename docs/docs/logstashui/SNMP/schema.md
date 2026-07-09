@@ -108,6 +108,9 @@ CPU, memory, and load fields. Standard source is **UCD-SNMP-MIB** (Net-SNMP, Lin
 
 Per-interface counters and state. Table: `interface`. Source: **IF-MIB** (`ifTable` and `ifXTable`).
 
+> [!NOTE]
+> Interface fields use flat names (`interface.in_octets`, not `interface.traffic.in.bytes`). The word `in` is a reserved keyword in ES|QL and nested `...in...` paths required backtick escaping in every query; the flat gNMI/OpenConfig-aligned naming avoids this and enables unified queries across SNMP and gNMI data sources.
+
 | Field | OID | MIB | Description |
 |---|---|---|---|
 | `interface.index` | `1.3.6.1.2.1.2.2.1.1` | IF-MIB | Interface index (ifIndex) |
@@ -115,26 +118,26 @@ Per-interface counters and state. Table: `interface`. Source: **IF-MIB** (`ifTab
 | `interface.alt_name` | `1.3.6.1.2.1.31.1.1.1.1` | IF-MIB | Shorter interface name (ifName from ifXTable) |
 | `interface.alias` | `1.3.6.1.2.1.31.1.1.1.18` | IF-MIB | Operator-configured alias (ifAlias) |
 | `interface.type` | `1.3.6.1.2.1.2.2.1.3` | IF-MIB | Interface type enum (ethernetCsmacd, etc.) |
-| `interface.status.admin` | `1.3.6.1.2.1.2.2.1.7` | IF-MIB | Admin state: 1=up, 2=down, 3=testing |
-| `interface.status.oper` | `1.3.6.1.2.1.2.2.1.8` | IF-MIB | Operational state: 1=up, 2=down |
+| `interface.admin_status` | `1.3.6.1.2.1.2.2.1.7` | IF-MIB | Admin state, translated to `UP`, `DOWN`, `TESTING` |
+| `interface.oper_status` | `1.3.6.1.2.1.2.2.1.8` | IF-MIB | Operational state, translated to `UP`, `DOWN`, `TESTING`, `UNKNOWN`, `DORMANT`, `NOT_PRESENT`, `LOWER_LAYER_DOWN` |
 | `interface.speed` | `1.3.6.1.2.1.2.2.1.5` | IF-MIB | Interface speed in bps (ifSpeed, 32-bit) |
 | `interface.speed_high_mbps` | `1.3.6.1.2.1.31.1.1.1.15` | IF-MIB | Interface speed in Mbps (ifHighSpeed, 64-bit) |
 | `interface.mac` | `1.3.6.1.2.1.2.2.1.6` | IF-MIB | Interface MAC address |
 | `interface.mtu` | `1.3.6.1.2.1.2.2.1.4` | IF-MIB | MTU in bytes |
 | `interface.last_change` | `1.3.6.1.2.1.2.2.1.9` | IF-MIB | Uptime timestamp of last state change |
 | `interface.vlan_id` | `1.3.6.1.2.1.17.7.1.4.5.1.1` | Q-BRIDGE-MIB | VLAN ID assigned to interface |
-| `interface.traffic.in.bytes` | `1.3.6.1.2.1.31.1.1.1.6` | IF-MIB | Inbound octets (64-bit counter) |
-| `interface.traffic.out.bytes` | `1.3.6.1.2.1.31.1.1.1.10` | IF-MIB | Outbound octets (64-bit counter) |
-| `interface.traffic.in.unicast_packets` | `1.3.6.1.2.1.31.1.1.1.7` | IF-MIB | Inbound unicast packets |
-| `interface.traffic.out.unicast_packets` | `1.3.6.1.2.1.31.1.1.1.11` | IF-MIB | Outbound unicast packets |
-| `interface.traffic.in.multicast_packets` | `1.3.6.1.2.1.31.1.1.1.8` | IF-MIB | Inbound multicast packets |
-| `interface.traffic.out.multicast_packets` | `1.3.6.1.2.1.31.1.1.1.12` | IF-MIB | Outbound multicast packets |
-| `interface.traffic.in.broadcast_packets` | `1.3.6.1.2.1.31.1.1.1.9` | IF-MIB | Inbound broadcast packets |
-| `interface.traffic.out.broadcast_packets` | `1.3.6.1.2.1.31.1.1.1.13` | IF-MIB | Outbound broadcast packets |
-| `interface.traffic.in.errors` | `1.3.6.1.2.1.2.2.1.14` | IF-MIB | Inbound packets with errors |
-| `interface.traffic.out.errors` | `1.3.6.1.2.1.2.2.1.20` | IF-MIB | Outbound packets with errors |
-| `interface.traffic.in.discards` | `1.3.6.1.2.1.2.2.1.13` | IF-MIB | Inbound packets dropped (no buffer) |
-| `interface.traffic.out.discards` | `1.3.6.1.2.1.2.2.1.19` | IF-MIB | Outbound packets dropped (no buffer) |
+| `interface.in_octets` | `1.3.6.1.2.1.31.1.1.1.6` | IF-MIB | Inbound octets (ifHCInOctets, 64-bit counter) |
+| `interface.out_octets` | `1.3.6.1.2.1.31.1.1.1.10` | IF-MIB | Outbound octets (ifHCOutOctets, 64-bit counter) |
+| `interface.in_unicast_pkts` | `1.3.6.1.2.1.31.1.1.1.7` | IF-MIB | Inbound unicast packets |
+| `interface.out_unicast_pkts` | `1.3.6.1.2.1.31.1.1.1.11` | IF-MIB | Outbound unicast packets |
+| `interface.in_multicast_pkts` | `1.3.6.1.2.1.31.1.1.1.8` | IF-MIB | Inbound multicast packets |
+| `interface.out_multicast_pkts` | `1.3.6.1.2.1.31.1.1.1.12` | IF-MIB | Outbound multicast packets |
+| `interface.in_broadcast_pkts` | `1.3.6.1.2.1.31.1.1.1.9` | IF-MIB | Inbound broadcast packets |
+| `interface.out_broadcast_pkts` | `1.3.6.1.2.1.31.1.1.1.13` | IF-MIB | Outbound broadcast packets |
+| `interface.in_errors` | `1.3.6.1.2.1.2.2.1.14` | IF-MIB | Inbound packets with errors |
+| `interface.out_errors` | `1.3.6.1.2.1.2.2.1.20` | IF-MIB | Outbound packets with errors |
+| `interface.in_discards` | `1.3.6.1.2.1.2.2.1.13` | IF-MIB | Inbound packets dropped (no buffer) |
+| `interface.out_discards` | `1.3.6.1.2.1.2.2.1.19` | IF-MIB | Outbound packets dropped (no buffer) |
 
 ---
 
@@ -506,9 +509,9 @@ Per-port FC traffic and error counters. Source: **SW-MIB** (Brocade).
 | `interface.index` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.1` | SW-MIB | Port index |
 | `interface.name` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.36` | SW-MIB | Port name string |
 | `interface.speed` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.35` | SW-MIB | Negotiated FC link speed |
-| `interface.status.physical` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.3` | SW-MIB | Physical port state enum |
-| `interface.traffic.in.frames` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.2` | SW-MIB | FC frames received |
-| `interface.traffic.out.frames` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.13` | SW-MIB | FC frames transmitted |
+| `interface.physical_status` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.3` | SW-MIB | Physical port state enum |
+| `interface.in_frames` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.2` | SW-MIB | FC frames received |
+| `interface.out_frames` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.13` | SW-MIB | FC frames transmitted |
 
 **Table: `fibre_channel`** — FC error counters (same index as `interface`):
 
@@ -516,13 +519,13 @@ Per-port FC traffic and error counters. Source: **SW-MIB** (Brocade).
 |---|---|---|---|
 | `fibre_channel.index` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.1` | SW-MIB | Port index |
 | `fibre_channel.wwn` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.34` | SW-MIB | Port World Wide Name |
-| `fibre_channel.errors.in.crc` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.4` | SW-MIB | Frames received with CRC errors |
-| `fibre_channel.errors.in.invalid_words` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.5` | SW-MIB | Invalid transmission words received |
-| `fibre_channel.errors.link_failures` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.6` | SW-MIB | Link failure count |
-| `fibre_channel.errors.loss_of_signal` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.7` | SW-MIB | Loss of signal events |
-| `fibre_channel.errors.loss_of_sync` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.8` | SW-MIB | Loss of sync events |
-| `fibre_channel.errors.in.encoding_disparity` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.9` | SW-MIB | Encoding disparity errors received |
-| `fibre_channel.errors.out.link_resets` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.10` | SW-MIB | Link reset primitives transmitted |
+| `fibre_channel.in_crc_errors` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.4` | SW-MIB | Frames received with CRC errors |
+| `fibre_channel.in_invalid_words` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.5` | SW-MIB | Invalid transmission words received |
+| `fibre_channel.link_failures` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.6` | SW-MIB | Link failure count |
+| `fibre_channel.loss_of_signal` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.7` | SW-MIB | Loss of signal events |
+| `fibre_channel.loss_of_sync` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.8` | SW-MIB | Loss of sync events |
+| `fibre_channel.in_encoding_disparity` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.9` | SW-MIB | Encoding disparity errors received |
+| `fibre_channel.out_link_resets` | `1.3.6.1.4.1.1588.2.1.1.1.6.2.1.10` | SW-MIB | Link reset primitives transmitted |
 
 ---
 

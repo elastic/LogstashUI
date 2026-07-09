@@ -126,7 +126,7 @@ logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs
 
 ## Related Documentation
 
-- **[Simulation Configuration](../../logstashui/configuration/simulation.md)** - LogstashUI simulation modes
-- **[Host Mode Setup](../../logstashui/configuration/host_mode.md)** - Setting up host mode for high-performance simulations
+- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - LogstashUI simulation modes
+- **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - Setting up host mode for high-performance simulations
 - **[Configuration Overview](/docs/docs/logstashagent/configuration/index.md)** - Return to LogstashAgent configuration index
 - **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Return to LogstashAgent documentation

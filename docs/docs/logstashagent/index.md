@@ -46,7 +46,7 @@ Persist agent identity and encrypted sensitive fields under package-local data s
 
 **For Managed Agent mode:**
 - [Python 3.12+](https://www.python.org/downloads/)
-- [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
 
 **For Enrolled Controller mode (`--run`):**
 - [Python 3.12+](https://www.python.org/downloads/)
@@ -164,4 +164,4 @@ Please open an issue to discuss large changes before submitting a pull request.
 
 Copyright 2024–2026 Elasticsearch and contributors.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](../../LICENSE.txt) for details.
+Licensed under the Elastic License 2.0 (ELv2). See [LICENSE](https://github.com/elastic/LogstashUI/blob/main/LICENSE.txt) for details.

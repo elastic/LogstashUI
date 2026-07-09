@@ -302,9 +302,10 @@ class Device(models.Model):
     
     def save(self, *args, **kwargs):
         # If no device template is assigned, use the Default template
+        # (synced from official_device_templates/default.json as 'default')
         if not self.device_template_id:
             default_template = DeviceTemplate.objects.filter(
-                name='Default',
+                name='default',
                 official=True
             ).first()
             
@@ -727,12 +728,12 @@ class DeviceTemplate(models.Model):
         Prevents deletion of the Default template itself.
         """
         # Prevent deletion of the Default template
-        if self.name == 'Default' and self.official:
+        if self.name == 'default' and self.official:
             raise ValidationError("Cannot delete the Default template")
-        
+
         # Get the Default template
         default_template = DeviceTemplate.objects.filter(
-            name='Default',
+            name='default',
             official=True
         ).exclude(id=self.id).first()
         

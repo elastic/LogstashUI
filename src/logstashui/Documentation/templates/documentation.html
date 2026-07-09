@@ -117,6 +117,63 @@
         margin-bottom: 0.25rem;
     }
 
+    /* Top-level section headers (depth=0 with children) */
+    .docs-subnav .nav-section-header {
+        display: block;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        color: rgba(255, 255, 255, 0.7);
+        text-decoration: none;
+        transition: background 0.15s ease, color 0.15s ease;
+        font-size: 0.9rem;
+    }
+
+    .docs-subnav .nav-section-header:hover {
+        background: rgba(168, 85, 247, 0.08);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .docs-subnav .nav-section-header.active {
+        background: rgba(168, 85, 247, 0.12);
+        color: rgba(168, 85, 247, 1);
+        font-weight: 500;
+    }
+
+    /* Collapsible nested sections (depth≥1 with children) */
+    .docs-subnav .nav-collapsible {
+        margin: 0.25rem 0;
+    }
+
+    .docs-subnav .nav-collapsible-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        padding: 0;
+    }
+
+    .docs-subnav .nav-collapsible-summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .docs-subnav .nav-collapsible-summary a {
+        flex: 1;
+    }
+
+    /* Chevron rotates when open */
+    .docs-subnav .nav-chevron {
+        flex-shrink: 0;
+        margin-left: 0.35rem;
+        color: rgba(148, 163, 184, 0.5);
+        transition: transform 0.18s ease;
+    }
+
+    .docs-subnav details[open] > .nav-collapsible-summary > .nav-chevron {
+        transform: rotate(90deg);
+    }
+
     .docs-content {
         flex: 1;
         min-width: 0;
@@ -137,7 +194,7 @@
                 </a>
             </li>
             {% for item in nav_tree %}
-                {% include 'nav_item.html' with item=item %}
+                {% include 'nav_item.html' with item=item depth=0 %}
             {% endfor %}
         </ul>
     </aside>
@@ -151,4 +208,18 @@
         </div>
     </div>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const activeLink = document.querySelector('.docs-subnav a.active');
+        if (activeLink) {
+            let node = activeLink.parentElement;
+            while (node && !node.classList.contains('docs-subnav')) {
+                if (node.tagName === 'DETAILS') {
+                    node.open = true;
+                }
+                node = node.parentElement;
+            }
+        }
+    });
+</script>
 {% endblock %}

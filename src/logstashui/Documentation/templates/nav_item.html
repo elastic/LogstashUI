@@ -6,19 +6,32 @@
 
 <li>
     {% if item.children %}
-        <!-- Folder with children - collapsible -->
-        <details open>
-            <summary>
-                <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">
-                    {{ item.title }}
-                </a>
-            </summary>
+        {% if depth == 0 %}
+            <!-- Top-level section: always expanded, no collapse toggle -->
+            <a href="{{ item.url }}" class="nav-section-header {% if request.path == item.url %}active{% endif %}">
+                {{ item.title }}
+            </a>
             <ul>
                 {% for child in item.children %}
-                    {% include 'nav_item.html' with item=child %}
+                    {% include 'nav_item.html' with item=child depth=1 %}
                 {% endfor %}
             </ul>
-        </details>
+        {% else %}
+            <!-- Nested folder: collapsible with chevron, collapsed by default -->
+            <details class="nav-collapsible">
+                <summary class="nav-collapsible-summary">
+                    <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}" onclick="event.stopPropagation()">
+                        {{ item.title }}
+                    </a>
+                </summary>
+                <ul>
+                    {% for child in item.children %}
+                        {% include 'nav_item.html' with item=child depth=depth|add:1 %}
+                    {% endfor %}
+                </ul>
+            </details>
+        {% endif %}
     {% else %}
         <!-- Leaf item - no children -->
         <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">

@@ -19,6 +19,11 @@ TITLE_OVERRIDES = {
     'logstashagent': 'LogstashAgent',
     'logstashagent.yml': 'logstashagent.yml',
     'logstashui.yml': 'logstashui.yml',
+    'SNMP': 'SNMP',
+    'tsds_implementation': 'TSDS Implementation',
+    'data_overview': 'Data Overview',
+    'pipeline_generation': 'Pipeline Generation',
+    'schema': 'Field Reference',
 }
 
 def get_display_title(filename):
@@ -151,7 +156,9 @@ def convert_github_alerts(html_content):
     }
     
     for alert_type, style in alert_types.items():
-        pattern = rf'<blockquote>\s*<p>\[!{alert_type}\](.*?)</p>\s*</blockquote>'
+        # Match to the closing </blockquote> so alerts containing lists or
+        # code blocks (multi-element blockquotes) are converted too.
+        pattern = rf'<blockquote>\s*<p>\[!{alert_type}\](.*?)</blockquote>'
         replacement = (
             f'<div style="background: {style["color"]}; border-left: 4px solid {style["border"]}; '
             f'padding: 1rem 1.5rem; border-radius: 0.5rem; margin: 1.5rem 0;">'
@@ -172,45 +179,47 @@ def rewrite_doc_links(html_content):
     - docs/docs/logstashui/index.md -> /Documentation/logstashui/
     - logstashui/index.md -> /Documentation/logstashui/
     """
+    # All patterns preserve an optional #anchor fragment after the .md extension.
+
     # Pattern 1: /docs/docs/path/index.md -> /Documentation/path/ (absolute paths)
     html_content = re.sub(
-        r'href="/docs/docs/([^"]+)/index\.md"',
-        r'href="/Documentation/\1/"',
+        r'href="/docs/docs/([^"#]+)/index\.md((?:#[^"]*)?)"',
+        r'href="/Documentation/\1/\2"',
         html_content
     )
-    
+
     # Pattern 2: /docs/docs/path/file.md -> /Documentation/path/file/ (absolute paths)
     html_content = re.sub(
-        r'href="/docs/docs/([^"]+)\.md"',
-        r'href="/Documentation/\1/"',
+        r'href="/docs/docs/([^"#]+)\.md((?:#[^"]*)?)"',
+        r'href="/Documentation/\1/\2"',
         html_content
     )
-    
+
     # Pattern 3: docs/docs/path/index.md -> /Documentation/path/ (relative paths)
     html_content = re.sub(
-        r'href="docs/docs/([^"]+)/index\.md"',
-        r'href="/Documentation/\1/"',
+        r'href="docs/docs/([^"#]+)/index\.md((?:#[^"]*)?)"',
+        r'href="/Documentation/\1/\2"',
         html_content
     )
-    
+
     # Pattern 4: docs/docs/path/file.md -> /Documentation/path/file/ (relative paths)
     html_content = re.sub(
-        r'href="docs/docs/([^"]+)\.md"',
-        r'href="/Documentation/\1/"',
+        r'href="docs/docs/([^"#]+)\.md((?:#[^"]*)?)"',
+        r'href="/Documentation/\1/\2"',
         html_content
     )
-    
+
     # Pattern 5: path/index.md -> /Documentation/path/ (generic relative)
     html_content = re.sub(
-        r'href="([^"/][^"]+)/index\.md"',
-        r'href="/Documentation/\1/"',
+        r'href="([^"/#][^"#]+)/index\.md((?:#[^"]*)?)"',
+        r'href="/Documentation/\1/\2"',
         html_content
     )
-    
+
     # Pattern 6: path/file.md -> /Documentation/path/file/ (generic relative)
     html_content = re.sub(
-        r'href="([^"/][^"]+)\.md"',
-        r'href="/Documentation/\1/"',
+        r'href="([^"/#][^"#]+)\.md((?:#[^"]*)?)"',
+        r'href="/Documentation/\1/\2"',
         html_content
     )
     
