@@ -15,61 +15,45 @@ Management → Settings → Experimental mode).
 - **Fix** — user/AI-authored profile normalizers are no longer dropped at pipeline generation
   (`_get_device_profiles` now reads `Profile.normalizers`, not just inline `profile_data`).
 
-## Components (two repos)
+## Components
 
 | Repo | Provides |
 |------|----------|
-| **LogstashUI** (this repo) | App: AI Onboarding models/views/UI, `agent_client`, `snmp_discovery`, the pipeline-generator normalizer fix. Migrations: `AI/0001`, `AI/0002_draftdefinition_normalizers`. |
-| **SNMP AB-tool** (`RCA/lab/snmp-ab-authoring-tool`) | The Agent Builder `snmp-profile-author` agent, the `snmp-definitions-kb` grounding KB, and the sync/deploy scripts (`deploy.sh`, `seed/load-kb.py`). |
+| **LogstashUI** (this repo) | Everything needed at runtime: AI Onboarding models/views/UI, `agent_client`, `snmp_discovery`, `inline_grounding`, the pipeline-generator normalizer fix, AND all grounding data under `SNMP/data/` (`official_profiles/`, `official_device_templates/`, `authoring_instructions.md`, `schema_reference/`, `mib_reference/`). Migrations: `AI/0001`, `AI/0002`. |
+| **SNMP AB-tool** (`RCA/lab/snmp-ab-authoring-tool`) | **Optional — not required at runtime.** Authoring/validation tooling and the now-optional KB path (`deploy.sh`, `deploy-agent.py`, `seed/load-kb.py`) if you ever want retrieval at scale. |
 
-## Source of truth
+## Grounding is inline — no backend KB
 
-**LogstashUI's on-disk `src/logstashui/SNMP/data/official_profiles/*.json` are the source of truth.**
-The KB is a **derived projection**, regenerated from the repo. Never hand-edit the KB — edit the
-profiles in the repo and re-sync. The agent grounds on the KB and *reuses profile/normalizer blocks
-verbatim*, so a KB out of sync with the repo silently degrades authoring quality.
+The LLM is grounded **entirely from local `SNMP/data/` files, sent with each request** (converse
+`configuration_overrides`: instructions overridden, `tools: []`). There is **no `snmp-definitions-kb`,
+no search tool, and no stored-agent-prompt dependency** at runtime — so there is no backend state to
+drift. LogstashUI is the sole source of truth. `inline_grounding.py` assembles the field schema +
+standard-MIB references + generic/vendor-matched profiles (~15K tokens) per request. Agent Builder is
+just the (swappable) LLM host — `agent_client` splits `assemble_request()` (backend-agnostic) from
+`send_via_agent_builder()`, so another backend drops in without touching the app.
 
 ## Deploy sequence
 
-1. **App** — build the image from this branch and run migrations (`python manage.py migrate` applies
-   the AI + SNMP migrations, including `DraftDefinition.normalizers`).
-2. **AI Agent Settings** — set the Agent Builder base URL, API key, and agent id
-   (`snmp-profile-author`) under AI Onboarding → AI Agent Settings (or seed `AISettings`).
-3. **Agent + tool** — push the `snmp-profile-author` agent and its `search_snmp_profiles` tool
-   (PUT-in-place, idempotent, never deletes). The agent is a build artifact — deploy it with the
-   dedicated script:
-   ```bash
-   export KB_URL="https://<cluster>.kb.<region>.cloud.es.io" KB_API_KEY="<agent-builder key>"
-   python3 deploy-agent.py            # upsert tool + agent to the target cluster
-   python3 deploy-agent.py --check    # drift gate: exit 0 = in sync, 1 = differs
-   ```
-   (`deploy.sh` remains the full one-shot installer — index + tool + agent + KB seed — for a fresh
-   cluster; `deploy-agent.py` is the focused, cluster-parameterized agent push for the build/CI path.)
-4. **Sync the KB from the repo (source of truth):**
-   ```bash
-   export ES_URL="https://<cluster>.es.<region>.cloud.es.io" ES_API_KEY="<write key>"
-   python3 seed/load-kb.py --logstashui /path/to/LogstashUI --prune   # upsert + reconcile deletes = exact mirror
-   ```
-5. **Verify sync (gate — do this before using the agent):**
-   ```bash
-   python3 seed/load-kb.py --logstashui /path/to/LogstashUI --check   # prints in_sync N/N; exit 0 = OK, 1 = drift
-   ```
-6. **End-to-end check** — AI Onboarding → Generate on a candidate device → the draft shows
-   `normalizers` → Approve → Profile + Template created → Deploy from the SNMP page → confirm scaled
+1. **App** — build the image from this branch and run migrations (`python manage.py migrate`).
+2. **AI Agent Settings** — set the LLM host base URL + API key + agent id under AI Onboarding →
+   AI Agent Settings (or seed `AISettings`). No custom agent/tool/KB is required — any reachable
+   converse agent works, because the instructions are overridden per request.
+3. **End-to-end check** — AI Onboarding → Generate on a candidate → draft shows OIDs + `normalizers`
+   with few/no unverified → Approve → Profile + Template → Deploy from the SNMP page → confirm scaled
    metrics land in Elasticsearch for the device IP.
 
 ## Rollback
 
-The app is image-tagged; roll back by pointing the stack at the previous image tag. The KB is
-regenerable from the repo at any time (`load-kb.py --prune`), so KB state is never a rollback blocker.
+Image-tagged; roll back by pointing the stack at the previous image tag. No KB state to reconcile.
 
 ## Notes / known follow-ups
 
 - Official profiles are stored as **DB placeholders** (`profile_data = {'is_official_placeholder': True}`);
   their real get/walk/table/normalizers content is read from the on-disk JSON at pipeline-gen time.
-- **Spec drift:** the on-disk profiles and the agent already use `translate` (and occasionally
-  `average`), but `gen-agent.py` pins the op set to `{multiply, ratio}` per
-  `spec/normalizers.0.5.0.json`, and the pipeline generator has no `average` handler. Reconcile
-  spec ↔ profiles ↔ generator.
-- The KB sync (`load-kb.py --prune` + `--check`) should be wired into the release/CI pipeline so the
-  KB is always a current projection of the repo.
+- **Discovery** uses a column-striding walk (`AI/snmp_discovery.py`) — samples every table column so the
+  agent is grounded on complete data, not a partial walk (unit-tested in `AI/test_snmp_discovery.py`).
+- **Spec drift:** profiles/agent use `translate` (and occasionally `average`), but the pinned op set is
+  `{multiply, ratio}` and the pipeline generator has no `average` handler. Reconcile spec ↔ profiles ↔ generator.
+- **Portability (next release):** to add another LLM backend (OpenAI, local, direct inference),
+  implement one `send_via_*` alongside `send_via_agent_builder` — `assemble_request` and the app are
+  unchanged. Promote the two functions to a small backend interface when the second backend lands.
