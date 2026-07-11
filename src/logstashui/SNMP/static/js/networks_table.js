@@ -220,6 +220,7 @@ function createNetworkRow(network) {
       ${network.connection_name ? escapeHtml(network.connection_name) : '<span class="text-gray-500 italic">None</span>'}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+      ${window.isAdmin ? `
       <div class="action-menu relative">
         <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
           <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -251,6 +252,7 @@ function createNetworkRow(network) {
           </div>
         </div>
       </div>
+      ` : ''}
     </td>
   `;
   

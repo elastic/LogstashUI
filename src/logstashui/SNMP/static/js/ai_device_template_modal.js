@@ -403,7 +403,10 @@
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
       body: JSON.stringify(body),
     })
-      .then(r => r.json())
+      .then(r => {
+        if (r.status === 403) throw new Error('Access denied: Admin role required');
+        return r.json();
+      })
       .then(result => {
         if (btn) btn.disabled = false;
         if (!result.success) {
@@ -874,6 +877,7 @@
       body: JSON.stringify(body),
     })
       .then(response => {
+        if (response.status === 403) throw new Error('Access denied: Admin role required');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const reader = response.body.getReader();
         _activeReader = reader;

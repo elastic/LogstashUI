@@ -1425,3 +1425,473 @@ class TestDefaultTemplateAssignment:
         doomed_template.delete()
         device.refresh_from_db()
         assert device.device_template == default_template
+
+
+# ============================================================================
+# DeviceTemplate CRUD Endpoint Tests
+# ============================================================================
+
+@pytest.fixture
+def test_device_template(db):
+    """Create a custom (non-official) device template."""
+    return DeviceTemplate.objects.create(
+        name='custom_template',
+        description='A custom test template',
+        vendor='Cisco',
+        model='9300',
+        product='Catalyst',
+        official=False,
+        matching_rules=['cisco', 'catalyst'],
+    )
+
+
+@pytest.fixture
+def official_template(db):
+    """Create an official (read-only) device template."""
+    return DeviceTemplate.objects.create(
+        name='official_template',
+        description='Official template',
+        vendor='Dell',
+        official=True,
+    )
+
+
+@pytest.mark.django_db
+class TestDeviceTemplateCRUD:
+    """Test DeviceTemplate Create, Read, Update, Delete operations via API endpoints."""
+
+    # ── GetDeviceTemplates ────────────────────────────────────────────────────
+
+    def test_get_device_templates_returns_list(self, authenticated_client, test_device_template):
+        response = authenticated_client.get('/SNMP/GetDeviceTemplates/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert 'templates' in data
+        names = [t['name'] for t in data['templates']]
+        assert 'custom_template' in names
+
+    def test_get_device_templates_includes_required_fields(self, authenticated_client, test_device_template):
+        response = authenticated_client.get('/SNMP/GetDeviceTemplates/')
+        data = json.loads(response.content)
+        template = next(t for t in data['templates'] if t['name'] == 'custom_template')
+        for field in ('id', 'name', 'display_name', 'vendor', 'model', 'product', 'official'):
+            assert field in template
+
+    def test_get_device_templates_display_name_formatted(self, authenticated_client, test_device_template):
+        response = authenticated_client.get('/SNMP/GetDeviceTemplates/')
+        data = json.loads(response.content)
+        template = next(t for t in data['templates'] if t['name'] == 'custom_template')
+        assert template['display_name'] == 'Custom Template'
+
+    # ── GetDeviceTemplate ────────────────────────────────────────────────────
+
+    def test_get_device_template_by_id(self, authenticated_client, test_device_template):
+        response = authenticated_client.get(f'/SNMP/GetDeviceTemplate/{test_device_template.id}/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['name'] == 'custom_template'
+        assert data['vendor'] == 'Cisco'
+        assert 'profiles' in data
+        assert 'matching_rules' in data
+
+    def test_get_device_template_not_found(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/GetDeviceTemplate/99999/')
+        # Falls back to GetOfficialDeviceTemplate which returns 404 for unknown names
+        assert response.status_code in (404, 200)
+
+    def test_get_device_template_includes_profiles(self, authenticated_client, test_device_template, test_profile):
+        test_device_template.profiles.add(test_profile)
+        response = authenticated_client.get(f'/SNMP/GetDeviceTemplate/{test_device_template.id}/')
+        data = json.loads(response.content)
+        assert any(p['name'] == test_profile.name for p in data['profiles'])
+
+    # ── AddDeviceTemplate ────────────────────────────────────────────────────
+
+    def test_add_device_template_requires_admin(self, readonly_client):
+        response = readonly_client.post('/SNMP/AddDeviceTemplate/', {
+            'name': 'new_tmpl',
+            'vendor': 'Cisco',
+        })
+        assert response.status_code == 403
+
+    def test_add_device_template_success(self, authenticated_client):
+        import json as _json
+        response = authenticated_client.post('/SNMP/AddDeviceTemplate/', {
+            'name': 'brand_new_template',
+            'description': 'Test',
+            'vendor': 'Juniper',
+            'model': 'EX2300',
+            'product': 'EX',
+            'matching_rules': _json.dumps(['juniper', 'ex']),
+            'profiles': _json.dumps([]),
+        })
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert 'template_id' in data
+        assert DeviceTemplate.objects.filter(name='brand_new_template').exists()
+
+    def test_add_device_template_missing_name(self, authenticated_client):
+        import json as _json
+        response = authenticated_client.post('/SNMP/AddDeviceTemplate/', {
+            'vendor': 'Cisco',
+            'matching_rules': _json.dumps([]),
+            'profiles': _json.dumps([]),
+        })
+        assert response.status_code == 400
+
+    def test_add_device_template_missing_vendor(self, authenticated_client):
+        import json as _json
+        response = authenticated_client.post('/SNMP/AddDeviceTemplate/', {
+            'name': 'no_vendor_tmpl',
+            'matching_rules': _json.dumps([]),
+            'profiles': _json.dumps([]),
+        })
+        assert response.status_code == 400
+
+    def test_add_device_template_with_profile_ids(self, authenticated_client, test_profile):
+        import json as _json
+        response = authenticated_client.post('/SNMP/AddDeviceTemplate/', {
+            'name': 'with_profiles',
+            'vendor': 'Generic',
+            'matching_rules': _json.dumps([]),
+            'profiles': _json.dumps([test_profile.id]),
+        })
+        assert response.status_code == 200
+        tmpl = DeviceTemplate.objects.get(name='with_profiles')
+        assert tmpl.profiles.filter(id=test_profile.id).exists()
+
+    # ── UpdateDeviceTemplate ─────────────────────────────────────────────────
+
+    def test_update_device_template_requires_admin(self, readonly_client, test_device_template):
+        import json as _json
+        response = readonly_client.post(
+            f'/SNMP/UpdateDeviceTemplate/{test_device_template.id}/',
+            {
+                'name': 'hacked_name',
+                'vendor': 'X',
+                'matching_rules': _json.dumps([]),
+                'profiles': _json.dumps([]),
+            },
+        )
+        assert response.status_code == 403
+
+    def test_update_device_template_success(self, authenticated_client, test_device_template):
+        import json as _json
+        response = authenticated_client.post(
+            f'/SNMP/UpdateDeviceTemplate/{test_device_template.id}/',
+            {
+                'name': 'updated_template',
+                'vendor': 'HPE',
+                'model': 'ProLiant',
+                'description': 'Updated desc',
+                'matching_rules': _json.dumps(['hpe']),
+                'profiles': _json.dumps([]),
+            },
+        )
+        assert response.status_code == 200
+        test_device_template.refresh_from_db()
+        assert test_device_template.name == 'updated_template'
+        assert test_device_template.vendor == 'HPE'
+
+    def test_update_official_template_rejected(self, authenticated_client, official_template):
+        import json as _json
+        response = authenticated_client.post(
+            f'/SNMP/UpdateDeviceTemplate/{official_template.id}/',
+            {
+                'name': 'hacked_official',
+                'vendor': 'X',
+                'matching_rules': _json.dumps([]),
+                'profiles': _json.dumps([]),
+            },
+        )
+        assert response.status_code == 403
+
+    def test_update_device_template_not_found(self, authenticated_client):
+        import json as _json
+        response = authenticated_client.post(
+            '/SNMP/UpdateDeviceTemplate/99999/',
+            {
+                'name': 'ghost',
+                'vendor': 'X',
+                'matching_rules': _json.dumps([]),
+                'profiles': _json.dumps([]),
+            },
+        )
+        assert response.status_code == 404
+
+    # ── DeleteDeviceTemplate ──────────────────────────────────────────────────
+
+    def test_delete_device_template_requires_admin(self, readonly_client, test_device_template):
+        response = readonly_client.post(f'/SNMP/DeleteDeviceTemplate/{test_device_template.id}/')
+        assert response.status_code == 403
+
+    def test_delete_device_template_success(self, authenticated_client, test_device_template):
+        tmpl_id = test_device_template.id
+        response = authenticated_client.post(f'/SNMP/DeleteDeviceTemplate/{tmpl_id}/')
+        assert response.status_code == 200
+        assert not DeviceTemplate.objects.filter(id=tmpl_id).exists()
+
+    def test_delete_official_template_rejected(self, authenticated_client, official_template):
+        response = authenticated_client.post(f'/SNMP/DeleteDeviceTemplate/{official_template.id}/')
+        assert response.status_code == 403
+
+    def test_delete_device_template_not_found(self, authenticated_client):
+        response = authenticated_client.post('/SNMP/DeleteDeviceTemplate/99999/')
+        assert response.status_code == 404
+
+
+# ============================================================================
+# suggest_device_template
+# ============================================================================
+
+@pytest.mark.django_db
+class TestSuggestDeviceTemplate:
+    """Test the suggest_device_template pure function in snmp_crud."""
+
+    @pytest.fixture(autouse=True)
+    def clear_templates(self, db):
+        """Ensure no leftover templates pollute suggestion results."""
+        DeviceTemplate.objects.all().delete()
+
+    def _make_template(self, name, rules):
+        return DeviceTemplate.objects.create(
+            name=name, vendor='Any', matching_rules=rules
+        )
+
+    def test_empty_device_info_returns_empty(self):
+        from SNMP.snmp_crud import suggest_device_template
+        assert suggest_device_template('') == []
+        assert suggest_device_template(None) == []
+
+    def test_all_rules_match_returns_full_match(self):
+        from SNMP.snmp_crud import suggest_device_template
+        tmpl = self._make_template('cisco_cat', ['cisco', 'catalyst'])
+        result = suggest_device_template('Cisco Catalyst 9300 switch')
+        assert tmpl.id in result
+        assert result.index(tmpl.id) == 0  # full match first
+
+    def test_partial_match_returned(self):
+        from SNMP.snmp_crud import suggest_device_template
+        tmpl = self._make_template('cisco_any', ['cisco', 'nexus'])
+        result = suggest_device_template('Cisco Catalyst switch')  # 'cisco' matches, 'nexus' doesn't
+        assert tmpl.id in result
+
+    def test_no_match_excluded(self):
+        from SNMP.snmp_crud import suggest_device_template
+        self._make_template('juniper_tmpl', ['juniper', 'ex'])
+        result = suggest_device_template('Cisco Catalyst 9300')
+        assert result == []
+
+    def test_full_match_ranked_before_partial(self):
+        from SNMP.snmp_crud import suggest_device_template
+        full = self._make_template('full_match', ['cisco', 'catalyst'])
+        partial = self._make_template('partial_match', ['cisco', 'nexus'])
+        result = suggest_device_template('Cisco Catalyst switch')
+        assert result.index(full.id) < result.index(partial.id)
+
+    def test_case_insensitive_matching(self):
+        from SNMP.snmp_crud import suggest_device_template
+        tmpl = self._make_template('caps_tmpl', ['CISCO'])
+        result = suggest_device_template('cisco ios router')
+        assert tmpl.id in result
+
+    def test_template_without_rules_excluded(self):
+        from SNMP.snmp_crud import suggest_device_template
+        self._make_template('no_rules', [])
+        result = suggest_device_template('cisco ios')
+        assert result == []
+
+
+# ============================================================================
+# GetDeviceLocationData
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetDeviceLocationData:
+    """Test the /SNMP/GetDeviceLocationData/ endpoint."""
+
+    def test_requires_authentication(self, client):
+        response = client.get('/SNMP/GetDeviceLocationData/')
+        assert response.status_code == 302
+
+    def test_returns_empty_lists_when_no_devices(self, authenticated_client):
+        Device.objects.all().delete()
+        response = authenticated_client.get('/SNMP/GetDeviceLocationData/')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['sites'] == []
+        assert data['site_building'] == []
+        assert data['full'] == []
+
+    def test_returns_sites(self, authenticated_client, test_credential_v2c, test_network):
+        Device.objects.create(
+            name='dev_site1',
+            ip_address='10.0.0.1',
+            credential=test_credential_v2c,
+            network=test_network,
+            site='HQ',
+        )
+        response = authenticated_client.get('/SNMP/GetDeviceLocationData/')
+        data = json.loads(response.content)
+        assert 'HQ' in data['sites']
+
+    def test_site_building_pairs(self, authenticated_client, test_credential_v2c, test_network):
+        Device.objects.create(
+            name='dev_sb',
+            ip_address='10.0.0.2',
+            credential=test_credential_v2c,
+            network=test_network,
+            site='Campus A',
+            building='Bldg 1',
+        )
+        response = authenticated_client.get('/SNMP/GetDeviceLocationData/')
+        data = json.loads(response.content)
+        assert any(
+            sb['site'] == 'Campus A' and sb['building'] == 'Bldg 1'
+            for sb in data['site_building']
+        )
+
+    def test_full_entries_with_coordinates(self, authenticated_client, test_credential_v2c, test_network):
+        Device.objects.create(
+            name='dev_full',
+            ip_address='10.0.0.3',
+            credential=test_credential_v2c,
+            network=test_network,
+            site='Site B',
+            building='Bldg 2',
+            room='Room 101',
+            latitude='37.774929',
+            longitude='-122.419418',
+        )
+        response = authenticated_client.get('/SNMP/GetDeviceLocationData/')
+        data = json.loads(response.content)
+        entry = next((e for e in data['full'] if e['room'] == 'Room 101'), None)
+        assert entry is not None
+        # lat/lon must be serialised as strings (Decimal-safe)
+        assert isinstance(entry['latitude'], str)
+        assert isinstance(entry['longitude'], str)
+
+    def test_devices_without_site_excluded_from_sites(self, authenticated_client, test_credential_v2c, test_network):
+        Device.objects.create(
+            name='dev_no_site',
+            ip_address='10.0.0.4',
+            credential=test_credential_v2c,
+            network=test_network,
+            site=None,
+        )
+        response = authenticated_client.get('/SNMP/GetDeviceLocationData/')
+        data = json.loads(response.content)
+        assert None not in data['sites']
+
+
+# ============================================================================
+# GetDevices – additional coverage (pagination, sorting)
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetDevicesAdditional:
+    """Additional GetDevices tests not covered by TestDeviceCRUD."""
+
+    def test_sort_by_name(self, authenticated_client, test_network, test_credential_v2c):
+        Device.objects.create(name='Zebra Device', ip_address='10.1.1.1',
+                              credential=test_credential_v2c, network=test_network)
+        Device.objects.create(name='Alpha Device', ip_address='10.1.1.2',
+                              credential=test_credential_v2c, network=test_network)
+        response = authenticated_client.get('/SNMP/GetDevices/?sort_by=name')
+        data = json.loads(response.content)
+        names = [d['name'] for d in data['devices']]
+        assert names == sorted(names)
+
+    def test_sort_by_name_descending(self, authenticated_client, test_network, test_credential_v2c):
+        Device.objects.create(name='ZZZ Device', ip_address='10.1.2.1',
+                              credential=test_credential_v2c, network=test_network)
+        Device.objects.create(name='AAA Device', ip_address='10.1.2.2',
+                              credential=test_credential_v2c, network=test_network)
+        response = authenticated_client.get('/SNMP/GetDevices/?sort_by=-name')
+        data = json.loads(response.content)
+        names = [d['name'] for d in data['devices']]
+        assert names == sorted(names, reverse=True)
+
+    def test_pagination_has_next(self, authenticated_client, test_network, test_credential_v2c):
+        """When more devices than page_size exist, has_next is True."""
+        for i in range(5):
+            Device.objects.create(
+                name=f'Paged Device {i}',
+                ip_address=f'10.2.0.{i + 1}',
+                credential=test_credential_v2c,
+                network=test_network,
+            )
+        response = authenticated_client.get('/SNMP/GetDevices/?page=1&page_size=2')
+        data = json.loads(response.content)
+        assert data['has_next'] is True
+        assert len(data['devices']) == 2
+
+    def test_pagination_page_2(self, authenticated_client, test_network, test_credential_v2c):
+        """Page 2 returns the next slice and has_previous is True."""
+        for i in range(4):
+            Device.objects.create(
+                name=f'Page2 Device {i}',
+                ip_address=f'10.3.0.{i + 1}',
+                credential=test_credential_v2c,
+                network=test_network,
+            )
+        response = authenticated_client.get('/SNMP/GetDevices/?page=2&page_size=2')
+        data = json.loads(response.content)
+        assert data['has_previous'] is True
+
+    def test_search_by_ip(self, authenticated_client, test_network, test_credential_v2c):
+        Device.objects.create(name='IP Search Device', ip_address='172.16.100.1',
+                              credential=test_credential_v2c, network=test_network)
+        response = authenticated_client.get('/SNMP/GetDevices/?search=172.16.100')
+        data = json.loads(response.content)
+        assert any(d['name'] == 'IP Search Device' for d in data['devices'])
+
+    def test_get_device_returns_location_fields(self, authenticated_client, test_network, test_credential_v2c):
+        """GetDevice includes location and metadata fields."""
+        device = Device.objects.create(
+            name='Location Device',
+            ip_address='10.5.5.5',
+            credential=test_credential_v2c,
+            network=test_network,
+            site='HQ',
+            building='Main',
+            room='A1',
+            metadata={'rack': '12'},
+        )
+        response = authenticated_client.get(f'/SNMP/GetDevice/{device.id}/')
+        data = json.loads(response.content)
+        assert data['site'] == 'HQ'
+        assert data['building'] == 'Main'
+        assert data['room'] == 'A1'
+        assert data['metadata'] == {'rack': '12'}
+
+    def test_add_device_with_location_fields(self, authenticated_client, test_network, test_credential_v2c):
+        """AddDevice persists location and metadata fields."""
+        import json as _json
+        response = authenticated_client.post('/SNMP/AddDevice/', {
+            'name': 'Located Device',
+            'ip_address': '10.6.6.6',
+            'network': test_network.id,
+            'credential': test_credential_v2c.id,
+            'site': 'West Campus',
+            'building': 'B1',
+            'room': 'R2',
+            'metadata': _json.dumps({'owner': 'infra'}),
+        })
+        assert response.status_code == 200
+        device = Device.objects.get(name='Located Device')
+        assert device.site == 'West Campus'
+        assert device.metadata == {'owner': 'infra'}
+
+    def test_add_device_with_hostname(self, authenticated_client, test_network, test_credential_v2c):
+        """AddDevice accepts hostname-only devices (no IP)."""
+        response = authenticated_client.post('/SNMP/AddDevice/', {
+            'name': 'Hostname Only Device',
+            'hostname': 'myswitch.example.com',
+            'network': test_network.id,
+            'credential': test_credential_v2c.id,
+        })
+        assert response.status_code == 200
+        device = Device.objects.get(name='Hostname Only Device')
+        assert device.hostname == 'myswitch.example.com'
+        assert device.ip_address is None

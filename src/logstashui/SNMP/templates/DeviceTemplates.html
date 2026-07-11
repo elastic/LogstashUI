@@ -32,18 +32,21 @@
         <div class="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse"></div>
         <span class="text-xs text-orange-300 font-medium whitespace-nowrap">Undeployed changes</span>
       </div>
+      {% if user.profile.role == 'admin' %}
       <button id="generateTemplateBtn" class="btn border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-x-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
         </svg>
         Generate Template and Profiles
       </button>
+      {% endif %}
       <button id="testSnmpBtn" class="btn border border-white text-white hover:bg-white/10 flex items-center gap-x-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
         </svg>
         Test SNMP
       </button>
+      {% if user.profile.role == 'admin' %}
       <button id="commitBtn" class="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-x-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -56,6 +59,7 @@
         </svg>
         <span id="addItemBtnText">Add Device Template</span>
       </button>
+      {% endif %}
     </div>
   </div>
 
@@ -124,6 +128,7 @@
 
                 <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700" role="menu">
                   <div class="px-1 py-1">
+                    {% if user.profile.role == 'admin' %}
                     <button onclick="cloneTemplate('{{ template.id|default:template.name }}', {{ template.official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
                       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -131,6 +136,7 @@
                       Clone
                     </button>
                     <hr class="my-1 border-gray-700">
+                    {% endif %}
                     <button onclick="viewTemplate('{{ template.id|default:template.name }}', {{ template.official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
                       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -138,7 +144,7 @@
                       </svg>
                       View
                     </button>
-                    {% if not template.official %}
+                    {% if not template.official and user.profile.role == 'admin' %}
                     <hr class="my-1 border-gray-700">
                     <button onclick="editTemplate({{ template.id }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
                       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -311,6 +317,7 @@
 
                 <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700" role="menu">
                   <div class="px-1 py-1">
+                    {% if user.profile.role == 'admin' %}
                     <button onclick="cloneProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
                       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -318,6 +325,7 @@
                       Clone
                     </button>
                     <hr class="my-1 border-gray-700">
+                    {% endif %}
                     <button onclick="viewProfile('{{ profile.name }}', {{ profile.is_official|lower }})" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
                       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -325,7 +333,7 @@
                       </svg>
                       View
                     </button>
-                    {% if not profile.is_official and profile.name != 'system' and profile.name != 'generic_system.json' %}
+                    {% if not profile.is_official and profile.name != 'system' and profile.name != 'generic_system.json' and user.profile.role == 'admin' %}
                     <hr class="my-1 border-gray-700">
                     <button onclick="editProfile('{{ profile.name }}')" class="group flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md" role="menuitem">
                       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

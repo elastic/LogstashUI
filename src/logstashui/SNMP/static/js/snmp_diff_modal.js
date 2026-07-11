@@ -247,6 +247,12 @@ async function installSNMPIndexTemplate() {
             },
             body: JSON.stringify({ connection_ids: _snmpDiffConnectionIds }),
         });
+
+        if (response.status === 403) {
+            showToast('Access denied: Admin role required', 'error');
+            return;
+        }
+
         const result = await response.json();
 
         if (!result.success) {
@@ -1049,6 +1055,12 @@ async function confirmDeployConfiguration() {
         });
         
         clearTimeout(timeoutId);
+
+        if (response.status === 403) {
+            showToast('Access denied: Admin role required', 'error');
+            if (confirmButton) confirmButton.disabled = false;
+            return;
+        }
 
         if (!response.ok) {
             const errorText = await response.text();

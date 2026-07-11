@@ -193,6 +193,7 @@ function createCredentialRow(credential) {
       </span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+      ${window.isAdmin ? `
       <div class="action-menu relative">
         <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
           <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -224,6 +225,7 @@ function createCredentialRow(credential) {
           </div>
         </div>
       </div>
+      ` : ''}
     </td>
   `;
 

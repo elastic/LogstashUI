@@ -401,3 +401,305 @@ class TestViewContextContent:
         user_profiles = [p for p in response.context['profiles'] if not p['is_official']]
         display_names = [p['display_name'] for p in user_profiles]
         assert display_names == sorted(display_names)
+
+
+# ============================================================================
+# Overview Page
+# ============================================================================
+
+@pytest.mark.django_db
+class TestOverviewView:
+    """Test the SNMP Overview page view."""
+
+    def test_overview_requires_authentication(self, client):
+        response = client.get('/SNMP/Overview/')
+        assert response.status_code == 302
+        assert '/Management/Login/' in response.url
+
+    def test_overview_accessible_to_admin(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/Overview/')
+        assert response.status_code == 200
+
+    def test_overview_accessible_to_readonly(self, readonly_client):
+        response = readonly_client.get('/SNMP/Overview/')
+        assert response.status_code == 200
+
+
+# ============================================================================
+# GetOverviewMetrics API
+# ============================================================================
+
+@pytest.mark.django_db
+class TestGetOverviewMetricsView:
+    """Test the /SNMP/GetOverviewMetrics/ JSON endpoint."""
+
+    def test_get_overview_metrics_requires_auth(self, client):
+        response = client.get('/SNMP/GetOverviewMetrics/')
+        assert response.status_code == 302
+
+    def test_get_overview_metrics_success(self, authenticated_client):
+        """GetOverviewMetrics returns the expected JSON shape when ES helpers succeed."""
+        with patch('SNMP.views.get_discovered_devices_count', return_value={'count': 5, 'errors': []}), \
+             patch('SNMP.views.get_template_data_categories', return_value={'templates': [], 'errors': []}), \
+             patch('SNMP.views.get_high_resource_usage', return_value={'high_cpu': [], 'high_memory': [], 'errors': []}):
+            response = authenticated_client.get('/SNMP/GetOverviewMetrics/')
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert 'metrics' in data
+        assert data['metrics']['discovered_devices'] == 5
+        assert 'high_usage' in data
+        assert 'data_quality' in data
+
+    def test_get_overview_metrics_total_devices(self, authenticated_client, test_device):
+        """total_devices counts devices in the database."""
+        with patch('SNMP.views.get_discovered_devices_count', return_value={'count': 0, 'errors': []}), \
+             patch('SNMP.views.get_template_data_categories', return_value={'templates': [], 'errors': []}), \
+             patch('SNMP.views.get_high_resource_usage', return_value={'high_cpu': [], 'high_memory': [], 'errors': []}):
+            response = authenticated_client.get('/SNMP/GetOverviewMetrics/')
+
+        data = json.loads(response.content)
+        assert data['metrics']['total_devices'] >= 1
+
+    def test_get_overview_metrics_propagates_errors(self, authenticated_client):
+        """Errors from helpers are propagated to the response errors list."""
+        with patch('SNMP.views.get_discovered_devices_count', return_value={'count': 0, 'errors': ['ES connection failed']}), \
+             patch('SNMP.views.get_template_data_categories', return_value={'templates': [], 'errors': []}), \
+             patch('SNMP.views.get_high_resource_usage', return_value={'high_cpu': [], 'high_memory': [], 'errors': []}):
+            response = authenticated_client.get('/SNMP/GetOverviewMetrics/')
+
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['errors'] is not None
+        assert 'ES connection failed' in data['errors']
+
+    def test_get_overview_metrics_exception_returns_500(self, authenticated_client):
+        """An unexpected exception inside GetOverviewMetrics returns HTTP 500."""
+        with patch('SNMP.views.get_discovered_devices_count', side_effect=Exception('Boom')):
+            response = authenticated_client.get('/SNMP/GetOverviewMetrics/')
+        assert response.status_code == 500
+        data = json.loads(response.content)
+        assert data['success'] is False
+
+
+# ============================================================================
+# CheckSNMPIndexTemplate
+# ============================================================================
+
+@pytest.mark.django_db
+class TestCheckSNMPIndexTemplateView:
+    """Test the /SNMP/CheckSNMPIndexTemplate/ endpoint."""
+
+    def test_requires_post(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/CheckSNMPIndexTemplate/')
+        assert response.status_code == 405
+
+    def test_requires_connection_ids(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/CheckSNMPIndexTemplate/',
+            data=json.dumps({}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_invalid_json_body(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/CheckSNMPIndexTemplate/',
+            data='not json',
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_connection_not_found(self, authenticated_client):
+        """A non-existent connection_id returns an error result (not a 500)."""
+        with patch('SNMP.views._load_snmp_template', return_value={'_meta': {'template_name': 'metrics-snmp.polling'}}), \
+             patch('Common.elastic_utils.check_index_template', return_value={'status': 'installed', 'differences': []}):
+            response = authenticated_client.post(
+                '/SNMP/CheckSNMPIndexTemplate/',
+                data=json.dumps({'connection_ids': [99999]}),
+                content_type='application/json',
+            )
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        result = data['results'][0]
+        assert result['status'] == 'error'
+        assert 'not found' in result['error']
+
+    def test_installed_status(self, authenticated_client, test_connection):
+        """Returns 'installed' status when template is present and up to date."""
+        with patch('SNMP.views._load_snmp_template', return_value={'_meta': {'template_name': 'metrics-snmp.polling'}}), \
+             patch('Common.elastic_utils.check_index_template', return_value={'status': 'installed', 'differences': []}):
+            response = authenticated_client.post(
+                '/SNMP/CheckSNMPIndexTemplate/',
+                data=json.dumps({'connection_ids': [test_connection.id]}),
+                content_type='application/json',
+            )
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['results'][0]['status'] == 'installed'
+        assert data['results'][0]['connection_name'] == test_connection.name
+
+
+# ============================================================================
+# InstallSNMPIndexTemplate
+# ============================================================================
+
+@pytest.mark.django_db
+class TestInstallSNMPIndexTemplateView:
+    """Test the /SNMP/InstallSNMPIndexTemplate/ endpoint."""
+
+    def test_requires_admin(self, readonly_client, test_connection):
+        response = readonly_client.post(
+            '/SNMP/InstallSNMPIndexTemplate/',
+            data=json.dumps({'connection_ids': [test_connection.id]}),
+            content_type='application/json',
+        )
+        assert response.status_code == 403
+
+    def test_requires_post(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/InstallSNMPIndexTemplate/')
+        assert response.status_code == 405
+
+    def test_requires_connection_ids(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/InstallSNMPIndexTemplate/',
+            data=json.dumps({}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_success(self, authenticated_client, test_connection):
+        """Successfully installing a template returns success=True."""
+        with patch('SNMP.views._load_snmp_template', return_value={'_meta': {'template_name': 'metrics-snmp.polling'}}), \
+             patch('Common.elastic_utils.create_index_template', return_value=None):
+            response = authenticated_client.post(
+                '/SNMP/InstallSNMPIndexTemplate/',
+                data=json.dumps({'connection_ids': [test_connection.id]}),
+                content_type='application/json',
+            )
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['results'][0]['success'] is True
+
+    def test_connection_not_found(self, authenticated_client):
+        """A non-existent connection_id records failure without crashing."""
+        with patch('SNMP.views._load_snmp_template', return_value={'_meta': {'template_name': 'metrics-snmp.polling'}}):
+            response = authenticated_client.post(
+                '/SNMP/InstallSNMPIndexTemplate/',
+                data=json.dumps({'connection_ids': [99999]}),
+                content_type='application/json',
+            )
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is False
+        assert data['results'][0]['success'] is False
+
+
+# ============================================================================
+# CheckAgentBuilderResources
+# ============================================================================
+
+@pytest.mark.django_db
+class TestCheckAgentBuilderResourcesView:
+    """Test the /SNMP/CheckAgentBuilderResources/ endpoint."""
+
+    def test_requires_post(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/CheckAgentBuilderResources/')
+        assert response.status_code == 405
+
+    def test_requires_connection_id(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/CheckAgentBuilderResources/',
+            data=json.dumps({}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_invalid_json_body(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/CheckAgentBuilderResources/',
+            data='{ bad json',
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_success(self, authenticated_client):
+        """Returns result from AgentBuilder.check_resources when successful."""
+        mock_result = {'tools': [], 'skills': [], 'agents': []}
+        with patch('Common.ai.agent_builder.AgentBuilder') as MockBuilder, \
+             patch('Common.ai.agent_builder.load_resources_from_directory', return_value=([], [], [])):
+            MockBuilder.return_value.check_resources.return_value = mock_result
+            response = authenticated_client.post(
+                '/SNMP/CheckAgentBuilderResources/',
+                data=json.dumps({'connection_id': 1}),
+                content_type='application/json',
+            )
+        assert response.status_code == 200
+
+    def test_agent_builder_exception_returns_500(self, authenticated_client):
+        """If AgentBuilder raises, the endpoint returns 500."""
+        with patch('Common.ai.agent_builder.AgentBuilder', side_effect=Exception('KB down')), \
+             patch('Common.ai.agent_builder.load_resources_from_directory', return_value=([], [], [])):
+            response = authenticated_client.post(
+                '/SNMP/CheckAgentBuilderResources/',
+                data=json.dumps({'connection_id': 1}),
+                content_type='application/json',
+            )
+        assert response.status_code == 500
+
+
+# ============================================================================
+# InstallAgentBuilderPackage
+# ============================================================================
+
+@pytest.mark.django_db
+class TestInstallAgentBuilderPackageView:
+    """Test the /SNMP/InstallAgentBuilderPackage/ endpoint."""
+
+    def test_requires_admin(self, readonly_client):
+        response = readonly_client.post(
+            '/SNMP/InstallAgentBuilderPackage/',
+            data=json.dumps({'connection_id': 1}),
+            content_type='application/json',
+        )
+        assert response.status_code == 403
+
+    def test_requires_post(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/InstallAgentBuilderPackage/')
+        assert response.status_code == 405
+
+    def test_requires_connection_id(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/InstallAgentBuilderPackage/',
+            data=json.dumps({}),
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+
+    def test_success(self, authenticated_client):
+        """Returns result from AgentBuilder.apply_all_resources when successful."""
+        mock_result = {'success': True, 'results': []}
+        with patch('Common.ai.agent_builder.AgentBuilder') as MockBuilder, \
+             patch('Common.ai.agent_builder.load_resources_from_directory', return_value=([], [], [])):
+            MockBuilder.return_value.apply_all_resources.return_value = mock_result
+            response = authenticated_client.post(
+                '/SNMP/InstallAgentBuilderPackage/',
+                data=json.dumps({'connection_id': 1}),
+                content_type='application/json',
+            )
+        assert response.status_code == 200
+
+    def test_exception_returns_500(self, authenticated_client):
+        """Unexpected exception returns 500 with success=False."""
+        with patch('Common.ai.agent_builder.AgentBuilder', side_effect=Exception('Fail')), \
+             patch('Common.ai.agent_builder.load_resources_from_directory', return_value=([], [], [])):
+            response = authenticated_client.post(
+                '/SNMP/InstallAgentBuilderPackage/',
+                data=json.dumps({'connection_id': 1}),
+                content_type='application/json',
+            )
+        assert response.status_code == 500
+        data = json.loads(response.content)
+        assert data['success'] is False
