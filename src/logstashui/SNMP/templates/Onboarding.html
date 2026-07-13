@@ -68,8 +68,326 @@
   </div>
 
   <!-- Device Wizard Tab Content -->
-  <div id="deviceWizardContent" class="hidden">
-  </div>
+  <div id="deviceWizardContent" class="hidden flex flex-col gap-5">
+
+    <!-- ── Input card ────────────────────────────────────────────────────── -->
+    <div class="bg-gray-900/50 rounded-lg border border-gray-700">
+
+      <!-- 3-col grid: Host | Credential | Network -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-700 border-b border-gray-700">
+
+        <!-- Host -->
+        <div class="p-5 flex flex-col gap-3">
+          <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+            </svg>
+            IP Address or Hostname <span class="text-red-400">*</span>
+          </h3>
+          <p class="text-xs text-gray-400">Used as both the device name and polling address.</p>
+          <input
+            id="wizardHost"
+            type="text"
+            placeholder="192.168.1.1 or switch.corp.local"
+            class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 placeholder-gray-500 font-mono"
+          />
+          <!-- Advanced: port (collapsed) -->
+          <details class="text-sm">
+            <summary class="text-gray-500 hover:text-gray-300 cursor-pointer select-none w-fit text-xs">Advanced</summary>
+            <div class="mt-2 flex items-center gap-2">
+              <label for="wizardPort" class="text-xs text-gray-400 whitespace-nowrap">Port</label>
+              <input id="wizardPort" type="number" value="161" min="1" max="65535"
+                     class="input input-xs input-bordered w-20 bg-gray-700 text-white border-gray-600 font-mono"/>
+            </div>
+          </details>
+        </div>
+
+        <!-- Credential -->
+        <div class="p-5 flex flex-col gap-3">
+          <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+            </svg>
+            SNMP Credential <span class="text-red-400">*</span>
+          </h3>
+          <p class="text-xs text-gray-400">SNMP community string or v3 credentials.</p>
+          <input type="hidden" id="wizardCredentialValue">
+          <div id="wizardCredentialDropdownWrapper" class="relative">
+            <button type="button" id="wizardCredentialTrigger"
+                    onclick="toggleWizardCredentialDropdown(event)"
+                    class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+              <span id="wizardCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential…</span>
+              <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            <div id="wizardCredentialDropdownList"
+                 class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+              <div class="p-2 border-b border-gray-700">
+                <input type="text" id="wizardCredentialSearch"
+                       class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                       placeholder="Search credentials…"
+                       autocomplete="off"
+                       oninput="filterWizardCredentialDropdown(this.value)"
+                       onclick="event.stopPropagation()">
+              </div>
+              <div id="wizardCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                <!-- populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Network -->
+        <div class="p-5 flex flex-col gap-3">
+          <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Network
+          </h3>
+          <p class="text-xs text-gray-400">Assign to a network segment (optional).</p>
+          <input type="hidden" id="wizardNetworkValue">
+          <div id="wizardNetworkDropdownWrapper" class="relative">
+            <button type="button" id="wizardNetworkTrigger"
+                    onclick="toggleWizardNetworkDropdown(event)"
+                    class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+              <span id="wizardNetworkSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a network...</span>
+              <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            <div id="wizardNetworkDropdownList"
+                 class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+              <div class="p-2 border-b border-gray-700">
+                <input type="text" id="wizardNetworkSearch"
+                       class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                       placeholder="Search networks…"
+                       autocomplete="off"
+                       oninput="filterWizardNetworkDropdown(this.value)"
+                       onclick="event.stopPropagation()">
+              </div>
+              <div id="wizardNetworkOptionsList" class="max-h-48 overflow-y-auto">
+                <!-- populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Check Device Type button row -->
+      <div class="px-5 pb-5 pt-4 flex justify-end">
+        {% if user.profile.role == 'admin' %}
+        <button id="wizardCheckBtn" type="button" onclick="wizardCheckDevice()"
+                class="btn border border-blue-400 text-blue-300 hover:bg-blue-400/10 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          Check Device Type
+        </button>
+        {% endif %}
+      </div>
+
+    </div><!-- /input card -->
+
+    <!-- ── Result panels (shown after check) ──────────────────────────────── -->
+    <div id="wizardResultCard" class="hidden flex flex-col gap-5">
+
+      <!-- Match found -->
+      <div id="wizardResultMatch" class="hidden">
+        <div class="bg-gray-900/50 rounded-lg border border-gray-700">
+
+          <!-- Match header -->
+          <div class="px-5 pt-4 pb-3 border-b border-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="text-sm font-semibold text-green-300">We found it!</span>
+            <span class="text-xs text-gray-500 ml-1">We matched your device to an official template.</span>
+          </div>
+
+          <!-- Template details -->
+          <div id="wizardMatchedTemplateCard" class="px-5 py-4 border-b border-gray-700 flex flex-col gap-1.5"></div>
+
+          <!-- Template select (inside the card so connection is obvious) -->
+          <div class="px-5 py-4 border-b border-gray-700 flex flex-col gap-2">
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Selected Template</label>
+            <input type="hidden" id="wizardTemplateMatchValue">
+            <div id="wizardTemplateMatchDropdownWrapper" class="relative" data-images-url="{% static 'images/' %}">
+              <button type="button" onclick="toggleWizardTemplateDropdown('Match', event)"
+                      class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                <img id="wizardTemplateMatchSelectedImg" src="" alt="" class="w-5 h-5 object-contain flex-shrink-0 hidden rounded">
+                <span id="wizardTemplateMatchSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a template...</span>
+                <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              <div id="wizardTemplateMatchDropdownList" class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                <div class="p-2 border-b border-gray-700">
+                  <input type="text" id="wizardTemplateMatchSearch"
+                         class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                         placeholder="Search templates..."
+                         autocomplete="off"
+                         oninput="filterWizardTemplateDropdown('Match', this.value)"
+                         onclick="event.stopPropagation()">
+                </div>
+                <div id="wizardTemplateMatchOptionsList" class="max-h-48 overflow-y-auto"></div>
+              </div>
+            </div>
+            <p class="text-xs text-gray-500">This was automatically selected based on the device's sysDescr. Change it if needed.</p>
+          </div>
+
+          <!-- Generate with AI / Save row -->
+          <div class="px-5 py-4 flex items-center justify-between gap-4">
+            <button type="button" onclick="wizardOpenWalkModal()"
+                    class="btn btn-sm border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+              </svg>
+              Generate with AI instead
+            </button>
+            {% if user.profile.role == 'admin' %}
+            <button id="wizardSaveBtn" type="button" onclick="wizardSaveDevice()"
+                    class="btn btn-sm border border-green-400 text-green-300 hover:bg-green-400/10 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              Save Device
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- No match found -->
+      <div id="wizardResultNoMatch" class="hidden">
+        <div class="bg-gray-900/50 rounded-lg border border-gray-700">
+
+          <div class="px-5 pt-4 pb-3 border-b border-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="text-sm font-semibold text-amber-300">No official template found.</span>
+          </div>
+
+          <div class="px-5 py-4 flex flex-col gap-2 border-b border-gray-700">
+            <p id="wizardNoMatchSysDescr" class="text-xs text-gray-400 font-mono leading-relaxed line-clamp-3 bg-gray-800/60 rounded p-2"></p>
+            <p class="text-sm text-gray-300">We need to run a walk against this device and generate a custom template and profiles with AI.</p>
+          </div>
+
+          <div class="px-5 py-4">
+            <button type="button" onclick="wizardOpenWalkModal()"
+                    class="btn border border-blue-400 text-blue-300 hover:bg-blue-400/10 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              Walk the Device &amp; Generate Template
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Unreachable -->
+      <div id="wizardResultUnreachable" class="hidden">
+        <div class="bg-gray-900/50 rounded-lg border border-red-700/40">
+
+          <div class="px-5 pt-4 pb-3 border-b border-red-700/40 flex items-center gap-2">
+            <svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="text-sm font-semibold text-red-300">Could not reach the device.</span>
+          </div>
+
+          <div class="px-5 py-4 flex flex-col gap-3 border-b border-red-700/40">
+            <p id="wizardUnreachableError" class="text-xs text-red-300/80"></p>
+            <p class="text-xs text-gray-500">Check the IP address, port, and credential, then try again. You can also skip the check and select a template manually.</p>
+          </div>
+
+          <div class="px-5 py-4 flex items-center justify-between gap-4">
+            <button type="button" onclick="wizardSkipCheck()"
+                    class="text-xs text-gray-400 hover:text-white underline w-fit">
+              Skip — I'll pick a template manually
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Manual template picker + Save (shown after skip / after AI import) -->
+      <div id="wizardManualPicker" class="hidden">
+        <div class="bg-gray-900/50 rounded-lg border border-gray-700">
+          <div class="px-5 pt-4 pb-3 border-b border-gray-700">
+            <label for="wizardTemplateSelectManual" class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Device Template</label>
+          </div>
+          <div class="px-5 py-4 flex flex-col gap-3 border-b border-gray-700">
+            <input type="hidden" id="wizardTemplateManualValue">
+            <div id="wizardTemplateManualDropdownWrapper" class="relative" data-images-url="{% static 'images/' %}">
+              <button type="button" onclick="toggleWizardTemplateDropdown('Manual', event)"
+                      class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                <img id="wizardTemplateManualSelectedImg" src="" alt="" class="w-5 h-5 object-contain flex-shrink-0 hidden rounded">
+                <span id="wizardTemplateManualSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a template...</span>
+                <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              <div id="wizardTemplateManualDropdownList" class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                <div class="p-2 border-b border-gray-700">
+                  <input type="text" id="wizardTemplateManualSearch"
+                         class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                         placeholder="Search templates..."
+                         autocomplete="off"
+                         oninput="filterWizardTemplateDropdown('Manual', this.value)"
+                         onclick="event.stopPropagation()">
+                </div>
+                <div id="wizardTemplateManualOptionsList" class="max-h-48 overflow-y-auto"></div>
+              </div>
+            </div>
+          </div>
+          {% if user.profile.role == 'admin' %}
+          <div class="px-5 py-4 flex justify-end">
+            <button id="wizardSaveBtnManual" type="button" onclick="wizardSaveDevice()"
+                    class="btn btn-sm border border-green-400 text-green-300 hover:bg-green-400/10 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              Save Device
+            </button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div><!-- /wizardResultCard -->
+
+    <!-- ── Success card ─────────────────────────────────────────────────── -->
+    <div id="wizardSuccessCard" class="hidden">
+      <div class="bg-gray-900/50 rounded-lg border border-green-700/40">
+        <div class="px-5 pt-4 pb-3 border-b border-green-700/40 flex items-center gap-2">
+          <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span class="text-sm font-semibold text-green-300">Device created!</span>
+        </div>
+        <div class="px-5 py-4 flex flex-col gap-4">
+          <p id="wizardSuccessMsg" class="text-sm text-gray-300"></p>
+          <div class="flex gap-3 flex-wrap">
+            <a href="/SNMP/Devices/" class="btn btn-sm border border-gray-600 text-gray-300 hover:text-white flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+              </svg>
+              View Devices
+            </a>
+            <button type="button" onclick="wizardReset()" class="btn btn-sm border border-purple-400 text-purple-300 hover:bg-purple-400/10">
+              Add Another Device
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /deviceWizardContent -->
 
   <!-- Generate Template and Profiles Tab Content -->
   <div id="generateTemplateContent" class="hidden">
@@ -77,6 +395,9 @@
   </div>
 
 </div>
+
+<!-- SNMP Test Modal (needed for Device Wizard walk step) -->
+{% include 'components/snmp_test_modal.html' %}
 
 <!-- Device Form Modal -->
 {% include 'components/snmp_devices_modal.html' %}
@@ -100,6 +421,7 @@
 {% include 'popup.html' %}
 
 <script>window.isAdmin = {% if user.profile.role == 'admin' %}true{% else %}false{% endif %};</script>
+<script src="{% static 'js/snmp_test.js' %}"></script>
 <script src="{% static 'js/onboarding.js' %}"></script>
 <script src="{% static 'js/discovered_devices.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>

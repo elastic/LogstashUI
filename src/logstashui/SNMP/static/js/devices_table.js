@@ -158,7 +158,23 @@ function renderDevices(devices) {
     // Render device template badge
     let templateHtml = '';
     if (device.device_template_name) {
-      templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(device.device_template_name)}</span>`;
+      if (device.device_template_name === 'default') {
+        // "default" means no real template configured — link to the wizard
+        const wizardUrl = `/SNMP/Onboarding/?tab=wizard&device_id=${device.id}`;
+        templateHtml = `
+          <a href="${wizardUrl}" title="No template configured — click to set one up in the wizard"
+             class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium
+                    bg-purple-600/20 text-purple-300 border border-purple-500/30
+                    hover:bg-purple-600/30 hover:border-purple-400/50 transition-colors cursor-pointer">
+            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+            </svg>
+            default
+          </a>`;
+      } else {
+        templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(device.device_template_name)}</span>`;
+      }
     } else {
       templateHtml = '<span class="text-gray-500 italic">None</span>';
     }

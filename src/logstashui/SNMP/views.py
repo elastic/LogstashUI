@@ -37,8 +37,166 @@ def Networks(request):
 
 def Onboarding(request):
     from PipelineManager.models import Connection
-    connections = Connection.objects.all().values('id', 'name', 'cloud_id')
-    return render(request, 'Onboarding.html', {'connections': connections})
+    connections   = Connection.objects.all().values('id', 'name', 'cloud_id')
+    credentials   = Credential.objects.all().order_by('name')
+    networks      = Network.objects.all().order_by('name')
+    templates     = DeviceTemplate.objects.exclude(name='default').order_by('-official', 'name')
+    devices       = Device.objects.all().select_related('credential', 'network', 'device_template')
+    from PipelineManager.forms import ConnectionForm
+    form = ConnectionForm()
+    return render(request, 'Onboarding.html', {
+        'connections':  connections,
+        'credentials':  credentials,
+        'networks':     networks,
+        'templates':    templates,
+        'devices':      devices,
+        'form':         form,
+    })
+
+
+@require_admin_role
+def CheckDeviceType(request):
+    """
+    Lightweight SNMP probe: GET sysDescr (1.3.6.1.2.1.1.1.0) from an arbitrary
+    host using a stored credential, then run suggest_device_template() to find
+    the best matching template.
+
+    POST body (JSON): { host, port (optional, default 161), credential_id }
+
+    Returns:
+        {
+            success: bool,
+            sys_descr: str,
+            matched_template: {id, name, vendor, description, matching_rules} | null,
+            error: str  (only on failure)
+        }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data          = json.loads(request.body)
+        host          = (data.get('host') or '').strip()
+        port          = int(data.get('port') or 161)
+        credential_id = data.get('credential_id')
+
+        if not host:
+            return JsonResponse({'success': False, 'error': 'host is required'}, status=400)
+        if not credential_id:
+            return JsonResponse({'success': False, 'error': 'credential_id is required'}, status=400)
+
+        credential = Credential.objects.get(pk=credential_id)
+    except Credential.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Credential not found'}, status=404)
+    except (json.JSONDecodeError, Exception) as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=400)
+
+    # ── Perform a single-OID SNMP GET for sysDescr ────────────────────────────
+    sys_descr = _snmp_get_sys_descr(host, port, credential)
+    if sys_descr is None:
+        return JsonResponse({
+            'success': False,
+            'error': f'Could not reach {host}:{port} — check the address and credential, '
+                     'and ensure the device is accessible from LogstashUI.',
+        })
+
+    # ── Match against templates ────────────────────────────────────────────────
+    from .snmp_crud import suggest_device_template
+    matched_ids = suggest_device_template(sys_descr)
+
+    matched_template = None
+    if matched_ids:
+        tpl = DeviceTemplate.objects.filter(pk=matched_ids[0]).first()
+        if tpl:
+            matched_template = {
+                'id':            tpl.id,
+                'name':          tpl.name,
+                'vendor':        tpl.vendor,
+                'description':   tpl.description,
+                'matching_rules': tpl.matching_rules,
+                'profile_names': list(tpl.profiles.values_list('name', flat=True)),
+            }
+
+    return JsonResponse({
+        'success':          True,
+        'sys_descr':        sys_descr,
+        'matched_template': matched_template,
+    })
+
+
+def _snmp_get_sys_descr(host, port, credential):
+    """
+    Do a single SNMP GET for sysDescr.0 and return the string value, or None on failure.
+    Runs in a background thread so the async loop is isolated.
+    Timeout: 8 seconds (generous enough for slow devices, fast enough to feel responsive).
+    """
+    import asyncio
+    import threading
+    from pysnmp.hlapi.v3arch.asyncio import (
+        SnmpEngine, CommunityData, UsmUserData, UdpTransportTarget,
+        ContextData, ObjectType, ObjectIdentity, get_cmd,
+        usmHMACMD5AuthProtocol, usmHMACSHAAuthProtocol,
+        usmDESPrivProtocol, usm3DESEDEPrivProtocol,
+        usmAesCfb128Protocol, usmAesCfb192Protocol, usmAesCfb256Protocol,
+    )
+
+    SYS_DESCR_OID = '1.3.6.1.2.1.1.1.0'
+
+    def _build_auth(cred):
+        if cred.version in ('1', '2c'):
+            community = cred.get_community()
+            if not community:
+                raise ValueError('No community string')
+            return CommunityData(community, mpModel=0 if cred.version == '1' else 1)
+        # SNMPv3
+        if cred.security_level == 'noAuthNoPriv':
+            return UsmUserData(cred.security_name)
+        proto_map = {
+            'md5': usmHMACMD5AuthProtocol,
+            'sha': usmHMACSHAAuthProtocol,
+        }
+        auth_proto = proto_map.get((cred.auth_protocol or '').lower(), usmHMACSHAAuthProtocol)
+        if cred.security_level == 'authNoPriv':
+            return UsmUserData(cred.security_name, authKey=cred.get_auth_pass(), authProtocol=auth_proto)
+        priv_map = {
+            'des': usmDESPrivProtocol, '3des': usm3DESEDEPrivProtocol,
+            'aes': usmAesCfb128Protocol, 'aes128': usmAesCfb128Protocol,
+            'aes192': usmAesCfb192Protocol, 'aes256': usmAesCfb256Protocol,
+        }
+        priv_proto = priv_map.get((cred.priv_protocol or '').lower(), usmDESPrivProtocol)
+        return UsmUserData(cred.security_name, authKey=cred.get_auth_pass(),
+                           authProtocol=auth_proto, privKey=cred.get_priv_pass(),
+                           privProtocol=priv_proto)
+
+    async def _fetch():
+        auth  = _build_auth(credential)
+        xport = await UdpTransportTarget.create((host, port), timeout=5, retries=1)
+        errInd, errStatus, _, varBinds = await get_cmd(
+            SnmpEngine(), auth, xport, ContextData(),
+            ObjectType(ObjectIdentity(SYS_DESCR_OID))
+        )
+        if errInd or errStatus:
+            return None
+        return str(varBinds[0][1]) if varBinds else None
+
+    result    = [None]
+    exception = [None]
+
+    def _run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result[0] = loop.run_until_complete(_fetch())
+            loop.close()
+        except Exception as exc:
+            exception[0] = exc
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=10)
+    if t.is_alive() or exception[0]:
+        return None
+    return result[0]
 
 def Devices(request):
     from PipelineManager.models import Connection

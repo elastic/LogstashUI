@@ -1871,6 +1871,37 @@ def GetDevices(request):
         return HttpResponse(f"Error fetching devices: {str(e)}", status=500)
 
 
+def FindDeviceByHost(request):
+    """Find a device by exact ip_address, hostname, or name match. Returns device details or null."""
+    host = request.GET.get('host', '').strip()
+    if not host:
+        return JsonResponse({'device': None}, status=200)
+    try:
+        from django.db.models import Q
+        device = Device.objects.select_related('credential', 'network', 'device_template').filter(
+            Q(ip_address=host) | Q(hostname=host) | Q(name=host)
+        ).first()
+        if not device:
+            return JsonResponse({'device': None}, status=200)
+        return JsonResponse({
+            'device': {
+                'id':                   device.id,
+                'name':                 device.name,
+                'ip_address':           device.ip_address or '',
+                'hostname':             device.hostname or '',
+                'port':                 device.port,
+                'credential_id':        device.credential.id   if device.credential   else None,
+                'credential_name':      device.credential.name if device.credential   else None,
+                'network_id':           device.network.id      if device.network       else None,
+                'network_name':         device.network.name    if device.network       else None,
+                'device_template_id':   device.device_template.id   if device.device_template else None,
+                'device_template_name': device.device_template.name if device.device_template else None,
+            }
+        }, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @require_admin_role
 def AddDevice(request):
     """Add a new SNMP device"""

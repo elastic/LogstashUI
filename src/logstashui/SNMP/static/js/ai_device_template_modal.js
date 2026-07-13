@@ -649,6 +649,13 @@
 
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
+        // Notify the Device Wizard (if open) so it can auto-select the template
+        if (result.success && result.template && result.template.id) {
+          if (typeof window.onAITemplateImported === 'function') {
+            window.onAITemplateImported({ id: result.template.id, name: result.template.name });
+          }
+        }
+
       })
       .catch(err => {
         if (importBtn) {

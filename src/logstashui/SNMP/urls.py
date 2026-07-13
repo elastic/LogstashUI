@@ -49,6 +49,7 @@ urlpatterns = [
     # SNMP Device endpoints
     path("GetDeviceLocationData/", snmp_crud.GetDeviceLocationData, name="GetDeviceLocationData"),
     path("GetDevices/", snmp_crud.GetDevices, name="GetSNMPDevices"),
+    path("FindDeviceByHost/", snmp_crud.FindDeviceByHost, name="FindDeviceByHost"),
     path("AddDevice/", snmp_crud.AddDevice, name="AddSNMPDevice"),
     path("UpdateDevice/<int:device_id>/", snmp_crud.UpdateDevice, name="UpdateSNMPDevice"),
     path("GetDevice/<int:device_id>/", snmp_crud.GetDevice, name="GetSNMPDevice"),
@@ -84,6 +85,7 @@ urlpatterns = [
     path("InstallAgentBuilderPackage/", views.InstallAgentBuilderPackage, name="InstallAgentBuilderPackage"),
     path("GenerateTemplateAndProfiles/", views.GenerateTemplateAndProfiles, name="GenerateTemplateAndProfiles"),
     path("ImportAIGeneratedDefinitions/", views.ImportAIGeneratedDefinitions, name="ImportAIGeneratedDefinitions"),
+    path("CheckDeviceType/", views.CheckDeviceType, name="CheckDeviceType"),
 
     # SNMP Index Template management endpoints
     path("CheckSNMPIndexTemplate/", views.CheckSNMPIndexTemplate, name="CheckSNMPIndexTemplate"),
