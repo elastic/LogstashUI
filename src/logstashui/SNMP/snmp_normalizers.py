@@ -40,7 +40,7 @@ def _apply_normalizers(normalizers):
         for scope, normalizer_list in scopes.items():
             if operation == 'multiply':
                 if scope in ('get', 'table'):
-                    filter_components = _generate_multiply_get_filter(normalizer_list)
+                    filter_components = _generate_multiply_get_filter(normalizer_list, scope)
                     if filter_components:
                         # Filter generators now return lists (comment + filter)
                         if isinstance(filter_components, list):
@@ -49,7 +49,7 @@ def _apply_normalizers(normalizers):
                             filters.append(filter_components)
             elif operation == 'ratio':
                 if scope in ('get', 'table'):
-                    filter_components = _generate_ratio_get_filter(normalizer_list)
+                    filter_components = _generate_ratio_get_filter(normalizer_list, scope)
                     if filter_components:
                         # Filter generators now return lists (comment + filter)
                         if isinstance(filter_components, list):
@@ -68,14 +68,19 @@ def _apply_normalizers(normalizers):
     return filters
 
 
-def _generate_multiply_get_filter(normalizers):
+def _generate_multiply_get_filter(normalizers, scope='get'):
     """
-    Generate Ruby filter for multiply operations on get fields.
+    Generate Ruby filter for multiply operations on get or table fields.
     Consolidates multiple multiply operations into a single Ruby filter.
-    
+
     Args:
-        normalizers: List of multiply normalizers for get scope
-        
+        normalizers: List of multiply normalizers for the given scope
+        scope: Target scope ('get' or 'table'), used to keep generated
+            Logstash filter component IDs unique across scopes so a
+            get-scope multiply and a table-scope multiply on the same
+            profile don't emit duplicate plugin IDs (Logstash rejects
+            pipelines with duplicate IDs at compile time).
+
     Returns:
         Logstash filter component dict
     """
@@ -123,7 +128,7 @@ def _generate_multiply_get_filter(normalizers):
     
     return [
         {
-            "id": "normalizer_multiply_get_comment",
+            "id": f"normalizer_multiply_{scope}_comment",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -131,7 +136,7 @@ def _generate_multiply_get_filter(normalizers):
             }
         },
         {
-            "id": "normalizer_multiply_get",
+            "id": f"normalizer_multiply_{scope}",
             "type": "filter",
             "plugin": "ruby",
             "config": {
@@ -141,14 +146,19 @@ def _generate_multiply_get_filter(normalizers):
     ]
 
 
-def _generate_ratio_get_filter(normalizers):
+def _generate_ratio_get_filter(normalizers, scope='get'):
     """
-    Generate Ruby filter for ratio operations on get fields.
+    Generate Ruby filter for ratio operations on get or table fields.
     Calculates ratios from two input fields and optionally creates total and ratio output fields.
-    
+
     Args:
-        normalizers: List of ratio normalizers for get scope
-        
+        normalizers: List of ratio normalizers for the given scope
+        scope: Target scope ('get' or 'table'), used to keep generated
+            Logstash filter component IDs unique across scopes so a
+            get-scope ratio and a table-scope ratio on the same profile
+            don't emit duplicate plugin IDs (Logstash rejects pipelines
+            with duplicate IDs at compile time).
+
     Returns:
         Logstash filter component dict
     """
@@ -253,7 +263,7 @@ def _generate_ratio_get_filter(normalizers):
     
     return [
         {
-            "id": "normalizer_ratio_get_comment",
+            "id": f"normalizer_ratio_{scope}_comment",
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -261,7 +271,7 @@ def _generate_ratio_get_filter(normalizers):
             }
         },
         {
-            "id": "normalizer_ratio_get",
+            "id": f"normalizer_ratio_{scope}",
             "type": "filter",
             "plugin": "ruby",
             "config": {
