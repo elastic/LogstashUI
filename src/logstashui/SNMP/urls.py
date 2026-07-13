@@ -10,6 +10,7 @@ from . import snmp_test
 
 urlpatterns = [
     path("Overview/", views.Overview, name="SNMPOverview"),
+    path("Onboarding/", views.Onboarding, name="SNMPOnboarding"),
     path("Networks/", views.Networks, name="Networks"),
     path("Devices/", views.Devices, name="Devices"),
     path("DeviceTemplates/", views.DeviceTemplates, name="DeviceTemplates"),
@@ -82,6 +83,7 @@ urlpatterns = [
     path("CheckAgentBuilderResources/", views.CheckAgentBuilderResources, name="CheckAgentBuilderResources"),
     path("InstallAgentBuilderPackage/", views.InstallAgentBuilderPackage, name="InstallAgentBuilderPackage"),
     path("GenerateTemplateAndProfiles/", views.GenerateTemplateAndProfiles, name="GenerateTemplateAndProfiles"),
+    path("ImportAIGeneratedDefinitions/", views.ImportAIGeneratedDefinitions, name="ImportAIGeneratedDefinitions"),
 
     # SNMP Index Template management endpoints
     path("CheckSNMPIndexTemplate/", views.CheckSNMPIndexTemplate, name="CheckSNMPIndexTemplate"),

@@ -1,3 +1,24 @@
+## [Unreleased] - AI Device Onboarding + Normalizers End-to-End
+
+### Added
+
+- **AI Device Onboarding** (experimental, `/AI/Onboarding/`) — discover an unmonitored SNMP device,
+  let the agent author a profile from a live walk, then review and approve before it deploys.
+  Adds `AISettings` + `DraftDefinition` models, `agent_client` (Agent Builder converse),
+  `snmp_discovery` (live grounding walk), and Generate/Approve/Reject views.
+- **Normalizers end-to-end** — authored profiles carry a `normalizers[]` array
+  (`DraftDefinition.normalizers`, migration `AI/0002`) captured from the agent and written to
+  `Profile.normalizers` on approval, so authored metrics ship scaled/decoded.
+- **KB sync tooling** (SNMP AB-tool) — `load-kb.py` gains `--prune` (exact mirror: upsert +
+  reconcile deletes) and `--check` (drift gate) so the grounding KB stays a faithful projection of
+  the repo (the source of truth). See `docs/docs/logstashui/ai-device-onboarding.md`.
+
+### Fixed
+
+- User/AI-authored profile normalizers were silently dropped from generated pipelines
+  (`_get_device_profiles` read only inline `profile_data['normalizers']`). It now falls back to the
+  `Profile.normalizers` model column, so non-official profiles ship correctly scaled metrics.
+
 ## [0.4.3] - AI Foundation, Simulation Improvements, and SNMP Fixes - 06/07/2026
 
 ### Added

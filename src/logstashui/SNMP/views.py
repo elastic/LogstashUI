@@ -11,7 +11,6 @@ from PipelineManager.forms import ConnectionForm
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 from Common.decorators import require_admin_role
 
-import datetime
 import os
 import json
 
@@ -35,6 +34,11 @@ def Networks(request):
         'credentials': credentials,
         'connections': connections,
     })
+
+def Onboarding(request):
+    from PipelineManager.models import Connection
+    connections = Connection.objects.all().values('id', 'name', 'cloud_id')
+    return render(request, 'Onboarding.html', {'connections': connections})
 
 def Devices(request):
     from PipelineManager.models import Connection
@@ -319,10 +323,11 @@ def GenerateTemplateAndProfiles(request):
     """
     Orchestrate SNMP AI template/profile generation.
 
-    1. Splits the raw walk into 5 000-line chunks.
-    2. Bulk-indexes the chunks into a timestamped ES index.
-    3. Invokes the ``snmp-profile-author`` Agent Builder agent with the index
-       name as context and streams its response back to the browser via SSE.
+    1. Reduces the raw walk to a compact set of MIB-grounded columns
+       (``snmp_grounding.reduce_and_ground``) — no walk data is written to any
+       backend, keeping the record of truth local and generation backend-agnostic.
+    2. Invokes the ``snmp-profile-author`` Agent Builder agent with the grounded
+       columns passed inline and streams its response back to the browser via SSE.
 
     POST body (JSON):
         connection_id – int, required
@@ -330,9 +335,9 @@ def GenerateTemplateAndProfiles(request):
         walk_text     – str, required (raw SNMP walk output)
 
     Response: text/event-stream — each event is a JSON object:
-        {"phase": "indexing",      "message": "..."}
-        {"phase": "indexing_done", "message": "..."}
-        {"phase": "invoking",      "message": "..."}
+        {"phase": "grounding",      "message": "..."}
+        {"phase": "grounding_done", "message": "..."}
+        {"phase": "invoking",       "message": "..."}
         {"phase": "agent_chunk",   "data":    <raw chunk dict from Kibana>}
         {"phase": "done"}
         {"phase": "error",         "message": "..."}
@@ -359,54 +364,72 @@ def GenerateTemplateAndProfiles(request):
         return f"data: {json.dumps(payload)}\n\n"
 
     def _stream():
-        from Common.elastic_utils import bulk_index_documents
         from Common.ai.agent_builder import AgentBuilder
+        from .snmp_grounding import reduce_and_ground
 
         if not inference_id:
             yield _sse({"phase": "error", "message": "No inference model selected."})
             return
 
-        # ── 1. Chunk the walk into 5 000-line documents ───────────────────────
-        lines      = walk_text.splitlines()
-        chunk_size = 5000
-        chunks     = [
-            {"message": "\n".join(lines[i:i + chunk_size])}
-            for i in range(0, len(lines), chunk_size)
-        ]
-
-        ts         = datetime.datetime.utcnow().strftime('%Y%m%dt%H%M%Sz')
-        index_name = f"snmp-template_generation-{ts}"
+        # ── 1. Reduce the raw walk to MIB-grounded columns ────────────────────
+        # The record of truth stays LOCAL to LogstashUI. LogstashUI may connect to
+        # multiple backends, so we never stage the walk in a per-backend ES index
+        # (that would leave residue and make generation backend-dependent, and N
+        # disconnected backends can't be reconciled). Instead we reduce the walk to
+        # a compact, authoritative grounded-column set and pass it INLINE in the
+        # agent request — walk in, definition out, nothing persisted on the backend.
+        walk_line_count = len(walk_text.splitlines())
+        grounded_columns, ungrounded_subtrees = reduce_and_ground(walk_text)
 
         yield _sse({
-            "phase":   "indexing",
-            "message": f"Indexing walk data into Elasticsearch ({len(chunks)} chunk(s) → {index_name})…",
+            "phase":   "grounding",
+            "message": (
+                f"Grounding walk against compiled MIBs "
+                f"({walk_line_count} lines → {len(grounded_columns)} column(s), "
+                f"{len(ungrounded_subtrees)} un-grounded subtree(s))…"
+            ),
         })
 
-        # ── 2. Bulk index ─────────────────────────────────────────────────────
-        try:
-            bulk_index_documents(int(connection_id), index_name, chunks)
-        except Exception as exc:
-            yield _sse({"phase": "error", "message": f"Indexing failed: {exc}"})
+        if not grounded_columns:
+            yield _sse({
+                "phase":   "error",
+                "message": (
+                    "No walked OIDs matched a compiled MIB in the grounding index. "
+                    "Load the device's MIBs (see data/grounding/) and retry."
+                ),
+            })
             return
 
-        yield _sse({"phase": "indexing_done"})
+        yield _sse({"phase": "grounding_done"})
 
-        # ── 3. Build the agent prompt ─────────────────────────────────────────
+        # ── 2. Build the agent prompt (grounded columns passed inline) ────────
+        grounding_payload = json.dumps(
+            {
+                "grounded_columns":    grounded_columns,
+                "ungrounded_subtrees": [{"prefix": p, "count": c} for p, c in ungrounded_subtrees],
+            },
+            separators=(",", ":"),
+        )
         user_message = (
-            f"I have indexed a raw SNMP walk into Elasticsearch index `{index_name}`. "
-            f"The walk is split into {len(chunks)} document(s) of up to 5,000 lines each, "
-            f"stored in the `message` field. "
-            f"Please analyse the OIDs present and generate a LogstashUI device template "
-            f"with the appropriate profiles. Consult the SNMP Catalog knowledge in your "
-            f"instructions to reuse any existing OIDs and profiles, then produce JSON for "
-            f"any new profiles required."
+            "Below is a REDUCED, MIB-grounded SNMP walk for one device, as JSON.\n"
+            "`grounded_columns` lists every walked OID column matched to a compiled MIB, "
+            "with its authoritative name, type, enum, units and instance count — author "
+            "ONLY from these columns; never recall or invent OIDs.\n"
+            "`ungrounded_subtrees` are OID prefixes the device exposes whose MIBs are not "
+            "loaded — do NOT author them; list them so the user can load the MIBs.\n"
+            "Consult the SNMP Catalog in your instructions to reuse existing profiles, "
+            "then produce JSON for any new profiles required.\n\n"
+            f"{grounding_payload}"
         )
 
-        # Build configuration_overrides: agent instructions + full catalog appended.
-        # Skills can't be linked to agents via the API, so we inject the catalog here.
+        # Build configuration_overrides: agent instructions + the field standard + full catalog,
+        # all sent INLINE with the request. LogstashUI owns the naming standard (data/schema.md)
+        # and the profile catalog; sending them per-request keeps LogstashUI the single source of
+        # truth — the agent conforms to what it's handed, nothing authoritative lives on the backend.
         _base = os.path.dirname(os.path.abspath(__file__))
         _agent_json = os.path.join(_base, 'assets', 'device_template_generation', 'agents', 'snmp-profile-author.json')
         _catalog_md = os.path.join(_base, 'data', 'template_profile_context.md')
+        _schema_md  = os.path.join(_base, 'data', 'schema.md')
         try:
             with open(_agent_json, 'r', encoding='utf-8') as fh:
                 _agent_def = json.load(fh)
@@ -414,12 +437,24 @@ def GenerateTemplateAndProfiles(request):
         except Exception:
             _base_instructions = ''
         try:
+            with open(_schema_md, 'r', encoding='utf-8') as fh:
+                _schema = fh.read()
+        except Exception:
+            _schema = ''
+        try:
             with open(_catalog_md, 'r', encoding='utf-8') as fh:
                 _catalog = fh.read()
         except Exception:
             _catalog = ''
 
         _full_instructions = _base_instructions
+        if _schema:
+            _full_instructions += (
+                "\n\n---\n\n## Field Standard — the canonical field dictionary (naming authority)\n\n"
+                "Conform every field name to this standard. It defines the OpenConfig-projected "
+                "canonical names; where it or OpenConfig has a leaf, use it — do not coin your own.\n\n"
+                + _schema
+            )
         if _catalog:
             _full_instructions += f"\n\n---\n\n## SNMP Catalog\n\n{_catalog}"
 
@@ -649,4 +684,187 @@ def InstallSNMPIndexTemplate(request):
             })
 
     return JsonResponse({'success': overall_success, 'results': results})
+
+
+@require_admin_role
+def ImportAIGeneratedDefinitions(request):
+    """
+    Persist the profiles and device template produced by GenerateTemplateAndProfiles.
+
+    POST body (JSON):
+        profiles        – list of profile dicts (may be empty)
+        device_template – device template dict
+
+    Each item in `profiles` must have at minimum a non-empty `name`.
+    The `device_template` must have `name` and a `profiles` list (all profile
+    names the template should reference, both new and existing catalog ones).
+
+    Per-item actions:
+        created  – new record inserted
+        updated  – existing user-owned record overwritten in place
+        skipped  – record already exists as official (official_key set) and
+                   cannot be overwritten; still linked to the template
+
+    Returns:
+        {
+            "success": bool,
+            "profiles": [{"name", "action", "id", "reason?"}],
+            "template": {"name", "action", "id", "reason?"},
+            "errors": ["..."]
+        }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    raw_profiles = data.get('profiles', [])
+    raw_template = data.get('device_template')
+
+    # ── Top-level shape validation ─────────────────────────────────────────────
+    errors = []
+
+    if not isinstance(raw_profiles, list):
+        return JsonResponse({'error': '`profiles` must be a list'}, status=400)
+    if not isinstance(raw_template, dict):
+        return JsonResponse({'error': '`device_template` must be an object'}, status=400)
+
+    template_name = (raw_template.get('name') or '').strip()
+    if not template_name:
+        return JsonResponse({'error': '`device_template.name` is required'}, status=400)
+
+    template_profile_names = raw_template.get('profiles', [])
+    if not isinstance(template_profile_names, list):
+        return JsonResponse({'error': '`device_template.profiles` must be a list'}, status=400)
+
+    # ── Validate each profile ──────────────────────────────────────────────────
+    def _validate_profile(p, idx):
+        errs = []
+        if not isinstance(p, dict):
+            errs.append(f'Profile[{idx}] is not an object')
+            return errs
+        name = (p.get('name') or '').strip()
+        if not name:
+            errs.append(f'Profile[{idx}] missing required field: name')
+        for section in ('get', 'walk', 'table'):
+            if section in p and not isinstance(p[section], dict):
+                errs.append(f'Profile[{idx}] ({name or "?"}): `{section}` must be an object')
+        return errs
+
+    for i, prof in enumerate(raw_profiles):
+        errors.extend(_validate_profile(prof, i))
+
+    if errors:
+        return JsonResponse({'success': False, 'errors': errors}, status=422)
+
+    # ── Import profiles ────────────────────────────────────────────────────────
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    profile_results = []
+    name_to_id = {}  # track created/updated profile IDs for template linking
+
+    for prof in raw_profiles:
+        p_name  = prof['name'].strip()
+        p_data  = {k: prof[k] for k in ('get', 'walk', 'table', 'normalizers') if k in prof}
+        if 'get'        not in p_data: p_data['get']        = {}
+        if 'walk'       not in p_data: p_data['walk']       = {}
+        if 'table'      not in p_data: p_data['table']      = {}
+        if 'normalizers' not in p_data: p_data['normalizers'] = []
+
+        existing = Profile.objects.filter(name=p_name).first()
+
+        if existing and existing.official_key:
+            profile_results.append({
+                'name':   p_name,
+                'action': 'skipped',
+                'id':     existing.id,
+                'reason': 'Official profile — cannot overwrite',
+            })
+            name_to_id[p_name] = existing.id
+            continue
+
+        action = 'updated' if existing else 'created'
+        profile = existing or Profile(name=p_name)
+        profile.description = (prof.get('description') or '').strip()
+        profile.vendor      = (prof.get('vendor') or 'Any').strip()
+        profile.product     = (prof.get('product') or '').strip()
+        profile.profile_data = p_data
+        profile.normalizers  = p_data.pop('normalizers', [])
+        profile.profile_data = {k: p_data[k] for k in ('get', 'walk', 'table') if k in p_data}
+
+        try:
+            profile.save()
+            profile_results.append({'name': p_name, 'action': action, 'id': profile.id})
+            name_to_id[p_name] = profile.id
+        except (DjangoValidationError, Exception) as exc:
+            errors.append(f'Profile "{p_name}": {exc}')
+            profile_results.append({'name': p_name, 'action': 'error', 'reason': str(exc)})
+
+    # ── Import device template ─────────────────────────────────────────────────
+    template_result = {}
+
+    existing_tpl = DeviceTemplate.objects.filter(name=template_name).first()
+
+    if existing_tpl and existing_tpl.official:
+        template_result = {
+            'name':   template_name,
+            'action': 'skipped',
+            'id':     existing_tpl.id,
+            'reason': 'Official template — cannot overwrite',
+        }
+        template = existing_tpl
+    else:
+        action = 'updated' if existing_tpl else 'created'
+        template = existing_tpl or DeviceTemplate(name=template_name, official=False)
+        template.description    = (raw_template.get('description') or '').strip()
+        template.vendor         = (raw_template.get('vendor') or 'Any').strip()
+        template.product        = (raw_template.get('product') or '').strip()
+        template.model          = (raw_template.get('model') or '').strip()
+        template.matching_rules = raw_template.get('matching_rules', [])
+
+        try:
+            template.save()
+
+            # Resolve ALL profile names the template should reference:
+            # first the ones we just created/updated, then look up the rest by name.
+            linked_ids = set()
+            for pname in template_profile_names:
+                if pname in name_to_id:
+                    linked_ids.add(name_to_id[pname])
+                else:
+                    db_prof = Profile.objects.filter(name=pname).first()
+                    if not db_prof:
+                        # Try the official name with .json suffix
+                        db_prof = Profile.objects.filter(name=f'{pname}.json').first()
+                    if db_prof:
+                        linked_ids.add(db_prof.id)
+                    else:
+                        errors.append(
+                            f'Template profile "{pname}" not found in database — '
+                            'install official data first or create the profile manually'
+                        )
+
+            template.profiles.set(linked_ids)
+
+            from .models import SNMPDeploymentState
+            SNMPDeploymentState.mark_config_changed()
+
+            template_result = {'name': template_name, 'action': action, 'id': template.id}
+
+        except (DjangoValidationError, Exception) as exc:
+            errors.append(f'Template "{template_name}": {exc}')
+            template_result = {'name': template_name, 'action': 'error', 'reason': str(exc)}
+
+    overall_success = not any(r.get('action') == 'error' for r in profile_results) \
+                      and template_result.get('action') != 'error'
+
+    return JsonResponse({
+        'success':  overall_success,
+        'profiles': profile_results,
+        'template': template_result,
+        'errors':   errors,
+    })
 

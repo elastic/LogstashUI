@@ -8,6 +8,7 @@
 
 function openDiscoveredDevicesModal() {
     const modal = document.getElementById('discoveredDevicesModal');
+    if (!modal) return;
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     
@@ -17,6 +18,7 @@ function openDiscoveredDevicesModal() {
 
 function closeDiscoveredDevicesModal() {
     const modal = document.getElementById('discoveredDevicesModal');
+    if (!modal) return;
     modal.classList.add('hidden');
     document.body.style.overflow = 'auto';
 }

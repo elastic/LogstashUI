@@ -1,0 +1,2184 @@
+{
+  "grounded_columns": [
+    {
+      "oid": "1.3.6.1.2.1.1.1",
+      "name": "sysDescr",
+      "mib": "SNMPv2-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "Cisco IOS Software, C2960X Software (C2960X-UNIVER"
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.2",
+      "name": "sysObjectID",
+      "mib": "SNMPv2-MIB",
+      "type": "OBJECT IDENTIFIER",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "1.3.6.1.4.1.9.1.1208"
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.3",
+      "name": "sysUpTime",
+      "mib": "SNMPv2-MIB",
+      "type": "TimeTicks",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "44266130"
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.4",
+      "name": "sysContact",
+      "mib": "SNMPv2-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-write",
+      "instances": 1,
+      "sample": ""
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.5",
+      "name": "sysName",
+      "mib": "SNMPv2-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-write",
+      "instances": 1,
+      "sample": "homelab-switch1"
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.6",
+      "name": "sysLocation",
+      "mib": "SNMPv2-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-write",
+      "instances": 1,
+      "sample": ""
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.7",
+      "name": "sysServices",
+      "mib": "SNMPv2-MIB",
+      "type": "INTEGER",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "6"
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.8",
+      "name": "sysORLastChange",
+      "mib": "SNMPv2-MIB",
+      "type": "TimeStamp",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.9.1.2",
+      "name": "sysORID",
+      "mib": "SNMPv2-MIB",
+      "type": "OBJECT IDENTIFIER",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 98,
+      "sample": "1.3.6.1.4.1.9.7.129",
+      "table": "1.3.6.1.2.1.1.9.1",
+      "index": [
+        "sysORIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.9.1.3",
+      "name": "sysORDescr",
+      "mib": "SNMPv2-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 98,
+      "sample": "Agent capabilities for CISCO-AAA-SERVER-MIB",
+      "table": "1.3.6.1.2.1.1.9.1",
+      "index": [
+        "sysORIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.1.9.1.4",
+      "name": "sysORUpTime",
+      "mib": "SNMPv2-MIB",
+      "type": "TimeStamp",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 98,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.1.9.1",
+      "index": [
+        "sysORIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.1",
+      "name": "ifNumber",
+      "mib": "IF-MIB",
+      "type": "Integer32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "58"
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.1",
+      "name": "ifIndex",
+      "mib": "IF-MIB",
+      "type": "InterfaceIndex",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.2",
+      "name": "ifDescr",
+      "mib": "IF-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "Vlan1",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.3",
+      "name": "ifType",
+      "mib": "IF-MIB",
+      "type": "IANAifType",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "53",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.4",
+      "name": "ifMtu",
+      "mib": "IF-MIB",
+      "type": "Integer32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "1500",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.5",
+      "name": "ifSpeed",
+      "mib": "IF-MIB",
+      "type": "Gauge32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "1000000000",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.6",
+      "name": "ifPhysAddress",
+      "mib": "IF-MIB",
+      "type": "PhysAddress",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "00:08:2f:9e:6d:40",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.7",
+      "name": "ifAdminStatus",
+      "mib": "IF-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "2": "down",
+        "3": "testing",
+        "1": "up"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 58,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.8",
+      "name": "ifOperStatus",
+      "mib": "IF-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "5": "dormant",
+        "2": "down",
+        "7": "lowerLayerDown",
+        "6": "notPresent",
+        "3": "testing",
+        "4": "unknown",
+        "1": "up"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.9",
+      "name": "ifLastChange",
+      "mib": "IF-MIB",
+      "type": "TimeTicks",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "10214",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.10",
+      "name": "ifInOctets",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "314405571",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.11",
+      "name": "ifInUcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "3005062",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.13",
+      "name": "ifInDiscards",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.14",
+      "name": "ifInErrors",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.15",
+      "name": "ifInUnknownProtos",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.16",
+      "name": "ifOutOctets",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "271210714",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.17",
+      "name": "ifOutUcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "285301",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.19",
+      "name": "ifOutDiscards",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.2.2.1.20",
+      "name": "ifOutErrors",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 56,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.2.2.1",
+      "index": [
+        "ifIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.1",
+      "name": "snmpInPkts",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "258851"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.2",
+      "name": "snmpOutPkts",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "258968"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.3",
+      "name": "snmpInBadVersions",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.4",
+      "name": "snmpInBadCommunityNames",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.5",
+      "name": "snmpInBadCommunityUses",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.6",
+      "name": "snmpInASNParseErrs",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.8",
+      "name": "snmpInTooBigs",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.9",
+      "name": "snmpInNoSuchNames",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.10",
+      "name": "snmpInBadValues",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.11",
+      "name": "snmpInReadOnlys",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.12",
+      "name": "snmpInGenErrs",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.13",
+      "name": "snmpInTotalReqVars",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "114908"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.14",
+      "name": "snmpInTotalSetVars",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.15",
+      "name": "snmpInGetRequests",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "7199"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.16",
+      "name": "snmpInGetNexts",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "42922"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.17",
+      "name": "snmpInSetRequests",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.18",
+      "name": "snmpInGetResponses",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.19",
+      "name": "snmpInTraps",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.20",
+      "name": "snmpOutTooBigs",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.21",
+      "name": "snmpOutNoSuchNames",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.22",
+      "name": "snmpOutBadValues",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.24",
+      "name": "snmpOutGenErrs",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.25",
+      "name": "snmpOutGetRequests",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.26",
+      "name": "snmpOutGetNexts",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.27",
+      "name": "snmpOutSetRequests",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.28",
+      "name": "snmpOutGetResponses",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "258875"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.29",
+      "name": "snmpOutTraps",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "117"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.30",
+      "name": "snmpEnableAuthenTraps",
+      "mib": "SNMPv2-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "2": "disabled",
+        "1": "enabled"
+      },
+      "nodetype": "scalar",
+      "access": "read-write",
+      "instances": 1,
+      "sample": "enabled"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.31",
+      "name": "snmpSilentDrops",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.11.32",
+      "name": "snmpProxyDrops",
+      "mib": "SNMPv2-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.1",
+      "name": "ifName",
+      "mib": "IF-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "Vl1"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.2",
+      "name": "ifInMulticastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "70420"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.3",
+      "name": "ifInBroadcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "1801021"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.4",
+      "name": "ifOutMulticastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "896301"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.5",
+      "name": "ifOutBroadcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "527422"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.6",
+      "name": "ifHCInOctets",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 54,
+      "sample": "314706160"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.7",
+      "name": "ifHCInUcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 54,
+      "sample": "3008690"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.8",
+      "name": "ifHCInMulticastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "70420"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.9",
+      "name": "ifHCInBroadcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "1801045"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.10",
+      "name": "ifHCOutOctets",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 54,
+      "sample": "271521185"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.11",
+      "name": "ifHCOutUcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 54,
+      "sample": "288128"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.12",
+      "name": "ifHCOutMulticastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "896315"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.13",
+      "name": "ifHCOutBroadcastPkts",
+      "mib": "IF-MIB",
+      "type": "Counter64",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 53,
+      "sample": "527443"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.14",
+      "name": "ifLinkUpDownTrapEnable",
+      "mib": "IF-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "2": "disabled",
+        "1": "enabled"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 57,
+      "sample": "1"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.15",
+      "name": "ifHighSpeed",
+      "mib": "IF-MIB",
+      "type": "Gauge32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "1000"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.16",
+      "name": "ifPromiscuousMode",
+      "mib": "IF-MIB",
+      "type": "TruthValue",
+      "enum": {
+        "1": "true",
+        "2": "false"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 58,
+      "sample": "2"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.17",
+      "name": "ifConnectorPresent",
+      "mib": "IF-MIB",
+      "type": "TruthValue",
+      "enum": {
+        "1": "true",
+        "2": "false"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "2"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.18",
+      "name": "ifAlias",
+      "mib": "IF-MIB",
+      "type": "DisplayString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 58,
+      "sample": ""
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.1.1.19",
+      "name": "ifCounterDiscontinuityTime",
+      "mib": "IF-MIB",
+      "type": "TimeStamp",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 58,
+      "sample": "0"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.2.1.3",
+      "name": "ifStackStatus",
+      "mib": "IF-MIB",
+      "type": "RowStatus",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-create",
+      "instances": 113,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.31.1.2.1",
+      "index": [
+        "ifStackHigherLayer",
+        "ifStackLowerLayer"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.4.1.2",
+      "name": "ifRcvAddressStatus",
+      "mib": "IF-MIB",
+      "type": "RowStatus",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-create",
+      "instances": 108,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.31.1.4.1",
+      "index": [
+        "ifIndex",
+        "ifRcvAddressAddress"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.4.1.3",
+      "name": "ifRcvAddressType",
+      "mib": "IF-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "3": "nonVolatile",
+        "1": "other",
+        "2": "volatile"
+      },
+      "nodetype": "column",
+      "access": "read-create",
+      "instances": 108,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.31.1.4.1",
+      "index": [
+        "ifIndex",
+        "ifRcvAddressAddress"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.5",
+      "name": "ifTableLastChange",
+      "mib": "IF-MIB",
+      "type": "TimeTicks",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "8645"
+    },
+    {
+      "oid": "1.3.6.1.2.1.31.1.6",
+      "name": "ifStackLastChange",
+      "mib": "IF-MIB",
+      "type": "TimeTicks",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "8645"
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.2",
+      "name": "entPhysicalDescr",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "Catalyst C29xx Switch Stack",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.3",
+      "name": "entPhysicalVendorType",
+      "mib": "ENTITY-MIB",
+      "type": "AutonomousType",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "1.3.6.1.4.1.9.12.3.1.11.11",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.4",
+      "name": "entPhysicalContainedIn",
+      "mib": "ENTITY-MIB",
+      "type": "PhysicalIndexOrZero",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.5",
+      "name": "entPhysicalClass",
+      "mib": "ENTITY-MIB",
+      "type": "IANAPhysicalClass",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "11",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.6",
+      "name": "entPhysicalParentRelPos",
+      "mib": "ENTITY-MIB",
+      "type": "Integer32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "-1",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.7",
+      "name": "entPhysicalName",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "C29xx Stacking",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.8",
+      "name": "entPhysicalHardwareRev",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.9",
+      "name": "entPhysicalFirmwareRev",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.10",
+      "name": "entPhysicalSoftwareRev",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.11",
+      "name": "entPhysicalSerialNum",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.12",
+      "name": "entPhysicalMfgName",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.13",
+      "name": "entPhysicalModelName",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.14",
+      "name": "entPhysicalAlias",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.15",
+      "name": "entPhysicalAssetID",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 62,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.1.1.1.16",
+      "name": "entPhysicalIsFRU",
+      "mib": "ENTITY-MIB",
+      "type": "TruthValue",
+      "enum": {
+        "1": "true",
+        "2": "false"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 62,
+      "sample": "2",
+      "table": "1.3.6.1.2.1.47.1.1.1.1",
+      "index": [
+        "entPhysicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.2",
+      "name": "entLogicalDescr",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "FastEthernet0",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.3",
+      "name": "entLogicalType",
+      "mib": "ENTITY-MIB",
+      "type": "AutonomousType",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "1.3.6.1.4.1.9.12.3.1.10.48",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.4",
+      "name": "entLogicalCommunity",
+      "mib": "ENTITY-MIB",
+      "type": "OCTET STRING",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "public",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.5",
+      "name": "entLogicalTAddress",
+      "mib": "ENTITY-MIB",
+      "type": "TAddress",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "c0:a8:04:fe:00:a1",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.6",
+      "name": "entLogicalTDomain",
+      "mib": "ENTITY-MIB",
+      "type": "TDomain",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "1.3.6.1.6.1.1",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.7",
+      "name": "entLogicalContextEngineID",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpEngineIdOrNone",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "80:00:00:09:03:00:00:08:2f:9e:6d:01",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.2.1.1.8",
+      "name": "entLogicalContextName",
+      "mib": "ENTITY-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 6,
+      "sample": "",
+      "table": "1.3.6.1.2.1.47.1.2.1.1",
+      "index": [
+        "entLogicalIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.3.2.1.2",
+      "name": "entAliasMappingIdentifier",
+      "mib": "ENTITY-MIB",
+      "type": "RowPointer",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 49,
+      "sample": "1.3.6.1.2.1.2.2.1.1.5179",
+      "table": "1.3.6.1.2.1.47.1.3.2.1",
+      "index": [
+        "entPhysicalIndex",
+        "entAliasLogicalIndexOrZero"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.3.3.1.1",
+      "name": "entPhysicalChildIndex",
+      "mib": "ENTITY-MIB",
+      "type": "PhysicalIndex",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 61,
+      "sample": "1001",
+      "table": "1.3.6.1.2.1.47.1.3.3.1",
+      "index": [
+        "entPhysicalIndex",
+        "entPhysicalChildIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.47.1.4.1",
+      "name": "entLastChangeTime",
+      "mib": "ENTITY-MIB",
+      "type": "TimeStamp",
+      "enum": null,
+      "nodetype": "scalar",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "8671"
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.3",
+      "name": "pethPsePortAdminEnable",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "TruthValue",
+      "enum": {
+        "1": "true",
+        "2": "false"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 48,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.4",
+      "name": "pethPsePortPowerPairsControlAbility",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "TruthValue",
+      "enum": {
+        "1": "true",
+        "2": "false"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "2",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.5",
+      "name": "pethPsePortPowerPairs",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "1": "signal",
+        "2": "spare"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 48,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.6",
+      "name": "pethPsePortDetectionStatus",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "3": "deliveringPower",
+        "1": "disabled",
+        "4": "fault",
+        "6": "otherFault",
+        "2": "searching",
+        "5": "test"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "2",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.7",
+      "name": "pethPsePortPowerPriority",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "1": "critical",
+        "2": "high",
+        "3": "low"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 48,
+      "sample": "3",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.8",
+      "name": "pethPsePortMPSAbsentCounter",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.9",
+      "name": "pethPsePortType",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "SnmpAdminString",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 48,
+      "sample": "",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.10",
+      "name": "pethPsePortPowerClassifications",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "1": "class0",
+        "2": "class1",
+        "3": "class2",
+        "4": "class3",
+        "5": "class4"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.11",
+      "name": "pethPsePortInvalidSignatureCounter",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.12",
+      "name": "pethPsePortPowerDeniedCounter",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.13",
+      "name": "pethPsePortOverLoadCounter",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "0",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.1.1.14",
+      "name": "pethPsePortShortCounter",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Counter32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 48,
+      "sample": "11",
+      "table": "1.3.6.1.2.1.105.1.1.1",
+      "index": [
+        "pethPsePortGroupIndex",
+        "pethPsePortIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.3.1.1.2",
+      "name": "pethMainPsePower",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Gauge32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "370",
+      "units": "Watts",
+      "table": "1.3.6.1.2.1.105.1.3.1.1",
+      "index": [
+        "pethMainPseGroupIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.3.1.1.3",
+      "name": "pethMainPseOperStatus",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "INTEGER",
+      "enum": {
+        "3": "faulty",
+        "2": "off",
+        "1": "on"
+      },
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.105.1.3.1.1",
+      "index": [
+        "pethMainPseGroupIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.3.1.1.4",
+      "name": "pethMainPseConsumptionPower",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Gauge32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-only",
+      "instances": 1,
+      "sample": "0",
+      "units": "Watts",
+      "table": "1.3.6.1.2.1.105.1.3.1.1",
+      "index": [
+        "pethMainPseGroupIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.3.1.1.5",
+      "name": "pethMainPseUsageThreshold",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "Integer32",
+      "enum": null,
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 1,
+      "sample": "0",
+      "units": "%",
+      "table": "1.3.6.1.2.1.105.1.3.1.1",
+      "index": [
+        "pethMainPseGroupIndex"
+      ]
+    },
+    {
+      "oid": "1.3.6.1.2.1.105.1.4.1.1.2",
+      "name": "pethNotificationControlEnable",
+      "mib": "POWER-ETHERNET-MIB",
+      "type": "TruthValue",
+      "enum": {
+        "1": "true",
+        "2": "false"
+      },
+      "nodetype": "column",
+      "access": "read-write",
+      "instances": 1,
+      "sample": "1",
+      "table": "1.3.6.1.2.1.105.1.4.1.1",
+      "index": [
+        "pethNotificationControlGroupIndex"
+      ]
+    }
+  ],
+  "ungrounded_subtrees": [
+    {
+      "prefix": "1.3.6.1.4.1.9.2.2",
+      "count": 3198
+    },
+    {
+      "prefix": "1.3.6.1.2.1.10.7.2",
+      "count": 848
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.30.1",
+      "count": 512
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.1.4",
+      "count": 260
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.4.4",
+      "count": 260
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.4.3",
+      "count": 171
+    },
+    {
+      "prefix": "1.3.6.1.4.1.9.2.1",
+      "count": 69
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.22.1",
+      "count": 48
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.31.1",
+      "count": 44
+    },
+    {
+      "prefix": "1.3.6.1.2.1.3.1.1",
+      "count": 36
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.15",
+      "count": 30
+    },
+    {
+      "prefix": "1.3.6.1.2.1.7.5.1",
+      "count": 18
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.20.1",
+      "count": 5
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.29.1",
+      "count": 4
+    },
+    {
+      "prefix": "1.3.6.1.2.1.92.1.1",
+      "count": 2
+    },
+    {
+      "prefix": "1.3.6.1.2.1.92.1.2",
+      "count": 2
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.1.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.2.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.3.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.4.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.5.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.6.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.7.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.8.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.9.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.10.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.11.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.12.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.13.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.14.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.15.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.16.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.17.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.18.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.19.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.23.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.4.33.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.1.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.2.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.3.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.4.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.5.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.6.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.7.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.8.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.9.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.10.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.11.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.12.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.13.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.14.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.15.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.16.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.17.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.18.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.19.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.20.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.21.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.22.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.23.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.24.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.25.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.5.26.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.1.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.2.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.3.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.4.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.5.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.6.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.7.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.8.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.9.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.10.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.11.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.12.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.14.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.6.15.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.7.1.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.7.2.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.7.3.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.7.4.0",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.1",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.2",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.3",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.4",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.5",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.6",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.7",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.8",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.9",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.12",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.15",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.16.19.16",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.1.1",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.1.2",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.1.3",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.1",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.2",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.3",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.4",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.5",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.6",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.7",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.8",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.9",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.10",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.11",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.12",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.13",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.2.14",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.4.1",
+      "count": 1
+    },
+    {
+      "prefix": "1.3.6.1.2.1.17.4.2",
+      "count": 1
+    }
+  ]
+}

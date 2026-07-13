@@ -1,0 +1,32 @@
+{
+  "name": "std_host_resources",
+  "description": "HOST-RESOURCES-MIB (RFC 2790) standard CPU load, memory and storage. Vendor-neutral; works on Linux/Windows hosts and many network OSes. hrStorage and hrProcessor are indexed tables.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "system.uptime": "1.3.6.1.2.1.25.1.1.0",
+    "system.users.count": "1.3.6.1.2.1.25.1.5.0",
+    "system.process.count": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.total.kbytes": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "hrStorage": {
+      "columns": {
+        "hrStorageIndex": "1.3.6.1.2.1.25.2.3.1.1",
+        "hrStorageType": "1.3.6.1.2.1.25.2.3.1.2",
+        "hrStorageDescr": "1.3.6.1.2.1.25.2.3.1.3",
+        "hrStorageAllocationUnits": "1.3.6.1.2.1.25.2.3.1.4",
+        "hrStorageSize": "1.3.6.1.2.1.25.2.3.1.5",
+        "hrStorageUsed": "1.3.6.1.2.1.25.2.3.1.6"
+      }
+    },
+    "hrProcessor": {
+      "columns": {
+        "hrProcessorFrwID": "1.3.6.1.2.1.25.3.3.1.1",
+        "hrProcessorLoad": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    }
+  }
+}

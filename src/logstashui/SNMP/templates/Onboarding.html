@@ -1,0 +1,147 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/snmp.css' %}">
+
+<div class="p-6">
+  <!-- Header -->
+  <div class="page-header flex justify-between items-center mb-6">
+    <div class="flex items-center gap-2">
+      <h1 class="text-2xl font-bold text-white">SNMP Onboarding</h1>
+      <div class="group relative inline-block">
+        <svg class="w-5 h-5 text-gray-400 hover:text-blue-400 cursor-help transition-colors" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+        </svg>
+        <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
+          <h4 class="text-sm font-semibold text-white mb-2">SNMP Onboarding</h4>
+          <p class="text-xs text-gray-300">Automated onboarding for SNMP device monitoring. Discover devices on your network, quickly setup a device with the device wizard, and automatically generate templates and profiles for data collection.</p>
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <!-- Undeployed changes indicator -->
+      <div id="snmpUndeployedIndicator" class="hidden flex items-center gap-1 px-2 py-1 bg-orange-500/20 border border-orange-500/40 rounded-full">
+        <div class="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse"></div>
+        <span class="text-xs text-orange-300 font-medium whitespace-nowrap">Undeployed changes</span>
+      </div>
+      {% if user.profile.role == 'admin' %}
+      <button id="deployChangesBtn" class="btn bg-green-600 hover:bg-green-700 text-white px-4 py-2.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Deploy Changes
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="mb-6">
+    <div class="border-b border-gray-700">
+      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <button id="discoveredDevicesTab" class="tab-button active border-b-2 border-primary py-4 px-1 text-sm font-medium text-primary">
+          Discovered Devices
+        </button>
+        <button id="deviceWizardTab" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-400 hover:text-gray-300 hover:border-gray-300">
+          Device Wizard
+        </button>
+        <button id="generateTemplateTab" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-400 hover:text-gray-300 hover:border-gray-300">
+          Generate Template and Profiles
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Discovered Devices Tab Content -->
+  <div id="discoveredDevicesContent">
+    {% include 'components/discovered_devices_content.html' %}
+    <div class="mt-4 text-sm text-gray-400">
+      <span id="discoveredDevicesCount">0</span> device(s) found
+    </div>
+  </div>
+
+  <!-- Device Wizard Tab Content -->
+  <div id="deviceWizardContent" class="hidden">
+  </div>
+
+  <!-- Generate Template and Profiles Tab Content -->
+  <div id="generateTemplateContent" class="hidden">
+    {% include 'components/ai_generate_template_content.html' %}
+  </div>
+
+</div>
+
+<!-- Device Form Modal -->
+{% include 'components/snmp_devices_modal.html' %}
+
+<!-- Credential Form Modal (for creating credentials from device modal) -->
+{% include 'components/snmp_credentials_modal.html' %}
+
+<!-- Network Form Modal (for creating networks from device modal) -->
+{% include 'components/snmp_network_modal.html' %}
+
+<!-- Connection Form Modal (for creating connections from network modal) -->
+{% include 'components/pipeline_manager/connection_modal.html' %}
+
+<!-- Commit Configuration Modal -->
+{% include 'components/snmp_commit_modal.html' %}
+
+<!-- SNMP Diff Modal -->
+{% include 'components/snmp_diff_modal.html' %}
+
+<!-- Popup Modal -->
+{% include 'popup.html' %}
+
+<script>window.isAdmin = {% if user.profile.role == 'admin' %}true{% else %}false{% endif %};</script>
+<script src="{% static 'js/onboarding.js' %}"></script>
+<script src="{% static 'js/discovered_devices.js' %}"></script>
+<script src="{% static 'js/snmp_devices_modal.js' %}"></script>
+<script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
+<script src="{% static 'js/snmp_network_modal.js' %}"></script>
+<script src="{% static 'js/snmp_commit_modal.js' %}"></script>
+<script src="{% static 'js/snmp_diff_modal.js' %}"></script>
+<script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
+<script src="{% static 'js/ai_device_template_modal.js' %}"></script>
+
+<script>
+  const discoveredDevicesTab = document.getElementById('discoveredDevicesTab');
+  const deviceWizardTab = document.getElementById('deviceWizardTab');
+  const generateTemplateTab = document.getElementById('generateTemplateTab');
+
+  const discoveredDevicesContent = document.getElementById('discoveredDevicesContent');
+  const deviceWizardContent = document.getElementById('deviceWizardContent');
+  const generateTemplateContent = document.getElementById('generateTemplateContent');
+
+  const allTabs = [discoveredDevicesTab, deviceWizardTab, generateTemplateTab];
+  const allContent = [discoveredDevicesContent, deviceWizardContent, generateTemplateContent];
+
+  function switchTab(activeTab, activeContent) {
+    allTabs.forEach(tab => {
+      tab.classList.remove('active', 'border-primary', 'text-primary');
+      tab.classList.add('border-transparent', 'text-gray-400');
+    });
+    allContent.forEach(content => content.classList.add('hidden'));
+
+    activeTab.classList.add('active', 'border-primary', 'text-primary');
+    activeTab.classList.remove('border-transparent', 'text-gray-400');
+    activeContent.classList.remove('hidden');
+  }
+
+  discoveredDevicesTab.addEventListener('click', () => switchTab(discoveredDevicesTab, discoveredDevicesContent));
+  deviceWizardTab.addEventListener('click', () => switchTab(deviceWizardTab, deviceWizardContent));
+  generateTemplateTab.addEventListener('click', () => switchTab(generateTemplateTab, generateTemplateContent));
+
+  // Auto-load discovered devices on page load (default active tab)
+  document.addEventListener('DOMContentLoaded', function() {
+    loadDiscoveredDevices();
+  });
+</script>
+
+{% endblock %}

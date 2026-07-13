@@ -507,6 +507,159 @@
     return null;
   }
 
+  // ── Import definitions ────────────────────────────────────────────────────────
+
+  function _buildImportResultPanel(result) {
+    const success  = result.success;
+    const errors   = result.errors   || [];
+    const profiles = result.profiles || [];
+    const template = result.template || {};
+
+    const ACTION_CFG = {
+      created: { bg: 'bg-green-900/30',  border: 'border-green-500/40',  text: 'text-green-300',  dot: 'bg-green-400',  label: 'Created' },
+      updated: { bg: 'bg-yellow-900/30', border: 'border-yellow-500/40', text: 'text-yellow-300', dot: 'bg-yellow-400', label: 'Updated' },
+      skipped: { bg: 'bg-gray-800/50',   border: 'border-gray-600/40',   text: 'text-gray-400',   dot: 'bg-gray-500',   label: 'Skipped' },
+      error:   { bg: 'bg-red-900/30',    border: 'border-red-500/40',    text: 'text-red-300',    dot: 'bg-red-400',    label: 'Error'   },
+    };
+
+    function _chip(name, action, reason) {
+      const c = ACTION_CFG[action] || ACTION_CFG.error;
+      return `<div class="flex items-center gap-2 px-3 py-2 rounded-lg border ${c.bg} ${c.border}">
+        <span class="w-1.5 h-1.5 rounded-full ${c.dot} flex-shrink-0"></span>
+        <span class="text-xs font-mono ${c.text} font-medium truncate min-w-0">${escapeHtml(name)}</span>
+        <span class="text-xs ${c.text} opacity-75 ml-auto flex-shrink-0">${c.label}</span>
+        ${reason ? `<span class="text-xs text-gray-500 flex-shrink-0">— ${escapeHtml(reason)}</span>` : ''}
+      </div>`;
+    }
+
+    let profilesHtml = '';
+    if (profiles.length > 0) {
+      profilesHtml = `
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs text-gray-500 uppercase tracking-wide font-medium">Profiles</span>
+          <div class="flex flex-col gap-1.5">${profiles.map(p => _chip(p.name, p.action, p.reason)).join('')}</div>
+        </div>`;
+    }
+
+    let templateHtml = '';
+    if (template.name) {
+      templateHtml = `
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs text-gray-500 uppercase tracking-wide font-medium">Device Template</span>
+          ${_chip(template.name, template.action, template.reason)}
+        </div>`;
+    }
+
+    let errorsHtml = '';
+    if (errors.length > 0) {
+      const items = errors.map(e => `<li class="text-xs text-red-300 leading-relaxed">${escapeHtml(e)}</li>`).join('');
+      errorsHtml = `
+        <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-3 flex flex-col gap-1.5">
+          <span class="text-xs font-semibold text-red-300 uppercase tracking-wide">Warnings / Errors</span>
+          <ul class="list-disc list-inside flex flex-col gap-0.5">${items}</ul>
+        </div>`;
+    }
+
+    let deployHtml = '';
+    if (success) {
+      const tplName = template.name ? escapeHtml(template.name) : 'the new template';
+      deployHtml = `
+        <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="text-sm text-green-300">Import complete! You can now add <strong class="text-white">${tplName}</strong> to your devices.</span>
+          </div>
+          <a
+            href="/SNMP/Devices/"
+            class="btn btn-sm border border-green-400 text-green-300 hover:bg-green-400/10 flex-shrink-0 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+            </svg>
+            Devices
+          </a>
+        </div>`;
+    }
+
+    const headerIcon = success
+      ? `<svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`
+      : `<svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+
+    const panel = document.createElement('div');
+    panel.id = 'aiTemplateImportResult';
+    panel.className = 'mt-4 flex flex-col gap-3 bg-gray-900/50 border border-gray-700 rounded-lg p-4';
+    panel.innerHTML = `
+      <div class="flex items-center gap-2 pb-2 border-b border-gray-700">
+        ${headerIcon}
+        <span class="text-sm font-semibold text-white">Import Results</span>
+      </div>
+      ${profilesHtml}
+      ${templateHtml}
+      ${errorsHtml}
+      ${deployHtml}
+    `;
+    return panel;
+  }
+
+  function _importDefinitions(parsed) {
+    const importBtn = document.getElementById('aiTemplateImportBtn');
+    const actionRow = importBtn ? importBtn.closest('div') : null;
+
+    // Remove any previous result panel
+    const prev = document.getElementById('aiTemplateImportResult');
+    if (prev) prev.remove();
+
+    // Loading state on the button
+    if (importBtn) {
+      importBtn.disabled = true;
+      importBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      importBtn.innerHTML = `<svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Importing…`;
+    }
+
+    fetch('/SNMP/ImportAIGeneratedDefinitions/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify({
+        profiles:        parsed.profiles        || [],
+        device_template: parsed.device_template || {},
+      }),
+    })
+      .then(r => {
+        if (r.status === 403) throw new Error('Access denied: Admin role required');
+        return r.json();
+      })
+      .then(result => {
+        // Restore button
+        if (importBtn) {
+          importBtn.disabled = false;
+          importBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+          importBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Import Profiles &amp; Template`;
+        }
+
+        const panel = _buildImportResultPanel(result);
+
+        // Insert the result panel immediately after the action row
+        if (actionRow && actionRow.parentNode) {
+          actionRow.parentNode.insertBefore(panel, actionRow.nextSibling);
+        } else {
+          const structured = document.getElementById('aiTemplateStructuredResponse');
+          if (structured) structured.appendChild(panel);
+        }
+
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      })
+      .catch(err => {
+        if (importBtn) {
+          importBtn.disabled = false;
+          importBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+          importBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Import Profiles &amp; Template`;
+        }
+        showToast(`Import failed: ${err.message}`, 'error');
+      });
+  }
+
   // ── Structured response renderer ─────────────────────────────────────────────
 
   function _oidCount(obj) {
@@ -520,44 +673,32 @@
     const tableCount = _oidCount(profile.table);
     const normCount  = Array.isArray(profile.normalizers) ? profile.normalizers.length : 0;
 
-    const metaChips = [
-      profile.vendor  && `<span class="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${escapeHtml(profile.vendor)}</span>`,
-      profile.product && `<span class="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${escapeHtml(profile.product)}</span>`,
-    ].filter(Boolean).join('');
-
-    const oidSummary = [
-      getCount   && `<span class="text-gray-400"><span class="text-white font-medium">${getCount}</span> get</span>`,
-      walkCount  && `<span class="text-gray-400"><span class="text-white font-medium">${walkCount}</span> walk</span>`,
-      tableCount && `<span class="text-gray-400"><span class="text-white font-medium">${tableCount}</span> ${tableCount === 1 ? 'table' : 'tables'}</span>`,
-      normCount  && `<span class="text-gray-400"><span class="text-white font-medium">${normCount}</span> ${normCount === 1 ? 'normalizer' : 'normalizers'}</span>`,
+    const oidParts = [
+      getCount   && `<span class="text-white font-medium">${getCount}</span> get`,
+      walkCount  && `<span class="text-white font-medium">${walkCount}</span> walk`,
+      tableCount && `<span class="text-white font-medium">${tableCount}</span> ${tableCount === 1 ? 'table' : 'tables'}`,
+      normCount  && `<span class="text-white font-medium">${normCount}</span> ${normCount === 1 ? 'normalizer' : 'normalizers'}`,
     ].filter(Boolean).join('<span class="text-gray-600 mx-1">·</span>');
 
     const jsonId  = `profile-json-${Math.random().toString(36).slice(2)}`;
     const jsonStr = JSON.stringify(profile, null, 2);
 
     const card = document.createElement('div');
-    card.className = 'bg-gray-900/60 border border-gray-700 rounded-lg overflow-hidden';
+    card.className = 'bg-gray-900/60 border border-gray-700 rounded-lg overflow-hidden flex flex-col';
     card.innerHTML = `
-      <div class="p-4 flex flex-col gap-2">
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex flex-col gap-1 min-w-0">
-            <span class="text-sm font-semibold text-white font-mono truncate">${escapeHtml(profile.name || '')}</span>
-            ${profile.description ? `<span class="text-xs text-gray-400 leading-relaxed">${escapeHtml(profile.description)}</span>` : ''}
-          </div>
-          <div class="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end text-xs">
-            ${metaChips}
-          </div>
-        </div>
-        ${oidSummary ? `<div class="flex items-center gap-1 text-xs flex-wrap">${oidSummary}</div>` : ''}
+      <div class="p-3 flex flex-col gap-1.5 flex-1">
+        <span class="text-xs font-semibold text-white font-mono truncate" title="${escapeHtml(profile.name || '')}">${escapeHtml(profile.name || '')}</span>
+        ${profile.description ? `<span class="text-xs text-gray-400 leading-snug line-clamp-2">${escapeHtml(profile.description)}</span>` : ''}
+        ${oidParts ? `<div class="flex items-center gap-0.5 text-xs text-gray-400 flex-wrap mt-0.5">${oidParts}</div>` : ''}
         <button
           type="button"
-          onclick="(function(btn){var el=document.getElementById('${jsonId}');if(!el)return;var open=el.classList.toggle('hidden');btn.textContent=open?'View JSON ▸':'Hide JSON ▾';})(this)"
-          class="text-xs text-purple-400 hover:text-purple-300 text-left mt-1 w-fit">
-          View JSON ▸
+          onclick="(function(btn){var el=document.getElementById('${jsonId}');if(!el)return;var open=el.classList.toggle('hidden');btn.textContent=open?'View JSON \u25b8':'Hide JSON \u25be';})(this)"
+          class="text-xs text-purple-400 hover:text-purple-300 text-left w-fit mt-auto pt-1">
+          View JSON &#9658;
         </button>
       </div>
       <div id="${jsonId}" class="hidden border-t border-gray-700">
-        <pre class="p-4 text-xs text-gray-300 font-mono overflow-x-auto max-h-72 overflow-y-auto bg-gray-950/60 whitespace-pre">${escapeHtml(jsonStr)}</pre>
+        <pre class="p-3 text-xs text-gray-300 font-mono overflow-x-auto max-h-56 overflow-y-auto bg-gray-950/60 whitespace-pre">${escapeHtml(jsonStr)}</pre>
       </div>
     `;
     return card;
@@ -651,11 +792,11 @@
       };
     }
 
-    // Import button placeholder (wired later when backend endpoints exist)
+    // Wire up the Import button with the current parsed response
     const importBtn = document.getElementById('aiTemplateImportBtn');
     if (importBtn) {
       importBtn.onclick = function () {
-        showToast('Import is not yet implemented.', 'info');
+        _importDefinitions(parsed);
       };
     }
   }
@@ -688,6 +829,10 @@
     if (outputEl)     outputEl.textContent = '';
     if (responseEl)   responseEl.classList.add('hidden');
     if (structuredEl) structuredEl.classList.add('hidden');
+
+    // Clear import result panel from a previous run
+    const prevImportResult = document.getElementById('aiTemplateImportResult');
+    if (prevImportResult) prevImportResult.remove();
 
     // Clear structured sub-sections so they don't bleed between runs
     const profilesSection  = document.getElementById('aiTemplateProfilesSection');
@@ -745,11 +890,11 @@
     function handleChunk(event) {
       switch (event.phase) {
 
-        case 'indexing':
+        case 'grounding':
           _pendingStep = _createStep(event.message);
           break;
 
-        case 'indexing_done':
+        case 'grounding_done':
           _resolveStep(_pendingStep, true);
           _pendingStep = null;
           break;
@@ -760,17 +905,7 @@
 
         case 'conversation_link': {
           _resolveStep(_pendingStep, true);
-          _pendingStep = null;
-          if (stepsEl && event.url) {
-            const linkRow = document.createElement('div');
-            linkRow.className = 'flex items-center gap-2.5 text-xs text-purple-400';
-            linkRow.innerHTML = `
-              <span class="flex-shrink-0">${ICON.link}</span>
-              <a href="${escapeHtml(event.url)}" target="_blank" rel="noopener"
-                 class="underline hover:text-purple-300 truncate">${escapeHtml(event.url)}</a>`;
-            stepsEl.appendChild(linkRow);
-            stepsEl.scrollTop = stepsEl.scrollHeight;
-          }
+          _pendingStep = _createStep('Agent is preparing response…');
           break;
         }
 
@@ -811,8 +946,10 @@
         case 'agent_chunk': {
           const text = event.data?.text ?? null;
           if (text) {
-            // Show a "receiving" indicator the first time a chunk arrives
             if (!_streamingStep) {
+              // Resolve the "preparing" waiting step before starting the streaming indicator
+              _resolveStep(_pendingStep, true);
+              _pendingStep = null;
               _streamingStep = _createStep('Receiving response…');
             }
             accumulatedResponse += text;
