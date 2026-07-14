@@ -449,3 +449,98 @@ class TestApplyNormalizers:
         ]
         result = _apply_normalizers(normalizers)
         assert len(result) > 0
+
+
+# ===========================================================================
+# Scope-qualified filter IDs (regression: duplicate Logstash plugin IDs)
+# ===========================================================================
+
+class TestScopeQualifiedFilterIds:
+    """
+    _generate_multiply_get_filter / _generate_ratio_get_filter run for BOTH
+    'get' and 'table' scope normalizers, so their generated Logstash filter
+    component IDs must be scope-qualified. Otherwise a profile pairing a
+    get-scope op with a table-scope op of the same type emits two components
+    with an identical plugin ID, and Logstash rejects pipelines with duplicate
+    plugin IDs at compile time (the merged pipeline never builds).
+    """
+
+    # Mirrors cisco_system_metrics.json (get scope) combined with a Cisco
+    # OpenConfig interface-table profile (table scope).
+    GET_MULTIPLY = {
+        'operation': 'multiply',
+        'target': {'scope': 'get', 'field': 'system.cpu.total.norm.pct'},
+        'params': {'multiply_value': 0.01},
+    }
+    TABLE_MULTIPLY = {
+        'operation': 'multiply',
+        'target': {'scope': 'table', 'field': 'interface.state.speed'},
+        'params': {'multiply_value': 1000000},
+    }
+    GET_RATIO = {
+        'operation': 'ratio',
+        'target': {'scope': 'get'},
+        'params': {
+            'value1_field': 'system.memory.actual.used.bytes',
+            'value2_field': 'system.memory.actual.free.bytes',
+            'total_output_field': 'system.memory.total.bytes',
+            'ratio1_output_field': 'system.memory.actual.used.pct',
+        },
+    }
+    TABLE_RATIO = {
+        'operation': 'ratio',
+        'target': {'scope': 'table'},
+        'params': {
+            'value1_field': 'interface.state.counters.in_octets',
+            'value2_field': 'interface.state.counters.out_octets',
+            'total_output_field': 'interface.state.counters.total_octets',
+        },
+    }
+
+    @staticmethod
+    def _assert_unique(components):
+        ids = [c['id'] for c in components]
+        dupes = sorted({i for i in ids if ids.count(i) > 1})
+        assert not dupes, f"duplicate filter component IDs: {dupes}"
+
+    def test_multiply_get_and_table_scope_ids_are_scope_qualified(self):
+        components = _apply_normalizers([self.GET_MULTIPLY, self.TABLE_MULTIPLY])
+        self._assert_unique(components)
+        ids = [c['id'] for c in components]
+        assert 'normalizer_multiply_get' in ids
+        assert 'normalizer_multiply_table' in ids
+        assert 'normalizer_multiply_get_comment' in ids
+        assert 'normalizer_multiply_table_comment' in ids
+
+    def test_ratio_get_and_table_scope_ids_are_scope_qualified(self):
+        components = _apply_normalizers([self.GET_RATIO, self.TABLE_RATIO])
+        self._assert_unique(components)
+        ids = [c['id'] for c in components]
+        assert 'normalizer_ratio_get' in ids
+        assert 'normalizer_ratio_table' in ids
+        assert 'normalizer_ratio_get_comment' in ids
+        assert 'normalizer_ratio_table_comment' in ids
+
+    def test_combined_profile_all_component_ids_unique(self):
+        # The exact scenario that triggered the bug: cisco_system_metrics
+        # (get-scope CPU multiply + memory ratio) merged with a Cisco
+        # OpenConfig interface-table profile (table-scope multiply + ratio).
+        components = _apply_normalizers(
+            [self.GET_MULTIPLY, self.GET_RATIO, self.TABLE_MULTIPLY, self.TABLE_RATIO]
+        )
+        self._assert_unique(components)
+        ids = [c['id'] for c in components]
+        for expected in (
+            'normalizer_multiply_get',
+            'normalizer_multiply_table',
+            'normalizer_ratio_get',
+            'normalizer_ratio_table',
+        ):
+            assert expected in ids, f"missing generated component: {expected}"
+
+    def test_single_get_scope_multiply_keeps_stable_id(self):
+        # A lone get-scope multiply keeps the historical un-suffixed id so the
+        # fix stays behavior-preserving for the common single-scope case.
+        components = _apply_normalizers([self.GET_MULTIPLY])
+        ids = [c['id'] for c in components]
+        assert ids == ['normalizer_multiply_get_comment', 'normalizer_multiply_get']
