@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function closeModal() {
         snmpTestModal.classList.add('hidden');
         snmpTestModal.classList.remove('flex');
+        document.body.style.overflow = '';
     }
 
     // ─────────────────────────────────────────────────────────────

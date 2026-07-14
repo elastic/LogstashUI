@@ -21,7 +21,7 @@
         </svg>
         <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
           <h4 class="text-sm font-semibold text-white mb-2">SNMP Onboarding</h4>
-          <p class="text-xs text-gray-300">Automated onboarding for SNMP device monitoring. Discover devices on your network, quickly setup a device with the device wizard, and automatically generate templates and profiles for data collection.</p>
+          <p class="text-xs text-gray-300">The Device Wizard quickly sets up a device and selects the right monitoring template. The device must be reachable from LogstashUI.</p>
         </div>
       </div>
     </div>
@@ -70,6 +70,16 @@
   <!-- Device Wizard Tab Content -->
   <div id="deviceWizardContent" class="hidden flex flex-col gap-5">
 
+    <!-- Info banner -->
+    <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+      <div class="flex items-start">
+        <svg class="w-5 h-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-sm text-blue-300">The Device Wizard helps you quickly set up a device and get the right template for monitoring. The device must be reachable from LogstashUI.</p>
+      </div>
+    </div>
+
     <!-- ── Input card ────────────────────────────────────────────────────── -->
     <div class="bg-gray-900/50 rounded-lg border border-gray-700">
 
@@ -89,7 +99,7 @@
             id="wizardHost"
             type="text"
             placeholder="192.168.1.1 or switch.corp.local"
-            class="input input-sm input-bordered w-full bg-gray-700 text-white border-gray-600 placeholder-gray-500 font-mono"
+            class="input input-bordered w-full font-mono"
           />
           <!-- Advanced: port (collapsed) -->
           <details class="text-sm">
@@ -97,7 +107,7 @@
             <div class="mt-2 flex items-center gap-2">
               <label for="wizardPort" class="text-xs text-gray-400 whitespace-nowrap">Port</label>
               <input id="wizardPort" type="number" value="161" min="1" max="65535"
-                     class="input input-xs input-bordered w-20 bg-gray-700 text-white border-gray-600 font-mono"/>
+                     class="input input-bordered w-20 font-mono"/>
             </div>
           </details>
         </div>
@@ -204,7 +214,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             <span class="text-sm font-semibold text-green-300">We found it!</span>
-            <span class="text-xs text-gray-500 ml-1">We matched your device to an official template.</span>
+            <span class="text-xs text-gray-500 ml-1">There's already a template for this device.</span>
           </div>
 
           <!-- Template details -->
@@ -302,13 +312,23 @@
 
           <div class="px-5 py-4 flex flex-col gap-3 border-b border-red-700/40">
             <p id="wizardUnreachableError" class="text-xs text-red-300/80"></p>
-            <p class="text-xs text-gray-500">Check the IP address, port, and credential, then try again. You can also skip the check and select a template manually.</p>
+            <p class="text-xs text-gray-500">Check the IP address, port, and credential, then try again. Or choose one of the options below.</p>
           </div>
 
-          <div class="px-5 py-4 flex items-center justify-between gap-4">
+          <div class="px-5 py-4 flex items-center gap-3">
             <button type="button" onclick="wizardSkipCheck()"
-                    class="text-xs text-gray-400 hover:text-white underline w-fit">
-              Skip — I'll pick a template manually
+                    class="btn btn-sm btn-outline border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500 hover:text-white gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+              </svg>
+              Select a device template manually
+            </button>
+            <button type="button" onclick="wizardBringYourOwnWalk()"
+                    class="btn btn-sm btn-outline border-purple-600/50 text-purple-300 hover:bg-purple-700/30 hover:border-purple-500 hover:text-purple-200 gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+              </svg>
+              Bring your own SNMP walk
             </button>
           </div>
 
@@ -319,7 +339,7 @@
       <div id="wizardManualPicker" class="hidden">
         <div class="bg-gray-900/50 rounded-lg border border-gray-700">
           <div class="px-5 pt-4 pb-3 border-b border-gray-700">
-            <label for="wizardTemplateSelectManual" class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Device Template</label>
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Device Template</label>
           </div>
           <div class="px-5 py-4 flex flex-col gap-3 border-b border-gray-700">
             <input type="hidden" id="wizardTemplateManualValue">
@@ -401,6 +421,7 @@
 
 <!-- Device Form Modal -->
 {% include 'components/snmp_devices_modal.html' %}
+{% include 'components/gmaps_latlon_modal.html' %}
 
 <!-- Credential Form Modal (for creating credentials from device modal) -->
 {% include 'components/snmp_credentials_modal.html' %}
@@ -422,7 +443,6 @@
 
 <script>window.isAdmin = {% if user.profile.role == 'admin' %}true{% else %}false{% endif %};</script>
 <script src="{% static 'js/snmp_test.js' %}"></script>
-<script src="{% static 'js/onboarding.js' %}"></script>
 <script src="{% static 'js/discovered_devices.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
 <script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
@@ -431,6 +451,7 @@
 <script src="{% static 'js/snmp_diff_modal.js' %}"></script>
 <script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
 <script src="{% static 'js/ai_device_template_modal.js' %}"></script>
+<script src="{% static 'js/onboarding.js' %}"></script>
 
 <script>
   const discoveredDevicesTab = document.getElementById('discoveredDevicesTab');
@@ -460,8 +481,39 @@
   deviceWizardTab.addEventListener('click', () => switchTab(deviceWizardTab, deviceWizardContent));
   generateTemplateTab.addEventListener('click', () => switchTab(generateTemplateTab, generateTemplateContent));
 
-  // Auto-load discovered devices on page load (default active tab)
-  document.addEventListener('DOMContentLoaded', function() {
+  // ── Smart default tab selection ───────────────────────────────────────────
+  // Priority (highest → lowest):
+  //   1. Explicit URL param (?tab=wizard / ?tab=discovered / ?tab=generate)
+  //   2. No devices at all          → Device Wizard
+  //   3. Has devices + discovered   → Discovered Devices (fetched async)
+  //   4. Has devices, none found    → Generate Template and Profiles
+  document.addEventListener('DOMContentLoaded', function () {
+    const urlParams   = new URLSearchParams(window.location.search);
+    const tabParam    = urlParams.get('tab');
+    const deviceCount = {{ device_count }};
+
+    // URL param already handled by onboarding.js — only apply smart logic when
+    // there is no explicit param (and the wizard wasn't already switched to).
+    if (tabParam) return;
+
+    if (deviceCount === 0) {
+      // No devices yet — send the user straight to the wizard.
+      deviceWizardTab.click();
+      return;
+    }
+
+    // Has devices: check ES for discovered devices before picking a tab.
+    // We piggy-back on loadDiscoveredDevices by temporarily hooking its result
+    // via a one-shot callback carried on the window object.
+    window._onDiscoveredDevicesLoaded = function (hasDiscovered) {
+      window._onDiscoveredDevicesLoaded = null;
+      if (hasDiscovered) {
+        discoveredDevicesTab.click();
+      } else {
+        generateTemplateTab.click();
+      }
+    };
+
     loadDiscoveredDevices();
   });
 </script>

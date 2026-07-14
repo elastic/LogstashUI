@@ -39,10 +39,14 @@ function openDeviceModal(deviceData = null) {
       // Edit mode - existing device
       modalTitle.textContent = 'Edit SNMP Device';
       document.getElementById('deviceId').value = deviceData.id;
+      const wizardLink = document.getElementById('deviceTemplateWizardLink');
+      if (wizardLink) wizardLink.href = `/SNMP/Onboarding/?tab=wizard&device_id=${deviceData.id}`;
     } else {
       // Clone/Add mode - has data but no ID
       modalTitle.textContent = 'Add SNMP Device';
       document.getElementById('deviceId').value = '';
+      const wizardLink = document.getElementById('deviceTemplateWizardLink');
+      if (wizardLink) wizardLink.href = '/SNMP/Onboarding/?tab=wizard';
     }
     
     // Fill in the form fields
@@ -73,6 +77,8 @@ function openDeviceModal(deviceData = null) {
     document.getElementById('deviceRetries').value = 2;
     document.getElementById('deviceTimeout').value = 1000;
     clearMetadataRows();
+    const wizardLink = document.getElementById('deviceTemplateWizardLink');
+    if (wizardLink) wizardLink.href = '/SNMP/Onboarding/?tab=wizard';
   }
 
   // Load credentials, networks, and device templates into dropdowns

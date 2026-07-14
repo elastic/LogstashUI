@@ -43,7 +43,8 @@ function loadDiscoveredDevices() {
         document.getElementById('discoveredDevicesLoading').classList.add('hidden');
         
         if (data.success) {
-            if (data.devices && data.devices.length > 0) {
+            const hasDiscovered = data.devices && data.devices.length > 0;
+            if (hasDiscovered) {
                 // Show table and populate it
                 document.getElementById('discoveredDevicesTable').classList.remove('hidden');
                 populateDiscoveredDevicesTable(data.devices);
@@ -58,9 +59,17 @@ function loadDiscoveredDevices() {
             if (data.errors && data.errors.length > 0) {
                 console.warn('Some connections had errors:', data.errors);
             }
+
+            // Notify smart tab selector (one-shot hook set by Onboarding.html)
+            if (typeof window._onDiscoveredDevicesLoaded === 'function') {
+                window._onDiscoveredDevicesLoaded(hasDiscovered);
+            }
         } else {
             // Show error state
             showDiscoveredDevicesError(data.error || 'Failed to load discovered devices');
+            if (typeof window._onDiscoveredDevicesLoaded === 'function') {
+                window._onDiscoveredDevicesLoaded(false);
+            }
         }
     })
     .catch(error => {

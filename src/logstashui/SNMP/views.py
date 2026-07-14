@@ -50,6 +50,7 @@ def Onboarding(request):
         'networks':     networks,
         'templates':    templates,
         'devices':      devices,
+        'device_count': devices.count(),
         'form':         form,
     })
 
@@ -382,6 +383,7 @@ def GetOverviewMetrics(request):
         }, status=500)
 
 
+@require_admin_role
 def CheckAgentBuilderResources(request):
     """
     Check whether the SNMP AI template generation resources (tools, skills, agents)
@@ -481,213 +483,40 @@ def GenerateTemplateAndProfiles(request):
     """
     Orchestrate SNMP AI template/profile generation.
 
-    1. Reduces the raw walk to a compact set of MIB-grounded columns
-       (``snmp_grounding.reduce_and_ground``) — no walk data is written to any
-       backend, keeping the record of truth local and generation backend-agnostic.
-    2. Invokes the ``snmp-profile-author`` Agent Builder agent with the grounded
-       columns passed inline and streams its response back to the browser via SSE.
+    Thin view wrapper — all stream logic lives in ``ai_template_generation.py``.
 
     POST body (JSON):
         connection_id – int, required
         kibana_url    – str, optional (URL-based connections only)
         walk_text     – str, required (raw SNMP walk output)
+        inference_id  – str, required
 
-    Response: text/event-stream — each event is a JSON object:
-        {"phase": "grounding",      "message": "..."}
-        {"phase": "grounding_done", "message": "..."}
-        {"phase": "invoking",       "message": "..."}
-        {"phase": "agent_chunk",   "data":    <raw chunk dict from Kibana>}
-        {"phase": "done"}
-        {"phase": "error",         "message": "..."}
+    Response: text/event-stream  (see ``ai_template_generation.stream_template_generation``)
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
     try:
-        data = json.loads(request.body)
+        body = json.loads(request.body)
     except (json.JSONDecodeError, Exception):
         return JsonResponse({'error': 'Invalid JSON body'}, status=400)
 
-    connection_id = data.get('connection_id')
-    kibana_url    = data.get('kibana_url') or None
-    walk_text     = data.get('walk_text', '')
-    inference_id  = data.get('inference_id') or None
+    connection_id = body.get('connection_id')
+    kibana_url    = body.get('kibana_url') or None
+    walk_text     = body.get('walk_text', '')
+    inference_id  = body.get('inference_id') or None
 
     if not connection_id:
         return JsonResponse({'error': 'connection_id is required'}, status=400)
     if not walk_text.strip():
         return JsonResponse({'error': 'walk_text is required'}, status=400)
 
-    def _sse(payload):
-        return f"data: {json.dumps(payload)}\n\n"
+    from .ai_template_generation import stream_template_generation
 
-    def _stream():
-        from Common.ai.agent_builder import AgentBuilder
-        from .snmp_grounding import reduce_and_ground
-
-        if not inference_id:
-            yield _sse({"phase": "error", "message": "No inference model selected."})
-            return
-
-        # ── 1. Reduce the raw walk to MIB-grounded columns ────────────────────
-        # The record of truth stays LOCAL to LogstashUI. LogstashUI may connect to
-        # multiple backends, so we never stage the walk in a per-backend ES index
-        # (that would leave residue and make generation backend-dependent, and N
-        # disconnected backends can't be reconciled). Instead we reduce the walk to
-        # a compact, authoritative grounded-column set and pass it INLINE in the
-        # agent request — walk in, definition out, nothing persisted on the backend.
-        walk_line_count = len(walk_text.splitlines())
-        grounded_columns, ungrounded_subtrees = reduce_and_ground(walk_text)
-
-        yield _sse({
-            "phase":   "grounding",
-            "message": (
-                f"Grounding walk against compiled MIBs "
-                f"({walk_line_count} lines → {len(grounded_columns)} column(s), "
-                f"{len(ungrounded_subtrees)} un-grounded subtree(s))…"
-            ),
-        })
-
-        if not grounded_columns:
-            yield _sse({
-                "phase":   "error",
-                "message": (
-                    "No walked OIDs matched a compiled MIB in the grounding index. "
-                    "Load the device's MIBs (see data/grounding/) and retry."
-                ),
-            })
-            return
-
-        yield _sse({"phase": "grounding_done"})
-
-        # ── 2. Build the agent prompt (grounded columns passed inline) ────────
-        grounding_payload = json.dumps(
-            {
-                "grounded_columns":    grounded_columns,
-                "ungrounded_subtrees": [{"prefix": p, "count": c} for p, c in ungrounded_subtrees],
-            },
-            separators=(",", ":"),
-        )
-        user_message = (
-            "Below is a REDUCED, MIB-grounded SNMP walk for one device, as JSON.\n"
-            "`grounded_columns` lists every walked OID column matched to a compiled MIB, "
-            "with its authoritative name, type, enum, units and instance count — author "
-            "ONLY from these columns; never recall or invent OIDs.\n"
-            "`ungrounded_subtrees` are OID prefixes the device exposes whose MIBs are not "
-            "loaded — do NOT author them; list them so the user can load the MIBs.\n"
-            "Consult the SNMP Catalog in your instructions to reuse existing profiles, "
-            "then produce JSON for any new profiles required.\n\n"
-            f"{grounding_payload}"
-        )
-
-        # Build configuration_overrides: agent instructions + the field standard + full catalog,
-        # all sent INLINE with the request. LogstashUI owns the naming standard (data/schema.md)
-        # and the profile catalog; sending them per-request keeps LogstashUI the single source of
-        # truth — the agent conforms to what it's handed, nothing authoritative lives on the backend.
-        _base = os.path.dirname(os.path.abspath(__file__))
-        _agent_json = os.path.join(_base, 'assets', 'device_template_generation', 'agents', 'snmp-profile-author.json')
-        _catalog_md = os.path.join(_base, 'data', 'template_profile_context.md')
-        _schema_md  = os.path.join(_base, 'data', 'schema.md')
-        try:
-            with open(_agent_json, 'r', encoding='utf-8') as fh:
-                _agent_def = json.load(fh)
-            _base_instructions = _agent_def.get('configuration', {}).get('instructions', '')
-        except Exception:
-            _base_instructions = ''
-        try:
-            with open(_schema_md, 'r', encoding='utf-8') as fh:
-                _schema = fh.read()
-        except Exception:
-            _schema = ''
-        try:
-            with open(_catalog_md, 'r', encoding='utf-8') as fh:
-                _catalog = fh.read()
-        except Exception:
-            _catalog = ''
-
-        _full_instructions = _base_instructions
-        if _schema:
-            _full_instructions += (
-                "\n\n---\n\n## Field Standard — the canonical field dictionary (naming authority)\n\n"
-                "Conform every field name to this standard. It defines the OpenConfig-projected "
-                "canonical names; where it or OpenConfig has a leaf, use it — do not coin your own.\n\n"
-                + _schema
-            )
-        if _catalog:
-            _full_instructions += f"\n\n---\n\n## SNMP Catalog\n\n{_catalog}"
-
-        configuration_overrides = {"instructions": _full_instructions} if _full_instructions else None
-
-        yield _sse({
-            "phase":   "invoking",
-            "message": f"Invoking SNMP Profile Author ({inference_id})…",
-        })
-
-        # ── 4. Stream agent response ──────────────────────────────────────────
-        try:
-            builder = AgentBuilder(
-                connection_id=int(connection_id),
-                kibana_url_override=kibana_url,
-            )
-            kibana_base = builder._kibana_url
-            for chunk in builder.invoke_agent(
-                'snmp-profile-author', user_message,
-                inference_id=inference_id,
-                configuration_overrides=configuration_overrides,
-            ):
-                err = chunk.get('error')
-                if err:
-                    msg = err if isinstance(err, str) else json.dumps(err)
-                    yield _sse({"phase": "error", "message": msg})
-                    return
-
-                event_type = chunk.get('event')
-                # Agent Builder wraps the actual payload one level deep:
-                # SSE data line parses to {"data": {<actual content>}}
-                outer_data = chunk.get('data') or {}
-                data       = outer_data.get('data') if isinstance(outer_data.get('data'), dict) else outer_data
-
-                if event_type == 'conversation_id_set':
-                    conv_id = data.get('conversation_id', '')
-                    if conv_id:
-                        conv_url = (
-                            f"{kibana_base}/app/agent_builder/agents"
-                            f"/snmp-profile-author/conversations/{conv_id}"
-                        )
-                        yield _sse({"phase": "conversation_link", "url": conv_url, "conversation_id": conv_id})
-
-                elif event_type == 'conversation_created':
-                    title = data.get('title', '')
-                    if title:
-                        yield _sse({"phase": "conversation_title", "title": title})
-
-                elif event_type == 'reasoning':
-                    reasoning_text = data.get('reasoning', '')
-                    if reasoning_text and not data.get('transient', False):
-                        yield _sse({"phase": "reasoning", "message": reasoning_text})
-
-                elif event_type == 'message_chunk':
-                    text = data.get('text_chunk', '')
-                    if text:
-                        yield _sse({"phase": "agent_chunk", "data": {"text": text}})
-
-                elif event_type == 'tool_call':
-                    tool_id = data.get('tool_id', 'unknown')
-                    yield _sse({"phase": "tool_call", "message": f"Calling tool: {tool_id}…"})
-
-                elif event_type == 'tool_result':
-                    yield _sse({"phase": "tool_done"})
-
-                elif event_type in ('message_complete', 'round_complete', 'thinking_complete'):
-                    pass  # Redundant / very large — content already built from message_chunk events
-
-        except Exception as exc:
-            yield _sse({"phase": "error", "message": f"Agent invocation failed: {exc}"})
-            return
-
-        yield _sse({"phase": "done"})
-
-    response = StreamingHttpResponse(_stream(), content_type='text/event-stream')
+    response = StreamingHttpResponse(
+        stream_template_generation(connection_id, kibana_url, walk_text, inference_id),
+        content_type='text/event-stream',
+    )
     response['X-Accel-Buffering'] = 'no'
     response['Cache-Control']     = 'no-cache'
     return response
@@ -701,6 +530,7 @@ def _load_snmp_template():
         return json.load(fh)
 
 
+@require_admin_role
 def CheckSNMPIndexTemplate(request):
     """
     Check whether the SNMP index template is installed and up to date on each

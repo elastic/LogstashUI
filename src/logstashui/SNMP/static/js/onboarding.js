@@ -13,7 +13,8 @@
   let _matchedTemplateName = null;
   let _inMatchFlow         = false; // true when a match was found (uses #wizardTemplateSelect)
 
-  // Set when coming from the Devices table (device_id URL param) or after FindDeviceByHost resolves
+  // Set when coming from the Devices table (device_id URL param) or after FindDeviceByHost resolves.
+  // Template dropdowns use wizardTemplateMatchValue / wizardTemplateManualValue hidden inputs.
   let _existingDeviceId    = null;
 
   // ── CSRF ──────────────────────────────────────────────────────────────────────
@@ -565,6 +566,11 @@
     document.getElementById('wizardManualPicker')?.classList.remove('hidden');
   }
 
+  function wizardBringYourOwnWalk() {
+    // Send the user to the Generate Template and Profiles tab.
+    document.getElementById('generateTemplateTab')?.click();
+  }
+
   // ── Open walk modal pre-filled ────────────────────────────────────────────────
 
   function wizardOpenWalkModal() {
@@ -800,17 +806,28 @@
       document.getElementById(id)?.classList.add('hidden')
     );
 
+    // Clear stale text so it doesn't flash on next check
+    const noMatchDescr = document.getElementById('wizardNoMatchSysDescr');
+    if (noMatchDescr) noMatchDescr.textContent = '';
+    const unreachableErr = document.getElementById('wizardUnreachableError');
+    if (unreachableErr) unreachableErr.textContent = '';
+    const matchCard = document.getElementById('wizardMatchedTemplateCard');
+    if (matchCard) matchCard.innerHTML = '';
+    const successMsg = document.getElementById('wizardSuccessMsg');
+    if (successMsg) successMsg.textContent = '';
+
     _restoreCheckBtn();
     _restoreSaveBtns();
   }
 
   // ── Global exports ────────────────────────────────────────────────────────────
 
-  window.wizardCheckDevice   = wizardCheckDevice;
-  window.wizardSkipCheck     = wizardSkipCheck;
-  window.wizardOpenWalkModal = wizardOpenWalkModal;
-  window.wizardSaveDevice    = wizardSaveDevice;
-  window.wizardReset         = wizardReset;
+  window.wizardCheckDevice       = wizardCheckDevice;
+  window.wizardSkipCheck         = wizardSkipCheck;
+  window.wizardBringYourOwnWalk  = wizardBringYourOwnWalk;
+  window.wizardOpenWalkModal     = wizardOpenWalkModal;
+  window.wizardSaveDevice        = wizardSaveDevice;
+  window.wizardReset             = wizardReset;
 
   // Custom dropdown functions called from HTML onclick/oninput attributes
   window.toggleWizardCredentialDropdown = toggleWizardCredentialDropdown;

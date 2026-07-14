@@ -48,9 +48,9 @@ def get_discovered_devices_count():
         unique_hosts = set()
         errors = []
 
-        # Calculate time range (last 2 hours for discovery)
+        # Calculate time range (last 15 minutes — matches GetDiscoveredDevices and online status)
         now = datetime.now(timezone.utc)
-        two_hours_ago = now - timedelta(hours=2)
+        fifteen_minutes_ago = now - timedelta(minutes=15)
 
         # Query each connection for discovered devices
         for connection in connections:
@@ -66,7 +66,7 @@ def get_discovered_devices_count():
                                 {
                                     "range": {
                                         "@timestamp": {
-                                            "gte": two_hours_ago.isoformat(),
+                                            "gte": fifteen_minutes_ago.isoformat(),
                                             "lte": now.isoformat()
                                         }
                                     }
@@ -77,7 +77,7 @@ def get_discovered_devices_count():
                     "aggs": {
                         "unique_hosts": {
                             "cardinality": {
-                                "field": "host.name"
+                                "field": "host.ip"
                             }
                         }
                     }

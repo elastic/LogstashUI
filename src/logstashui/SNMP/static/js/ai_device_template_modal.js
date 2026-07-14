@@ -939,6 +939,9 @@
         }
 
         case 'tool_call':
+          // Resolve any previous pending step (e.g. "Agent is preparing response…")
+          // before starting the tool-call indicator, otherwise it spins forever.
+          _resolveStep(_pendingStep, true);
           _pendingStep = document.createElement('div');
           _pendingStep.className = 'flex items-start gap-2.5 text-xs text-gray-400';
           _pendingStep.innerHTML = `<span class="step-icon flex-shrink-0 mt-0.5">${ICON.spinner}</span><span class="step-text leading-relaxed">${escapeHtml(event.message || 'Calling tool…')}</span>`;

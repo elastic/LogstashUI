@@ -1720,61 +1720,6 @@ def DeployConfiguration(request):
         }, status=500)
 
 
-@require_admin_role
-def GenerateDeployConfiguration(request):
-    """Deploy SNMP configuration - builds and deploys Logstash pipelines"""
-    try:
-        # Query all networks
-        networks = Network.objects.all()
-        components = {
-            "input": [],
-            "filter": [],
-            "output": []
-        }
-
-        # Iterate through each network and build pipeline configuration
-        for network in networks:
-            # Initialize pipeline data structure for this network
-            input_data = {
-                "network": network,
-                "devices": {
-                    "v1_v2c": {},
-                    "v3": {}
-                },
-                "connection": network.connection
-            }
-
-            # Get all devices for this network
-            devices = Device.objects.filter(network=network).select_related('credential')
-
-            for device in devices:
-                if not device.credential:
-                    continue
-
-                credential = device.credential
-
-                # Group v1 and v2c together
-                if credential.version in ['1', '2c']:
-                    input_data["devices"]["v1_v2c"][device.name] = device
-
-                # Group v3 devices
-                elif credential.version == '3':
-                    input_data["devices"]["v3"][device.name] = device
-
-            # Generate inputs
-            components["input"] = _generate_input(input_data)
-            components["output"] = _generate_output(input_data, network, snmp_type="polling")
-
-            logstash_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
-
-        return JsonResponse({
-            'success': True,
-            'message': f'Configuration deployment initiated for {networks.count()} network(s).'
-        })
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
-
 
 # ============================================================================
 # Device API Endpoints
@@ -1877,7 +1822,6 @@ def FindDeviceByHost(request):
     if not host:
         return JsonResponse({'device': None}, status=200)
     try:
-        from django.db.models import Q
         device = Device.objects.select_related('credential', 'network', 'device_template').filter(
             Q(ip_address=host) | Q(hostname=host) | Q(name=host)
         ).first()
@@ -2061,8 +2005,6 @@ def GetDeviceLocationData(request):
         "full":          [{"site":…, "building":…, "room":…, "latitude":…, "longitude":…}, ...]
       }
     """
-    from django.db.models import Q
-
     sites = list(
         Device.objects
         .exclude(site__isnull=True).exclude(site='')
@@ -2504,7 +2446,7 @@ def GetDeviceVisualization(request, device_id):
 def GetDiscoveredDevices(request):
     """
     Query Elasticsearch for discovered devices from logs-snmp.discovery-* indices.
-    Aggregates by host.name and returns top hits from the last 2 hours.
+    Aggregates by host.ip and returns top hits from the last 15 minutes.
     """
     try:
 
@@ -2523,9 +2465,9 @@ def GetDiscoveredDevices(request):
         all_discovered_devices = []
         errors = []
 
-        # Calculate time range (last 10 minutes)
+        # Calculate time range (last 15 minutes — matches device online status threshold)
         now = datetime.now(timezone.utc)
-        ten_minutes_ago = now - timedelta(minutes=10)
+        fifteen_minutes_ago = now - timedelta(minutes=15)
 
         # Query each connection for discovered devices
         for connection in connections:
@@ -2541,7 +2483,7 @@ def GetDiscoveredDevices(request):
                                 {
                                     "range": {
                                         "@timestamp": {
-                                            "gte": ten_minutes_ago.isoformat(),
+                                            "gte": fifteen_minutes_ago.isoformat(),
                                             "lte": now.isoformat()
                                         }
                                     }
@@ -2636,7 +2578,6 @@ def GetDiscoveredDevices(request):
                                     # Get the name of the first (best) suggested template
                                     if suggested_template_ids:
                                         try:
-                                            from .models import DeviceTemplate
                                             best_template = DeviceTemplate.objects.get(id=suggested_template_ids[0])
                                             suggested_template_name = best_template.name.replace('_', ' ').title()
                                         except DeviceTemplate.DoesNotExist:
@@ -2661,6 +2602,25 @@ def GetDiscoveredDevices(request):
             except Exception as e:
                 errors.append(f"Connection '{connection.name}': {str(e)}")
                 continue
+
+        # Filter out devices already registered in the DB.
+        # A polled address lands in host.ip (when it's an IP) or host.hostname
+        # (when it's a hostname) — both stored in the Device model as ip_address
+        # and hostname respectively. Build one set covering all known addresses
+        # then drop any ES result that matches.
+        known_addresses = set(
+            Device.objects.exclude(ip_address='').exclude(ip_address__isnull=True)
+                          .values_list('ip_address', flat=True)
+        ) | set(
+            Device.objects.exclude(hostname='').exclude(hostname__isnull=True)
+                          .values_list('hostname', flat=True)
+        )
+
+        all_discovered_devices = [
+            d for d in all_discovered_devices
+            if d['host_ip'] not in known_addresses
+            and d['host_hostname'] not in known_addresses
+        ]
 
         return JsonResponse({
             'success': True,

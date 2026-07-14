@@ -13,9 +13,8 @@ import glob
 import json
 import os
 
-from django.conf import settings
-
-_DATA = os.path.join(settings.BASE_DIR, "SNMP", "data")
+# Resolve data path relative to this file so it works regardless of BASE_DIR.
+_DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 _MAX_PROFILES = 40  # corpus is small + curated; a generous cap, not a real limit
 
 
