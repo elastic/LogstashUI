@@ -3,19 +3,51 @@
 #you may not use this file except in compliance with the Elastic License.
 
 
-def _apply_normalizers(normalizers):
+def _next_id(base, counter):
+    """
+    Return a deduplicated ID by appending an ever-increasing integer suffix.
+
+    The counter dict is mutated in-place so the same dict can be shared
+    across multiple calls to _apply_normalizers, guaranteeing uniqueness
+    even when normalizer blocks from several profiles are merged into a
+    single Logstash pipeline.
+
+    Args:
+        base: Base ID string (e.g. "normalizer_multiply_get")
+        counter: Shared mutable dict tracking how many times each base ID
+                 has been issued so far
+
+    Returns:
+        Unique ID string (e.g. "normalizer_multiply_get_1")
+    """
+    n = counter.get(base, 0) + 1
+    counter[base] = n
+    return f"{base}_{n}"
+
+
+def _apply_normalizers(normalizers, id_counter=None):
     """
     Generate Logstash filter components from normalizer configurations.
     Groups normalizers by operation and scope for efficient processing.
     
     Args:
         normalizers: List of normalizer configurations from profile
+        id_counter: Optional shared dict used to track ID usage across
+                    multiple calls. Pass the same dict for every profile
+                    in a pipeline so that IDs like
+                    ``normalizer_multiply_get_1`` / ``normalizer_multiply_get_2``
+                    are unique across the whole pipeline, not just within
+                    a single profile's normalizer block. If omitted a
+                    fresh dict is created (safe for single-call use).
         
     Returns:
         List of Logstash filter components
     """
     if not normalizers:
         return []
+
+    if id_counter is None:
+        id_counter = {}
     
     filters = []
     
@@ -40,25 +72,23 @@ def _apply_normalizers(normalizers):
         for scope, normalizer_list in scopes.items():
             if operation == 'multiply':
                 if scope in ('get', 'table'):
-                    filter_components = _generate_multiply_get_filter(normalizer_list, scope)
+                    filter_components = _generate_multiply_get_filter(normalizer_list, scope, id_counter)
                     if filter_components:
-                        # Filter generators now return lists (comment + filter)
                         if isinstance(filter_components, list):
                             filters.extend(filter_components)
                         else:
                             filters.append(filter_components)
             elif operation == 'ratio':
                 if scope in ('get', 'table'):
-                    filter_components = _generate_ratio_get_filter(normalizer_list, scope)
+                    filter_components = _generate_ratio_get_filter(normalizer_list, scope, id_counter)
                     if filter_components:
-                        # Filter generators now return lists (comment + filter)
                         if isinstance(filter_components, list):
                             filters.extend(filter_components)
                         else:
                             filters.append(filter_components)
             elif operation == 'translate':
                 if scope in ('get', 'table'):
-                    filter_components = _generate_translate_filter(normalizer_list)
+                    filter_components = _generate_translate_filter(normalizer_list, id_counter)
                     if filter_components:
                         if isinstance(filter_components, list):
                             filters.extend(filter_components)
@@ -68,7 +98,7 @@ def _apply_normalizers(normalizers):
     return filters
 
 
-def _generate_multiply_get_filter(normalizers, scope='get'):
+def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
     """
     Generate Ruby filter for multiply operations on get or table fields.
     Consolidates multiple multiply operations into a single Ruby filter.
@@ -80,10 +110,13 @@ def _generate_multiply_get_filter(normalizers, scope='get'):
             get-scope multiply and a table-scope multiply on the same
             profile don't emit duplicate plugin IDs (Logstash rejects
             pipelines with duplicate IDs at compile time).
+        id_counter: Shared mutable dict for deduplicating IDs across calls.
 
     Returns:
         Logstash filter component dict
     """
+    if id_counter is None:
+        id_counter = {}
     if not normalizers:
         return None
     
@@ -126,9 +159,10 @@ def _generate_multiply_get_filter(normalizers, scope='get'):
     comment_text += "Multiplies field values by configured factors:\n"
     comment_text += '\n'.join(field_list)
     
+    base = f"normalizer_multiply_{scope}"
     return [
         {
-            "id": f"normalizer_multiply_{scope}_comment",
+            "id": _next_id(f"{base}_comment", id_counter),
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -136,7 +170,7 @@ def _generate_multiply_get_filter(normalizers, scope='get'):
             }
         },
         {
-            "id": f"normalizer_multiply_{scope}",
+            "id": _next_id(base, id_counter),
             "type": "filter",
             "plugin": "ruby",
             "config": {
@@ -146,7 +180,7 @@ def _generate_multiply_get_filter(normalizers, scope='get'):
     ]
 
 
-def _generate_ratio_get_filter(normalizers, scope='get'):
+def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
     """
     Generate Ruby filter for ratio operations on get or table fields.
     Calculates ratios from two input fields and optionally creates total and ratio output fields.
@@ -158,10 +192,13 @@ def _generate_ratio_get_filter(normalizers, scope='get'):
             get-scope ratio and a table-scope ratio on the same profile
             don't emit duplicate plugin IDs (Logstash rejects pipelines
             with duplicate IDs at compile time).
+        id_counter: Shared mutable dict for deduplicating IDs across calls.
 
     Returns:
         Logstash filter component dict
     """
+    if id_counter is None:
+        id_counter = {}
     if not normalizers:
         return None
     
@@ -261,9 +298,10 @@ def _generate_ratio_get_filter(normalizers, scope='get'):
     comment_text += "Calculates ratios and derived fields from two input values:\n"
     comment_text += '\n'.join(calc_list)
     
+    base = f"normalizer_ratio_{scope}"
     return [
         {
-            "id": f"normalizer_ratio_{scope}_comment",
+            "id": _next_id(f"{base}_comment", id_counter),
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -271,7 +309,7 @@ def _generate_ratio_get_filter(normalizers, scope='get'):
             }
         },
         {
-            "id": f"normalizer_ratio_{scope}",
+            "id": _next_id(base, id_counter),
             "type": "filter",
             "plugin": "ruby",
             "config": {
@@ -281,7 +319,7 @@ def _generate_ratio_get_filter(normalizers, scope='get'):
     ]
 
 
-def _generate_translate_filter(normalizers):
+def _generate_translate_filter(normalizers, id_counter=None):
     """
     Generate Logstash translate plugin filters for value-mapping operations.
     Each normalizer produces its own translate filter that maps raw SNMP values
@@ -289,12 +327,16 @@ def _generate_translate_filter(normalizers):
 
     Args:
         normalizers: List of translate normalizers
+        id_counter: Shared mutable dict for deduplicating IDs across calls.
 
     Returns:
         List of Logstash filter component dicts, or None
     """
     if not normalizers:
         return None
+
+    if id_counter is None:
+        id_counter = {}
 
     components = []
 
@@ -310,8 +352,9 @@ def _generate_translate_filter(normalizers):
         pairs = ', '.join(f'{k}→{v}' for k, v in mapping.items())
         comment_text = f"Normalizer: Translate\nMaps {field}: {pairs}"
 
+        base = f"normalizer_translate_{field.replace('.', '_')}"
         components.append({
-            "id": f"normalizer_translate_{field.replace('.', '_')}_comment",
+            "id": _next_id(f"{base}_comment", id_counter),
             "type": "filter",
             "plugin": "comment",
             "config": {
@@ -319,7 +362,7 @@ def _generate_translate_filter(normalizers):
             }
         })
         components.append({
-            "id": f"normalizer_translate_{field.replace('.', '_')}",
+            "id": _next_id(base, id_counter),
             "type": "filter",
             "plugin": "translate",
             "config": {
