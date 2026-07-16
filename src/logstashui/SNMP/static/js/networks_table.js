@@ -217,7 +217,17 @@ function createNetworkRow(network) {
       }
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-      ${network.connection_name ? escapeHtml(network.connection_name) : '<span class="text-gray-500 italic">None</span>'}
+      ${network.deployment_mode === 'AGENT' ? `
+        <div class="flex flex-col gap-1">
+          <span class="inline-flex items-center w-fit px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30" title="Deployed locally to a LogstashAgent">Agent</span>
+          <span class="text-xs">${network.agent_connection_name ? escapeHtml(network.agent_connection_name) : '<span class="text-red-400 italic">No agent assigned</span>'}</span>
+        </div>
+      ` : `
+        <div class="flex flex-col gap-1">
+          <span class="inline-flex items-center w-fit px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30" title="Deployed to Elasticsearch Centralized Pipeline Management">CPM</span>
+          <span class="text-xs">${network.connection_name ? escapeHtml(network.connection_name) : '<span class="text-gray-500 italic">None</span>'}</span>
+        </div>
+      `}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
       ${window.isAdmin ? `

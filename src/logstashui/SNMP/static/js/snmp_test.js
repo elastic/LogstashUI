@@ -275,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         document.getElementById('snmpTestSummaryDevice').textContent =
             `${data.device.name} (${data.device.ip_address}:${data.device.port})`;
-        document.getElementById('snmpTestSummaryTemplate').textContent = data.template.name;
+        document.getElementById('snmpTestSummaryTemplate').textContent = data.template.display_name || data.template.name;
 
         const executionTime = data.execution_time ? `${data.execution_time}s` : 'N/A';
         if (data.has_errors) {

@@ -10,6 +10,7 @@ from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 from Common.decorators import require_admin_role
+from Common.formatters import format_display_name
 
 import os
 import json
@@ -37,7 +38,9 @@ def Networks(request):
 
 def Onboarding(request):
     from PipelineManager.models import Connection
-    connections   = Connection.objects.all().values('id', 'name', 'cloud_id')
+    connections   = Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED
+    ).values('id', 'name', 'cloud_id')
     credentials   = Credential.objects.all().order_by('name')
     networks      = Network.objects.all().order_by('name')
     templates     = DeviceTemplate.objects.exclude(name='default').order_by('-official', 'name')
@@ -109,13 +112,16 @@ def CheckDeviceType(request):
     if matched_ids:
         tpl = DeviceTemplate.objects.filter(pk=matched_ids[0]).first()
         if tpl:
+            profile_names = list(tpl.profiles.values_list('name', flat=True))
             matched_template = {
                 'id':            tpl.id,
                 'name':          tpl.name,
+                'display_name':  format_display_name(tpl.name),
                 'vendor':        tpl.vendor,
                 'description':   tpl.description,
                 'matching_rules': tpl.matching_rules,
-                'profile_names': list(tpl.profiles.values_list('name', flat=True)),
+                'profile_names': profile_names,
+                'profile_display_names': [format_display_name(n) for n in profile_names],
             }
 
     return JsonResponse({
@@ -218,7 +224,7 @@ def DeviceTemplates(request):
     device_templates = []
     for template in DeviceTemplate.objects.annotate(device_count=Count('devices')).prefetch_related('profiles').order_by('-official', 'name'):
         # Create a friendly display name from the template name
-        display_name = template.name.replace('_', ' ').title()
+        display_name = format_display_name(template.name)
         
         # Count the number of profiles associated with this template
         profile_count = template.profiles.count()
@@ -245,7 +251,7 @@ def DeviceTemplates(request):
             if filename.endswith('.json'):
                 profile_name = filename[:-5]  # Remove .json extension
                 # Convert filename to display name (e.g., cisco_ios -> Cisco Ios)
-                display_name = profile_name.replace('_', ' ').title()
+                display_name = format_display_name(profile_name)
                 
                 # Load the JSON file to get description, vendor, and product
                 profile_path = os.path.join(official_profiles_dir, filename)
@@ -287,7 +293,7 @@ def DeviceTemplates(request):
         
         user_profiles.append({
             'name': profile.name,
-            'display_name': profile.name.replace('_', ' ').title(),
+            'display_name': format_display_name(profile.name),
             'is_official': False,
             'description': profile.description,
             'vendor': profile.vendor,

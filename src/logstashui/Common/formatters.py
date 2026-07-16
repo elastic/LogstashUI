@@ -64,6 +64,25 @@ def _format_uptime(milliseconds):
         return f"{seconds}s"
 
 
+def format_display_name(name):
+    """
+    Convert a slug-style identifier (e.g. 'dell_x1026', 'generic_interfaces.json')
+    into a human-friendly display label (e.g. 'Dell X1026', 'Generic Interfaces').
+
+    This is used for SNMP device templates and profiles, whose `name` field is a
+    stable slug/key (referenced by pipelines, Elasticsearch fields, and the
+    official catalog) that should never be shown to end users as-is.
+    """
+    if not name:
+        return ''
+
+    label = str(name)
+    if label.endswith('.json'):
+        label = label[:-5]
+
+    return label.replace('_', ' ').replace('-', ' ').title()
+
+
 def _sanitize_pipeline_name_component(name):
     """
     Sanitize a name component for use in pipeline names.

@@ -44,6 +44,12 @@
                 </div>
             </div>
 
+            <!-- Blocking validation banner (deploy is disabled while shown) -->
+            <div id="snmpDiffBlockingBanner" class="hidden mb-4 flex-shrink-0 p-4 rounded-lg border border-red-600/50 bg-red-900/20 text-red-100"></div>
+
+            <!-- Aggregated manual keystore commands (one collapsible row per network) -->
+            <div id="snmpKeystoreCommandsSection" class="hidden mb-4 flex-shrink-0"></div>
+
             <!-- Loading state -->
             <div id="snmpDiffLoading" class="flex-1 flex items-center justify-center" style="min-height: 0;">
                 <div class="text-center">

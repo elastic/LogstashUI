@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from datetime import datetime, timedelta, timezone
 
 from Common.elastic_utils import get_elastic_connection
+from Common.formatters import format_display_name
 from PipelineManager.models import Connection
 from .models import Network, Device
 
@@ -192,7 +193,11 @@ def get_template_data_categories():
                 continue
 
         result = [
-            {'template_name': name, 'categories': sorted(list(cats))}
+            {
+                'template_name': name,
+                'template_display_name': format_display_name(name),
+                'categories': sorted(list(cats)),
+            }
             for name, cats in sorted(template_categories.items())
         ]
 

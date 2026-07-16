@@ -86,6 +86,7 @@
             <tr>
                 <td class="px-4 py-2">
                     <a href="/ConnectionManager/Pipelines/Editor/?{{ editor_id_param }}={{ pipeline.es_id }}&pipeline={{ pipeline.name }}" class="text-blue-500 hover:underline">{{ pipeline.name }}</a>
+                    {% if pipeline.managed_by == 'snmp' %}<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Managed by SNMP — changes may be overwritten on the next SNMP deploy">SNMP</span>{% endif %}
                 </td>
                 <td class="px-4 py-2 text-gray-300">
                     {% if pipeline.description %}

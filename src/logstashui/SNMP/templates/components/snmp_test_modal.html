@@ -3,6 +3,7 @@
  * or more contributor license agreements. Licensed under the Elastic License;
  * you may not use this file except in compliance with the Elastic License.
 -->
+{% load snmp_extras %}
 
 <!-- SNMP Test Modal -->
 <div id="snmpTestModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
@@ -73,6 +74,7 @@
                         data-port="{{ device.port }}"
                         data-template-id="{% if device.device_template %}{{ device.device_template.id }}{% endif %}"
                         data-template-name="{% if device.device_template %}{{ device.device_template.name }}{% endif %}"
+                        data-template-display-name="{% if device.device_template %}{{ device.device_template.name|display_name }}{% endif %}"
                         data-has-credential="{% if device.credential %}true{% else %}false{% endif %}">
                   {{ device.name }} ({{ device.ip_address }})
                 </option>
@@ -100,7 +102,7 @@
                 <option value="{{ template.id }}" 
                         data-vendor="{{ template.vendor }}"
                         data-official="{{ template.official }}">
-                  {{ template.name }}{% if template.official %} (Official){% endif %}
+                  {{ template.name|display_name }}{% if template.official %} (Official){% endif %}
                 </option>
                 {% endfor %}
               </select>

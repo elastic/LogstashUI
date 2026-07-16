@@ -206,7 +206,7 @@ function renderTemplateRows() {
       : '<span class="text-gray-500 italic text-xs">none</span>';
 
     row.innerHTML = `
-      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(tpl.template_name)}</td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(tpl.template_display_name || formatDisplayName(tpl.template_name))}</td>
       <td class="px-6 py-4 text-sm">
         <div class="flex flex-wrap gap-1.5">${badges}</div>
       </td>

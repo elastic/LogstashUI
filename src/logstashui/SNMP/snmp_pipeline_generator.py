@@ -19,6 +19,130 @@ from .snmp_normalizers import _apply_normalizers
 _OFFICIAL_PROFILE_CACHE = {}
 
 
+# ============================================================================
+# Agent-mode keystore helpers
+#
+# In Agent (LogstashAgent) mode, secrets are never embedded in the generated
+# pipeline. Instead the pipeline references Logstash keystore keys (${KEY}) and
+# LogstashUI provisions the matching keystore entries on the agent's policy.
+# The naming convention (agreed for SNMP) is:
+#   SNMP device credentials:
+#     snmp_{cred_id}_v1        (v1 community)
+#     snmp_{cred_id}_v2        (v2c community)
+#     snmp_{cred_id}_v3_auth   (v3 auth password)
+#     snmp_{cred_id}_v3_priv   (v3 priv password)
+#   Elasticsearch output connection credentials:
+#     snmp_es_{conn_id}_api_key
+#     snmp_es_{conn_id}_user
+#     snmp_es_{conn_id}_password
+# ============================================================================
+
+
+def _uses_keystore(network):
+    """
+    True when credentials should be emitted as Logstash keystore references
+    (${KEY}) rather than embedded inline.
+
+    - Agent mode: always uses the keystore (LogstashUI provisions the entries).
+    - Centralized mode: controlled by the network's credential_mode
+      ('KEYSTORE' = manage keystore manually on the Logstash node,
+       'PLAINTEXT' = embed credentials directly in the pipeline).
+    """
+    if getattr(network, 'deployment_mode', 'CENTRALIZED') == 'AGENT':
+        return True
+    return getattr(network, 'credential_mode', 'KEYSTORE') == 'KEYSTORE'
+
+
+def _community_key_name(credential):
+    """Keystore key name holding a v1/v2c community string."""
+    suffix = 'v1' if credential.version == '1' else 'v2'
+    return f"snmp_{credential.id}_{suffix}"
+
+
+def _auth_pass_key_name(credential):
+    """Keystore key name holding a v3 auth password."""
+    return f"snmp_{credential.id}_v3_auth"
+
+
+def _priv_pass_key_name(credential):
+    """Keystore key name holding a v3 priv password."""
+    return f"snmp_{credential.id}_v3_priv"
+
+
+def _es_api_key_name(connection):
+    """Keystore key name holding an ES connection API key."""
+    return f"snmp_es_{connection.id}_api_key"
+
+
+def _es_user_key_name(connection):
+    """Keystore key name holding an ES connection username."""
+    return f"snmp_es_{connection.id}_user"
+
+
+def _es_password_key_name(connection):
+    """Keystore key name holding an ES connection password."""
+    return f"snmp_es_{connection.id}_password"
+
+
+def _ref(key_name):
+    """Format a keystore key name as a Logstash keystore reference."""
+    return "${" + key_name + "}"
+
+
+def snmp_credential_keystore_entries(credential):
+    """
+    Return {key_name: plaintext_value} for an SNMP credential's secrets.
+
+    Used by the Agent deploy path to provision keystore entries. Only includes
+    secrets that are actually set on the credential.
+    """
+    entries = {}
+    if credential is None:
+        return entries
+
+    if credential.version == '1':
+        community = credential.get_community()
+        if community:
+            entries[_community_key_name(credential)] = community
+    elif credential.version == '2c':
+        community = credential.get_community()
+        if community:
+            entries[_community_key_name(credential)] = community
+    elif credential.version == '3':
+        if credential.security_level in ['authNoPriv', 'authPriv']:
+            auth = credential.get_auth_pass()
+            if auth:
+                entries[_auth_pass_key_name(credential)] = auth
+        if credential.security_level == 'authPriv':
+            priv = credential.get_priv_pass()
+            if priv:
+                entries[_priv_pass_key_name(credential)] = priv
+    return entries
+
+
+def es_connection_keystore_entries(connection):
+    """
+    Return {key_name: plaintext_value} for an Elasticsearch connection's secrets.
+
+    Prefers API key auth; falls back to username/password. Used by the Agent
+    deploy path to provision keystore entries for pipeline outputs.
+    """
+    entries = {}
+    if connection is None:
+        return entries
+
+    if connection.api_key:
+        api_key = connection.get_api_key()
+        if api_key:
+            entries[_es_api_key_name(connection)] = api_key
+    elif connection.username and connection.password:
+        entries[_es_user_key_name(connection)] = connection.username
+        password = connection.get_password()
+        if password:
+            entries[_es_password_key_name(connection)] = password
+    return entries
+
+
 def _normalize_template_name(name: str) -> str:
     """
     Normalize a device template name so it is safe to use as an Elasticsearch
@@ -165,9 +289,14 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
 
             for device in group_data['devices']:
                 credential = device.credential
+                community_value = (
+                    _ref(_community_key_name(credential))
+                    if _uses_keystore(input_data['network'])
+                    else credential.get_community()
+                )
                 hosts.append({
                     "host": f"udp:{device.hostname or device.ip_address}/{device.port}",
-                    "community": credential.get_community(),
+                    "community": community_value,
                     "version": credential.version,
                     "timeout": device.timeout,
                     "retries": device.retries
@@ -313,13 +442,20 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
                 } | global_input_config
 
                 # Add auth settings based on security level
+                use_keystore = _uses_keystore(input_data['network'])
                 if credential.security_level in ['authNoPriv', 'authPriv']:
                     config["auth_protocol"] = credential.auth_protocol
-                    config["auth_pass"] = credential.get_auth_pass()
+                    config["auth_pass"] = (
+                        _ref(_auth_pass_key_name(credential))
+                        if use_keystore else credential.get_auth_pass()
+                    )
 
                 if credential.security_level == 'authPriv':
                     config["priv_protocol"] = credential.priv_protocol
-                    config["priv_pass"] = credential.get_priv_pass()
+                    config["priv_pass"] = (
+                        _ref(_priv_pass_key_name(credential))
+                        if use_keystore else credential.get_priv_pass()
+                    )
 
                 # Add ECS field enrichment from device template
                 add_fields = {}
@@ -441,7 +577,10 @@ def _generate_discovery_input(network):
 
         # Add version-specific configuration
         if credential.version in ['1', '2c']:
-            host_config["community"] = credential.get_community()
+            host_config["community"] = (
+                _ref(_community_key_name(credential))
+                if _uses_keystore(network) else credential.get_community()
+            )
             host_config["version"] = credential.version
 
         hosts.append(host_config)
@@ -457,13 +596,20 @@ def _generate_discovery_input(network):
         config["security_name"] = credential.security_name
         config["security_level"] = credential.security_level
 
+        use_keystore = _uses_keystore(network)
         if credential.security_level in ['authNoPriv', 'authPriv']:
             config["auth_protocol"] = credential.auth_protocol
-            config["auth_pass"] = credential.get_auth_pass()
+            config["auth_pass"] = (
+                _ref(_auth_pass_key_name(credential))
+                if use_keystore else credential.get_auth_pass()
+            )
 
         if credential.security_level == 'authPriv':
             config["priv_protocol"] = credential.priv_protocol
-            config["priv_pass"] = credential.get_priv_pass()
+            config["priv_pass"] = (
+                _ref(_priv_pass_key_name(credential))
+                if use_keystore else credential.get_priv_pass()
+            )
 
     # Add OIDs from System profile
     if oid_mappings['get']:
@@ -827,12 +973,20 @@ def _generate_output(input_data, network_db_object, snmp_type="polling", device_
         host_with_port = f"{connection.host}:{connection.port}" if connection.port else connection.host
         config["hosts"] = [host_with_port]
 
-    # Add authentication
-    if connection.api_key:
-        config["api_key"] = connection.get_api_key()
-    elif connection.username and connection.password:
-        config["user"] = connection.username
-        config["password"] = connection.get_password()
+    # Add authentication. In Agent mode, reference keystore keys instead of
+    # embedding secrets; LogstashUI provisions the matching keystore entries.
+    if _uses_keystore(network_db_object):
+        if connection.api_key:
+            config["api_key"] = _ref(_es_api_key_name(connection))
+        elif connection.username and connection.password:
+            config["user"] = _ref(_es_user_key_name(connection))
+            config["password"] = _ref(_es_password_key_name(connection))
+    else:
+        if connection.api_key:
+            config["api_key"] = connection.get_api_key()
+        elif connection.username and connection.password:
+            config["user"] = connection.username
+            config["password"] = connection.get_password()
 
     output_components.append(
         {

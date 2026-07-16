@@ -173,7 +173,8 @@ function renderDevices(devices) {
             default
           </a>`;
       } else {
-        templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(device.device_template_name)}</span>`;
+        const templateLabel = device.device_template_display_name || formatDisplayName(device.device_template_name);
+        templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(templateLabel)}</span>`;
       }
     } else {
       templateHtml = '<span class="text-gray-500 italic">None</span>';

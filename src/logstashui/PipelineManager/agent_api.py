@@ -31,6 +31,85 @@ def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
     return Fernet(key).encrypt(plaintext.encode("utf-8")).decode("utf-8")
 
 
+def _build_snmp_changes(policy, raw_api_key, agent_snmp_pipelines, agent_snmp_keystore):
+    """
+    Compute the SNMP-managed pipeline/keystore delta between the agent's current
+    state (hash maps) and the policy's SNMP-managed records.
+
+    SNMP-managed pipelines/keystore entries are delivered independently of the
+    policy revision number so that SNMP deploys never touch policy revision
+    history. Comparison uses pre-computed hashes (cheap dict diff).
+
+    Args:
+        policy: the agent's assigned Policy
+        raw_api_key: the agent's raw API key (for encrypting keystore values)
+        agent_snmp_pipelines: {pipeline_name: pipeline_hash} reported by the agent
+        agent_snmp_keystore: {key_name: kv_hash} reported by the agent
+
+    Returns:
+        dict {'pipelines': {...}, 'keystore': {...}} or None if no changes.
+    """
+    agent_snmp_pipelines = agent_snmp_pipelines or {}
+    agent_snmp_keystore = agent_snmp_keystore or {}
+
+    snmp_pipelines = policy.pipelines.filter(managed_by="snmp")
+    snmp_keystore = policy.keystore_entries.filter(managed_by="snmp")
+
+    pipeline_changes = {"set": {}, "delete": []}
+    expected_pipeline_names = set()
+
+    for pipeline in snmp_pipelines:
+        expected_pipeline_names.add(pipeline.name)
+        agent_hash = agent_snmp_pipelines.get(pipeline.name)
+        if agent_hash != pipeline.pipeline_hash:
+            pipeline_changes["set"][pipeline.name] = {
+                "lscl": pipeline.lscl,
+                "pipeline_hash": pipeline.pipeline_hash,
+                "no_input": pipeline.no_input,
+                "non_reloadable": pipeline.non_reloadable,
+                "settings": {
+                    "pipeline_workers": pipeline.pipeline_workers,
+                    "pipeline_batch_size": pipeline.pipeline_batch_size,
+                    "pipeline_batch_delay": pipeline.pipeline_batch_delay,
+                    "queue_type": pipeline.queue_type,
+                    "queue_max_bytes": pipeline.queue_max_bytes,
+                    "queue_checkpoint_writes": pipeline.queue_checkpoint_writes,
+                },
+            }
+
+    for agent_pipeline_name in agent_snmp_pipelines:
+        if agent_pipeline_name not in expected_pipeline_names:
+            pipeline_changes["delete"].append(agent_pipeline_name)
+
+    keystore_changes = {"set": {}, "delete": []}
+    expected_key_names = set()
+
+    for entry in snmp_keystore:
+        expected_key_names.add(entry.key_name)
+        agent_hash = agent_snmp_keystore.get(entry.key_name)
+        if agent_hash != entry.kv_hash:
+            plaintext_value = entry.get_key_value()
+            if plaintext_value is not None:
+                keystore_changes["set"][entry.key_name] = _encrypt_for_agent(
+                    raw_api_key, plaintext_value
+                )
+
+    for agent_key_name in agent_snmp_keystore:
+        if agent_key_name not in expected_key_names:
+            keystore_changes["delete"].append(agent_key_name)
+
+    has_pipeline_changes = bool(pipeline_changes["set"] or pipeline_changes["delete"])
+    has_keystore_changes = bool(keystore_changes["set"] or keystore_changes["delete"])
+
+    if not has_pipeline_changes and not has_keystore_changes:
+        return None
+
+    return {
+        "pipelines": pipeline_changes if has_pipeline_changes else {"set": {}, "delete": []},
+        "keystore": keystore_changes if has_keystore_changes else {"set": {}, "delete": []},
+    }
+
+
 @csrf_exempt
 def enroll(request):
     """
@@ -188,19 +267,30 @@ def check_in(request):
         if not policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
 
-        return JsonResponse(
-            {
-                "success": True,
-                "message": "Check-in successful",
-                "timestamp": connection.last_check_in.isoformat(),
-                "current_revision_number": policy.current_revision_number,
-                "settings_path": policy.settings_path,
-                "logs_path": policy.logs_path,
-                "binary_path": policy.binary_path,
-                "restart": should_restart,
-                "desired_agent_version": connection.desired_agent_version,
-            }
+        # SNMP-managed pipelines/keystore are synced here, independently of the
+        # policy revision number, via a cheap hash comparison.
+        snmp_changes = _build_snmp_changes(
+            policy,
+            raw_api_key,
+            data.get("snmp_pipelines", {}),
+            data.get("snmp_keystore", {}),
         )
+
+        response_payload = {
+            "success": True,
+            "message": "Check-in successful",
+            "timestamp": connection.last_check_in.isoformat(),
+            "current_revision_number": policy.current_revision_number,
+            "settings_path": policy.settings_path,
+            "logs_path": policy.logs_path,
+            "binary_path": policy.binary_path,
+            "restart": should_restart,
+            "desired_agent_version": connection.desired_agent_version,
+        }
+        if snmp_changes is not None:
+            response_payload["snmp_changes"] = snmp_changes
+
+        return JsonResponse(response_payload)
 
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
@@ -271,11 +361,20 @@ def get_config_changes(request):
             entry.key_name: {"hash": entry.kv_hash, "value": entry.get_key_value()}
             for entry in policy_keystore_entries
         }
+        # SNMP-managed keystore entries are synced via the check-in loop. Exclude
+        # them from "set" here, but keep them in the delete guard (policy_keystore
+        # holds all names) so they are never deleted by this channel. On keystore
+        # password change the physical keystore is recreated with ALL keys below.
+        snmp_key_names = set(
+            policy.keystore_entries.filter(managed_by="snmp").values_list("key_name", flat=True)
+        )
 
         keystore_changes = {"set": {}, "delete": []}
 
         for agent_key_name, agent_hash in agent_keystore.items():
             if agent_key_name in policy_keystore:
+                if agent_key_name in snmp_key_names:
+                    continue
                 if agent_hash != policy_keystore[agent_key_name]["hash"]:
                     plaintext_value = policy_keystore[agent_key_name]["value"]
                     keystore_changes["set"][agent_key_name] = _encrypt_for_agent(raw_api_key, plaintext_value)
@@ -283,6 +382,8 @@ def get_config_changes(request):
                 keystore_changes["delete"].append(agent_key_name)
 
         for policy_key_name, policy_key_data in policy_keystore.items():
+            if policy_key_name in snmp_key_names:
+                continue
             if policy_key_name not in agent_keystore:
                 keystore_changes["set"][policy_key_name] = _encrypt_for_agent(
                     raw_api_key,
@@ -306,13 +407,18 @@ def get_config_changes(request):
 
         agent_pipelines = data.get("pipelines", {})
         policy_pipelines_qs = policy.pipelines.all()
+        # SNMP-managed pipelines are synced via the check-in loop, not this
+        # channel. Exclude them from "set" so the two channels don't fight, but
+        # guard "delete" against ALL policy pipeline names (including SNMP) so we
+        # never delete an SNMP pipeline the agent reports in its regular state.
+        all_pipeline_names = set(policy_pipelines_qs.values_list("name", flat=True))
         pipeline_changes = {"set": {}, "delete": []}
 
         for agent_pipeline_name in agent_pipelines:
-            if not policy_pipelines_qs.filter(name=agent_pipeline_name).exists():
+            if agent_pipeline_name not in all_pipeline_names:
                 pipeline_changes["delete"].append(agent_pipeline_name)
 
-        for pipeline in policy_pipelines_qs:
+        for pipeline in policy_pipelines_qs.exclude(managed_by="snmp"):
             agent_entry = agent_pipelines.get(pipeline.name)
             needs_update = agent_entry is None or agent_entry.get("config_hash") != pipeline.pipeline_hash
             if needs_update:

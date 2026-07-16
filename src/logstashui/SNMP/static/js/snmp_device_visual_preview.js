@@ -93,11 +93,7 @@ function renderDevicePreview(deviceId, device, visualizations) {
       const isOfficial = profile.name.endsWith('.json');
       
       // Create friendly display name
-      let displayName = profile.name;
-      if (isOfficial) {
-        // Remove .json extension and convert to title case
-        displayName = profile.name.slice(0, -5).replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      }
+      const displayName = profile.display_name || formatDisplayName(profile.name);
       
       // Build metadata line with vendor and product
       let metadata = '';

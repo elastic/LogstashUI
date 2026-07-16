@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from .models import Device, DeviceTemplate, Profile, Credential
+from Common.formatters import format_display_name
 import json
 import os
 import traceback
@@ -538,9 +539,10 @@ def RunSNMPTest(request):
                 'template': {
                     'id': template.id,
                     'name': template.name,
+                    'display_name': format_display_name(template.name),
                     'description': template.description,
                     'vendor': template.vendor,
-                    'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                    'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
                 }
             })
         
@@ -637,9 +639,10 @@ def RunSNMPTest(request):
                 'template': {
                     'id': template.id,
                     'name': template.name,
+                    'display_name': format_display_name(template.name),
                     'description': template.description,
                     'vendor': template.vendor,
-                    'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                    'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
                 }
             })
         
@@ -661,9 +664,10 @@ def RunSNMPTest(request):
                 'template': {
                     'id': template.id,
                     'name': template.name,
+                    'display_name': format_display_name(template.name),
                     'description': template.description,
                     'vendor': template.vendor,
-                    'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                    'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
                 }
             })
         
@@ -683,9 +687,10 @@ def RunSNMPTest(request):
             'template': {
                 'id': template.id,
                 'name': template.name,
+                'display_name': format_display_name(template.name),
                 'description': template.description,
                 'vendor': template.vendor,
-                'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
             },
             'results': results
         }

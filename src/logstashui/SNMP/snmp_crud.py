@@ -11,7 +11,7 @@ from Common.encryption import decrypt_credential
 from Common.elastic_utils import get_elastic_connection
 from Common.logstash_config_parse import ComponentToPipeline
 from Common.decorators import require_admin_role
-from Common.formatters import _sanitize_pipeline_name_component
+from Common.formatters import _sanitize_pipeline_name_component, format_display_name
 
 from .snmp_pipeline_generator import (
     _generate_input, 
@@ -19,10 +19,13 @@ from .snmp_pipeline_generator import (
     _generate_discovery_input, 
     _generate_discovery_filters, 
     _generate_filters,
-    _OFFICIAL_PROFILE_CACHE
+    _OFFICIAL_PROFILE_CACHE,
+    snmp_credential_keystore_entries,
+    es_connection_keystore_entries,
+    _uses_keystore,
 )
 
-from PipelineManager.models import Connection
+from PipelineManager.models import Connection, Pipeline, Keystore
 
 from .models import Credential, Network, Profile, Device, DeviceTemplate
 
@@ -30,9 +33,80 @@ from datetime import datetime, timedelta, timezone
 
 import json
 import os
+import re
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Matches keystore key names generated for SNMP device credentials, e.g.
+# "snmp_16_v2" or "snmp_16_v3_auth" (see snmp_pipeline_generator.py naming
+# convention docstring).
+_SNMP_CRED_KEY_RE = re.compile(r'^snmp_(\d+)_(v1|v2|v3_auth|v3_priv)$')
+
+# Matches keystore key names generated for Elasticsearch output connection
+# credentials, e.g. "snmp_es_1_password".
+_SNMP_ES_KEY_RE = re.compile(r'^snmp_es_(\d+)_(api_key|user|password)$')
+
+
+def _resolve_manual_keystore_values(keys):
+    """
+    Resolve a list of ${KEY} names (extracted from a generated pipeline) back
+    to their plaintext credential values, for display in the "manual keystore"
+    deploy diff banner. Only used when the network manages its keystore
+    manually — the operator needs the actual values to run `logstash-keystore
+    add` on the Logstash node themselves.
+
+    Returns {key_name: plaintext_value}, omitting any key that can't be
+    resolved (unknown format, missing record, or empty value).
+    """
+    parsed = {}
+    cred_ids = set()
+    conn_ids = set()
+
+    for key in keys:
+        m = _SNMP_ES_KEY_RE.match(key)
+        if m:
+            conn_id = int(m.group(1))
+            conn_ids.add(conn_id)
+            parsed[key] = ('es', conn_id, m.group(2))
+            continue
+        m = _SNMP_CRED_KEY_RE.match(key)
+        if m:
+            cred_id = int(m.group(1))
+            cred_ids.add(cred_id)
+            parsed[key] = ('snmp', cred_id, m.group(2))
+
+    credentials = {c.id: c for c in Credential.objects.filter(id__in=cred_ids)} if cred_ids else {}
+    connections = {c.id: c for c in Connection.objects.filter(id__in=conn_ids)} if conn_ids else {}
+
+    values = {}
+    for key, (kind, obj_id, field) in parsed.items():
+        try:
+            if kind == 'es':
+                conn = connections.get(obj_id)
+                if not conn:
+                    continue
+                if field == 'api_key':
+                    values[key] = conn.get_api_key()
+                elif field == 'user':
+                    values[key] = conn.username
+                elif field == 'password':
+                    values[key] = conn.get_password()
+            else:
+                cred = credentials.get(obj_id)
+                if not cred:
+                    continue
+                if field in ('v1', 'v2'):
+                    values[key] = cred.get_community()
+                elif field == 'v3_auth':
+                    values[key] = cred.get_auth_pass()
+                elif field == 'v3_priv':
+                    values[key] = cred.get_priv_pass()
+        except Exception:
+            logger.warning(f"Could not resolve manual keystore value for key {key}", exc_info=True)
+
+    return {k: v for k, v in values.items() if v}
 
 
 def _get_unique_templates_for_network(devices):
@@ -175,6 +249,11 @@ def AddCredential(request):
         # Save (this will trigger validation and encryption.py)
         credential.save()
 
+        # Mark config as changed: a new secret may need to be provisioned into
+        # keystores on the next deploy (Agent/CPM-keystore mode).
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
+
         return JsonResponse({'id': credential.id, 'message': 'Credential created successfully!'}, status=200)
 
     except ValidationError as e:
@@ -231,6 +310,11 @@ def UpdateCredential(request, credential_id):
 
         # Save (this will trigger validation and encryption.py)
         credential.save()
+
+        # Mark config as changed: a rotated secret changes keystore values even
+        # though no pipeline LSCL changes, so the deploy indicator must light up.
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential updated successfully!'}, status=200)
 
@@ -289,6 +373,11 @@ def DeleteCredential(request, credential_id):
     try:
         credential = Credential.objects.get(pk=credential_id)
         credential.delete()
+
+        # Mark config as changed: removing a credential may orphan keystore
+        # entries that need to be pruned on the next deploy.
+        from SNMP.models import SNMPDeploymentState
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -395,6 +484,611 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
 
     except Exception as e:
         return (False, False, str(e), False)
+
+
+# ============================================================================
+# Agent-mode pipeline generation helpers
+#
+# These centralize per-network pipeline generation so the Agent deploy path
+# (which stores pipelines as Django Pipeline records instead of ES CPM) can
+# reuse the exact same generation logic. Generation is mode-agnostic; the
+# generator itself decides keystore-vs-inline credentials from
+# network.deployment_mode.
+# ============================================================================
+
+
+def _build_trap_components(network, input_data=None):
+    """
+    Build the trap pipeline component dict for a network (traps input + output).
+
+    Mode-agnostic: credentials are emitted as keystore references or inline
+    based on _uses_keystore(network), which covers both Agent mode and
+    Centralized mode with credential_mode='KEYSTORE'.
+    """
+    if input_data is None:
+        input_data = {
+            "network": network,
+            "devices": {"v1_v2c": {}, "v3": {}},
+            "connection": network.connection,
+        }
+
+    credential = network.credential
+    trap_input_config = {
+        "host": "0.0.0.0",
+        "port": 1662,
+        "oid_map_field_values": False,
+        "oid_mapping_format": "dotted_string",
+        "supported_versions": []
+    }
+
+    use_keystore = _uses_keystore(network)
+
+    if credential.version in ['1', '2c']:
+        trap_input_config["supported_versions"].append(credential.version)
+        if credential.community:
+            if use_keystore:
+                suffix = 'v1' if credential.version == '1' else 'v2'
+                trap_input_config["community"] = ["${" + f"snmp_{credential.id}_{suffix}" + "}"]
+            else:
+                trap_input_config["community"] = [decrypt_credential(credential.community)]
+    elif credential.version == '3':
+        trap_input_config["supported_versions"].append("3")
+        if credential.security_name:
+            trap_input_config["security_name"] = credential.security_name
+        if credential.auth_protocol:
+            trap_input_config["auth_protocol"] = credential.auth_protocol
+        if credential.auth_pass:
+            trap_input_config["auth_pass"] = (
+                "${" + f"snmp_{credential.id}_v3_auth" + "}"
+                if use_keystore else decrypt_credential(credential.auth_pass)
+            )
+        if credential.priv_protocol:
+            trap_input_config["priv_protocol"] = credential.priv_protocol
+        if credential.priv_pass:
+            trap_input_config["priv_pass"] = (
+                "${" + f"snmp_{credential.id}_v3_priv" + "}"
+                if use_keystore else decrypt_credential(credential.priv_pass)
+            )
+        if credential.security_level:
+            trap_input_config["security_level"] = credential.security_level
+
+    return {
+        "input": [{
+            "id": "input_snmptrap_1",
+            "type": "input",
+            "plugin": "snmptrap",
+            "config": trap_input_config
+        }],
+        "filter": [
+            {
+                "id": "filter_mutate_trap_1",
+                "type": "filter",
+                "plugin": "mutate",
+                "config": {
+                    "add_field": {
+                        "[event][category]": "traps"
+                    }
+                }
+            }
+        ],
+        "output": _generate_output(input_data, network, snmp_type="traps")
+    }
+
+
+def _build_network_pipeline_configs(network, profile_cache=None):
+    """
+    Generate all pipeline configs a network should produce.
+
+    Mode-agnostic: the generator embeds credentials inline for CENTRALIZED
+    networks and emits keystore references for AGENT networks.
+
+    Returns:
+        list of dicts: {pipeline_name, config, pipeline_type, template_name}
+    """
+    if profile_cache is None:
+        profile_cache = {}
+
+    results = []
+    devices = list(network.devices.all())
+    templates = _get_unique_templates_for_network(devices)
+
+    # Per-template polling pipelines
+    for template in templates:
+        template_id = template.id if template else None
+        template_name = template.name if template else 'no-template'
+
+        input_data = {
+            "network": network,
+            "devices": {"v1_v2c": {}, "v3": {}},
+            "connection": network.connection
+        }
+
+        has_template_devices = False
+        for device in devices:
+            if not device.credential:
+                continue
+            device_template_id = device.device_template.id if device.device_template else None
+            if device_template_id != template_id:
+                continue
+            has_template_devices = True
+            credential = device.credential
+            if credential.version in ['1', '2c']:
+                input_data["devices"]["v1_v2c"][device.name] = device
+            elif credential.version == '3':
+                input_data["devices"]["v3"][device.name] = device
+
+        if not has_template_devices:
+            continue
+
+        input_components, oid_mappings, normalizers = _generate_input(
+            input_data, profile_cache, template_filter=template_id
+        )
+        filter_components = _generate_filters(oid_mappings, network, normalizers, input_data=input_data)
+        components = {
+            "input": input_components,
+            "filter": filter_components,
+            "output": _generate_output(input_data, network, snmp_type="polling", device_template=template)
+        }
+        config = ComponentToPipeline(components, test=False).components_to_logstash_config()
+        results.append({
+            'pipeline_name': _get_template_pipeline_name(network, template, 'polling'),
+            'config': config,
+            'pipeline_type': 'polling',
+            'template_name': template_name,
+        })
+
+    # Trap pipeline
+    if network.traps_enabled and network.credential:
+        trap_components = _build_trap_components(network)
+        config = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
+        results.append({
+            'pipeline_name': f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps",
+            'config': config,
+            'pipeline_type': 'trap',
+            'template_name': None,
+        })
+
+    # Discovery pipeline
+    if network.discovery_enabled and network.discovery_credential:
+        discovery_input_data = {
+            "network": network,
+            "devices": {"v1_v2c": {}, "v3": {}},
+            "connection": network.connection
+        }
+        discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
+        discovery_filter_components = _generate_discovery_filters(discovery_oid_mappings, network)
+        discovery_components = {
+            "input": discovery_input_components,
+            "filter": discovery_filter_components,
+            "output": _generate_output(discovery_input_data, network, snmp_type="discovery")
+        }
+        config = ComponentToPipeline(discovery_components, test=False).components_to_logstash_config()
+        results.append({
+            'pipeline_name': f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery",
+            'config': config,
+            'pipeline_type': 'discovery',
+            'template_name': None,
+        })
+
+    return results
+
+
+def _collect_network_keystore_entries(network):
+    """
+    Return {key_name: plaintext_value} of all keystore entries an Agent-mode
+    network's pipelines reference (SNMP device creds + ES output creds).
+    """
+    entries = {}
+    entries.update(es_connection_keystore_entries(network.connection))
+
+    for device in network.devices.all():
+        if device.credential:
+            entries.update(snmp_credential_keystore_entries(device.credential))
+
+    if network.traps_enabled and network.credential:
+        entries.update(snmp_credential_keystore_entries(network.credential))
+
+    if network.discovery_enabled and network.discovery_credential:
+        entries.update(snmp_credential_keystore_entries(network.discovery_credential))
+
+    return entries
+
+
+def _network_has_pipeline_devices(network):
+    """True if a network should generate at least one pipeline."""
+    has_devices = any(d.credential for d in network.devices.all())
+    return has_devices or (network.traps_enabled and network.credential) \
+        or (network.discovery_enabled and network.discovery_credential)
+
+
+def _reconcile_policy_snmp_keystore(policy):
+    """
+    Ensure a policy's SNMP-managed keystore entries exactly match what all
+    Agent-mode networks assigned to it require. Adds/updates needed entries and
+    removes orphaned snmp-managed entries.
+    """
+    import hashlib
+
+    needed = {}
+    agent_networks = Network.objects.filter(
+        deployment_mode='AGENT', agent_connection__policy_id=policy.id
+    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related(
+        'devices__credential'
+    )
+    for network in agent_networks:
+        needed.update(_collect_network_keystore_entries(network))
+
+    # Upsert needed entries (Keystore.save encrypts + hashes plaintext values)
+    for key_name, value in needed.items():
+        expected_hash = hashlib.sha256(f"{key_name}{value}".encode('utf-8')).hexdigest()
+        existing = Keystore.objects.filter(policy=policy, key_name=key_name).first()
+        if existing:
+            if existing.kv_hash != expected_hash or existing.managed_by != 'snmp':
+                existing.key_value = value
+                existing.managed_by = 'snmp'
+                existing.save()
+        else:
+            Keystore.objects.create(
+                policy=policy, key_name=key_name, key_value=value, managed_by='snmp'
+            )
+
+    # Remove orphaned snmp-managed entries no longer referenced by any network
+    for entry in Keystore.objects.filter(policy=policy, managed_by='snmp'):
+        if entry.key_name not in needed:
+            entry.delete()
+
+
+def _agent_policy_keystore_drift(policy):
+    """
+    Compare the SNMP keystore entries an agent policy SHOULD have (derived from
+    its Agent-mode networks) against the Keystore rows currently stored.
+
+    This catches credential/secret rotation: rotating a secret does not change
+    any pipeline LSCL (it only holds a ${ref}), so without this the change would
+    never surface in the deploy diff and never propagate to the agent.
+
+    Returns {added: [...], changed: [...], removed: [...]} of key NAMES only
+    (never values), or None when there is no drift.
+    """
+    import hashlib
+
+    needed = {}
+    agent_networks = Network.objects.filter(
+        deployment_mode='AGENT', agent_connection__policy_id=policy.id
+    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related(
+        'devices__credential'
+    )
+    for network in agent_networks:
+        needed.update(_collect_network_keystore_entries(network))
+
+    existing = {
+        e.key_name: e.kv_hash
+        for e in Keystore.objects.filter(policy=policy, managed_by='snmp')
+    }
+
+    added, changed = [], []
+    for key_name, value in needed.items():
+        expected_hash = hashlib.sha256(f"{key_name}{value}".encode('utf-8')).hexdigest()
+        if key_name not in existing:
+            added.append(key_name)
+        elif existing[key_name] != expected_hash:
+            changed.append(key_name)
+
+    removed = [k for k in existing if k not in needed]
+
+    if not (added or changed or removed):
+        return None
+    return {'added': sorted(added), 'changed': sorted(changed), 'removed': sorted(removed)}
+
+
+def _cleanup_stale_es_pipelines(networks):
+    """
+    Best-effort removal of leftover [MANAGED] Elasticsearch CPM pipelines for
+    networks now managed via Agent mode (handles CPM -> AGENT transition).
+
+    Batched per ES connection (one get_pipeline() call per connection instead of
+    one per network). Failures are logged as warnings, never surfaced as deploy
+    errors, so a flaky/unreachable ES cluster can't block an Agent deploy.
+    Returns the number of pipelines deleted.
+    """
+    by_conn = {}
+    for network in networks:
+        if network.connection_id:
+            by_conn.setdefault(network.connection_id, []).append(network)
+
+    total = 0
+    for conn_id, conn_networks in by_conn.items():
+        try:
+            es = get_elastic_connection(conn_id)
+            all_pipelines = es.logstash.get_pipeline()
+        except Exception as e:
+            logger.warning(f"Skipping stale-ES cleanup for connection {conn_id}: {e}")
+            continue
+
+        prefixes = [f"snmp-{_sanitize_pipeline_name_component(n.name)}-" for n in conn_networks]
+        for name, data in all_pipelines.items():
+            if '[MANAGED]' not in data.get('description', ''):
+                continue
+            if any(name.startswith(p) for p in prefixes):
+                try:
+                    es.logstash.delete_pipeline(id=name)
+                    total += 1
+                    logger.info(f"Removed stale ES pipeline '{name}' (now Agent-managed)")
+                except Exception as e:
+                    logger.warning(f"Failed to remove stale ES pipeline '{name}': {e}")
+    return total
+
+
+def _compute_agent_network_diffs(networks, profile_cache=None):
+    """
+    Build the list of Agent-mode deployment diff entries by comparing freshly
+    generated pipeline configs against existing Django Pipeline records.
+
+    Handles create/update for current Agent networks plus policy-level orphan
+    detection (networks that switched AGENT -> CPM or were deleted).
+
+    Args:
+        networks: iterable of Network objects
+        profile_cache: optional shared profile cache dict
+
+    Returns:
+        list of diff entries (each with deployment_mode == 'AGENT')
+    """
+    if profile_cache is None:
+        profile_cache = {}
+
+    diffs = []
+    agent_expected_by_policy = {}
+    policies_by_id = {}
+
+    for network in networks:
+        if network.deployment_mode != 'AGENT':
+            continue
+
+        policy = network.agent_connection.policy if network.agent_connection else None
+        if not policy:
+            diffs.append({
+                'network_name': network.name,
+                'pipeline_name': '(no agent policy)',
+                'current': '',
+                'new': '',
+                'pipeline_type': 'error',
+                'action': 'error',
+                'deployment_mode': 'AGENT',
+                'note': 'Network is in Agent mode but has no agent connection/policy assigned.'
+            })
+            continue
+
+        agent_expected_by_policy.setdefault(policy.id, set())
+        policies_by_id[policy.id] = policy
+        agent_name = network.agent_connection.name if network.agent_connection else policy.name
+
+        expected_configs = (
+            _build_network_pipeline_configs(network, profile_cache)
+            if _network_has_pipeline_devices(network) else []
+        )
+
+        for cfg in expected_configs:
+            pipeline_name = cfg['pipeline_name']
+            agent_expected_by_policy[policy.id].add(pipeline_name)
+            new_config = cfg['config']
+
+            existing = Pipeline.objects.filter(
+                policy=policy, name=pipeline_name, managed_by='snmp'
+            ).first()
+            current_config = existing.lscl if existing else ''
+
+            if not existing:
+                action = 'create'
+            elif current_config != new_config:
+                action = 'update'
+            else:
+                action = 'none'
+
+            if action != 'none':
+                diffs.append({
+                    'network_name': network.name,
+                    'template_name': cfg['template_name'],
+                    'pipeline_name': pipeline_name,
+                    'current': current_config,
+                    'new': new_config,
+                    'pipeline_type': cfg['pipeline_type'],
+                    'action': action,
+                    'deployment_mode': 'AGENT',
+                    'agent_policy_id': policy.id,
+                    'network_id': network.id,
+                    'destination_type': 'agent',
+                    'destination_name': agent_name,
+                })
+
+    # Policy-level orphan detection (AGENT -> CPM transitions, deleted networks)
+    snmp_policy_ids = set(
+        Pipeline.objects.filter(managed_by='snmp').values_list('policy_id', flat=True)
+    )
+    keystore_policy_ids = set(
+        Keystore.objects.filter(managed_by='snmp').values_list('policy_id', flat=True)
+    )
+
+    def _resolve_policy(pid):
+        if pid in policies_by_id:
+            return policies_by_id[pid]
+        from PipelineManager.models import Policy
+        policy = Policy.objects.filter(id=pid).first()
+        if policy:
+            policies_by_id[pid] = policy
+        return policy
+
+    for policy_id in snmp_policy_ids | set(agent_expected_by_policy.keys()):
+        expected = agent_expected_by_policy.get(policy_id, set())
+        for pl in Pipeline.objects.filter(policy_id=policy_id, managed_by='snmp'):
+            if pl.name not in expected:
+                orphan_policy = _resolve_policy(policy_id)
+                diffs.append({
+                    'network_name': 'Orphaned (Agent)',
+                    'pipeline_name': pl.name,
+                    'current': pl.lscl,
+                    'new': '',
+                    'pipeline_type': 'orphaned',
+                    'action': 'delete',
+                    'deployment_mode': 'AGENT',
+                    'agent_policy_id': policy_id,
+                    'destination_type': 'agent',
+                    'destination_name': orphan_policy.name if orphan_policy else str(policy_id),
+                    'note': 'Pipeline no longer matches any Agent-mode network.'
+                })
+
+    # Keystore drift per affected policy. Secret rotation leaves pipeline LSCL
+    # untouched, so it must be surfaced independently or it never deploys.
+    for policy_id in set(policies_by_id.keys()) | keystore_policy_ids:
+        policy = _resolve_policy(policy_id)
+        if not policy:
+            continue
+        drift = _agent_policy_keystore_drift(policy)
+        if not drift:
+            continue
+        parts = []
+        if drift['added']:
+            parts.append(f"{len(drift['added'])} added")
+        if drift['changed']:
+            parts.append(f"{len(drift['changed'])} changed")
+        if drift['removed']:
+            parts.append(f"{len(drift['removed'])} removed")
+        diffs.append({
+            'network_name': 'Keystore',
+            'pipeline_name': f'Keystore: {policy.name}',
+            'current': '\n'.join(sorted(drift['removed'])),
+            'new': '\n'.join(sorted(drift['added'] + drift['changed'])),
+            'pipeline_type': 'keystore',
+            'action': 'update',
+            'deployment_mode': 'AGENT',
+            'agent_policy_id': policy_id,
+            'destination_type': 'agent',
+            'destination_name': policy.name,
+            'keystore_drift': drift,
+            'note': 'Keystore values changed: ' + ', '.join(parts),
+        })
+
+    return diffs
+
+
+def _deploy_agent_diffs(agent_diffs):
+    """
+    Apply Agent-mode deployment diffs to Django Pipeline/Keystore records.
+
+    Args:
+        agent_diffs: list of diff entries with deployment_mode == 'AGENT'
+
+    Returns:
+        dict: {created, updated, deleted, errors}
+    """
+    created = 0
+    updated = 0
+    deleted = 0
+    keystore_changed = 0
+    errors = []
+
+    # Group diffs by policy
+    diffs_by_policy = {}
+    for diff in agent_diffs:
+        if diff.get('action') == 'error':
+            errors.append(diff.get('note', 'Agent network misconfiguration'))
+            continue
+        policy_id = diff.get('agent_policy_id')
+        if policy_id is None:
+            errors.append(f"Pipeline '{diff.get('pipeline_name')}': missing agent policy")
+            continue
+        diffs_by_policy.setdefault(policy_id, []).append(diff)
+
+    from PipelineManager.models import Policy
+
+    all_affected_network_ids = set()
+
+    for policy_id, diffs in diffs_by_policy.items():
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            errors.append(f"Agent policy {policy_id} not found")
+            continue
+
+        # Keystore password gate: required so the agent can decrypt SNMP secrets
+        if not policy.keystore_password:
+            errors.append(
+                f"The policy '{policy.name}' assigned to this agent does not have a "
+                f"keystore password set. Please set a keystore password for this policy "
+                f"before deploying."
+            )
+            continue
+
+        for diff in diffs:
+            pipeline_name = diff.get('pipeline_name')
+            action = diff.get('action')
+            network_id = diff.get('network_id')
+            if network_id:
+                all_affected_network_ids.add(network_id)
+
+            # Keystore-drift entries carry no real pipeline; they exist only to
+            # pull the policy into this loop so reconcile (below) runs. Count the
+            # affected keys so the deploy doesn't misreport "no changes".
+            if diff.get('pipeline_type') == 'keystore':
+                drift = diff.get('keystore_drift') or {}
+                keystore_changed += (
+                    len(drift.get('added', [])) + len(drift.get('changed', []))
+                    + len(drift.get('removed', []))
+                )
+                continue
+
+            try:
+                if action in ('create', 'update'):
+                    description = f"[MANAGED] SNMP {diff.get('pipeline_type', 'polling')} pipeline"
+                    existing = Pipeline.objects.filter(
+                        policy=policy, name=pipeline_name, managed_by='snmp'
+                    ).first()
+                    if existing:
+                        existing.lscl = diff.get('new', '')
+                        existing.description = description
+                        existing.managed_by = 'snmp'
+                        existing.save()
+                        updated += 1
+                    else:
+                        Pipeline.objects.create(
+                            policy=policy,
+                            name=pipeline_name,
+                            lscl=diff.get('new', ''),
+                            description=description,
+                            managed_by='snmp',
+                        )
+                        created += 1
+                elif action == 'delete':
+                    Pipeline.objects.filter(
+                        policy=policy, name=pipeline_name, managed_by='snmp'
+                    ).delete()
+                    deleted += 1
+            except Exception as e:
+                errors.append(f"Pipeline '{pipeline_name}': {str(e)}")
+
+        # Reconcile keystore entries for this policy (SNMP + ES output creds).
+        # Always runs for every affected policy, so credential/secret rotation
+        # (surfaced as a keystore-drift diff) updates the Keystore rows even when
+        # no pipeline LSCL changed.
+        try:
+            _reconcile_policy_snmp_keystore(policy)
+        except Exception as e:
+            errors.append(f"Keystore reconciliation failed for policy '{policy.name}': {str(e)}")
+
+    # CPM -> AGENT transition cleanup: remove leftover ES pipelines (batched
+    # per connection; best-effort, never blocks the deploy).
+    if all_affected_network_ids:
+        _cleanup_stale_es_pipelines(
+            Network.objects.filter(id__in=all_affected_network_ids).select_related('connection')
+        )
+
+    return {
+        'created': created,
+        'updated': updated,
+        'deleted': deleted,
+        'keystore_changed': keystore_changed,
+        'errors': errors,
+    }
 
 
 # ============================================================================
@@ -719,6 +1413,10 @@ def GetDeployDiff(request):
         network_pipeline_map = {}
 
         for network in networks:
+            # Agent-mode networks are reconciled against Django Pipeline records,
+            # not Elasticsearch CPM. Handled in a dedicated section below.
+            if network.deployment_mode == 'AGENT':
+                continue
             if network.connection:
                 conn_id = network.connection.id
                 if conn_id not in pipeline_names_by_connection:
@@ -778,6 +1476,9 @@ def GetDeployDiff(request):
 
         # Iterate through each network and build pipeline configurations
         for network in networks:
+            # Agent-mode networks handled separately (compared vs Django records)
+            if network.deployment_mode == 'AGENT':
+                continue
             # Get all devices for this network (already prefetched)
             devices = network.devices.all()
             
@@ -898,58 +1599,9 @@ def GetDeployDiff(request):
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap',
                                                                                   f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
 
-                # Build trap input configuration
-                credential = network.credential
-                trap_input_config = {
-                    "host": "0.0.0.0",
-                    "port": 1662,
-                    "oid_map_field_values": False,
-                    "oid_mapping_format": "dotted_string",
-                    "supported_versions": []
-                }
-
-                # Add version-specific configuration
-                if credential.version in ['1', '2c']:
-                    trap_input_config["supported_versions"].append(credential.version)
-                    if credential.community:
-                        trap_input_config["community"] = [decrypt_credential(credential.community)]
-                elif credential.version == '3':
-                    trap_input_config["supported_versions"].append("3")
-                    if credential.security_name:
-                        trap_input_config["security_name"] = credential.security_name
-                    if credential.auth_protocol:
-                        trap_input_config["auth_protocol"] = credential.auth_protocol
-                    if credential.auth_pass:
-                        trap_input_config["auth_pass"] = decrypt_credential(credential.auth_pass)
-                    if credential.priv_protocol:
-                        trap_input_config["priv_protocol"] = credential.priv_protocol
-                    if credential.priv_pass:
-                        trap_input_config["priv_pass"] = decrypt_credential(credential.priv_pass)
-                    if credential.security_level:
-                        trap_input_config["security_level"] = credential.security_level
-
-                # Build trap pipeline components
-                trap_components = {
-                    "input": [{
-                        "id": "input_snmptrap_1",
-                        "type": "input",
-                        "plugin": "snmptrap",
-                        "config": trap_input_config
-                    }],
-                    "filter": [
-                        {
-                            "id": "filter_mutate_trap_1",
-                            "type": "filter",
-                            "plugin": "mutate",
-                            "config": {
-                                "add_field": {
-                                    "[event][category]": "traps"
-                                }
-                            }
-                        }
-                    ],
-                    "output": _generate_output(input_data, network, snmp_type="traps")
-                }
+                # Build trap pipeline components (keystore vs inline credentials
+                # is decided by the network's deployment/credential mode).
+                trap_components = _build_trap_components(network)
 
                 # Generate new trap pipeline configuration
                 new_trap_config = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
@@ -1063,10 +1715,15 @@ def GetDeployDiff(request):
                         'action': 'delete'
                     })
 
+        # ---- Agent-mode networks: compare generated configs vs Django records ----
+        network_diffs.extend(_compute_agent_network_diffs(networks, profile_cache))
+
         # Check for orphaned pipelines that will be deleted
         # Build a set of expected pipeline names
         expected_pipelines = set()
         for network in networks:
+            if network.deployment_mode == 'AGENT':
+                continue
             if network.connection:
                 # Add per-template polling pipelines
                 devices = Device.objects.filter(network=network).select_related('device_template')
@@ -1086,6 +1743,8 @@ def GetDeployDiff(request):
         # Check each connection for orphaned pipelines
         connections_checked = set()
         for network in networks:
+            if network.deployment_mode == 'AGENT':
+                continue
             if network.connection and network.connection.id not in connections_checked:
                 connections_checked.add(network.connection.id)
                 conn_id = network.connection.id
@@ -1110,12 +1769,75 @@ def GetDeployDiff(request):
                                     'new': '',
                                     'pipeline_type': 'orphaned',
                                     'action': 'delete',
+                                    'connection_id': conn_id,
+                                    'destination_type': 'cpm',
+                                    'destination_name': network.connection.name,
                                     'note': 'Pipeline no longer matches any configured network/template'
                                 })
                 except Exception as e:
                     # Connection error or ES error - skip orphan detection for this connection
                     logger.warning(f"Could not check for orphaned pipelines on connection {conn_id}: {str(e)}")
         
+        # Enrich centralized (CPM) diff entries with destination + connection info
+        # and, for keystore-credential-mode networks, the ${KEY} names the operator
+        # must add manually via logstash-keystore. Agent-mode entries already carry
+        # their destination from _compute_agent_network_diffs.
+        _ref_re = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
+        networks_by_name = {n.name: n for n in networks}
+        for d in network_diffs:
+            if d.get('deployment_mode') == 'AGENT':
+                continue
+            net = networks_by_name.get(d.get('network_name'))
+            if net and net.connection:
+                d.setdefault('connection_id', net.connection.id)
+                d.setdefault('destination_type', 'cpm')
+                d.setdefault('destination_name', net.connection.name)
+                if getattr(net, 'credential_mode', 'KEYSTORE') == 'KEYSTORE' and d.get('action') in ('create', 'update'):
+                    keys = sorted(set(_ref_re.findall(d.get('new') or '')))
+                    if keys:
+                        d['manual_keystore_keys'] = keys
+                        d['manual_keystore_values'] = _resolve_manual_keystore_values(keys)
+
+        # ---- Pre-deploy blocking validation ----
+        # These misconfigurations make a correct deploy impossible, so we block the
+        # entire deploy (not just the offending network) and tell the user why.
+        blocking_errors = []
+        _seen_block_msgs = set()
+
+        def _add_block(message, policy_id=None):
+            if message in _seen_block_msgs:
+                return
+            _seen_block_msgs.add(message)
+            entry = {'message': message}
+            if policy_id is not None:
+                entry['policy_id'] = policy_id
+            blocking_errors.append(entry)
+
+        for network in networks:
+            if not _network_has_pipeline_devices(network):
+                continue
+            # Every SNMP pipeline emits an Elasticsearch output, so a network with
+            # no ES connection can never be deployed.
+            if not network.connection:
+                _add_block(
+                    f"Network '{network.name}' no longer has an Elasticsearch connection. "
+                    f"Please assign one before deploying."
+                )
+            if network.deployment_mode == 'AGENT':
+                policy = network.agent_connection.policy if network.agent_connection else None
+                if not policy:
+                    _add_block(
+                        f"Network '{network.name}' is in Agent mode but is not assigned to an "
+                        f"agent policy. Please assign an agent before deploying."
+                    )
+                elif not policy.keystore_password:
+                    _add_block(
+                        f"The policy '{policy.name}' assigned to this agent does not have a "
+                        f"keystore password set. Please set a keystore password for this policy "
+                        f"before deploying.",
+                        policy_id=policy.id,
+                    )
+
         # Check if there are actual changes
         # If user changed config then reverted, indicator may show changes but diff is empty
         from SNMP.models import SNMPDeploymentState
@@ -1147,6 +1869,7 @@ def GetDeployDiff(request):
             'success': True,
             'networks': network_diffs,
             'has_changes': has_actual_changes,
+            'blocking_errors': blocking_errors,
             'connections': [
                 {'id': conn_id, 'name': name}
                 for conn_id, name in connection_name_map.items()
@@ -1176,26 +1899,33 @@ def DeployConfiguration(request):
             pipelines_updated = 0
             pipelines_deleted = 0
             errors = []
-            
-            for diff in cached_plan:
+
+            # Split by deployment mode: Agent-mode entries go to Django records,
+            # Centralized entries go to Elasticsearch CPM.
+            agent_diffs = [d for d in cached_plan if d.get('deployment_mode') == 'AGENT']
+            centralized_diffs = [d for d in cached_plan if d.get('deployment_mode') != 'AGENT']
+
+            for diff in centralized_diffs:
                 pipeline_name = diff.get('pipeline_name')
                 action = diff.get('action')
                 network_name = diff.get('network_name')
+                connection_id = diff.get('connection_id')
                 
                 try:
-                    # Get the network to access its connection
-                    if network_name == 'Orphaned':
-                        # For orphaned pipelines, we need to find which connection they're on
-                        # We'll get the connection from the first network (they should all be on same connection)
-                        network = Network.objects.select_related('connection').first()
-                    else:
-                        network = Network.objects.select_related('connection').get(name=network_name)
+                    # Prefer the connection_id captured at diff time (correct even for
+                    # orphans and networks that were later edited); fall back to a
+                    # name lookup only for older cached plans.
+                    if connection_id is None:
+                        if network_name == 'Orphaned':
+                            network = Network.objects.select_related('connection').first()
+                        else:
+                            network = Network.objects.select_related('connection').get(name=network_name)
+                        if not network or not network.connection:
+                            errors.append(f"Pipeline '{pipeline_name}': No connection found")
+                            continue
+                        connection_id = network.connection.id
                     
-                    if not network or not network.connection:
-                        errors.append(f"Pipeline '{pipeline_name}': No connection found")
-                        continue
-                    
-                    es = get_elastic_connection(network.connection.id)
+                    es = get_elastic_connection(connection_id)
                     
                     if action == 'create' or action == 'update':
                         # Create or update pipeline using helper function
@@ -1232,9 +1962,20 @@ def DeployConfiguration(request):
                     errors.append(f"Pipeline '{pipeline_name}': Network '{network_name}' not found")
                 except Exception as e:
                     errors.append(f"Pipeline '{pipeline_name}': {str(e)}")
+
+            # Apply Agent-mode diffs to Django Pipeline/Keystore records
+            keystore_changed = 0
+            if agent_diffs:
+                agent_result = _deploy_agent_diffs(agent_diffs)
+                pipelines_created += agent_result['created']
+                pipelines_updated += agent_result['updated']
+                pipelines_deleted += agent_result['deleted']
+                keystore_changed += agent_result.get('keystore_changed', 0)
+                errors.extend(agent_result['errors'])
             
             # Build response message
-            if pipelines_created == 0 and pipelines_updated == 0 and pipelines_deleted == 0:
+            if (pipelines_created == 0 and pipelines_updated == 0
+                    and pipelines_deleted == 0 and keystore_changed == 0):
                 if errors:
                     return JsonResponse({
                         'success': False,
@@ -1257,6 +1998,8 @@ def DeployConfiguration(request):
                 message_parts.append(f"{pipelines_updated} pipeline(s) updated")
             if pipelines_deleted > 0:
                 message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
+            if keystore_changed > 0:
+                message_parts.append(f"{keystore_changed} keystore value(s) updated")
             
             message = "Successfully deployed: " + ", ".join(message_parts)
             if errors:
@@ -1303,6 +2046,9 @@ def DeployConfiguration(request):
 
         # Iterate through each network and create/update pipeline
         for network in networks:
+            # Agent-mode networks are deployed to Django records below, not ES CPM
+            if network.deployment_mode == 'AGENT':
+                continue
             try:
                 # Initialize pipeline data structure for this network
                 input_data = {
@@ -1451,58 +2197,9 @@ def DeployConfiguration(request):
                             # Generate trap pipeline name
                             trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
 
-                            # Build trap input configuration
-                            credential = network.credential
-                            trap_input_config = {
-                                "host": "0.0.0.0",
-                                "port": 1662,
-                                "oid_map_field_values": False,
-                                "oid_mapping_format": "dotted_string",
-                                "supported_versions": []
-                            }
-
-                            # Add version-specific configuration
-                            if credential.version in ['1', '2c']:
-                                trap_input_config["supported_versions"].append(credential.version)
-                                if credential.community:
-                                    trap_input_config["community"] = [decrypt_credential(credential.community)]
-                            elif credential.version == '3':
-                                trap_input_config["supported_versions"].append("3")
-                                if credential.security_name:
-                                    trap_input_config["security_name"] = credential.security_name
-                                if credential.auth_protocol:
-                                    trap_input_config["auth_protocol"] = credential.auth_protocol
-                                if credential.auth_pass:
-                                    trap_input_config["auth_pass"] = decrypt_credential(credential.auth_pass)
-                                if credential.priv_protocol:
-                                    trap_input_config["priv_protocol"] = credential.priv_protocol
-                                if credential.priv_pass:
-                                    trap_input_config["priv_pass"] = decrypt_credential(credential.priv_pass)
-                                if credential.security_level:
-                                    trap_input_config["security_level"] = credential.security_level
-
-                            # Build trap pipeline components
-                            trap_components = {
-                                "input": [{
-                                    "id": "input_snmptrap_1",
-                                    "type": "input",
-                                    "plugin": "snmptrap",
-                                    "config": trap_input_config
-                                }],
-                                "filter": [
-                                    {
-                                        "id": "filter_mutate_trap_1",
-                                        "type": "filter",
-                                        "plugin": "mutate",
-                                        "config": {
-                                            "add_field": {
-                                                "[event][category]": "traps"
-                                            }
-                                        }
-                                    }
-                                ],
-                                "output": _generate_output(input_data, network, snmp_type="traps")
-                            }
+                            # Build trap pipeline components (keystore vs inline
+                            # credentials decided by the network's mode).
+                            trap_components = _build_trap_components(network)
 
                             # Generate trap pipeline configuration
                             trap_pipeline_content = ComponentToPipeline(trap_components,
@@ -1616,6 +2313,8 @@ def DeployConfiguration(request):
             # Build a set of expected pipeline names
             expected_pipelines = set()
             for network in networks:
+                if network.deployment_mode == 'AGENT':
+                    continue
                 if network.connection:
                     # Add per-template polling pipelines
                     devices = Device.objects.filter(network=network).select_related('device_template')
@@ -1635,6 +2334,8 @@ def DeployConfiguration(request):
             # Get all pipelines from Elasticsearch for each connection
             connections_checked = set()
             for network in networks:
+                if network.deployment_mode == 'AGENT':
+                    continue
                 if network.connection and network.connection.id not in connections_checked:
                     connections_checked.add(network.connection.id)
                     try:
@@ -1664,8 +2365,23 @@ def DeployConfiguration(request):
         except Exception as cleanup_err:
             errors.append(f"Pipeline cleanup error: {str(cleanup_err)}")
 
+        # Deploy Agent-mode networks to Django Pipeline/Keystore records
+        keystore_changed = 0
+        try:
+            agent_diffs = _compute_agent_network_diffs(networks)
+            if agent_diffs:
+                agent_result = _deploy_agent_diffs(agent_diffs)
+                pipelines_created += agent_result['created']
+                pipelines_updated += agent_result['updated']
+                pipelines_deleted += agent_result['deleted']
+                keystore_changed += agent_result.get('keystore_changed', 0)
+                errors.extend(agent_result['errors'])
+        except Exception as agent_err:
+            errors.append(f"Agent deployment error: {str(agent_err)}")
+
         # Build response message
-        if pipelines_created == 0 and pipelines_updated == 0 and pipelines_deleted == 0:
+        if (pipelines_created == 0 and pipelines_updated == 0
+                and pipelines_deleted == 0 and keystore_changed == 0):
             if errors:
                 return JsonResponse({
                     'success': False,
@@ -1689,6 +2405,8 @@ def DeployConfiguration(request):
             message_parts.append(f"{pipelines_updated} pipeline(s) updated")
         if pipelines_deleted > 0:
             message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
+        if keystore_changed > 0:
+            message_parts.append(f"{keystore_changed} keystore value(s) updated")
 
         message = "Successfully deployed: " + ", ".join(message_parts)
 
@@ -1796,6 +2514,7 @@ def GetDevices(request):
                 'network_name': device.network.name if device.network else None,
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
+                'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
                 'site': device.site,
                 'building': device.building,
                 'room': device.room,
@@ -1840,6 +2559,7 @@ def FindDeviceByHost(request):
                 'network_name':         device.network.name    if device.network       else None,
                 'device_template_id':   device.device_template.id   if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
+                'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
             }
         }, status=200)
     except Exception as e:
@@ -2131,9 +2851,11 @@ def GetOfficialProfile(request, profile_name):
         with open(profile_path, 'r') as f:
             profile_data = json.load(f)
 
+        resolved_name = profile_data.get('name', profile_name)
         return JsonResponse({
             'success': True,
-            'name': profile_data.get('name', profile_name),
+            'name': resolved_name,
+            'display_name': format_display_name(resolved_name),
             'description': profile_data.get('description', ''),
             'vendor': profile_data.get('vendor', ''),
             'product': profile_data.get('product', ''),
@@ -2152,6 +2874,7 @@ def GetProfile(request, profile_name):
         return JsonResponse({
             'success': True,
             'name': profile.name,
+            'display_name': format_display_name(profile.name),
             'description': profile.description,
             'vendor': profile.vendor,
             'product': profile.product,
@@ -2282,17 +3005,11 @@ def GetAllProfiles(request):
         for profile in Profile.objects.all():
             # Determine if it's an official profile (name ends with .json)
             is_official = profile.name.endswith('.json')
-            
-            # Create friendly display name for official profiles
-            if is_official:
-                display_name = profile.name[:-5].replace('_', ' ').title()
-            else:
-                display_name = profile.name
-            
+
             all_profiles.append({
                 'id': profile.id,  # Always use database ID
                 'name': profile.name,
-                'display_name': display_name,
+                'display_name': format_display_name(profile.name),
                 'is_official': is_official,
                 'vendor': profile.vendor or ''
             })
@@ -3410,8 +4127,10 @@ def GetOfficialDeviceTemplate(request, template_name):
                 # We'll just use the name as-is
                 profile_ids.append(profile_name)
 
+        resolved_name = template_data.get('name', template_name)
         return JsonResponse({
-            'name': template_data.get('name', template_name),
+            'name': resolved_name,
+            'display_name': format_display_name(resolved_name),
             'description': template_data.get('description', ''),
             'vendor': template_data.get('vendor', ''),
             'model': template_data.get('model', ''),
@@ -3435,7 +4154,7 @@ def GetDeviceTemplates(request):
             templates_list.append({
                 'id': template.id,
                 'name': template.name,
-                'display_name': template.name.replace('_', ' ').title(),
+                'display_name': format_display_name(template.name),
                 'vendor': template.vendor,
                 'model': template.model,
                 'product': template.product,
@@ -3460,7 +4179,7 @@ def GetDeviceTemplate(request, template_id):
                 {
                     'id': profile.id,
                     'name': profile.name,
-                    'display_name': profile.name[:-5].replace('_', ' ').title() if profile.name.endswith('.json') else profile.name
+                    'display_name': format_display_name(profile.name)
                 }
                 for profile in template.profiles.all()
             ]
@@ -3472,6 +4191,7 @@ def GetDeviceTemplate(request, template_id):
             return JsonResponse({
                 'id': template.id,
                 'name': template.name,
+                'display_name': format_display_name(template.name),
                 'description': template.description,
                 'vendor': template.vendor,
                 'model': template.model,

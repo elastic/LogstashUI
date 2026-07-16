@@ -537,7 +537,7 @@
       profilesHtml = `
         <div class="flex flex-col gap-1.5">
           <span class="text-xs text-gray-500 uppercase tracking-wide font-medium">Profiles</span>
-          <div class="flex flex-col gap-1.5">${profiles.map(p => _chip(p.name, p.action, p.reason)).join('')}</div>
+          <div class="flex flex-col gap-1.5">${profiles.map(p => _chip(formatDisplayName(p.name), p.action, p.reason)).join('')}</div>
         </div>`;
     }
 
@@ -546,7 +546,7 @@
       templateHtml = `
         <div class="flex flex-col gap-1.5">
           <span class="text-xs text-gray-500 uppercase tracking-wide font-medium">Device Template</span>
-          ${_chip(template.name, template.action, template.reason)}
+          ${_chip(formatDisplayName(template.name), template.action, template.reason)}
         </div>`;
     }
 
@@ -562,7 +562,7 @@
 
     let deployHtml = '';
     if (success) {
-      const tplName = template.name ? escapeHtml(template.name) : 'the new template';
+      const tplName = template.name ? escapeHtml(formatDisplayName(template.name)) : 'the new template';
       deployHtml = `
         <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2 min-w-0">
@@ -694,7 +694,7 @@
     card.className = 'bg-gray-900/60 border border-gray-700 rounded-lg overflow-hidden flex flex-col';
     card.innerHTML = `
       <div class="p-3 flex flex-col gap-1.5 flex-1">
-        <span class="text-xs font-semibold text-white font-mono truncate" title="${escapeHtml(profile.name || '')}">${escapeHtml(profile.name || '')}</span>
+        <span class="text-xs font-semibold text-white font-mono truncate" title="${escapeHtml(profile.name || '')}">${escapeHtml(formatDisplayName(profile.name))}</span>
         ${profile.description ? `<span class="text-xs text-gray-400 leading-snug line-clamp-2">${escapeHtml(profile.description)}</span>` : ''}
         ${oidParts ? `<div class="flex items-center gap-0.5 text-xs text-gray-400 flex-wrap mt-0.5">${oidParts}</div>` : ''}
         <button
@@ -711,16 +711,25 @@
     return card;
   }
 
-  function _renderTemplateCard(template) {
+  function _renderTemplateCard(template, newProfileNames) {
     const matchingRules = Array.isArray(template.matching_rules) ? template.matching_rules : [];
     const profiles      = Array.isArray(template.profiles)       ? template.profiles       : [];
+    const knownNewNames = newProfileNames instanceof Set ? newProfileNames : new Set();
 
     const matchingHtml = matchingRules.length
       ? matchingRules.map(r => `<span class="px-1.5 py-0.5 rounded bg-gray-700 text-xs text-gray-300 font-mono">${escapeHtml(r)}</span>`).join(' ')
       : '<span class="text-xs text-gray-500 italic">none</span>';
 
+    const starSvg = `<svg class="w-3 h-3 text-yellow-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+      </svg>`;
+    // A profile referenced by the template that isn't one of the newly-authored
+    // profiles in this response is being reused from the existing catalog.
     const profilesHtml = profiles.length
-      ? profiles.map(p => `<span class="px-1.5 py-0.5 rounded bg-purple-900/40 border border-purple-500/20 text-xs text-purple-300 font-mono">${escapeHtml(p)}</span>`).join(' ')
+      ? profiles.map(p => {
+          const isExisting = !knownNewNames.has(p);
+          return `<span class="px-1.5 py-0.5 rounded bg-purple-900/40 border border-purple-500/20 text-xs text-purple-300 font-mono inline-flex items-center gap-1" ${isExisting ? 'title="Reusing an existing profile from the catalog"' : ''}>${isExisting ? starSvg : ''}${escapeHtml(formatDisplayName(p))}</span>`;
+        }).join(' ')
       : '<span class="text-xs text-gray-500 italic">none</span>';
 
     const meta = [template.vendor, template.product, template.model].filter(Boolean).join(' · ');
@@ -731,7 +740,7 @@
     card.innerHTML = `
       <div class="flex flex-col gap-3">
         <div>
-          <div class="text-base font-semibold text-white font-mono">${escapeHtml(template.name || '')}</div>
+          <div class="text-base font-semibold text-white font-mono">${escapeHtml(formatDisplayName(template.name))}</div>
           ${meta ? `<div class="text-xs text-gray-400 mt-0.5">${escapeHtml(meta)}</div>` : ''}
           ${template.description ? `<div class="text-xs text-gray-300 mt-1 leading-relaxed">${escapeHtml(template.description)}</div>` : ''}
         </div>
@@ -779,7 +788,8 @@
     const templateSection = document.getElementById('aiTemplateTemplateSection');
     if (parsed.device_template && templateSection) {
       templateSection.classList.remove('hidden');
-      _renderTemplateCard(parsed.device_template);
+      const newProfileNames = new Set(profiles.map(p => p.name));
+      _renderTemplateCard(parsed.device_template, newProfileNames);
     }
 
     // Show the structured panel

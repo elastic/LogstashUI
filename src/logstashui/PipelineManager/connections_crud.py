@@ -320,13 +320,23 @@ def GetPipelines(request, connection_id):
                     except Exception:
                         formatted_date = last_modified_str  # Fallback to original if parsing fails
 
+                # Infer SNMP management for centralized pipelines from the
+                # naming convention + [MANAGED] tag (no managed_by column in ES).
+                description = pipeline_data.get("description", "")
+                inferred_managed_by = (
+                    'snmp'
+                    if pipeline_name.startswith('snmp-') and '[MANAGED]' in description
+                    else 'user'
+                )
+
                 logstash_pipelines.append(
                     {
                         "es_id": connection.id,
                         "es_name": connection.name,
                         "name": pipeline_name,
-                        "description": pipeline_data.get("description", ""),
-                        "last_modified": formatted_date
+                        "description": description,
+                        "last_modified": formatted_date,
+                        "managed_by": inferred_managed_by,
                     }
                 )
 
@@ -337,7 +347,7 @@ def GetPipelines(request, connection_id):
         # Fetch pipelines from the associated policy for agent connections
         if connection.policy:
             pipelines = Pipeline.objects.filter(policy=connection.policy).values(
-                'id', 'name', 'description', 'last_updated'
+                'id', 'name', 'description', 'last_updated', 'managed_by'
             )
 
             for p in pipelines:
@@ -357,7 +367,8 @@ def GetPipelines(request, connection_id):
                     "name": p['name'],
                     "description": p['description'] or '',
                     "last_modified": formatted_date,
-                    "policy_id": connection.policy.id  # Add policy_id to each pipeline for delete/clone
+                    "policy_id": connection.policy.id,  # Add policy_id to each pipeline for delete/clone
+                    "managed_by": p['managed_by'],
                 })
 
     context['pipelines'] = logstash_pipelines
@@ -385,7 +396,7 @@ def GetPolicyPipelines(request):
 
         # Get all pipelines for this policy
         pipelines = Pipeline.objects.filter(policy=policy).values(
-            'id', 'name', 'description', 'last_updated'
+            'id', 'name', 'description', 'last_updated', 'managed_by'
         )
 
         pipelines_list = []
@@ -396,7 +407,8 @@ def GetPolicyPipelines(request):
                 'description': p['description'] or '',
                 'last_modified': p['last_updated'].strftime('%Y-%m-%d %H:%M:%S') if p['last_updated'] else 'N/A',
                 'es_id': policy_id,  # Use policy_id as es_id for compatibility with frontend
-                'policy_id': policy_id  # Tells pipeline_list.js to use ls_id= in the editor URL
+                'policy_id': policy_id,  # Tells pipeline_list.js to use ls_id= in the editor URL
+                'managed_by': p['managed_by'],
             })
 
         return JsonResponse({

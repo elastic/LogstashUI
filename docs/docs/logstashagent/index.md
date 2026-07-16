@@ -15,8 +15,8 @@ It enrolls with LogstashUI, persists local agent state, checks in for policy and
 ### Enrollment + Reconciliation Loop
 Enroll with LogstashUI and continuously reconcile desired state to the local Logstash instance.
 
-- **Enrollment mode**: `python src/logstashagent/main.py --enroll=<TOKEN> --logstash-ui-url=<URL>`
-- **Controller mode**: `python src/logstashagent/main.py --run`
+- **Install and enroll**: `sudo ./logstash-agent/logstash-agent install --enroll <TOKEN> --logstash-ui-url <URL>`
+- **Controller mode**: managed automatically by the `logstash-agent` systemd service after installation
 - Agent state includes enrollment identity, policy assignment, and revision tracking
 
 ### Pipeline Management API
@@ -44,69 +44,122 @@ Persist agent identity and encrypted sensitive fields under package-local data s
 
 ### Software
 
-**For Managed Agent mode:**
-- [Python 3.12+](https://www.python.org/downloads/)
-- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
-
-**For Enrolled Controller mode (`--run`):**
-- [Python 3.12+](https://www.python.org/downloads/)
-- Access to managed Logstash settings/log paths
+**For production agent deployment:**
+- Linux (x86-64) — the installer is Linux-only
+- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash) — not required at install time, but the agent will not manage pipelines until Logstash is present and configured
+- Root / sudo access for installation
 - Network reachability to your LogstashUI instance
 
-**For Local Development:**
+**For local development (from source):**
 - [Python 3.12+](https://www.python.org/downloads/)
 - `uv` (recommended) or `pip`
+- See the **[Build Guide](/docs/docs/logstashagent/general/build.md)** for full details
 
 ---
 
-## Quick Start - Agent Mode
+## Quick Start - Install and Enroll
 
 > [!TIP]
-> Use `--run` only after successful enrollment, because controller mode requires persisted enrollment state.
+> Download the latest `logstash-agent-linux-amd64.tar.gz` from the [GitHub releases page](https://github.com/elastic/LogstashAgent/releases) and extract it before running the steps below.
 
-### 1. Install
-
-```bash
-cd LogstashAgent
-uv sync
-```
-
-### 2. Configure
-
-Copy and adjust the example config:
+### 1. Extract the bundle
 
 ```bash
-cp src/logstashagent/config/logstashagent.example.yml src/logstashagent/config/logstashagent.yml
+tar -xzf logstash-agent-linux-amd64.tar.gz
 ```
 
-### 3. Run agent process
+This produces a `logstash-agent/` directory containing the `logstash-agent` executable and its bundled dependencies.
+
+### 2. Install and enroll
+
+Run the installer as root, passing the enrollment token generated from LogstashUI:
 
 ```bash
-python src/logstashagent/main.py
+sudo ./logstash-agent/logstash-agent install \
+  --enroll <BASE64_TOKEN> \
+  --logstash-ui-url http://<logstashui-host>:8080 \
+  --yes
 ```
 
-By default this starts the agent service (including management API) on `0.0.0.0:9650` unless overridden in config.
+The installer will:
+- Copy the bundle to `/opt/logstash-agent/bin/`
+- Create a symlink at `/usr/local/bin/logstash-agent` (or `/usr/bin/` on RHEL)
+- Write a config file to `/etc/logstash-agent/logstash-agent.yml`
+- Register and start the `logstash-agent` systemd service
+- Enroll with LogstashUI
+
+> [!NOTE]
+> If Logstash is not yet installed on the host, the installer will warn you but continue. The agent will be set up and enrolled, but will not manage pipelines until Logstash is installed and the paths in `/etc/logstash-agent/logstash-agent.yml` are correct.
+
+### 3. Enable and start the service
+
+```bash
+sudo systemctl enable logstash-agent
+sudo systemctl start logstash-agent
+```
+
+### 4. Verify
+
+```bash
+sudo systemctl status logstash-agent
+sudo journalctl -u logstash-agent -f
+```
 
 ---
 
-## Enroll and Run Controller
+## Installing Logstash After the Agent
 
-### 1. Enroll the agent
+If you installed the agent on a host where Logstash was not yet present, the agent cannot complete its Logstash-specific setup at install time. You will see this message at the end of installation:
 
-```bash
-python src/logstashagent/main.py --enroll=<BASE64_TOKEN> --logstash-ui-url=http://localhost:8080
+```
+ACTION REQUIRED: Logstash was NOT installed at install time.
+
+You MUST run the following after you install Logstash to
+complete the setup, otherwise you may see issues:
+
+  sudo logstash-agent configure
 ```
 
-### 2. Start controller mode
+Once Logstash is installed, follow these steps to complete setup:
+
+**1. Install Logstash** on the host.
+
+**2. Update the agent config** if Logstash is in a non-standard location:
 
 ```bash
-python src/logstashagent/main.py --run
+sudo nano /etc/logstash-agent/logstash-agent.yml
 ```
 
-### 3. Verify state files
+Update `logstash_binary`, `logstash_settings`, and `logstash_log_path` to match your installation.
 
-- `src/logstashagent/data/state.json`
-- `src/logstashagent/data/.secret_key`
+**3. Run configure** (requires root):
+
+```bash
+sudo logstash-agent configure
+```
+
+This applies:
+- Ownership of `/etc/logstash`, `/var/log/logstash`, and `/usr/share/logstash/data` set to `logstash:logstash` so the agent can manage Logstash configuration
+- `/etc/sudoers.d/logstash-agent` with the required passwordless sudo grants for service management
+- The `logstash-agent` systemd service unit updated to run as the `logstash` user
+
+**4. Restart the service:**
+
+```bash
+sudo systemctl restart logstash-agent
+```
+
+> [!WARNING]
+> Skipping `logstash-agent configure` after installing Logstash will cause the agent to fail to manage pipelines, restart Logstash, or apply policies correctly.
+
+---
+
+## Enrolled Agent State Files
+
+After installation, agent identity and credentials are stored at:
+
+- `/var/lib/logstash-agent/state.json`
+- `/var/lib/logstash-agent/.secret_key`
 
 ---
 
@@ -119,14 +172,17 @@ python src/logstashagent/main.py --run
 
 ## Updating
 
-Pull latest source and resync dependencies:
+Use the built-in upgrade command to download and apply a new release:
 
 ```bash
-git pull
-uv sync
+sudo logstash-agent upgrade --version <NEW_VERSION>
 ```
 
-Then restart the running agent process.
+The upgrade command will:
+1. Download the new release from GitHub (cached to `/var/cache/logstash-agent/`)
+2. Atomically replace the running binary
+3. Restart the `logstash-agent` service
+4. Automatically roll back to the previous version if the new binary fails to start
 
 ---
 

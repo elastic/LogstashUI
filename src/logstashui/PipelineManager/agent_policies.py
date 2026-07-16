@@ -551,6 +551,19 @@ def get_policy_nodes(request):
             is_active=True
         ).order_by('name')
 
+        # CPM involvement is policy-level: the policy's logstash.yml enabling
+        # centralized pipeline management applies to every agent on the policy.
+        from .manager_views import _logstash_yml_cpm_enabled
+        cpm_enabled = _logstash_yml_cpm_enabled(policy.logstash_yml)
+
+        # Per-agent SNMP involvement (networks assigned to this agent connection)
+        from SNMP.models import Network
+        snmp_networks_by_conn = {}
+        for net_name, conn_id in Network.objects.filter(
+            deployment_mode='AGENT', agent_connection__isnull=False
+        ).values_list('name', 'agent_connection_id'):
+            snmp_networks_by_conn.setdefault(conn_id, []).append(net_name)
+
         # Serialize nodes
         nodes_data = []
         now = datetime.now(timezone.utc)
@@ -593,7 +606,9 @@ def get_policy_nodes(request):
                 "status": status,
                 "status_class": status_class,
                 "last_check_in": node.last_check_in.isoformat() if node.last_check_in else None,
-                "agent_version": node.status_blob.get('agent_version') if node.status_blob else None
+                "agent_version": node.status_blob.get('agent_version') if node.status_blob else None,
+                "cpm_enabled": cpm_enabled,
+                "snmp_networks": sorted(snmp_networks_by_conn.get(node.id, [])),
             })
 
         return JsonResponse({

@@ -122,6 +122,7 @@ function renderPipelineList(esId) {
         row.innerHTML = `
             <td class="px-4 py-2">
                 <a href="/ConnectionManager/Pipelines/Editor/?${pipeline.policy_id ? 'ls_id=' + escapeHtml(pipeline.policy_id) : 'es_id=' + escapeHtml(pipeline.es_id)}&pipeline=${escapeHtml(pipeline.name)}" class="text-blue-500 hover:underline">${escapeHtml(pipeline.name)}</a>
+                ${pipeline.managed_by === 'snmp' ? `<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Managed by SNMP — changes may be overwritten on the next SNMP deploy">SNMP</span>` : ''}
             </td>
             <td class="px-4 py-2 text-gray-300">
                 ${pipeline.description ? escapeHtml(pipeline.description).substring(0, 80) + (pipeline.description.length > 80 ? '...' : '') : '<span class="text-gray-500 italic">No description</span>'}
