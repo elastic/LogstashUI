@@ -1819,6 +1819,11 @@ def GetDeployDiff(request):
                 if network.discovery_enabled:
                     expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
         
+        # Pipelines already scheduled for an explicit delete by the per-network
+        # branches above (e.g. discovery/traps toggled off). Exclude these from
+        # the orphan scan so the same pipeline doesn't get two delete entries.
+        already_in_diff = {d['pipeline_name'] for d in network_diffs}
+
         # Check each connection for orphaned pipelines
         connections_checked = set()
         for network in networks:
@@ -1839,7 +1844,7 @@ def GetDeployDiff(request):
                         if pipeline_name.startswith("snmp-"):
                             description = pipeline_data.get('description', '')
                             
-                            if '[MANAGED]' in description and pipeline_name not in expected_pipelines:
+                            if '[MANAGED]' in description and pipeline_name not in expected_pipelines and pipeline_name not in already_in_diff:
                                 # This is an orphaned pipeline - add to diffs as delete
                                 network_diffs.append({
                                     'network_name': 'Orphaned',
