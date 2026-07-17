@@ -124,13 +124,11 @@ python src/logstashagent/main.py --run
 ## Docker Build Notes
 
 The Dockerfile:
-- Starts from the official Logstash 9.3.1 image
-- Compiles Python 3.12 from source (microdnf only provides Python 3.9)
+- Starts from the official Logstash image — see the [Compatibility Matrix](/docs/docs/logstashui/compatibility.md) for the supported version
+- Installs Python 3.12 via `microdnf`
 - Installs dependencies using `uv` for faster resolution
 - Copies the entire `src/` directory for proper package structure
 - Sets `PYTHONPATH=/app/src` for module imports
-
-Build time is approximately 5-10 minutes due to Python compilation.
 
 ---
 

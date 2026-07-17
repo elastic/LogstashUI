@@ -8,12 +8,15 @@ The `logstashagent.yml` file configures the LogstashAgent component, which is re
 
 ## File Location
 
-The configuration file should be placed in the LogstashAgent directory:
+The configuration file lives under the source package:
 
 ```
 LogstashAgent/
-├── logstashagent.yml
 ├── src/
+│   └── logstashagent/
+│       └── config/
+│           ├── logstashagent.example.yml
+│           └── logstashagent.yml
 └── ...
 ```
 

@@ -135,13 +135,18 @@ Update `logstash_binary`, `logstash_settings`, and `logstash_log_path` to match 
 **3. Run configure** (requires root):
 
 ```bash
-sudo logstash-agent configure
+sudo logstash-agent configure --yes
 ```
 
 This applies:
 - Ownership of `/etc/logstash`, `/var/log/logstash`, and `/usr/share/logstash/data` set to `logstash:logstash` so the agent can manage Logstash configuration
 - `/etc/sudoers.d/logstash-agent` with the required passwordless sudo grants for service management
 - The `logstash-agent` systemd service unit updated to run as the `logstash` user
+
+`configure` is safe to re-run at any time — for example, if you change the Logstash installation path in `/etc/logstash-agent/logstash-agent.yml`, run `configure` again to re-apply the correct permissions before restarting the service.
+
+> [!NOTE]
+> Omit `--yes` to be prompted for confirmation before configure proceeds.
 
 **4. Restart the service:**
 
@@ -175,7 +180,7 @@ After installation, agent identity and credentials are stored at:
 Use the built-in upgrade command to download and apply a new release:
 
 ```bash
-sudo logstash-agent upgrade --version <NEW_VERSION>
+sudo logstash-agent upgrade --version <NEW_VERSION> --yes
 ```
 
 The upgrade command will:
@@ -183,6 +188,34 @@ The upgrade command will:
 2. Atomically replace the running binary
 3. Restart the `logstash-agent` service
 4. Automatically roll back to the previous version if the new binary fails to start
+
+> [!NOTE]
+> Omit `--yes` to be prompted for confirmation before the upgrade proceeds.
+
+---
+
+## Uninstalling
+
+To remove LogstashAgent from a host:
+
+```bash
+sudo logstash-agent uninstall --yes
+```
+
+This removes:
+- Binary: `/opt/logstash-agent/`
+- Symlink: `/usr/local/bin/logstash-agent`
+- Config: `/etc/logstash-agent/`
+- Systemd service: `/etc/systemd/system/logstash-agent.service`
+
+Agent state and logs are **preserved by default** at `/var/lib/logstash-agent/` and `/var/log/logstash-agent/`. To remove those as well, add the `--purge` flag:
+
+```bash
+sudo logstash-agent uninstall --purge --yes
+```
+
+> [!NOTE]
+> Omit `--yes` to be prompted for confirmation before uninstallation proceeds.
 
 ---
 
