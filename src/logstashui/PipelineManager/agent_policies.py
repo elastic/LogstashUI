@@ -11,49 +11,31 @@ from Common.decorators import require_admin_role
 from datetime import datetime, timezone
 
 import json
-import secrets
-import base64
 import logging
 
 logger = logging.getLogger(__name__)
 
-@require_admin_role
-def generate_enrollment_token(request):
+def _strip_nonuser_from_snapshot(snapshot, nonuser_pipeline_names, nonuser_key_names):
     """
-    Generate an enrollment token for Logstash Agent
-    Token contains: enrollment token only (logstashui URL provided via command-line)
+    Return a copy of a revision snapshot with pipeline/keystore entries whose
+    names are currently managed by a non-user subsystem (e.g. SNMP) removed.
+
+    Revision snapshots taken before the user-only allowlist may have captured
+    SNMP artifacts. Stripping them on read keeps diffs/change-counts honest
+    without needing to rewrite historical revision records.
     """
-    if request.method != 'POST':
-        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
-
-    try:
-        data = json.loads(request.body)
-        policy_name = data.get('policy_name', 'Default')
-
-        # Generate a secure random enrollment token
-        enrollment_token = secrets.token_urlsafe(32)
-
-        # Create token payload (only enrollment_token, no URL)
-        token_payload = {
-            "enrollment_token": enrollment_token,
-        }
-
-        # Encode as base64
-        json_string = json.dumps(token_payload)
-        encoded_token = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
-
-        logger.info(f"User '{request.user.username}' generated enrollment token for policy '{policy_name}'")
-
-        return JsonResponse({
-            "success": True,
-            "enrollment_token": encoded_token,
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
-    except Exception as e:
-        logger.error(f"Error generating enrollment token: {str(e)}")
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
+    if not snapshot:
+        return snapshot
+    cleaned = dict(snapshot)
+    cleaned['pipelines'] = [
+        p for p in snapshot.get('pipelines', [])
+        if p.get('name') not in nonuser_pipeline_names
+    ]
+    cleaned['keystore'] = [
+        e for e in snapshot.get('keystore', [])
+        if e.get('key_name') not in nonuser_key_names
+    ]
+    return cleaned
 
 
 @require_admin_role
@@ -92,8 +74,11 @@ def deploy_policy(request):
             'settings_path': policy.settings_path,
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
-            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
-            'keystore': list(policy.keystore_entries.values('key_name', 'key_value')),
+            # Agent policies own ONLY user-authored artifacts. SNMP (and any
+            # future managed subsystem) is deployed on its own channel and must
+            # never enter policy revisions/rollback history.
+            'pipelines': list(policy.pipelines.filter(managed_by='user').values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
+            'keystore': list(policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')),
             'keystore_password_hash': policy.keystore_password_hash
         }
 
@@ -146,7 +131,8 @@ def get_policy_diff(request):
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
 
-        # Get current policy state
+        # Get current policy state (user-authored artifacts only; SNMP/managed
+        # artifacts live on their own channel and are never part of the policy).
         current_state = {
             'logstash_yml': policy.logstash_yml,
             'jvm_options': policy.jvm_options,
@@ -154,17 +140,29 @@ def get_policy_diff(request):
             'settings_path': policy.settings_path,
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
-            'pipelines': list(policy.pipelines.values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
-            'keystore': list(policy.keystore_entries.values('key_name', 'key_value')),
+            'pipelines': list(policy.pipelines.filter(managed_by='user').values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
+            'keystore': list(policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')),
             'keystore_password_hash': policy.keystore_password_hash
         }
+
+        # Names of non-user artifacts currently on the policy. Older revision
+        # snapshots may have captured these before the allowlist existed; strip
+        # them from the previous state so the diff doesn't show phantom removals.
+        nonuser_pipeline_names = set(
+            policy.pipelines.exclude(managed_by='user').values_list('name', flat=True)
+        )
+        nonuser_key_names = set(
+            policy.keystore_entries.exclude(managed_by='user').values_list('key_name', flat=True)
+        )
 
         # Get last revision (if any)
         last_revision = policy.revisions.first()  # Already ordered by -revision_number
 
         if last_revision:
             # Compare with last revision
-            previous_state = last_revision.snapshot_json
+            previous_state = _strip_nonuser_from_snapshot(
+                last_revision.snapshot_json, nonuser_pipeline_names, nonuser_key_names
+            )
             revision_number = last_revision.revision_number
         else:
             # No previous revision - compare with empty state
@@ -249,9 +247,19 @@ def get_policy_change_count(request):
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
 
+        # Names of non-user artifacts to ignore on both sides (SNMP etc.).
+        nonuser_pipeline_names = set(
+            policy.pipelines.exclude(managed_by='user').values_list('name', flat=True)
+        )
+        nonuser_key_names = set(
+            policy.keystore_entries.exclude(managed_by='user').values_list('key_name', flat=True)
+        )
+
         last_revision = policy.revisions.first()
         if last_revision:
-            prev = last_revision.snapshot_json
+            prev = _strip_nonuser_from_snapshot(
+                last_revision.snapshot_json, nonuser_pipeline_names, nonuser_key_names
+            )
         else:
             prev = {
                 'logstash_yml': '', 'jvm_options': '', 'log4j2_properties': '',
@@ -268,10 +276,10 @@ def get_policy_change_count(request):
         if policy.log4j2_properties != prev.get('log4j2_properties', ''):
             count += 1
 
-        # Pipelines: compare sorted list of {name, lscl}
+        # Pipelines: compare sorted list of {name, lscl} (user-authored only)
         curr_pipelines = sorted(
             [{'name': p['name'], 'lscl': p['lscl']}
-             for p in policy.pipelines.values('name', 'lscl')],
+             for p in policy.pipelines.filter(managed_by='user').values('name', 'lscl')],
             key=lambda p: p['name']
         )
         prev_pipelines = sorted(
@@ -286,7 +294,7 @@ def get_policy_change_count(request):
         # Keystore: compare by key names and encrypted values in snapshot
         curr_keystore = sorted(
             [{'key_name': e['key_name'], 'key_value': e['key_value']}
-             for e in policy.keystore_entries.values('key_name', 'key_value')],
+             for e in policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')],
             key=lambda e: e['key_name']
         )
         prev_keystore = sorted(
@@ -331,8 +339,9 @@ def get_keystore_entries(request):
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
 
-        # Get all keystore entries for this policy
-        entries = Keystore.objects.filter(policy=policy)
+        # User-authored keystore entries only. SNMP/managed secrets are
+        # provisioned automatically and are never shown or edited here.
+        entries = Keystore.objects.filter(policy=policy, managed_by='user')
 
         # Serialize entries
         entries_data = []

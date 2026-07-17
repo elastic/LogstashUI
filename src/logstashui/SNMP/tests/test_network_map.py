@@ -17,6 +17,8 @@ from SNMP.network_map import (
     convert_adjacency_to_graph,
     get_networks_list,
     get_network_map_data,
+    get_cdp_adjacencies,
+    get_edge_interface_detail,
 )
 from SNMP.models import Network, Device, Credential
 from PipelineManager.models import Connection
@@ -390,3 +392,227 @@ class TestGetNetworkMapData:
         assert response.status_code == 500
         data = json.loads(response.content)
         assert data['success'] is False
+
+
+# ===========================================================================
+# get_cdp_adjacencies
+# ===========================================================================
+
+@pytest.mark.django_db
+class TestGetCdpAdjacencies:
+    """
+    get_cdp_adjacencies queries ES for CDP/LLDP neighbor data.
+    All ES I/O is mocked; only the Django ORM layer is real.
+    """
+
+    def _empty_cdp_response(self):
+        """ES response with no CDP buckets."""
+        return {'aggregations': {'cdp_adjacencies': {'buckets': []}}}
+
+    def _cdp_response(self, host_sysname, table_index, neighbor_device_id, neighbor_port,
+                      polled_address='10.0.0.1', network_name=''):
+        """Minimal ES response with one CDP bucket."""
+        return {
+            'aggregations': {
+                'cdp_adjacencies': {
+                    'buckets': [
+                        {
+                            'key': {'host_name': host_sysname, 'cdp_row_index': table_index},
+                            'latest': {
+                                'hits': {
+                                    'hits': [
+                                        {
+                                            '_source': {
+                                                'host': {
+                                                    'sysname': host_sysname,
+                                                    'polled_address': polled_address,
+                                                    'hostname': '',
+                                                },
+                                                'network': {
+                                                    'name': network_name,
+                                                    'neighbor': {
+                                                        'index': table_index,
+                                                        'device_id': neighbor_device_id,
+                                                        'port': neighbor_port,
+                                                        'platform': 'Cisco IOS',
+                                                        'capabilities': 'Switch',
+                                                        'address': '10.0.0.2',
+                                                        'version': '15.2',
+                                                    }
+                                                },
+                                                'event': {'category': 'network.neighbor'},
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+
+    def test_no_networks_returns_failure(self):
+        result = get_cdp_adjacencies()
+        assert result['success'] is False
+        assert 'adjacency_table' in result
+
+    def test_network_without_connection_not_queried(self, test_credential, db):
+        Network.objects.create(
+            name='No Conn',
+            network_range='10.99.0.0/24',
+            discovery_credential=test_credential,
+            interval=30,
+            connection=None,
+        )
+        result = get_cdp_adjacencies()
+        assert result['success'] is False
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_empty_cdp_response_returns_empty_adjacency(self, mock_get_es, test_network):
+        mock_es = MagicMock()
+        mock_es.search.return_value = self._empty_cdp_response()
+        mock_get_es.return_value = mock_es
+
+        result = get_cdp_adjacencies()
+        assert result['success'] is True
+        assert result['adjacency_table'] == {}
+        assert result['errors'] is None
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_cdp_data_populates_adjacency_table(self, mock_get_es, test_network, test_device):
+        mock_es = MagicMock()
+        mock_es.search.side_effect = [
+            self._cdp_response(
+                host_sysname='switch-a',
+                table_index='1.1',
+                neighbor_device_id='switch-b',
+                neighbor_port='Gi0/2',
+                polled_address='10.0.0.1',
+                network_name='NM Test Network (10.0.0.0/24)',
+            ),
+            {'hits': {'hits': []}},   # interface name lookup returns nothing
+        ]
+        mock_get_es.return_value = mock_es
+
+        result = get_cdp_adjacencies()
+        assert result['success'] is True
+        # adjacency table is non-empty
+        assert result['adjacency_table']
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_es_error_recorded_in_errors_list(self, mock_get_es, test_network):
+        mock_get_es.side_effect = Exception('ES down')
+        result = get_cdp_adjacencies()
+        assert result['success'] is True
+        assert result['errors'] is not None
+        assert len(result['errors']) == 1
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_network_id_filter_restricts_scope(self, mock_get_es, test_network):
+        mock_es = MagicMock()
+        mock_es.search.return_value = self._empty_cdp_response()
+        mock_get_es.return_value = mock_es
+
+        result = get_cdp_adjacencies(network_ids=[test_network.id])
+        assert result['success'] is True
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_outer_exception_returns_failure(self, mock_get_es, test_network):
+        # Trigger the outer try/except by making Network.objects.filter raise
+        with patch('SNMP.network_map.Network.objects') as mock_objs:
+            mock_objs.filter.side_effect = Exception('DB error')
+            result = get_cdp_adjacencies()
+        assert result['success'] is False
+        assert 'error' in result
+
+
+# ===========================================================================
+# get_edge_interface_detail
+# ===========================================================================
+
+@pytest.mark.django_db
+class TestGetEdgeInterfaceDetail:
+
+    @pytest.fixture
+    def rf(self):
+        from django.test import RequestFactory
+        return RequestFactory()
+
+    def test_missing_source_returns_400(self, rf):
+        request = rf.get('/SNMP/GetEdgeInterfaceDetail/')
+        response = get_edge_interface_detail(request)
+        assert response.status_code == 400
+        data = json.loads(response.content)
+        assert data['success'] is False
+
+    def test_missing_source_iface_returns_400(self, rf):
+        request = rf.get('/SNMP/GetEdgeInterfaceDetail/?source=switch-a')
+        response = get_edge_interface_detail(request)
+        assert response.status_code == 400
+
+    def test_no_es_connections_returns_400(self, rf):
+        request = rf.get(
+            '/SNMP/GetEdgeInterfaceDetail/?source=switch-a&source_iface=Gi0/1'
+        )
+        response = get_edge_interface_detail(request)
+        assert response.status_code == 400
+        data = json.loads(response.content)
+        assert data['success'] is False
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_returns_interface_data_for_source(self, mock_get_es, rf, test_network):
+        mock_es = MagicMock()
+        mock_es.search.return_value = {
+            'hits': {
+                'hits': [
+                    {'_source': {'interface': {'name': 'Gi0/1', 'speed': 1000}}}
+                ]
+            }
+        }
+        mock_get_es.return_value = mock_es
+
+        request = rf.get(
+            '/SNMP/GetEdgeInterfaceDetail/'
+            '?source=switch-a&source_iface=Gi0/1'
+            '&target=switch-b&target_iface=Gi0/2'
+        )
+        response = get_edge_interface_detail(request)
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['source']['sysname'] == 'switch-a'
+        assert data['source']['iface_name'] == 'Gi0/1'
+        assert data['target']['sysname'] == 'switch-b'
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_no_hits_returns_none_interface(self, mock_get_es, rf, test_network):
+        mock_es = MagicMock()
+        mock_es.search.return_value = {'hits': {'hits': []}}
+        mock_get_es.return_value = mock_es
+
+        request = rf.get(
+            '/SNMP/GetEdgeInterfaceDetail/'
+            '?source=unknown-device&source_iface=Gi0/1'
+        )
+        response = get_edge_interface_detail(request)
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['source']['interface'] is None
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_es_exception_on_lookup_still_returns_200(self, mock_get_es, rf, test_network):
+        mock_es = MagicMock()
+        mock_es.search.side_effect = Exception('ES lookup failed')
+        mock_get_es.return_value = mock_es
+
+        request = rf.get(
+            '/SNMP/GetEdgeInterfaceDetail/'
+            '?source=switch-a&source_iface=Gi0/1'
+        )
+        response = get_edge_interface_detail(request)
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['source']['interface'] is None

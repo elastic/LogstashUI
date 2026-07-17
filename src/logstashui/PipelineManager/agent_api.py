@@ -17,6 +17,8 @@ from cryptography.fernet import Fernet
 
 from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken
 
+from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +33,25 @@ def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
     return Fernet(key).encrypt(plaintext.encode("utf-8")).decode("utf-8")
 
 
-def _build_snmp_changes(policy, raw_api_key, agent_snmp_pipelines, agent_snmp_keystore):
+def _build_snmp_changes(connection, policy, raw_api_key, agent_snmp_pipelines, agent_snmp_keystore):
     """
     Compute the SNMP-managed pipeline/keystore delta between the agent's current
-    state (hash maps) and the policy's SNMP-managed records.
+    state (hash maps) and the SNMP records THIS agent is responsible for.
 
     SNMP-managed pipelines/keystore entries are delivered independently of the
     policy revision number so that SNMP deploys never touch policy revision
     history. Comparison uses pre-computed hashes (cheap dict diff).
 
+    Scoping is per-agent, never per-policy: a network's pipelines belong to
+    exactly one agent (Network.agent_connection), even though many networks can
+    share one agent and many agents can share one base policy. Delivering the
+    whole policy's SNMP records to every agent on it would make sibling agents
+    poll the same devices (duplicate data), so we restrict delivery to the
+    pipelines/keys owned by this agent's own networks.
+
     Args:
-        policy: the agent's assigned Policy
+        connection: the agent Connection checking in
+        policy: the agent's assigned Policy (holds the SNMP records)
         raw_api_key: the agent's raw API key (for encrypting keystore values)
         agent_snmp_pipelines: {pipeline_name: pipeline_hash} reported by the agent
         agent_snmp_keystore: {key_name: kv_hash} reported by the agent
@@ -52,8 +62,15 @@ def _build_snmp_changes(policy, raw_api_key, agent_snmp_pipelines, agent_snmp_ke
     agent_snmp_pipelines = agent_snmp_pipelines or {}
     agent_snmp_keystore = agent_snmp_keystore or {}
 
-    snmp_pipelines = policy.pipelines.filter(managed_by="snmp")
-    snmp_keystore = policy.keystore_entries.filter(managed_by="snmp")
+    own_pipeline_names = agent_snmp_pipeline_names(connection)
+    own_key_names = agent_snmp_keystore_keys(connection)
+
+    snmp_pipelines = policy.pipelines.filter(
+        managed_by="snmp", name__in=own_pipeline_names
+    )
+    snmp_keystore = policy.keystore_entries.filter(
+        managed_by="snmp", key_name__in=own_key_names
+    )
 
     pipeline_changes = {"set": {}, "delete": []}
     expected_pipeline_names = set()
@@ -93,6 +110,19 @@ def _build_snmp_changes(policy, raw_api_key, agent_snmp_pipelines, agent_snmp_ke
                 keystore_changes["set"][entry.key_name] = _encrypt_for_agent(
                     raw_api_key, plaintext_value
                 )
+            else:
+                # Can't decrypt the stored secret (e.g. app secret/key rotated or
+                # DB corruption). We can't deliver it, so the agent will keep
+                # reporting this key out-of-sync (cheap rollup stays "dirty")
+                # every cycle. Surface it so it's diagnosable rather than a silent
+                # perpetual fetch loop; fix by re-provisioning (redeploy the
+                # network) or removing the entry.
+                logger.warning(
+                    "SNMP keystore entry '%s' on policy '%s' could not be decrypted; "
+                    "cannot deliver to agent. Redeploy the owning network to re-provision it.",
+                    entry.key_name,
+                    policy.name,
+                )
 
     for agent_key_name in agent_snmp_keystore:
         if agent_key_name not in expected_key_names:
@@ -108,6 +138,56 @@ def _build_snmp_changes(policy, raw_api_key, agent_snmp_pipelines, agent_snmp_ke
         "pipelines": pipeline_changes if has_pipeline_changes else {"set": {}, "delete": []},
         "keystore": keystore_changes if has_keystore_changes else {"set": {}, "delete": []},
     }
+
+
+def _managed_rollup(pipelines, keystore):
+    """
+    Canonical single-hash summary of a managed source's pipeline + keystore hash
+    maps, used for the cheap per-source "dirty?" check at check-in (Phase 2).
+
+    MUST stay byte-for-byte identical to the agent's implementation
+    (logstashagent.controller._managed_rollup) so both sides derive the same
+    rollup from the same {name: hash} maps. Built from stored hashes only — no
+    decryption — so it is safe to run on every check-in.
+    """
+    import hashlib
+    parts = []
+    for name in sorted(pipelines or {}):
+        parts.append(f"p:{name}={pipelines[name]}")
+    for name in sorted(keystore or {}):
+        parts.append(f"k:{name}={keystore[name]}")
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
+def _snmp_desired_hashes(connection, policy):
+    """
+    The SNMP pipeline/keystore hash maps THIS agent should have, scoped to its
+    own networks. Uses the SAME scoping/query as _build_snmp_changes() so the
+    cheap rollup check agrees exactly with the delta the fetch would return.
+    No decryption (stored pipeline_hash/kv_hash only).
+    """
+    own_pipeline_names = agent_snmp_pipeline_names(connection)
+    own_key_names = agent_snmp_keystore_keys(connection)
+    pipelines = {
+        p.name: p.pipeline_hash
+        for p in policy.pipelines.filter(managed_by="snmp", name__in=own_pipeline_names)
+    }
+    keystore = {
+        e.key_name: e.kv_hash
+        for e in policy.keystore_entries.filter(managed_by="snmp", key_name__in=own_key_names)
+    }
+    return pipelines, keystore
+
+
+def _snmp_changes_available(connection, policy, agent_rollup):
+    """
+    Cheap check: does this agent's reported SNMP rollup differ from the desired
+    (deployed) SNMP state for its networks? No decryption, no payload building.
+    The actual delta is fetched via GetConfigChanges when this returns True.
+    """
+    desired_pipelines, desired_keystore = _snmp_desired_hashes(connection, policy)
+    expected_rollup = _managed_rollup(desired_pipelines, desired_keystore)
+    return expected_rollup != (agent_rollup or _managed_rollup({}, {}))
 
 
 @csrf_exempt
@@ -267,14 +347,15 @@ def check_in(request):
         if not policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
 
-        # SNMP-managed pipelines/keystore are synced here, independently of the
-        # policy revision number, via a cheap hash comparison.
-        snmp_changes = _build_snmp_changes(
-            policy,
-            raw_api_key,
-            data.get("snmp_pipelines", {}),
-            data.get("snmp_keystore", {}),
-        )
+        # Cheap per-source "dirty?" check (Phase 2). SNMP deltas are NOT built
+        # here anymore (no decryption on check-in); when this flag is set the
+        # agent fetches the actual delta via GetConfigChanges alongside the
+        # policy delta, so both apply in one merged pass. Detection is a rollup
+        # hash compare over stored hashes, independent of the policy revision.
+        managed_state_hashes = data.get("managed_state_hashes", {}) or {}
+        managed_changes_available = {
+            "snmp": _snmp_changes_available(connection, policy, managed_state_hashes.get("snmp")),
+        }
 
         response_payload = {
             "success": True,
@@ -286,9 +367,8 @@ def check_in(request):
             "binary_path": policy.binary_path,
             "restart": should_restart,
             "desired_agent_version": connection.desired_agent_version,
+            "managed_changes_available": managed_changes_available,
         }
-        if snmp_changes is not None:
-            response_payload["snmp_changes"] = snmp_changes
 
         return JsonResponse(response_payload)
 
@@ -363,10 +443,17 @@ def get_config_changes(request):
         }
         # SNMP-managed keystore entries are synced via the check-in loop. Exclude
         # them from "set" here, but keep them in the delete guard (policy_keystore
-        # holds all names) so they are never deleted by this channel. On keystore
-        # password change the physical keystore is recreated with ALL keys below.
+        # holds all names) so they are never deleted by this channel.
         snmp_key_names = set(
             policy.keystore_entries.filter(managed_by="snmp").values_list("key_name", flat=True)
+        )
+        # The policy channel owns ONLY user-authored keys. On a keystore-password
+        # change the physical keystore is rebuilt from scratch, so we must rebuild
+        # it from user keys only -- pushing every policy SNMP key here would leak
+        # sibling agents' secrets (an agent must only ever hold its own networks'
+        # SNMP keys, which arrive separately via the agent-scoped check-in loop).
+        user_key_names = set(
+            policy.keystore_entries.filter(managed_by="user").values_list("key_name", flat=True)
         )
 
         keystore_changes = {"set": {}, "delete": []}
@@ -396,6 +483,7 @@ def get_config_changes(request):
             forced_set = {
                 policy_key_name: _encrypt_for_agent(raw_api_key, policy_key_data["value"])
                 for policy_key_name, policy_key_data in policy_keystore.items()
+                if policy_key_name in user_key_names
             }
             if forced_set or keystore_changes.get("delete"):
                 changes["keystore"] = {"set": forced_set, "delete": keystore_changes.get("delete", [])}
@@ -441,6 +529,19 @@ def get_config_changes(request):
             pipeline_changes if (pipeline_changes["set"] or pipeline_changes["delete"]) else False
         )
 
+        # SNMP-managed deltas ride along in this same fetch (Phase 2). The agent
+        # calls GetConfigChanges whenever check-in flagged policy OR snmp as
+        # dirty, so both are applied together in one merged pass / one restart.
+        # This is where the (agent-scoped) decrypt + re-encrypt happens — only
+        # for changed keys, and only when something is actually dirty.
+        snmp_changes = _build_snmp_changes(
+            connection,
+            policy,
+            raw_api_key,
+            data.get("snmp_pipelines", {}),
+            data.get("snmp_keystore", {}),
+        )
+
         config_statuses = ", ".join(
             [
                 f"logstash_yml={'CHANGED' if changes.get('logstash_yml') else 'unchanged'}",
@@ -467,14 +568,16 @@ def get_config_changes(request):
             f"pipelines(agent={len(agent_pipelines)}, policy={policy_pipelines_qs.count()}, {pipeline_summary})"
         )
 
-        return JsonResponse(
-            {
-                "success": True,
-                "changes": changes,
-                "policy_name": policy.name,
-                "current_revision": policy.current_revision_number,
-            }
-        )
+        response = {
+            "success": True,
+            "changes": changes,
+            "policy_name": policy.name,
+            "current_revision": policy.current_revision_number,
+        }
+        if snmp_changes is not None:
+            response["snmp_changes"] = snmp_changes
+
+        return JsonResponse(response)
 
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)

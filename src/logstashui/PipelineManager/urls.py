@@ -48,8 +48,6 @@ urlpatterns = [
     path("GetPolicyAgentCount/", agent_policies.get_policy_agent_count, name="GetPolicyAgentCount"),
     path("GetPolicyChangeCount/", agent_policies.get_policy_change_count, name="GetPolicyChangeCount"),
     path("DeployPolicy/", agent_policies.deploy_policy, name="DeployPolicy"),
-    path("GenerateEnrollmentToken/", agent_policies.generate_enrollment_token, name="GenerateEnrollmentToken"),
-
     path("Enroll/", agent_api.enroll, name="Enroll"),
     path("CheckIn/", agent_api.check_in, name="CheckIn"),
     path("GetConfigChanges/", agent_api.get_config_changes, name="GetConfigChanges"),

@@ -143,6 +143,49 @@ def es_connection_keystore_entries(connection):
     return entries
 
 
+def snmp_credential_keystore_key_names(credential):
+    """
+    Return the set of keystore key names an SNMP credential's secrets would
+    produce, WITHOUT decrypting anything.
+
+    Names are derived purely from credential id/version/security_level, and
+    presence is tested against the (encrypted) columns being non-empty. This
+    mirrors snmp_credential_keystore_entries() so callers that only need names
+    (e.g. per-check-in scoping) never have to decrypt secrets.
+    """
+    names = set()
+    if credential is None:
+        return names
+
+    if credential.version in ('1', '2c'):
+        if credential.community:
+            names.add(_community_key_name(credential))
+    elif credential.version == '3':
+        if credential.security_level in ('authNoPriv', 'authPriv') and credential.auth_pass:
+            names.add(_auth_pass_key_name(credential))
+        if credential.security_level == 'authPriv' and credential.priv_pass:
+            names.add(_priv_pass_key_name(credential))
+    return names
+
+
+def es_connection_keystore_key_names(connection):
+    """
+    Return the set of keystore key names an Elasticsearch connection's secrets
+    would produce, WITHOUT decrypting anything. Mirrors the presence logic of
+    es_connection_keystore_entries() using the encrypted columns directly.
+    """
+    names = set()
+    if connection is None:
+        return names
+
+    if connection.api_key:
+        names.add(_es_api_key_name(connection))
+    elif connection.username and connection.password:
+        names.add(_es_user_key_name(connection))
+        names.add(_es_password_key_name(connection))
+    return names
+
+
 def _normalize_template_name(name: str) -> str:
     """
     Normalize a device template name so it is safe to use as an Elasticsearch
@@ -196,19 +239,18 @@ def _deduplicate_normalizers(normalizers):
     if not normalizers:
         return []
     
-    seen = []
+    seen = set()
     unique = []
-    
+
     for normalizer in normalizers:
-        # Create a hashable representation of the normalizer
         normalizer_key = (
             normalizer.get('operation'),
             str(normalizer.get('target', {})),
             str(normalizer.get('params', {}))
         )
-        
+
         if normalizer_key not in seen:
-            seen.append(normalizer_key)
+            seen.add(normalizer_key)
             unique.append(normalizer)
     
     return unique
@@ -915,12 +957,11 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     return filter_components
 
 
-def _generate_output(input_data, network_db_object, snmp_type="polling", device_template=None):
+def _generate_output(network_db_object, snmp_type="polling", device_template=None):
     """
     Generate Elasticsearch output configuration with data stream settings.
 
     Args:
-        input_data: Dict containing network and device information
         network_db_object: Network model instance
         snmp_type: Type of SNMP operation - "discovery", "traps", or "polling" (default)
         device_template: Optional DeviceTemplate instance. When provided and

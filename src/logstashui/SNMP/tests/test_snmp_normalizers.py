@@ -507,19 +507,19 @@ class TestScopeQualifiedFilterIds:
         components = _apply_normalizers([self.GET_MULTIPLY, self.TABLE_MULTIPLY])
         self._assert_unique(components)
         ids = [c['id'] for c in components]
-        assert 'normalizer_multiply_get' in ids
-        assert 'normalizer_multiply_table' in ids
-        assert 'normalizer_multiply_get_comment' in ids
-        assert 'normalizer_multiply_table_comment' in ids
+        assert 'normalizer_multiply_get_1' in ids
+        assert 'normalizer_multiply_table_1' in ids
+        assert 'normalizer_multiply_get_comment_1' in ids
+        assert 'normalizer_multiply_table_comment_1' in ids
 
     def test_ratio_get_and_table_scope_ids_are_scope_qualified(self):
         components = _apply_normalizers([self.GET_RATIO, self.TABLE_RATIO])
         self._assert_unique(components)
         ids = [c['id'] for c in components]
-        assert 'normalizer_ratio_get' in ids
-        assert 'normalizer_ratio_table' in ids
-        assert 'normalizer_ratio_get_comment' in ids
-        assert 'normalizer_ratio_table_comment' in ids
+        assert 'normalizer_ratio_get_1' in ids
+        assert 'normalizer_ratio_table_1' in ids
+        assert 'normalizer_ratio_get_comment_1' in ids
+        assert 'normalizer_ratio_table_comment_1' in ids
 
     def test_combined_profile_all_component_ids_unique(self):
         # The exact scenario that triggered the bug: cisco_system_metrics
@@ -531,16 +531,15 @@ class TestScopeQualifiedFilterIds:
         self._assert_unique(components)
         ids = [c['id'] for c in components]
         for expected in (
-            'normalizer_multiply_get',
-            'normalizer_multiply_table',
-            'normalizer_ratio_get',
-            'normalizer_ratio_table',
+            'normalizer_multiply_get_1',
+            'normalizer_multiply_table_1',
+            'normalizer_ratio_get_1',
+            'normalizer_ratio_table_1',
         ):
             assert expected in ids, f"missing generated component: {expected}"
 
     def test_single_get_scope_multiply_keeps_stable_id(self):
-        # A lone get-scope multiply keeps the historical un-suffixed id so the
-        # fix stays behavior-preserving for the common single-scope case.
+        # IDs are always suffixed with _N by _next_id, even on the first call.
         components = _apply_normalizers([self.GET_MULTIPLY])
         ids = [c['id'] for c in components]
-        assert ids == ['normalizer_multiply_get_comment', 'normalizer_multiply_get']
+        assert ids == ['normalizer_multiply_get_comment_1', 'normalizer_multiply_get_1']

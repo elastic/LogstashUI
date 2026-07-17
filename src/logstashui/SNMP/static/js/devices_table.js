@@ -209,6 +209,7 @@ function renderDevices(devices) {
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.network_name ? `
           <div class="flex items-center gap-2 ${device.network_id ? 'cursor-pointer hover:text-blue-400 group' : ''}" ${device.network_id ? `onclick="copyPipelineName(${device.network_id}, '${escapeHtml(device.network_name)}')"` : ''} title="${device.network_id ? 'Click to copy pipeline name' : ''}">
+            <img src="${device.network_deployment_mode === 'AGENT' ? window.logstashAgentIconUrl : window.elasticIconUrl}" class="w-5 h-5 flex-shrink-0" title="${device.network_deployment_mode === 'AGENT' ? 'LogstashAgent' : 'Elasticsearch'}" />
             <span>${escapeHtml(device.network_name)}</span>
             ${device.network_id ? `
               <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">

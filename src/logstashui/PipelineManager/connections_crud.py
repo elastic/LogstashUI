@@ -344,9 +344,21 @@ def GetPipelines(request, connection_id):
             logger.exception("Couldn't connect to Elastic")
 
     else:  # AGENT connection type
-        # Fetch pipelines from the associated policy for agent connections
+        # Fetch pipelines from the associated policy for agent connections.
+        #
+        # An agent hosts (a) every user-authored pipeline on its base policy,
+        # shared across all agents on that policy, plus (b) ONLY the SNMP
+        # pipelines belonging to networks assigned to THIS specific agent.
+        # SNMP pipelines for sibling agents on the same policy are excluded so
+        # each agent sees exactly what it will actually run.
         if connection.policy:
-            pipelines = Pipeline.objects.filter(policy=connection.policy).values(
+            from django.db.models import Q
+            from SNMP.snmp_crud import agent_snmp_pipeline_names
+
+            own_snmp_names = agent_snmp_pipeline_names(connection)
+            pipelines = Pipeline.objects.filter(policy=connection.policy).filter(
+                Q(managed_by='user') | Q(managed_by='snmp', name__in=own_snmp_names)
+            ).values(
                 'id', 'name', 'description', 'last_updated', 'managed_by'
             )
 
@@ -394,8 +406,9 @@ def GetPolicyPipelines(request):
     try:
         policy = Policy.objects.get(pk=policy_id)
 
-        # Get all pipelines for this policy
-        pipelines = Pipeline.objects.filter(policy=policy).values(
+        # The policy tab lists user-authored pipelines only. SNMP/managed
+        # pipelines are surfaced per-agent on the Connections page, never here.
+        pipelines = Pipeline.objects.filter(policy=policy, managed_by='user').values(
             'id', 'name', 'description', 'last_updated', 'managed_by'
         )
 

@@ -197,7 +197,11 @@
 
 </div>
 
-<script>window.isAdmin = {% if user.profile.role == 'admin' %}true{% else %}false{% endif %};</script>
+<script>
+  window.isAdmin = {% if user.profile.role == 'admin' %}true{% else %}false{% endif %};
+  window.logstashAgentIconUrl = "{% static 'images/LogstashAgentIcon.png' %}";
+  window.elasticIconUrl = "{% static 'images/ElasticIcon.png' %}";
+</script>
 <script src="{% static 'js/networks_table.js' %}"></script>
 <script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>

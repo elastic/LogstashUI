@@ -192,6 +192,7 @@ function createNetworkRow(network) {
   tr.innerHTML = `
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
       <div class="flex items-center gap-2 cursor-pointer hover:text-blue-400 group" onclick="copyPipelineName(${network.id}, '${escapeHtml(network.name)}')" title="Click to copy pipeline name">
+        <img src="${network.deployment_mode === 'AGENT' ? window.logstashAgentIconUrl : window.elasticIconUrl}" class="w-5 h-5 flex-shrink-0" title="${network.deployment_mode === 'AGENT' ? 'LogstashAgent' : 'Elasticsearch'}" />
         <span>${escapeHtml(network.name)}</span>
         <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />

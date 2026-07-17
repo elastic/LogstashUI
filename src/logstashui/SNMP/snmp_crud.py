@@ -22,12 +22,14 @@ from .snmp_pipeline_generator import (
     _OFFICIAL_PROFILE_CACHE,
     snmp_credential_keystore_entries,
     es_connection_keystore_entries,
+    snmp_credential_keystore_key_names,
+    es_connection_keystore_key_names,
     _uses_keystore,
 )
 
 from PipelineManager.models import Connection, Pipeline, Keystore
 
-from .models import Credential, Network, Profile, Device, DeviceTemplate
+from .models import Credential, Network, Profile, Device, DeviceTemplate, SNMPDeploymentState
 
 from datetime import datetime, timedelta, timezone
 
@@ -54,7 +56,7 @@ def _resolve_manual_keystore_values(keys):
     Resolve a list of ${KEY} names (extracted from a generated pipeline) back
     to their plaintext credential values, for display in the "manual keystore"
     deploy diff banner. Only used when the network manages its keystore
-    manually — the operator needs the actual values to run `logstash-keystore
+    manually â€” the operator needs the actual values to run `logstash-keystore
     add` on the Logstash node themselves.
 
     Returns {key_name: plaintext_value}, omitting any key that can't be
@@ -158,9 +160,6 @@ def _get_template_pipeline_name(network, template, pipeline_type='polling'):
         return f"snmp-{network_name}-no-template-{pipeline_type}"
 
 
-import traceback
-
-
 def GetCredentials(request):
     """Get all SNMP credentials"""
     try:
@@ -177,17 +176,13 @@ def GetNetworks(request):
     """Get all SNMP networks"""
     try:
         from django.db.models import Count
-        import logging
-        logger = logging.getLogger(__name__)
-        
+
         networks = Network.objects.select_related('connection', 'agent_connection').annotate(
             device_count=Count('devices')
         ).all()
         networks_data = []
         for network in networks:
             namespace_value = getattr(network, 'namespace', 'default')
-            logger.info(f"Network {network.id} namespace: {namespace_value}")
-            
             network_dict = {
                 'id': network.id,
                 'name': network.name,
@@ -206,7 +201,6 @@ def GetNetworks(request):
                 'agent_connection_name': network.agent_connection.name if network.agent_connection else None,
                 'device_count': network.device_count
             }
-            logger.info(f"Network dict: {network_dict}")
             networks_data.append(network_dict)
         return JsonResponse(networks_data, safe=False, status=200)
     except Exception as e:
@@ -251,7 +245,6 @@ def AddCredential(request):
 
         # Mark config as changed: a new secret may need to be provisioned into
         # keystores on the next deploy (Agent/CPM-keystore mode).
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential created successfully!'}, status=200)
@@ -313,7 +306,6 @@ def UpdateCredential(request, credential_id):
 
         # Mark config as changed: a rotated secret changes keystore values even
         # though no pipeline LSCL changes, so the deploy indicator must light up.
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential updated successfully!'}, status=200)
@@ -376,7 +368,6 @@ def DeleteCredential(request, credential_id):
 
         # Mark config as changed: removing a credential may orphan keystore
         # entries that need to be pruned on the next deploy.
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
@@ -571,7 +562,7 @@ def _build_trap_components(network, input_data=None):
                 }
             }
         ],
-        "output": _generate_output(input_data, network, snmp_type="traps")
+        "output": _generate_output(network, snmp_type="traps")
     }
 
 
@@ -627,7 +618,7 @@ def _build_network_pipeline_configs(network, profile_cache=None):
         components = {
             "input": input_components,
             "filter": filter_components,
-            "output": _generate_output(input_data, network, snmp_type="polling", device_template=template)
+            "output": _generate_output(network, snmp_type="polling", device_template=template)
         }
         config = ComponentToPipeline(components, test=False).components_to_logstash_config()
         results.append({
@@ -660,7 +651,7 @@ def _build_network_pipeline_configs(network, profile_cache=None):
         discovery_components = {
             "input": discovery_input_components,
             "filter": discovery_filter_components,
-            "output": _generate_output(discovery_input_data, network, snmp_type="discovery")
+            "output": _generate_output(network, snmp_type="discovery")
         }
         config = ComponentToPipeline(discovery_components, test=False).components_to_logstash_config()
         results.append({
@@ -694,11 +685,103 @@ def _collect_network_keystore_entries(network):
     return entries
 
 
+def _network_keystore_key_names(network):
+    """
+    Names-only mirror of _collect_network_keystore_entries(): the set of
+    keystore key names a network's pipelines reference, WITHOUT decrypting any
+    secret. Kept in lockstep with _collect_network_keystore_entries so scoping
+    never diverges from what actually gets provisioned.
+    """
+    names = set()
+    names.update(es_connection_keystore_key_names(network.connection))
+
+    for device in network.devices.all():
+        if device.credential:
+            names.update(snmp_credential_keystore_key_names(device.credential))
+
+    if network.traps_enabled and network.credential:
+        names.update(snmp_credential_keystore_key_names(network.credential))
+
+    if network.discovery_enabled and network.discovery_credential:
+        names.update(snmp_credential_keystore_key_names(network.discovery_credential))
+
+    return names
+
+
 def _network_has_pipeline_devices(network):
     """True if a network should generate at least one pipeline."""
     has_devices = any(d.credential for d in network.devices.all())
     return has_devices or (network.traps_enabled and network.credential) \
         or (network.discovery_enabled and network.discovery_credential)
+
+
+def _network_pipeline_names(network):
+    """
+    Names-only mirror of _build_network_pipeline_configs(): the set of SNMP
+    pipeline names a single network produces, without regenerating configs.
+    Kept in lockstep with _build_network_pipeline_configs so scoping never
+    diverges from what actually gets deployed.
+    """
+    names = set()
+    devices = list(network.devices.all())
+
+    for template in _get_unique_templates_for_network(devices):
+        template_id = template.id if template else None
+        has_template_devices = any(
+            d.credential and (d.device_template.id if d.device_template else None) == template_id
+            for d in devices
+        )
+        if has_template_devices:
+            names.add(_get_template_pipeline_name(network, template, 'polling'))
+
+    if network.traps_enabled and network.credential:
+        names.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
+
+    if network.discovery_enabled and network.discovery_credential:
+        names.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
+
+    return names
+
+
+def agent_snmp_pipeline_names(connection):
+    """
+    The set of SNMP pipeline names a specific agent should host, unioned across
+    every Agent-mode network assigned to that agent (agent_connection == it).
+
+    Scoping key is the agent, never the policy: multiple networks can share one
+    agent, but a network's pipelines belong to exactly one agent, so agents that
+    merely share a base policy must not receive each other's SNMP pipelines.
+    """
+    if not connection:
+        return set()
+    names = set()
+    networks = Network.objects.filter(
+        agent_connection=connection, deployment_mode='AGENT'
+    ).prefetch_related('devices__credential', 'devices__device_template')
+    for network in networks:
+        names.update(_network_pipeline_names(network))
+    return names
+
+
+def agent_snmp_keystore_keys(connection):
+    """
+    The set of SNMP keystore key names a specific agent needs, unioned across
+    every Agent-mode network assigned to that agent. Same agent-scoping rule as
+    agent_snmp_pipeline_names().
+
+    Derives names WITHOUT decrypting secrets (names come from credential/
+    connection ids + presence of the encrypted columns), so this can run on
+    every check-in without materializing plaintext credentials in memory.
+    """
+    if not connection:
+        return set()
+    keys = set()
+    networks = Network.objects.filter(
+        agent_connection=connection, deployment_mode='AGENT'
+    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related('devices__credential')
+    for network in networks:
+        keys.update(_network_keystore_key_names(network))
+    return keys
 
 
 def _reconcile_policy_snmp_keystore(policy):
@@ -1147,7 +1230,6 @@ def AddNetwork(request):
         network.save()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': network.id, 'message': 'Network created successfully!'}, status=200)
@@ -1214,7 +1296,6 @@ def UpdateNetwork(request, network_id):
         network.save()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': network.id, 'message': 'Network updated successfully!'}, status=200)
@@ -1307,7 +1388,6 @@ def DeleteNetwork(request, network_id):
         network.delete()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         # Build response message
@@ -1370,7 +1450,6 @@ def CheckUndeployedChanges(request):
         JSON with has_changes boolean
     """
     try:
-        from SNMP.models import SNMPDeploymentState
         has_changes = SNMPDeploymentState.has_undeployed_changes()
         
         return JsonResponse({
@@ -1539,7 +1618,7 @@ def GetDeployDiff(request):
                 components = {
                     "input": input_components,
                     "filter": filter_components,
-                    "output": _generate_output(input_data, network, snmp_type="polling", device_template=template)
+                    "output": _generate_output(network, snmp_type="polling", device_template=template)
                 }
 
                 new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
@@ -1663,7 +1742,7 @@ def GetDeployDiff(request):
                 discovery_components = {
                     "input": discovery_input_components,
                     "filter": discovery_filter_components,
-                    "output": _generate_output(input_data, network, snmp_type="discovery")
+                    "output": _generate_output(network, snmp_type="discovery")
                 }
 
                 # Generate new discovery pipeline configuration
@@ -1840,7 +1919,6 @@ def GetDeployDiff(request):
 
         # Check if there are actual changes
         # If user changed config then reverted, indicator may show changes but diff is empty
-        from SNMP.models import SNMPDeploymentState
         has_actual_changes = any(
             diff.get('action') in ['create', 'update', 'delete']
             for diff in network_diffs
@@ -1917,9 +1995,12 @@ def DeployConfiguration(request):
                     # name lookup only for older cached plans.
                     if connection_id is None:
                         if network_name == 'Orphaned':
-                            network = Network.objects.select_related('connection').first()
-                        else:
-                            network = Network.objects.select_related('connection').get(name=network_name)
+                            errors.append(
+                                f"Pipeline '{pipeline_name}': orphaned pipeline has no "
+                                f"connection recorded — remove it manually from Elasticsearch."
+                            )
+                            continue
+                        network = Network.objects.select_related('connection').get(name=network_name)
                         if not network or not network.connection:
                             errors.append(f"Pipeline '{pipeline_name}': No connection found")
                             continue
@@ -2006,7 +2087,6 @@ def DeployConfiguration(request):
                 message += f". Warnings: {'; '.join(errors)}"
             
             # Mark deployment as successful
-            from SNMP.models import SNMPDeploymentState
             from django.utils import timezone
             state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
             state.last_deployment = timezone.now()
@@ -2160,7 +2240,7 @@ def DeployConfiguration(request):
                         components = {
                             "input": input_components,
                             "filter": filter_components,
-                            "output": _generate_output(template_input_data, network, snmp_type="polling", device_template=template)
+                            "output": _generate_output(network, snmp_type="polling", device_template=template)
                         }
 
                         # Generate pipeline configuration
@@ -2258,7 +2338,7 @@ def DeployConfiguration(request):
                             discovery_components = {
                                 "input": discovery_input_components,
                                 "filter": discovery_filter_components,
-                                "output": _generate_output(input_data, network, snmp_type="discovery")
+                                "output": _generate_output(network, snmp_type="discovery")
                             }
 
                             # Generate discovery pipeline configuration
@@ -2414,7 +2494,6 @@ def DeployConfiguration(request):
             message += f". Warnings: {'; '.join(errors)}"
 
         # Mark deployment as successful to clear the indicator
-        from SNMP.models import SNMPDeploymentState
         from django.utils import timezone
         state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
         state.last_deployment = timezone.now()
@@ -2458,7 +2537,7 @@ def GetDevices(request):
             'id', 'name', 'ip_address', 'hostname', 'port', 'retries', 'timeout', 'created_at',
             'site', 'building', 'room',
             'credential__id', 'credential__name',
-            'network__id', 'network__name',
+            'network__id', 'network__name', 'network__deployment_mode',
             'device_template__id', 'device_template__name'
         )
 
@@ -2512,6 +2591,7 @@ def GetDevices(request):
                 'credential_name': device.credential.name if device.credential else None,
                 'network_id': device.network.id if device.network else None,
                 'network_name': device.network.name if device.network else None,
+                'network_deployment_mode': device.network.deployment_mode if device.network else None,
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
                 'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
@@ -2620,7 +2700,6 @@ def AddDevice(request):
         device.save()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         # Note: Profiles are now managed through device templates, not directly on devices
@@ -2694,7 +2773,6 @@ def UpdateDevice(request, device_id):
         device.save()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         # Note: Profiles are now managed through device templates, not directly on devices
@@ -2722,7 +2800,7 @@ def GetDeviceLocationData(request):
       {
         "sites":         ["HQ", ...],                              # all unique non-null site values
         "site_building": [{"site": "HQ", "building": "Bld A"}, ...]  # all (site, building) pairs
-        "full":          [{"site":…, "building":…, "room":…, "latitude":…, "longitude":…}, ...]
+        "full":          [{"site":â€¦, "building":â€¦, "room":â€¦, "latitude":â€¦, "longitude":â€¦}, ...]
       }
     """
     sites = list(
@@ -2797,7 +2875,6 @@ def DeleteDevice(request, device_id):
         device.delete()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
 
         return HttpResponse("""
@@ -3182,7 +3259,7 @@ def GetDiscoveredDevices(request):
         all_discovered_devices = []
         errors = []
 
-        # Calculate time range (last 15 minutes — matches device online status threshold)
+        # Calculate time range (last 15 minutes â€” matches device online status threshold)
         now = datetime.now(timezone.utc)
         fifteen_minutes_ago = now - timedelta(minutes=15)
 
@@ -3322,7 +3399,7 @@ def GetDiscoveredDevices(request):
 
         # Filter out devices already registered in the DB.
         # A polled address lands in host.ip (when it's an IP) or host.hostname
-        # (when it's a hostname) — both stored in the Device model as ip_address
+        # (when it's a hostname) â€” both stored in the Device model as ip_address
         # and hostname respectively. Build one set covering all known addresses
         # then drop any ES result that matches.
         known_addresses = set(
@@ -3347,7 +3424,7 @@ def GetDiscoveredDevices(request):
         })
 
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error in GetDiscoveredDevices")
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -4271,7 +4348,6 @@ def AddDeviceTemplate(request):
                     pass  # Skip profiles that don't exist
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
         
         return JsonResponse({
@@ -4346,7 +4422,6 @@ def UpdateDeviceTemplate(request, template_id):
                     pass  # Skip profiles that don't exist
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
         
         return JsonResponse({
@@ -4376,7 +4451,6 @@ def DeleteDeviceTemplate(request, template_id):
         template.delete()
         
         # Mark config as changed to show deployment indicator
-        from SNMP.models import SNMPDeploymentState
         SNMPDeploymentState.mark_config_changed()
         
         return JsonResponse({
@@ -4411,14 +4485,14 @@ def sync_official_profiles():
 
                 official_key = profile_data.get('official_key')
                 if not official_key:
-                    print(f"Warning: official profile {filename} has no official_key — skipping")
+                    print(f"Warning: official profile {filename} has no official_key â€” skipping")
                     continue
 
-                # 1. Already migrated — find by official_key (fast path, rename-safe)
+                # 1. Already migrated â€” find by official_key (fast path, rename-safe)
                 try:
                     profile = Profile.objects.get(official_key=official_key)
                 except Profile.DoesNotExist:
-                    # 2. Upgrade path — old record exists by name but has no official_key yet
+                    # 2. Upgrade path â€” old record exists by name but has no official_key yet
                     try:
                         profile = Profile.objects.get(name=profile_name, official_key__isnull=True)
                         profile.official_key = official_key
@@ -4432,7 +4506,7 @@ def sync_official_profiles():
                 profile.description = profile_data.get('description', '')
                 profile.vendor = profile_data.get('vendor', 'Any')
                 profile.product = profile_data.get('product', '')
-                # Always reset to a clean placeholder — clears any stale flags such as
+                # Always reset to a clean placeholder â€” clears any stale flags such as
                 # 'is_orphaned' that may have been set during a previous cleanup run.
                 profile.profile_data = {'is_official_placeholder': True}
                 profile.save()
@@ -4460,16 +4534,16 @@ def sync_official_device_templates():
 
                 official_key = template_data.get('official_key')
                 if not official_key:
-                    print(f"Warning: official template {filename} has no official_key — skipping")
+                    print(f"Warning: official template {filename} has no official_key â€” skipping")
                     continue
 
                 display_name = template_data.get('name', template_name)
 
-                # 1. Already migrated — find by official_key (fast path, rename-safe)
+                # 1. Already migrated â€” find by official_key (fast path, rename-safe)
                 try:
                     template = DeviceTemplate.objects.get(official_key=official_key)
                 except DeviceTemplate.DoesNotExist:
-                    # 2. Upgrade path — old record exists by name but has no official_key yet
+                    # 2. Upgrade path â€” old record exists by name but has no official_key yet
                     try:
                         template = DeviceTemplate.objects.get(name=display_name, official_key__isnull=True)
                         template.official_key = official_key
@@ -4489,7 +4563,7 @@ def sync_official_device_templates():
                 template.official = True
                 template.save()
 
-                # Sync profiles — look up by official_key first (rename-proof),
+                # Sync profiles â€” look up by official_key first (rename-proof),
                 # with fallbacks for profiles that haven't been migrated yet or are user-created
                 profile_names = template_data.get('profiles', [])
                 if profile_names:
