@@ -8,8 +8,11 @@ from django.conf import settings
 from .models import Device, DeviceTemplate, Profile, Credential
 from Common.formatters import format_display_name
 import json
+import logging
 import os
 import traceback
+
+logger = logging.getLogger(__name__)
 
 # Import PySNMP asyncio API
 from pysnmp.hlapi.v3arch.asyncio import (
@@ -85,7 +88,7 @@ def _load_profile_data(profile):
             with open(profile_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading official profile {profile_name}: {e}")
+            logger.debug(f"Error loading official profile {profile_name}: {e}")
             return {'get': {}, 'walk': {}, 'table': {}}
     else:
         return profile.profile_data
@@ -470,17 +473,17 @@ def RunSNMPTest(request):
     start_time = time.time()
     
     try:
-        print("=== SNMP Test Started ===")
+        logger.debug("=== SNMP Test Started ===")
         data = json.loads(request.body)
         device_id = data.get('device_id')
         template_id = data.get('template_id')
-        print(f"Device ID: {device_id}, Template ID: {template_id}")
+        logger.debug(f"Device ID: {device_id}, Template ID: {template_id}")
         
         if not device_id:
             return JsonResponse({'success': False, 'error': 'device_id is required'}, status=400)
         
         device = Device.objects.select_related('credential', 'device_template').get(pk=device_id)
-        print(f"Device found: {device.name}, Credential: {device.credential}")
+        logger.debug(f"Device found: {device.name}")
         
         if not device.credential:
             return JsonResponse({'success': False, 'error': 'Device has no credential assigned'}, status=400)
@@ -493,16 +496,16 @@ def RunSNMPTest(request):
             return JsonResponse({'success': False, 'error': 'No template specified and device has no assigned template'}, status=400)
         
         profiles = list(template.profiles.all())
-        print(f"Template: {template.name}, Profiles: {[p.name for p in profiles]}")
+        logger.debug(f"Template: {template.name}, Profiles: {[p.name for p in profiles]}")
         
         if not profiles:
             return JsonResponse({'success': False, 'error': 'Template has no profiles assigned'}, status=400)
         
-        print("Merging profile OIDs...")
+        logger.debug("Merging profile OIDs...")
         merged_oids = _merge_profile_oids(profiles)
-        print(f"Merged OIDs - GET: {len(merged_oids['get'])}, WALK: {len(merged_oids['walk'])}, TABLE: {len(merged_oids['table'])}")
+        logger.debug(f"Merged OIDs - GET: {len(merged_oids['get'])}, WALK: {len(merged_oids['walk'])}, TABLE: {len(merged_oids['table'])}")
         
-        print("Performing SNMP operations...")
+        logger.debug("Performing SNMP operations...")
         
         # Use threading to enforce overall timeout
         import threading
@@ -525,7 +528,7 @@ def RunSNMPTest(request):
         
         if operation_thread.is_alive():
             # Operations took too long, return timeout error
-            print("SNMP operations timed out after 60 seconds")
+            logger.debug("SNMP operations timed out after 60 seconds")
             return JsonResponse({
                 'success': False,
                 'error': 'Test timed out after 60 seconds - device may be unreachable or too slow to respond',
@@ -550,7 +553,7 @@ def RunSNMPTest(request):
             raise exception_container[0]
         
         results = results_container[0]
-        print("SNMP operations completed")
+        logger.debug("SNMP operations completed")
         
         # Collect all error messages and check for authentication failures
         auth_error_count = 0
@@ -616,7 +619,7 @@ def RunSNMPTest(request):
         
         execution_time = time.time() - start_time
         
-        print(f"Auth errors: {auth_error_count}/{total_operations}, has_any_success: {has_any_success}")
+        logger.debug(f"Auth errors: {auth_error_count}/{total_operations}, has_any_success: {has_any_success}")
         
         # If we have authentication errors and no successes, it's an auth failure
         if auth_error_count > 0 and not has_any_success:
@@ -695,9 +698,8 @@ def RunSNMPTest(request):
             'results': results
         }
         
-        print(f"Returning response - success: {response_data['success']}, has_errors: {response_data['has_errors']}")
-        print(f"Response data keys: {list(response_data.keys())}")
-        print("=== SNMP Test Completed ===")
+        logger.debug(f"Returning response - success: {response_data['success']}, has_errors: {response_data['has_errors']}")
+        logger.debug("=== SNMP Test Completed ===")
         
         return JsonResponse(response_data)
         
@@ -707,8 +709,7 @@ def RunSNMPTest(request):
         return JsonResponse({'success': False, 'error': 'Template not found'}, status=404)
     except Exception as e:
         error_trace = traceback.format_exc()
-        print(f"SNMP Test Error: {str(e)}")
-        print(f"Traceback:\n{error_trace}")
+        logger.error(f"SNMP Test Error: {str(e)}\n{error_trace}")
         return JsonResponse({
             'success': False, 
             'error': str(e),
@@ -871,7 +872,7 @@ def RunSNMPWalk(request):
         return JsonResponse({'success': False, 'error': 'Credential not found'}, status=404)
     except Exception as e:
         error_trace = traceback.format_exc()
-        print(f"SNMP Walk Error: {str(e)}\n{error_trace}")
+        logger.error(f"SNMP Walk Error: {str(e)}\n{error_trace}")
         return JsonResponse({
             'success': False,
             'error': str(e),

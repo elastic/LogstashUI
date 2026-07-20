@@ -738,39 +738,56 @@ document.addEventListener('click', function (e) {
   }
 });
 
-// Validate CIDR and show warning for large networks
+// Validate CIDR and show warning/error for large networks.
+// Hard blocks networks larger than /20 (prefix < 20).
+// Warns for networks larger than /24 but within /20 (prefix 20–23).
 function validateNetworkSize() {
   const networkRange = document.getElementById('networkRange').value.trim();
   const errorContainer = document.getElementById('networkErrorContainer');
+  const saveBtn = document.getElementById('networkSaveBtn');
 
-  // Clear any existing warnings
-  const existingWarning = errorContainer.querySelector('.warning-message');
-  if (existingWarning) {
-    existingWarning.remove();
-  }
+  // Clear any existing size messages
+  errorContainer.querySelectorAll('.cidr-size-message').forEach(el => el.remove());
+  if (saveBtn) saveBtn.disabled = false;
 
-  // Check if input matches CIDR format
   const cidrMatch = networkRange.match(/\/(\d+)$/);
-  if (cidrMatch) {
-    const prefix = parseInt(cidrMatch[1]);
+  if (!cidrMatch) return;
 
-    // If prefix is less than 24, it's a large network
-    if (prefix < 24) {
-      const warningDiv = document.createElement('div');
-      warningDiv.className = 'warning-message p-4 mb-4 text-yellow-700 bg-yellow-100 border border-yellow-300 rounded-lg';
-      warningDiv.innerHTML = `
-        <div class="flex items-start">
-          <svg class="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-          </svg>
-          <div>
-            <h3 class="font-bold mb-1">Woooah, that's a big network!</h3>
-            <p class="text-sm">Consider using a /24 or smaller for optimal results.</p>
-          </div>
+  const prefix = parseInt(cidrMatch[1]);
+
+  if (prefix < 20) {
+    // Hard block — network is too large to safely generate a discovery pipeline
+    if (saveBtn) saveBtn.disabled = true;
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'cidr-size-message p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg';
+    errorDiv.innerHTML = `
+      <div class="flex items-start">
+        <svg class="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+        </svg>
+        <div>
+          <h3 class="font-bold mb-1">Network range is too large</h3>
+          <p class="text-sm">Networks larger than /20 are not supported. Please break this network into smaller subnets (/20 or smaller) and add each one separately.</p>
         </div>
-      `;
-      errorContainer.appendChild(warningDiv);
-    }
+      </div>
+    `;
+    errorContainer.prepend(errorDiv);
+  } else if (prefix < 24) {
+    // Warning only — allowed but large
+    const warningDiv = document.createElement('div');
+    warningDiv.className = 'cidr-size-message p-4 mb-4 text-yellow-700 bg-yellow-100 border border-yellow-300 rounded-lg';
+    warningDiv.innerHTML = `
+      <div class="flex items-start">
+        <svg class="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <div>
+          <h3 class="font-bold mb-1">Large network range</h3>
+          <p class="text-sm">Consider using a /24 or smaller for optimal performance.</p>
+        </div>
+      </div>
+    `;
+    errorContainer.prepend(warningDiv);
   }
 }
 
@@ -788,6 +805,15 @@ document.getElementById('networkForm').addEventListener('submit', function (e) {
   e.preventDefault();
 
   const errorContainer = document.getElementById('networkErrorContainer');
+
+  // Reject networks larger than /20 before anything else
+  const networkRangeVal = document.getElementById('networkRange').value.trim();
+  const cidrMatch = networkRangeVal.match(/\/(\d+)$/);
+  if (cidrMatch && parseInt(cidrMatch[1]) < 20) {
+    validateNetworkSize(); // ensure the error banner is visible
+    errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
 
   // Determine deployment mode
   const deploymentMode = document.querySelector('input[name="deployment_mode"]:checked')?.value || 'CENTRALIZED';

@@ -809,6 +809,8 @@ class SNMPDeploymentState(models.Model):
             return True
         
         # Compare timestamps
+        if not state.last_config_change:
+            return False
         return state.last_config_change > state.last_deployment
     
     def __str__(self):

@@ -56,7 +56,7 @@ def _resolve_manual_keystore_values(keys):
     Resolve a list of ${KEY} names (extracted from a generated pipeline) back
     to their plaintext credential values, for display in the "manual keystore"
     deploy diff banner. Only used when the network manages its keystore
-    manually â€” the operator needs the actual values to run `logstash-keystore
+    manually — the operator needs the actual values to run `logstash-keystore
     add` on the Logstash node themselves.
 
     Returns {key_name: plaintext_value}, omitting any key that can't be
@@ -1185,6 +1185,20 @@ def AddNetwork(request):
         # Extract form data
         name = request.POST.get('name')
         network_range = request.POST.get('network_range')
+
+        # Reject networks larger than /20 — discovery IP expansion would OOM
+        import ipaddress as _ipaddress
+        try:
+            _net = _ipaddress.ip_network(network_range or '', strict=False)
+            if _net.prefixlen < 20:
+                return JsonResponse(
+                    {'success': False, 'message': f'Network range {network_range} is too large. '
+                     'Networks larger than /20 are not supported. '
+                     'Please break it into smaller subnets (/20 or smaller).'},
+                    status=400
+                )
+        except ValueError:
+            pass  # Invalid CIDR will be caught by model validation below
         connection_id = request.POST.get('connection')
         agent_connection_id = request.POST.get('agent_connection')
         credential_id = request.POST.get('credential')
@@ -1252,6 +1266,20 @@ def UpdateNetwork(request, network_id):
         # Update fields
         network.name = request.POST.get('name', network.name)
         network.network_range = request.POST.get('network_range', network.network_range)
+
+        # Reject networks larger than /20 — discovery IP expansion would OOM
+        import ipaddress as _ipaddress
+        try:
+            _net = _ipaddress.ip_network(network.network_range or '', strict=False)
+            if _net.prefixlen < 20:
+                return JsonResponse(
+                    {'success': False, 'message': f'Network range {network.network_range} is too large. '
+                     'Networks larger than /20 are not supported. '
+                     'Please break it into smaller subnets (/20 or smaller).'},
+                    status=400
+                )
+        except ValueError:
+            pass  # Invalid CIDR will be caught by model validation below
         network.namespace = request.POST.get('namespace', network.namespace)
         network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
@@ -1465,6 +1493,7 @@ def CheckUndeployedChanges(request):
         })
 
 
+@require_admin_role
 def GetDeployDiff(request):
     """Get diff for all network pipeline configurations"""
     try:
@@ -2805,7 +2834,7 @@ def GetDeviceLocationData(request):
       {
         "sites":         ["HQ", ...],                              # all unique non-null site values
         "site_building": [{"site": "HQ", "building": "Bld A"}, ...]  # all (site, building) pairs
-        "full":          [{"site":â€¦, "building":â€¦, "room":â€¦, "latitude":â€¦, "longitude":â€¦}, ...]
+        "full":          [{"site":…, "building":…, "room":…, "latitude":…, "longitude":…}, ...]
       }
     """
     sites = list(
@@ -3001,6 +3030,7 @@ def AddProfile(request):
             normalizers=normalizers
         )
         profile.save()
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -3039,6 +3069,7 @@ def UpdateProfile(request, profile_name):
             profile.name = new_name
 
         profile.save()
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -3066,6 +3097,7 @@ def DeleteProfile(request, profile_name):
 
         profile = Profile.objects.get(name=profile_name)
         profile.delete()
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -3264,7 +3296,7 @@ def GetDiscoveredDevices(request):
         all_discovered_devices = []
         errors = []
 
-        # Calculate time range (last 15 minutes â€” matches device online status threshold)
+        # Calculate time range (last 15 minutes — matches device online status threshold)
         now = datetime.now(timezone.utc)
         fifteen_minutes_ago = now - timedelta(minutes=15)
 
@@ -3404,7 +3436,7 @@ def GetDiscoveredDevices(request):
 
         # Filter out devices already registered in the DB.
         # A polled address lands in host.ip (when it's an IP) or host.hostname
-        # (when it's a hostname) â€” both stored in the Device model as ip_address
+        # (when it's a hostname) — both stored in the Device model as ip_address
         # and hostname respectively. Build one set covering all known addresses
         # then drop any ES result that matches.
         known_addresses = set(
@@ -4490,18 +4522,18 @@ def sync_official_profiles():
 
                 official_key = profile_data.get('official_key')
                 if not official_key:
-                    print(f"Warning: official profile {filename} has no official_key â€” skipping")
+                    logger.warning(f"Official profile {filename} has no official_key — skipping")
                     continue
 
-                # 1. Already migrated â€” find by official_key (fast path, rename-safe)
+                # 1. Already migrated — find by official_key (fast path, rename-safe)
                 try:
                     profile = Profile.objects.get(official_key=official_key)
                 except Profile.DoesNotExist:
-                    # 2. Upgrade path â€” old record exists by name but has no official_key yet
+                    # 2. Upgrade path — old record exists by name but has no official_key yet
                     try:
                         profile = Profile.objects.get(name=profile_name, official_key__isnull=True)
                         profile.official_key = official_key
-                        print(f"Backfilled official_key for existing profile '{profile_name}'")
+                        logger.debug(f"Backfilled official_key for existing profile '{profile_name}'")
                     except Profile.DoesNotExist:
                         # 3. Genuinely new record
                         profile = Profile(official_key=official_key, name=profile_name)
@@ -4511,13 +4543,13 @@ def sync_official_profiles():
                 profile.description = profile_data.get('description', '')
                 profile.vendor = profile_data.get('vendor', 'Any')
                 profile.product = profile_data.get('product', '')
-                # Always reset to a clean placeholder â€” clears any stale flags such as
+                # Always reset to a clean placeholder — clears any stale flags such as
                 # 'is_orphaned' that may have been set during a previous cleanup run.
                 profile.profile_data = {'is_official_placeholder': True}
                 profile.save()
 
             except Exception as e:
-                print(f"Error syncing official profile {filename}: {e}")
+                logger.error(f"Error syncing official profile {filename}: {e}")
                 continue
 
 
@@ -4539,20 +4571,20 @@ def sync_official_device_templates():
 
                 official_key = template_data.get('official_key')
                 if not official_key:
-                    print(f"Warning: official template {filename} has no official_key â€” skipping")
+                    logger.warning(f"Official template {filename} has no official_key — skipping")
                     continue
 
                 display_name = template_data.get('name', template_name)
 
-                # 1. Already migrated â€” find by official_key (fast path, rename-safe)
+                # 1. Already migrated — find by official_key (fast path, rename-safe)
                 try:
                     template = DeviceTemplate.objects.get(official_key=official_key)
                 except DeviceTemplate.DoesNotExist:
-                    # 2. Upgrade path â€” old record exists by name but has no official_key yet
+                    # 2. Upgrade path — old record exists by name but has no official_key yet
                     try:
                         template = DeviceTemplate.objects.get(name=display_name, official_key__isnull=True)
                         template.official_key = official_key
-                        print(f"Backfilled official_key for existing template '{display_name}'")
+                        logger.debug(f"Backfilled official_key for existing template '{display_name}'")
                     except DeviceTemplate.DoesNotExist:
                         # 3. Genuinely new record
                         template = DeviceTemplate(official_key=official_key, name=display_name)
@@ -4568,7 +4600,7 @@ def sync_official_device_templates():
                 template.official = True
                 template.save()
 
-                # Sync profiles â€” look up by official_key first (rename-proof),
+                # Sync profiles — look up by official_key first (rename-proof),
                 # with fallbacks for profiles that haven't been migrated yet or are user-created
                 profile_names = template_data.get('profiles', [])
                 if profile_names:
@@ -4598,11 +4630,11 @@ def sync_official_device_templates():
                             template.profiles.add(profile)
                             profiles_added += 1
                         else:
-                            print(f"Warning: Profile '{profile_name}' not found for template '{template.name}'")
-                    print(f"Synced template '{template.name}': {profiles_added}/{len(profile_names)} profiles linked")
+                            logger.warning(f"Profile '{profile_name}' not found for template '{template.name}'")
+                    logger.debug(f"Synced template '{template.name}': {profiles_added}/{len(profile_names)} profiles linked")
 
             except Exception as e:
-                print(f"Error syncing official template {filename}: {e}")
+                logger.error(f"Error syncing official template {filename}: {e}")
                 continue
 
 
