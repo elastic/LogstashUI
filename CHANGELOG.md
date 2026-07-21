@@ -1,23 +1,220 @@
-## [Unreleased] - AI Device Onboarding + Normalizers End-to-End
+## [0.5.0] - NMS release - 07/21/2026
 
 ### Added
 
-- **AI Device Onboarding** (experimental, `/AI/Onboarding/`) — discover an unmonitored SNMP device,
-  let the agent author a profile from a live walk, then review and approve before it deploys.
-  Adds `AISettings` + `DraftDefinition` models, `agent_client` (Agent Builder converse),
-  `snmp_discovery` (live grounding walk), and Generate/Approve/Reject views.
-- **Normalizers end-to-end** — authored profiles carry a `normalizers[]` array
-  (`DraftDefinition.normalizers`, migration `AI/0002`) captured from the agent and written to
-  `Profile.normalizers` on approval, so authored metrics ship scaled/decoded.
-- **KB sync tooling** (SNMP AB-tool) — `load-kb.py` gains `--prune` (exact mirror: upsert +
-  reconcile deletes) and `--check` (drift gate) so the grounding KB stays a faithful projection of
-  the repo (the source of truth). See `docs/docs/logstashui/ai-device-onboarding.md`.
+- Added a complete SNMP network management application for discovering, onboarding, configuring, monitoring, and deploying network devices through Logstash.
+- Added a consolidated onboarding experience for device discovery, manual device setup, and AI-assisted device generation.
+- Added a modal-based Device Wizard workflow so users remain on the Device Wizard page throughout onboarding.
+- Added AI-assisted SNMP device onboarding that can:
+  - Walk a device.
+  - Identify device capabilities.
+  - Generate device templates and profiles.
+  - Allow iterative review and refinement.
+  - Approve and deploy generated configurations.
+- Added inline MIB-grounded AI authoring without requiring a separate runtime knowledge base.
+- Added full-column SNMP discovery walks to improve grounding coverage during AI generation.
+- Added support for re-onboarding devices without failing when an existing template or profile has the same name.
+- Added official SNMP device templates and profiles for a wider range of network devices.
+- Added initial Ubiquiti access point profiles and templates.
+- Added a generic `Default` device template that acts as a catchall for devices without an explicitly assigned template.
+- Added device type classification to device templates.
+- Added official-template tracking to distinguish built-in templates from user-created templates.
+- Added images to device, network, template, and profile interfaces to make objects easier to identify.
+- Added card-based metric visuals for:
+  - CPU cores.
+  - Wireless radios.
+  - CDP and LLDP neighbors.
+  - Filesystems.
+  - Printer ink and consumables.
+- Added configurable profile normalizers, replacing the previous hard-coded field-normalization implementation.
+- Added normalizers for:
+  - Field renaming.
+  - Multiplication.
+  - Division.
+  - Ratios.
+  - Ratios calculated from table rows.
+  - Column averages.
+  - Translate mappings.
+- Added support for carrying user-authored and AI-authored normalizers through onboarding, approval, synchronization, and pipeline generation.
+- Added Time Series Data Stream support for generated SNMP metrics.
+- Added time-series dimensions and index-template installation during deployment.
+- Added configurable namespaces for SNMP data streams.
+- Added support for separating SNMP data streams by:
+  - A shared namespace.
+  - Network namespace.
+  - Device-template namespace.
+- Added a network-level option to create namespaces per device template.
+- Added editable Elasticsearch connections.
+- Added automatic invalidation of stale credentials when an Elasticsearch connection is edited.
+- Added Logstash Agent support for SNMP pipeline deployment and management.
+- Added Logstash Agent information to the agent inspection Process tab.
+- Added support for identifying agents managed through Centralized Pipeline Management when a sibling connection is used for management.
+- Added keystore discovery for Centralized Pipeline Management connections.
+- Added support for plaintext SNMP credentials in generated pipelines when keystores are not being used.
+- Added SNMP credential and connectivity testing throughout the SNMP application.
+- Added clearer SNMP test results for:
+  - Invalid credentials.
+  - Connection timeouts.
+  - Devices that do not respond.
+- Added SNMP walk testing for troubleshooting and future AI template generation.
+- Added discovery-pipeline generation for empty networks that have discovery enabled.
+- Added safeguards preventing discovery configuration for networks larger than `/20`.
+- Added device-level location and arbitrary metadata fields.
+- Added configurable metadata enrichment for generated SNMP events.
+- Added device counts to the credentials page.
+- Added credential-table pagination with page sizes of 25, 50, 100, and 200.
+- Added asynchronous search and loading for credential selectors.
+- Added searchable device-template selectors.
+- Added custom image-based device-template selection controls.
+- Added expandable editors for large text fields such as Grok patterns and Dissect mappings.
+- Added support for preserving comments inside plugin configurations.
+- Added support for regular expressions in pipeline conditions.
+- Added a Logstash and LogstashUI compatibility matrix.
+- Added comprehensive SNMP architecture, onboarding, deployment, and operations documentation.
+- Added documentation for:
+  - Creating credentials.
+  - Creating networks.
+  - Discovering devices.
+  - Assigning templates and profiles.
+  - Committing and deploying changes.
+  - SNMP pipeline generation.
+  - Discovery behavior and limitations.
+  - Undeployed-change workflows.
+  - SNMP trap support.
+  - Simulation and test data.
+  - Logstash Agent compatibility.
+  - Deployment-mode differences.
+  - Embedded Docker Compose deployments.
+  - Building and running LogstashUI from source.
+  - AI Device Onboarding.
+  - Inline AI grounding.
+  - Contributing device walks and official profiles.
+- Added automated tests for SNMP CRUD operations, views, synchronization commands, AI onboarding, normalizers, and discovery walks.
+- Added regression tests for scope-qualified normalizer filter IDs.
+- Added the required license attribution for Marked.js.
+
+### Changed
+
+- Changed SNMP pipeline generation to generate and reconcile pipelines by device template rather than by every profile combination.
+- Overhauled SNMP pipeline generation and reconciliation for significantly larger deployments.
+- Changed generated enrichment to operate at the device-template level.
+- Changed the default SNMP polling interval from 30 seconds to 60 seconds.
+- Changed `event.kind` usage to `event.category`.
+- Changed `host.description` to `observer.sys_descr` to align with the Kibana network map schema.
+- Added `host.type` enrichment from the assigned device template.
+- Added `observer.vendor` enrichment from device profiles.
+- Updated the SNMP schema to better align with gNMI field conventions.
+- Normalized field names across official SNMP profiles and templates.
+- Normalized the generic host-system metrics profile.
+- Updated generic host-system metrics to detect and normalize available memory metrics.
+- Updated table unpacking to use dot-separated table names.
+- Changed generated table names so they use the actual table name rather than always being prefixed with `table`.
+- Removed the former special-case filter generator after replacing its behavior with configurable normalization.
+- Restricted the remaining Ruby filter generation helper to table-splitting behavior.
+- Updated ratio normalization to support ordinary division and table rows.
+- Scope-qualified multiply and ratio normalizer filter IDs to prevent collisions.
+- Updated template and profile synchronization to clean up obsolete official files.
+- Moved official SNMP synchronization helpers into a dedicated location.
+- Updated discovery to query only SNMP connections currently used by relevant networks.
+- Changed discovery behavior to better support devices configured with hostnames rather than IP addresses.
+- Updated device identity handling to distinguish:
+  - User-assigned names.
+  - Discovered system names.
+  - DNS names.
+  - IP addresses.
+- Added IP detection so valid addresses are populated into `host.ip`.
+- Updated the network map architecture and made network-map nodes interactive.
+- Updated the network-map index used by SNMP views.
+- Replaced the device-quality table with a device-template coverage matrix.
+- Updated interface health colors:
+  - Green for healthy.
+  - Yellow for warning.
+  - Red for critical.
+  - Gray for unknown or administratively down.
+- Updated SNMP metric visuals after schema and normalization changes.
+- Updated template and profile image sizing.
+- Removed the arbitrary Logstash node name from network configuration.
+- Removed the Created column from device and credential tables.
+- Changed credential loading from server-side rendering to asynchronous JavaScript loading.
+- Changed related-object dropdowns to refresh automatically after objects are created in nested modals.
+- Removed manual refresh buttons from supported CRUD selectors.
+- Changed the plugin configuration search bar so it is visually distinct from configuration fields.
+- Standardized SNMP device and network modal inputs.
+- Changed the device-template selector to display formatted names and images instead of raw object values.
+- Changed the SNMP Devices navigation indicator so it stops pulsing after the user visits the page.
+- Updated context processors so the SNMP Devices page only pulses when attention is actually required.
+- Updated the Device Wizard template-generation path to remain within the onboarding workflow.
+- Changed the AI generation button to clearly indicate unavailable or upcoming functionality where appropriate.
+- Replaced the former instruction modal with direct links to documentation.
+- Updated deployment progress messaging so smaller deployments no longer warn that they may take several minutes.
+- Updated the SNMP walk warning to be more direct.
+- Added `system.location` and `system.contact` to the generic system profile.
+- Updated Ubiquiti access point uptime polling.
+- Removed deprecated profile interfaces and duplicated onboarding functionality.
+- Consolidated duplicate `escapeHtml` implementations into the shared base JavaScript module.
+- Removed orphaned functions, deprecated helpers, and duplicated code.
+- Replaced remaining `print` statements with structured logger calls.
+- Added missing administrator authorization checks to SNMP CRUD operations.
+- Updated feature gating for SNMP, Centralized Pipeline Management, and traditional Logstash deployment modes.
+- Updated the Logstash Agent installation validation to support Logstash installations built or run from source.
+- Added jitter to Logstash Agent polling timers.
+- Updated Logstash Agent documentation and deployment guidance.
+- Updated source-build documentation and minimum system requirements.
+- Updated compatibility assets for Logstash 9.4.
+- Updated the LogstashUI introductory workshop for the NMS release.
+- Improved general UI text, spacing, formatting, and consistency throughout the SNMP application.
 
 ### Fixed
 
-- User/AI-authored profile normalizers were silently dropped from generated pipelines
-  (`_get_device_profiles` read only inline `profile_data['normalizers']`). It now falls back to the
-  `Profile.normalizers` model column, so non-official profiles ship correctly scaled metrics.
+- Fixed undeployed-change indicators not clearing after a successful deployment.
+- Fixed undeployed-change indicators not appearing or updating correctly after CRUD operations.
+- Fixed some network, profile, and template operations failing to trigger the deploy-changes animation.
+- Fixed orphaned discovery-pipeline detection overlapping with pipeline deletion.
+- Fixed empty discovery-enabled networks not generating discovery pipelines.
+- Fixed stale and orphaned generated pipelines not being reconciled correctly.
+- Fixed collisions between generated normalizer IDs.
+- Fixed multiply and ratio normalizer filter IDs colliding across scopes.
+- Fixed AI-authored and user-authored normalizers being dropped during onboarding and pipeline generation.
+- Fixed generated profiles losing normalizer configuration.
+- Fixed device templates being left empty after a template was deleted.
+- Fixed devices without an assigned template by automatically assigning the `Default` template.
+- Fixed device-template profile selectors displaying database IDs instead of readable profile names.
+- Fixed device-template names being formatted incorrectly in device configuration workflows.
+- Fixed official profile and template synchronization issues on Windows.
+- Fixed data consistency problems in SNMP profile and template synchronization commands.
+- Fixed the renamed `sysDescr` field breaking generated output.
+- Fixed missing SNMP metadata in generated `add_field` configuration.
+- Fixed Cisco IOS profile metrics that were using an incorrect index.
+- Fixed Ubiquiti access point normalizers conflicting with unrelated fields.
+- Fixed access point uptime polling using the wrong metric.
+- Fixed an orphaned component table in the entity-sensor profile.
+- Fixed table normalizers failing to calculate averages correctly.
+- Fixed commented fields containing hash values being parsed as active configuration.
+- Fixed inline comments containing `{` or `}` causing pipeline-parser errors.
+- Fixed plugin comments being discarded instead of preserved.
+- Fixed regular expressions in conditions being rejected by the pipeline AST.
+- Fixed large text inputs being difficult to inspect and edit.
+- Fixed modal input and select controls closing immediately after being clicked.
+- Fixed a credentials-table JavaScript error caused by a missing closing brace.
+- Fixed credential selectors and CRUD dropdowns failing to update after new objects were created.
+- Fixed SNMP tests presenting ambiguous failures for credential errors and timeouts.
+- Fixed discovery querying every configured connection instead of only relevant SNMP connections.
+- Fixed hostname-based devices being handled incorrectly during discovery.
+- Fixed the SNMP Devices page continuing to pulse after it had been visited.
+- Fixed the network map using the wrong backing index.
+- Fixed network-map rendering after schema changes.
+- Fixed fresh installations failing when the last-seen timestamp was null.
+- Fixed device and network views exposing inconsistent or incomplete names.
+- Fixed missing migrations associated with new SNMP templates, profiles, namespaces, and Logstash Agent functionality.
+- Fixed generated device onboarding failing when an approved object reused an existing name.
+- Fixed AI discovery walks skipping columns and producing incomplete grounding data.
+- Fixed incorrect interactions and state synchronization between LogstashUI and Logstash Agent.
+- Fixed Logstash Agent process information being presented as though it were the Logstash process.
+- Fixed missing RBAC protection across SNMP administrative operations.
+- Fixed installation-asset actions, loading indicators, and cleanup behavior in AI template and profile generation.
+- Fixed various SNMP CRUD, rendering, deployment, and code-quality issues discovered during final release testing.
+
+
 
 ## [0.4.3] - AI Foundation, Simulation Improvements, and SNMP Fixes - 06/07/2026
 
