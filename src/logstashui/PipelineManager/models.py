@@ -297,6 +297,13 @@ class Connection(models.Model):
         return decrypt_credential(self.api_key) if self.api_key else None
 
 
+MANAGED_BY_CHOICES = [
+    ('user', 'User'),
+    ('snmp', 'SNMP'),
+    ('library', 'Library'),
+]
+
+
 class Pipeline(models.Model):
     """
     Represents a Logstash pipeline configuration within a policy.
@@ -311,6 +318,12 @@ class Pipeline(models.Model):
     name = models.CharField(
         max_length=100,
         help_text="Pipeline name (unique within policy)"
+    )
+    managed_by = models.CharField(
+        max_length=20,
+        choices=MANAGED_BY_CHOICES,
+        default='user',
+        help_text="Which subsystem owns this pipeline (user, snmp, library)"
     )
     description = models.TextField(
         blank=True,
@@ -442,6 +455,12 @@ class Keystore(models.Model):
     key_value = models.CharField(
         max_length=512,
         help_text="Encrypted key value"
+    )
+    managed_by = models.CharField(
+        max_length=20,
+        choices=MANAGED_BY_CHOICES,
+        default='user',
+        help_text="Which subsystem owns this keystore entry (user, snmp, library)"
     )
     kv_hash = models.CharField(
         max_length=64,

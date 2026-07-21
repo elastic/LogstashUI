@@ -5,6 +5,7 @@
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.template.loader import get_template
+from django.db import transaction
 
 from PipelineManager.models import Connection as ConnectionTable, Policy, Pipeline
 
@@ -100,6 +101,103 @@ def DeleteConnection(request, connection_id=None):
             }, 500);
         </script>
     """)
+
+
+@require_admin_role
+def GetConnection(request, connection_id):
+    """
+    Return connection details (excluding credentials) for pre-filling the edit modal.
+    Only supports CENTRALIZED connections.
+    """
+    if request.method != "GET":
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
+
+    if connection.connection_type != ConnectionTable.ConnectionType.CENTRALIZED:
+        return JsonResponse({'success': False, 'error': 'Only centralized connections can be edited via this endpoint'}, status=400)
+
+    auth_type = 'apiKey' if connection.api_key else 'basic'
+
+    return JsonResponse({
+        'success': True,
+        'connection': {
+            'id': connection.id,
+            'name': connection.name,
+            'connection_mode': 'cloud' if connection.cloud_id else 'url',
+            'cloud_id': connection.cloud_id or '',
+            'host': connection.host or '',
+            'port': connection.port or '',
+            'auth_type': auth_type,
+            'username': connection.username or '',
+        }
+    })
+
+
+@require_admin_role
+def UpdateConnection(request, connection_id):
+    """
+    Update an existing CENTRALIZED connection.
+    Credentials must be re-supplied — they are tested before the change is committed.
+    On connectivity test failure the database record is rolled back.
+    """
+    if request.method != "POST":
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    connection = ConnectionTable.objects.filter(id=connection_id).first()
+    if not connection:
+        return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
+
+    if connection.connection_type != ConnectionTable.ConnectionType.CENTRALIZED:
+        return JsonResponse({'success': False, 'error': 'Only centralized connections can be edited'}, status=400)
+
+    # Enforce credential re-entry
+    auth_type = request.POST.get('auth_type', 'basic')
+    if auth_type == 'basic':
+        if not request.POST.get('password', '').strip():
+            return JsonResponse({'success': False, 'error': 'Password is required when updating a connection'}, status=200)
+    else:
+        if not request.POST.get('api_key', '').strip():
+            return JsonResponse({'success': False, 'error': 'API Key is required when updating a connection'}, status=200)
+
+    # Clear the opposing credential on the instance before form binding so that
+    # ConnectionForm.save()'s "keep existing if empty" logic doesn't silently
+    # preserve a stale credential from the previous auth type.
+    if auth_type == 'basic':
+        connection.api_key = None
+    else:
+        connection.username = None
+        connection.password = None
+
+    form = ConnectionForm(request.POST, instance=connection)
+    if not form.is_valid():
+        logger.warning(f"User '{request.user.username}' submitted invalid update for connection {connection_id}: {form.errors}")
+        return JsonResponse({'success': False, 'error': str(form.errors)}, status=200)
+
+    test_success = False
+    test_message = ""
+    try:
+        with transaction.atomic():
+            updated_connection = form.save()
+            test_success, test_message = manager_views.test_connectivity(updated_connection.id)
+            if not test_success:
+                transaction.set_rollback(True)
+    except Exception as e:
+        logger.error(f"User '{request.user.username}' encountered error updating connection {connection_id}: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=200)
+
+    if not test_success:
+        logger.warning(f"User '{request.user.username}' failed connectivity test when updating connection {connection_id}")
+        return JsonResponse({'success': False, 'error': str(test_message)}, status=200)
+
+    logger.info(f"User '{request.user.username}' updated connection {connection_id}")
+    return JsonResponse({
+        'success': True,
+        'connection_id': connection_id,
+        'message': 'Connection updated and tested successfully!'
+    }, status=200)
 
 
 @require_admin_role
@@ -222,13 +320,23 @@ def GetPipelines(request, connection_id):
                     except Exception:
                         formatted_date = last_modified_str  # Fallback to original if parsing fails
 
+                # Infer SNMP management for centralized pipelines from the
+                # naming convention + [MANAGED] tag (no managed_by column in ES).
+                description = pipeline_data.get("description", "")
+                inferred_managed_by = (
+                    'snmp'
+                    if pipeline_name.startswith('snmp-') and '[MANAGED]' in description
+                    else 'user'
+                )
+
                 logstash_pipelines.append(
                     {
                         "es_id": connection.id,
                         "es_name": connection.name,
                         "name": pipeline_name,
-                        "description": pipeline_data.get("description", ""),
-                        "last_modified": formatted_date
+                        "description": description,
+                        "last_modified": formatted_date,
+                        "managed_by": inferred_managed_by,
                     }
                 )
 
@@ -236,10 +344,22 @@ def GetPipelines(request, connection_id):
             logger.exception("Couldn't connect to Elastic")
 
     else:  # AGENT connection type
-        # Fetch pipelines from the associated policy for agent connections
+        # Fetch pipelines from the associated policy for agent connections.
+        #
+        # An agent hosts (a) every user-authored pipeline on its base policy,
+        # shared across all agents on that policy, plus (b) ONLY the SNMP
+        # pipelines belonging to networks assigned to THIS specific agent.
+        # SNMP pipelines for sibling agents on the same policy are excluded so
+        # each agent sees exactly what it will actually run.
         if connection.policy:
-            pipelines = Pipeline.objects.filter(policy=connection.policy).values(
-                'id', 'name', 'description', 'last_updated'
+            from django.db.models import Q
+            from SNMP.snmp_crud import agent_snmp_pipeline_names
+
+            own_snmp_names = agent_snmp_pipeline_names(connection)
+            pipelines = Pipeline.objects.filter(policy=connection.policy).filter(
+                Q(managed_by='user') | Q(managed_by='snmp', name__in=own_snmp_names)
+            ).values(
+                'id', 'name', 'description', 'last_updated', 'managed_by'
             )
 
             for p in pipelines:
@@ -259,7 +379,8 @@ def GetPipelines(request, connection_id):
                     "name": p['name'],
                     "description": p['description'] or '',
                     "last_modified": formatted_date,
-                    "policy_id": connection.policy.id  # Add policy_id to each pipeline for delete/clone
+                    "policy_id": connection.policy.id,  # Add policy_id to each pipeline for delete/clone
+                    "managed_by": p['managed_by'],
                 })
 
     context['pipelines'] = logstash_pipelines
@@ -285,9 +406,10 @@ def GetPolicyPipelines(request):
     try:
         policy = Policy.objects.get(pk=policy_id)
 
-        # Get all pipelines for this policy
-        pipelines = Pipeline.objects.filter(policy=policy).values(
-            'id', 'name', 'description', 'last_updated'
+        # The policy tab lists user-authored pipelines only. SNMP/managed
+        # pipelines are surfaced per-agent on the Connections page, never here.
+        pipelines = Pipeline.objects.filter(policy=policy, managed_by='user').values(
+            'id', 'name', 'description', 'last_updated', 'managed_by'
         )
 
         pipelines_list = []
@@ -298,7 +420,8 @@ def GetPolicyPipelines(request):
                 'description': p['description'] or '',
                 'last_modified': p['last_updated'].strftime('%Y-%m-%d %H:%M:%S') if p['last_updated'] else 'N/A',
                 'es_id': policy_id,  # Use policy_id as es_id for compatibility with frontend
-                'policy_id': policy_id  # Tells pipeline_list.js to use ls_id= in the editor URL
+                'policy_id': policy_id,  # Tells pipeline_list.js to use ls_id= in the editor URL
+                'managed_by': p['managed_by'],
             })
 
         return JsonResponse({

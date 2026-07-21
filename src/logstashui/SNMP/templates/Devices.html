@@ -23,12 +23,14 @@
         <h2 class="text-2xl font-bold text-white mb-2">Get Started with SNMP Devices</h2>
         <p class="text-gray-300 mb-4">Devices are the individual network devices you want to monitor via SNMP. <b>Add your first device to start collecting data!</b></p>
         <div class="flex justify-center mb-8">
+          {% if user.profile.role == 'admin' %}
           <button id="addDeviceBtnEmpty" class="btn btn-primary flex items-center gap-x-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
             Add Device
           </button>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -51,9 +53,9 @@
             </div>
           </div>
         </div>
-        <button id="setupInstructionsBtn" class="text-sm text-blue-400 hover:text-blue-300 underline mt-1">
+        <a href="/Documentation/logstashui/SNMP/Quickstart/" class="text-sm text-blue-400 hover:text-blue-300 underline mt-1">
           Click here for setup instructions
-        </button>
+        </a>
       </div>
       <div class="flex gap-2 items-center">
         <!-- Undeployed changes indicator -->
@@ -67,6 +69,7 @@
           </svg>
           Test SNMP
         </button>
+        {% if user.profile.role == 'admin' %}
         <button id="discoveredDevicesBtn" class="btn bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -85,6 +88,7 @@
           </svg>
           Add Device
         </button>
+        {% endif %}
       </div>
     </div>
 
@@ -109,9 +113,10 @@
         <div style="flex: 0 0 13%;">
           <label for="pageSizeSelect" class="block text-sm font-medium text-gray-300 mb-2 text-xs">Rows</label>
           <select id="pageSizeSelect" class="select select-bordered w-full select-sm">
-            <option value="10">10</option>
             <option value="25" selected>25</option>
+            <option value="50">50</option>
             <option value="100">100</option>
+            <option value="200">200</option>
           </select>
         </div>
       </div>
@@ -156,15 +161,16 @@
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('name')">
             Name <span id="sort-name" class="ml-1"></span>
           </th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('hostname')">
+            Hostname <span id="sort-hostname" class="ml-1"></span>
+          </th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('ip_address')">
             IP Address <span id="sort-ip_address" class="ml-1"></span>
           </th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Credential</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network</th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Device Template</th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('created_at')">
-            Created <span id="sort-created_at" class="ml-1">▼</span>
-          </th>
           <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
         </tr>
       </thead>
@@ -193,98 +199,6 @@
   </div>
   </div>
 
-  <!-- Setup Instructions Modal -->
-  <div id="setupInstructionsModal" class="hidden fixed inset-0 overflow-hidden z-50">
-    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeSetupInstructions()"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-center p-6 border-b border-gray-700">
-          <h2 class="text-xl font-bold text-white">Setup Instructions</h2>
-          <button onclick="closeSetupInstructions()" class="text-gray-400 hover:text-white">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        
-        <!-- Tabs -->
-        <div class="px-6 pt-4">
-          <div class="border-b border-gray-700">
-            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-              <button id="centralizedPipelineTab" class="setup-tab-button active border-b-2 border-primary py-4 px-1 text-sm font-medium text-primary">
-                Centralized Pipeline Management
-              </button>
-              <button id="logstashAgentTab" class="setup-tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-400 hover:text-gray-300 hover:border-gray-300">
-                Logstash Agent
-              </button>
-            </nav>
-          </div>
-        </div>
-        
-        <!-- Tab Content -->
-        <div class="p-6">
-          <!-- Centralized Pipeline Management Tab Content -->
-          <div id="centralizedPipelineContent">
-            <div class="space-y-4">
-              <p class="text-gray-300">
-                Quick start device setup using <a href="https://www.elastic.co/docs/reference/logstash/logstash-centralized-pipeline-management" class="text-primary hover:underline" target="_blank">centralized pipeline management:</a>
-              </p>
-              
-              <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-                <h3 class="font-semibold text-white mb-2">Step 1: Add a Device</h3>
-                <p class="text-gray-300 mb-3">
-                  Click the <strong>"Add Device"</strong> button and fill out the form with your device information. You will be prompted to setup a credential, network, or connection if you haven't set those up yet.
-                </p>
-                <button onclick="document.getElementById('addDeviceBtn').click();" class="btn btn-primary flex items-center gap-x-2">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Add Device
-                </button>
-              </div>
-              
-              <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-                <h3 class="font-semibold text-white mb-2">Step 2: Get your pipeline name</h3>
-                <p class="text-gray-300">
-                  When you've added your device, close this window and click on the text in the Network column to copy your pipeline name. <b>Every network has its own unique pipeline name.</b>
-                </p>
-              </div>
-              
-              <div class="bg-gray-700/50 rounded-lg p-4 border border-gray-600">
-                <h3 class="font-semibold text-white mb-2">Step 3: Add it to your logstash.yml file</h3>
-                <p class="text-gray-300">
-                  In your Logstash.yml file, add the pipeline name you copied in step 2 to the <strong>xpack.management.pipeline.id</strong> list in your configuration file, then restart Logstash.
-                </p>
-              </div>
-              
-              <div class="bg-blue-900/30 rounded-lg p-4 border border-blue-700">
-                <div class="flex items-start">
-                  <svg class="w-5 h-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <h4 class="font-semibold text-blue-300 mb-1">Tip</h4>
-                    <p class="text-gray-300 text-sm">
-                      Every network has a unique pipeline name. You can add one or many to a single instance of Logstash. You must have this pipeline added to your config for the devices to be monitored.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Logstash Agent Tab Content -->
-          <div id="logstashAgentContent" class="hidden">
-            <div class="space-y-4">
-              <p class="text-gray-300">
-                Coming soon: Instructions for deploying Logstash Agent for distributed monitoring.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
 </div>
 
@@ -309,12 +223,20 @@
 <!-- Discovered Devices Modal -->
 {% include 'components/discovered_devices_modal.html' %}
 
+<!-- Google Maps Lat/Lon Picker -->
+{% include 'components/gmaps_latlon_modal.html' %}
+
 <!-- Device Visual Preview Component -->
 {% include 'components/snmp_device_visual_preview.html' %}
 
 <!-- Popup Modal -->
 {% include 'popup.html' %}
 
+<script>
+  window.isAdmin = {% if user.profile.role == 'admin' %}true{% else %}false{% endif %};
+  window.logstashAgentIconUrl = "{% static 'images/LogstashAgentIcon.png' %}";
+  window.elasticIconUrl = "{% static 'images/ElasticIcon.png' %}";
+</script>
 <script src="{% static 'js/devices_table.js' %}"></script>
 <script src="{% static 'js/snmp_device_visual_preview.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
@@ -325,64 +247,14 @@
 <script src="{% static 'js/discovered_devices.js' %}"></script>
 <script src="{% static 'js/snmp_changes_indicator.js' %}"></script>
 
-<script>
-// Setup Instructions Modal Functions
-function openSetupInstructions() {
-  const modal = document.getElementById('setupInstructionsModal');
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeSetupInstructions() {
-  const modal = document.getElementById('setupInstructionsModal');
-  modal.classList.add('hidden');
-  document.body.style.overflow = 'auto';
-}
-
-// Attach event listener to setup instructions button
-document.addEventListener('DOMContentLoaded', function() {
-  const setupBtn = document.getElementById('setupInstructionsBtn');
-  if (setupBtn) {
-    setupBtn.addEventListener('click', openSetupInstructions);
-  }
-  
-  // Setup tab switching functionality
-  const centralizedPipelineTab = document.getElementById('centralizedPipelineTab');
-  const logstashAgentTab = document.getElementById('logstashAgentTab');
-  const centralizedPipelineContent = document.getElementById('centralizedPipelineContent');
-  const logstashAgentContent = document.getElementById('logstashAgentContent');
-  
-  if (centralizedPipelineTab && logstashAgentTab) {
-    centralizedPipelineTab.addEventListener('click', () => {
-      // Update tab styles
-      centralizedPipelineTab.classList.add('active', 'border-primary', 'text-primary');
-      centralizedPipelineTab.classList.remove('border-transparent', 'text-gray-400');
-      logstashAgentTab.classList.remove('active', 'border-primary', 'text-primary');
-      logstashAgentTab.classList.add('border-transparent', 'text-gray-400');
-      
-      // Show/hide content
-      centralizedPipelineContent.classList.remove('hidden');
-      logstashAgentContent.classList.add('hidden');
-    });
-    
-    logstashAgentTab.addEventListener('click', () => {
-      // Update tab styles
-      logstashAgentTab.classList.add('active', 'border-primary', 'text-primary');
-      logstashAgentTab.classList.remove('border-transparent', 'text-gray-400');
-      centralizedPipelineTab.classList.remove('active', 'border-primary', 'text-primary');
-      centralizedPipelineTab.classList.add('border-transparent', 'text-gray-400');
-      
-      // Show/hide content
-      logstashAgentContent.classList.remove('hidden');
-      centralizedPipelineContent.classList.add('hidden');
-    });
-  }
-});
-</script>
 
 <!-- Include SNMP Test Modal -->
 {% include "components/snmp_test_modal.html" %}
 
+<!-- AI Generate Device Template Modal -->
+{% include "components/ai_device_template_modal.html" %}
+
 <script src="{% static 'js/snmp_test.js' %}"></script>
+<script src="{% static 'js/ai_device_template_modal.js' %}"></script>
 
 {% endblock %}

@@ -54,17 +54,6 @@ function updateNetworksData(networks) {
 
 // Populate filter dropdowns with unique values
 function populateFilters() {
-  // Get unique logstash nodes
-  const logstashNodes = [...new Set(allNetworks.map(n => n.logstash_name).filter(Boolean))].sort();
-  const logstashFilter = document.getElementById('logstashFilter');
-  logstashFilter.innerHTML = '<option value="">All Nodes</option>';
-  logstashNodes.forEach(node => {
-    const option = document.createElement('option');
-    option.value = node;
-    option.textContent = node;
-    logstashFilter.appendChild(option);
-  });
-  
   // Get unique connections from network data
   const connectionMap = new Map();
   allNetworks.forEach(n => {
@@ -93,7 +82,6 @@ function populateFilters() {
 // Apply search and filters
 function applyFiltersAndRender() {
   const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-  const logstashFilter = document.getElementById('logstashFilter').value;
   const connectionFilter = document.getElementById('connectionFilter').value;
   
   filteredNetworks = allNetworks.filter(network => {
@@ -102,14 +90,11 @@ function applyFiltersAndRender() {
       network.name.toLowerCase().includes(searchTerm) ||
       network.network_range.toLowerCase().includes(searchTerm);
     
-    // Logstash node filter
-    const matchesLogstash = !logstashFilter || network.logstash_name === logstashFilter;
-    
     // Connection filter
     const matchesConnection = !connectionFilter || 
       (network.connection && network.connection.toString() === connectionFilter);
     
-    return matchesSearch && matchesLogstash && matchesConnection;
+    return matchesSearch && matchesConnection;
   });
   
   // Sort the filtered results
@@ -207,6 +192,7 @@ function createNetworkRow(network) {
   tr.innerHTML = `
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
       <div class="flex items-center gap-2 cursor-pointer hover:text-blue-400 group" onclick="copyPipelineName(${network.id}, '${escapeHtml(network.name)}')" title="Click to copy pipeline name">
+        <img src="${network.deployment_mode === 'AGENT' ? window.logstashAgentIconUrl : window.elasticIconUrl}" class="w-5 h-5 flex-shrink-0" title="${network.deployment_mode === 'AGENT' ? 'LogstashAgent' : 'Elasticsearch'}" />
         <span>${escapeHtml(network.name)}</span>
         <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -217,9 +203,8 @@ function createNetworkRow(network) {
       <span class="font-mono">${escapeHtml(network.network_range)}</span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${network.device_count > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">${network.device_count || 0}</span>
+      <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium ${network.device_count > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}" style="min-width: 2rem;">${network.device_count || 0}</span>
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${escapeHtml(network.logstash_name || '')}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
       ${network.discovery_enabled ? 
         '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Enabled</span>' :
@@ -233,9 +218,20 @@ function createNetworkRow(network) {
       }
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-      ${network.connection_name ? escapeHtml(network.connection_name) : '<span class="text-gray-500 italic">None</span>'}
+      ${network.deployment_mode === 'AGENT' ? `
+        <div class="flex flex-col gap-1">
+          <span class="inline-flex items-center w-fit px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30" title="Deployed locally to a LogstashAgent">Agent</span>
+          <span class="text-xs">${network.agent_connection_name ? escapeHtml(network.agent_connection_name) : '<span class="text-red-400 italic">No agent assigned</span>'}</span>
+        </div>
+      ` : `
+        <div class="flex flex-col gap-1">
+          <span class="inline-flex items-center w-fit px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30" title="Deployed to Elasticsearch Centralized Pipeline Management">CPM</span>
+          <span class="text-xs">${network.connection_name ? escapeHtml(network.connection_name) : '<span class="text-gray-500 italic">None</span>'}</span>
+        </div>
+      `}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+      ${window.isAdmin ? `
       <div class="action-menu relative">
         <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
           <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -267,6 +263,7 @@ function createNetworkRow(network) {
           </div>
         </div>
       </div>
+      ` : ''}
     </td>
   `;
   
@@ -345,7 +342,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   
   // Set up event listeners
   document.getElementById('searchInput').addEventListener('input', applyFiltersAndRender);
-  document.getElementById('logstashFilter').addEventListener('change', applyFiltersAndRender);
   document.getElementById('connectionFilter').addEventListener('change', applyFiltersAndRender);
   document.getElementById('pageSizeSelect').addEventListener('change', function() {
     pageSize = parseInt(this.value);

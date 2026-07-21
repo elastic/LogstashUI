@@ -6,15 +6,19 @@ The `logstashui.yml` file is the main configuration file for LogstashUI. It cont
 
 ## File Location
 
-The configuration file should be placed in the project root:
+The configuration file lives at `src/logstashui/logstashui.yml`:
 
 ```
 LogstashUI/
-├── logstashui.yml
 ├── bin/
 ├── src/
+│   └── logstashui/
+│       ├── logstashui.yml
+│       └── logstashui.example.yml
 └── ...
 ```
+
+If the file does not exist, the startup script creates it from `logstashui.example.yml` in the same directory — as a **symlink** on Linux, and as a **copy** on Windows (symlinks require elevated privileges there). To customize settings on Linux, replace the symlink with a real copy of the example file and edit it; on Windows, just edit the copied file.
 
 ---
 
@@ -39,7 +43,7 @@ no_auth:
 
 ### `simulation`
 
-Controls pipeline simulation behavior. See the [full simulation documentation](simulation.md) for detailed information.
+Controls pipeline simulation behavior. See the [full simulation documentation](/docs/docs/logstashui/configuration/simulation.md) for detailed information.
 
 ```yaml
 simulation:
@@ -58,7 +62,7 @@ simulation:
 | **Setup** | Simple - no dependencies | Requires Logstash installation |
 | **Best For** | Quick start, occasional simulations | Heavy simulation workloads |
 
-📖 **Learn more:** [Simulation Configuration](simulation.md)
+📖 **Learn more:** [Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)
 
 ---
 
@@ -95,7 +99,7 @@ logstash_agent:
 
 > **IMPORTANT:** When using host mode, Logstash is fully managed by LogstashAgent. Logstash should not be started manually, and your configuration files will be modified.
 
-📖 **Learn more:** [Host Mode Setup Guide](host_mode.md)
+📖 **Learn more:** [Host Mode Setup Guide](/docs/docs/logstashui/configuration/host_mode.md)
 
 ---
 
@@ -160,6 +164,6 @@ simulation:
 
 ## Related Documentation
 
-- **[Simulation Configuration](simulation.md)** - Detailed simulation modes and settings
-- **[Host Mode Setup](host_mode.md)** - Complete guide to setting up host mode for high-performance simulations
-- **[Getting Started](../getting_started)** - Quick start guide for LogstashUI
+- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - Detailed simulation modes and settings
+- **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - Complete guide to setting up host mode for high-performance simulations
+- **[Getting Started](/docs/docs/getting_started.md)** - Quick start guide for LogstashUI

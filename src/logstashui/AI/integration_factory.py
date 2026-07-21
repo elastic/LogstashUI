@@ -15,8 +15,6 @@ from Common.elastic_utils import (
 import os
 import logging
 import json
-import markdown
-
 logger = logging.getLogger(__name__)
 
 

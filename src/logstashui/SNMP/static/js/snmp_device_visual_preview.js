@@ -93,11 +93,7 @@ function renderDevicePreview(deviceId, device, visualizations) {
       const isOfficial = profile.name.endsWith('.json');
       
       // Create friendly display name
-      let displayName = profile.name;
-      if (isOfficial) {
-        // Remove .json extension and convert to title case
-        displayName = profile.name.slice(0, -5).replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      }
+      const displayName = profile.display_name || formatDisplayName(profile.name);
       
       // Build metadata line with vendor and product
       let metadata = '';
@@ -243,8 +239,8 @@ function renderDevicePreview(deviceId, device, visualizations) {
 
       // Sort interfaces by index
       const sortedInterfaces = interfacesArray.sort((a, b) => {
-        const indexA = parseInt(a.index) || parseInt(a.ifIndex) || 0;
-        const indexB = parseInt(b.index) || parseInt(b.ifIndex) || 0;
+        const indexA = parseInt(a.index) || 0;
+        const indexB = parseInt(b.index) || 0;
         return indexA - indexB;
       });
 
@@ -254,90 +250,222 @@ function renderDevicePreview(deviceId, device, visualizations) {
       });
     }
   }
+
+  // Render printer supplies if available
+  if (visualizations && visualizations.printer_supplies) {
+    const suppliesSection = contentDiv.querySelector('.device-printer-supplies-section');
+    const suppliesContainer = contentDiv.querySelector('.printer-supplies-container');
+    const suppliesArray = visualizations.printer_supplies.supplies || [];
+
+    if (suppliesArray.length > 0 && suppliesSection && suppliesContainer) {
+      suppliesSection.style.display = 'block';
+      suppliesContainer.innerHTML = '';
+
+      suppliesArray.forEach(supply => {
+        const supplyCard = createPrinterSupplyCard(supply);
+        suppliesContainer.appendChild(supplyCard);
+      });
+    }
+  }
+
+  // Render filesystems if available
+  if (visualizations && visualizations.filesystems) {
+    const fsSection = contentDiv.querySelector('.device-filesystems-section');
+    const fsContainer = contentDiv.querySelector('.filesystems-container');
+    const fsArray = visualizations.filesystems.filesystems || [];
+
+    if (fsArray.length > 0 && fsSection && fsContainer) {
+      fsSection.style.display = 'block';
+      fsContainer.innerHTML = '';
+
+      fsArray.forEach(fs => {
+        const fsCard = createFilesystemCard(fs);
+        fsContainer.appendChild(fsCard);
+      });
+    }
+  }
+
+  // Render wireless radios if available
+  if (visualizations && visualizations.wireless_radios) {
+    const radiosSection = contentDiv.querySelector('.device-wireless-radios-section');
+    const radiosContainer = contentDiv.querySelector('.wireless-radios-container');
+    const radiosArray = visualizations.wireless_radios.radios || [];
+
+    if (radiosArray.length > 0 && radiosSection && radiosContainer) {
+      radiosSection.style.display = 'block';
+      radiosContainer.innerHTML = '';
+
+      radiosArray.forEach(radio => {
+        const radioCard = createWirelessRadioCard(radio);
+        radiosContainer.appendChild(radioCard);
+      });
+    }
+  }
+
+  // Render neighbors if available
+  if (visualizations && visualizations.neighbors) {
+    const neighborsSection = contentDiv.querySelector('.device-neighbors-section');
+    const neighborsContainer = contentDiv.querySelector('.neighbors-container');
+    const neighborsArray = visualizations.neighbors.neighbors || [];
+
+    if (neighborsArray.length > 0 && neighborsSection && neighborsContainer) {
+      neighborsSection.style.display = 'block';
+      neighborsContainer.innerHTML = '';
+
+      neighborsArray.forEach(neighbor => {
+        const neighborCard = createNeighborCard(neighbor);
+        neighborsContainer.appendChild(neighborCard);
+      });
+    }
+  }
+
+  // Render CPU cores if available
+  if (visualizations && visualizations.cpu_cores) {
+    const cpuCoresSection = contentDiv.querySelector('.device-cpu-cores-section');
+    const cpuCoresContainer = contentDiv.querySelector('.cpu-cores-container');
+    const coresArray = visualizations.cpu_cores.cores || [];
+
+    if (coresArray.length > 0 && cpuCoresSection && cpuCoresContainer) {
+      cpuCoresSection.style.display = 'block';
+      cpuCoresContainer.innerHTML = '';
+
+      coresArray.forEach((core, i) => {
+        const coreCard = createCpuCoreCard(core, i);
+        cpuCoresContainer.appendChild(coreCard);
+      });
+    }
+  }
+}
+
+// Abbreviate common interface name prefixes so port numbers are visible in compact cards.
+// The full name is always shown in the hover tooltip.
+function abbreviateIfaceName(name) {
+  if (!name) return name;
+  const prefixes = [
+    // Longest/most-specific matches first to avoid partial replacements
+    [/^TenGigabitEthernet/i,  'Te'],
+    [/^HundredGigE/i,         'Hu'],
+    [/^TwentyFiveGigE/i,      '25G'],
+    [/^FortyGigabitEthernet/i,'Fo'],
+    [/^GigabitEthernet/i,     'Gi'],
+    [/^FastEthernet/i,        'Fa'],
+    [/^Ethernet/i,            'Eth'],
+    [/^Port-channel/i,        'Po'],
+    [/^Bundle-Ether/i,        'BE'],
+    [/^Loopback/i,            'Lo'],
+    [/^Tunnel/i,              'Tu'],
+    [/^Serial/i,              'Se'],
+    [/^Management/i,          'Mg'],
+    [/^Vlan/i,                'Vl'],
+    [/^StackSub-St/i,         'StSub'],
+    [/^StackPort/i,           'StPo'],
+  ];
+  for (const [pattern, abbr] of prefixes) {
+    if (pattern.test(name)) {
+      return name.replace(pattern, abbr);
+    }
+  }
+  return name;
 }
 
 // Create an interface card with status indicators and hover details
 function createInterfaceCard(iface) {
   const card = document.createElement('div');
 
-  // Determine status colors based on admin and oper status
-  const adminStatus = parseInt(iface.ifAdminStatus);
-  const operStatus = parseInt(iface.ifOperStatus);
-
-  // Admin status: 1=Up, 2=Down, 3=Testing
-  // Oper status: 1=Up, 2=Down, 3=Testing, 4=Unknown, 5=Dormant, 6=NotPresent, 7=LowerLayerDown
+  // admin_status / oper_status are stored as strings (UP/DOWN/TESTING/...)
+  const adminStatus = iface.admin_status;
+  const operStatus  = iface.oper_status;
 
   let borderClass = 'border-gray-600';
   let statusText = 'Unknown';
   let statusColor = 'bg-gray-500';
 
-  if (adminStatus === 2) {
-    // Admin down - gray
-    borderClass = 'border-gray-500';
-    statusText = 'Admin Down';
-    statusColor = 'bg-gray-500';
-  } else if (adminStatus === 1 && operStatus === 1) {
-    // Up/Up - green
+  if (adminStatus === 'UP' && operStatus === 'UP') {
+    // Admin up / oper up — enabled and active
     borderClass = 'border-green-500';
     statusText = 'Up';
     statusColor = 'bg-green-500';
-  } else if (adminStatus === 1 && operStatus === 2) {
-    // Up/Down - red
-    borderClass = 'border-red-500';
-    statusText = 'Down';
-    statusColor = 'bg-red-500';
-  } else if (adminStatus === 1 && operStatus === 5) {
-    // Dormant - yellow
+  } else if (adminStatus === 'DOWN' && operStatus === 'UP') {
+    // Admin down / oper up — inconsistent, worth investigating
+    borderClass = 'border-yellow-500';
+    statusText = 'Admin Down / Link Up';
+    statusColor = 'bg-yellow-500';
+  } else if (adminStatus === 'UP' && operStatus === 'DORMANT') {
+    // Admin up / oper dormant — link enabled but dormant
     borderClass = 'border-yellow-500';
     statusText = 'Dormant';
     statusColor = 'bg-yellow-500';
-  } else if (adminStatus === 3 || operStatus === 3) {
-    // Testing - blue
+  } else if (adminStatus === 'TESTING' || operStatus === 'TESTING') {
+    // Testing state
     borderClass = 'border-blue-500';
     statusText = 'Testing';
     statusColor = 'bg-blue-500';
+  } else {
+    // Admin down / oper down, admin up / oper down, or unknown — gray (disabled/no link)
+    borderClass = 'border-gray-500';
+    statusText = adminStatus === 'DOWN' ? 'Admin Down' : operStatus === 'DOWN' ? 'No Link' : 'Unknown';
+    statusColor = 'bg-gray-500';
   }
 
-  // Format speed
-  const speedMbps = iface.ifHighSpeed || (iface.ifSpeed ? iface.ifSpeed / 1000000 : 0);
+  const speedMbps = iface.speed_high_mbps ?? (iface.speed ? iface.speed / 1_000_000 : 0);
   const speedText = speedMbps >= 1000 ? `${speedMbps / 1000}G` : `${speedMbps}M`;
 
-  // Format MAC address
-  const macAddress = iface.ifPhysAddress || 'N/A';
+  const macAddress = iface.mac ?? 'N/A';
 
-  // Build detailed tooltip content with better formatting
-  const adminStatusText = adminStatus === 1 ? '<span class="text-green-400">Up</span>' : adminStatus === 2 ? '<span class="text-gray-400">Down</span>' : '<span class="text-blue-400">Testing</span>';
-  const operStatusHtml = operStatus === 1 ? '<span class="text-green-400">Up</span>' : operStatus === 2 ? '<span class="text-red-400">Down</span>' : `<span class="text-yellow-400">${statusText}</span>`;
+  const ifaceName  = iface.name ?? iface.alt_name ?? '';
+  const ifaceAlias = iface.alias ?? '';
+
+  const inBytes  = iface.in_octets  ?? 0;
+  const outBytes = iface.out_octets ?? 0;
+
+  const inErrors  = iface.in_errors  ?? 0;
+  const outErrors = iface.out_errors ?? 0;
+
+  const mtu   = iface.mtu   ?? 'N/A';
+  const type  = iface.type  ?? 'N/A';
+  const index = iface.index ?? 'N/A';
+
+  const adminStatusText = adminStatus === 'UP'   ? '<span class="text-green-400">Up</span>'
+                        : adminStatus === 'DOWN' ? '<span class="text-gray-400">Down</span>'
+                        :                         '<span class="text-blue-400">Testing</span>';
+  const operStatusHtml  = operStatus === 'UP'               ? '<span class="text-green-400">Up</span>'
+                        : operStatus === 'DOWN'             ? '<span class="text-gray-400">Down</span>'
+                        : operStatus === 'LOWER_LAYER_DOWN' ? '<span class="text-orange-400">Lower Layer Down</span>'
+                        : operStatus === 'DORMANT'          ? '<span class="text-yellow-400">Dormant</span>'
+                        : operStatus === 'NOT_PRESENT'      ? '<span class="text-gray-500">Not Present</span>'
+                        :                                     `<span class="text-yellow-400">${escapeHtml(statusText)}</span>`;
 
   const tooltipContent = `
-    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(iface.ifDescr || iface.ifName)}</div>
-    ${iface.ifAlias ? `<div class="text-xs text-gray-400 mb-2 italic">${escapeHtml(iface.ifAlias)}</div>` : ''}
+    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700">${escapeHtml(ifaceName)}</div>
+    ${ifaceAlias ? `<div class="text-xs text-gray-400 mb-2 italic">${escapeHtml(ifaceAlias)}</div>` : ''}
     
     <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mb-2">
       <div><span class="text-gray-400">Admin:</span> ${adminStatusText}</div>
       <div><span class="text-gray-400">Oper:</span> ${operStatusHtml}</div>
       <div><span class="text-gray-400">Speed:</span> <span class="text-white">${speedText}</span></div>
-      <div><span class="text-gray-400">MTU:</span> <span class="text-white">${iface.ifMtu || 'N/A'}</span></div>
+      <div><span class="text-gray-400">MTU:</span> <span class="text-white">${mtu}</span></div>
       <div class="col-span-2"><span class="text-gray-400">MAC:</span> <span class="text-white font-mono text-xs">${escapeHtml(macAddress)}</span></div>
     </div>
     
     <div class="border-t border-gray-700 pt-2 mt-2">
       <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-        <div><span class="text-gray-400">Type:</span> <span class="text-white">${iface.ifType || 'N/A'}</span></div>
-        <div><span class="text-gray-400">Index:</span> <span class="text-white">${iface.ifIndex || 'N/A'}</span></div>
-        <div><span class="text-gray-400">In:</span> <span class="text-green-400">${formatBytes(iface.ifHCInOctets || 0)}</span></div>
-        <div><span class="text-gray-400">Out:</span> <span class="text-blue-400">${formatBytes(iface.ifHCOutOctets || 0)}</span></div>
-        <div><span class="text-gray-400">In Err:</span> <span class="${iface.ifInErrors > 0 ? 'text-red-400' : 'text-white'}">${iface.ifInErrors || 0}</span></div>
-        <div><span class="text-gray-400">Out Err:</span> <span class="${iface.ifOutErrors > 0 ? 'text-red-400' : 'text-white'}">${iface.ifOutErrors || 0}</span></div>
+        <div><span class="text-gray-400">Type:</span> <span class="text-white">${type}</span></div>
+        <div><span class="text-gray-400">Index:</span> <span class="text-white">${index}</span></div>
+        <div><span class="text-gray-400">In:</span> <span class="text-green-400">${formatBytes(inBytes)}</span></div>
+        <div><span class="text-gray-400">Out:</span> <span class="text-blue-400">${formatBytes(outBytes)}</span></div>
+        <div><span class="text-gray-400">In Err:</span> <span class="${inErrors > 0 ? 'text-red-400' : 'text-white'}">${inErrors}</span></div>
+        <div><span class="text-gray-400">Out Err:</span> <span class="${outErrors > 0 ? 'text-red-400' : 'text-white'}">${outErrors}</span></div>
       </div>
     </div>
   `;
+
+  const displayName = abbreviateIfaceName(ifaceName);
 
   card.className = `relative bg-gray-800 rounded-lg p-1.5 border-2 ${borderClass} hover:shadow-lg transition-all cursor-pointer group`;
   card.innerHTML = `
     <div class="flex flex-col items-center justify-center h-12">
       <div class="w-2.5 h-2.5 rounded-full ${statusColor} mb-1"></div>
-      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(iface.ifName || iface.ifDescr)}</div>
+      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5">${escapeHtml(displayName)}</div>
       <div class="text-xs text-gray-400 text-xs">${speedText}</div>
     </div>
     
@@ -638,6 +766,388 @@ function createFanCard(fan) {
       <div class="text-xs text-gray-400 mt-2 text-center">
         ${isOperational ? 'Operational' : 'Not Running'}
       </div>
+    </div>
+  `;
+
+  return card;
+}
+
+// Decode prtMarkerSuppliesSupplyUnit values to labels
+function decodePrinterSupplyUnit(unit) {
+  const map = {
+    3:  'tenths of inches', 4:  'micrometers',   7:  'impressions',
+    8:  'sheets',           11: 'hours',          12: 'thousandths of oz',
+    13: 'tenths of grams',  14: 'hundredths fl oz', 15: 'tenths of mL',
+    16: 'feet',             17: 'meters',         18: 'items',
+    19: '%',
+  };
+  return map[parseInt(unit)] || '';
+}
+
+// Infer toner/ink swatch color from the supply description string
+function inferSupplyColor(description) {
+  if (!description) return null;
+  const d = description.toLowerCase();
+
+  if (d.includes('yellow'))  return { swatch: 'bg-yellow-400',  label: 'Yellow',  bar: 'bg-yellow-400',  text: 'text-yellow-400',  border: 'border-yellow-500' };
+  if (d.includes('cyan'))    return { swatch: 'bg-cyan-400',    label: 'Cyan',    bar: 'bg-cyan-400',    text: 'text-cyan-400',    border: 'border-cyan-500' };
+  if (d.includes('magenta')) return { swatch: 'bg-pink-500',    label: 'Magenta', bar: 'bg-pink-500',    text: 'text-pink-400',    border: 'border-pink-500' };
+  if (d.includes('black') || d.includes('toner k')) {
+    return { swatch: 'bg-gray-300', label: 'Black', bar: 'bg-gray-400', text: 'text-gray-300', border: 'border-gray-400' };
+  }
+  if (d.includes('waste'))   return { swatch: 'bg-orange-500', label: 'Waste',  bar: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500' };
+  if (d.includes('fuser'))   return { swatch: 'bg-purple-500', label: 'Fuser',  bar: 'bg-purple-500', text: 'text-purple-400', border: 'border-purple-500' };
+  if (d.includes('drum'))    return { swatch: 'bg-indigo-500', label: 'Drum',   bar: 'bg-indigo-500', text: 'text-indigo-400', border: 'border-indigo-500' };
+  return null;
+}
+
+// Create a printer supply card with a level gauge and toner-color awareness
+function createPrinterSupplyCard(supply) {
+  const card = document.createElement('div');
+
+  const level       = typeof supply.level === 'number' ? supply.level : 0;
+  const capacityMax = supply.capacity_max || 100;
+  const pct         = Math.min(Math.max((level / capacityMax) * 100, 0), 100);
+  const pctText     = pct.toFixed(0);
+  const unitLabel   = decodePrinterSupplyUnit(supply.unit);
+
+  // Level display: if unit is %, show as %; otherwise show raw level + unit label
+  const levelDisplay = unitLabel === '%'
+    ? `${pctText}%`
+    : `${level}${unitLabel ? ' ' + unitLabel : ''}`;
+
+  const colorInfo = inferSupplyColor(supply.description);
+
+  // If we know the toner color, use it for the bar and border; otherwise fall back to level thresholds
+  let barColor, textColor, borderColor;
+  if (colorInfo) {
+    barColor    = colorInfo.bar;
+    textColor   = colorInfo.text;
+    borderColor = colorInfo.border;
+  } else if (pct <= 10) {
+    barColor = 'bg-red-500';    textColor = 'text-red-400';    borderColor = 'border-red-500';
+  } else if (pct <= 25) {
+    barColor = 'bg-yellow-500'; textColor = 'text-yellow-400'; borderColor = 'border-yellow-500';
+  } else {
+    barColor = 'bg-emerald-500'; textColor = 'text-emerald-400'; borderColor = 'border-emerald-500';
+  }
+
+  // Low-level warning badge regardless of color type
+  let warningBadge = '';
+  if (pct <= 10) {
+    warningBadge = `<span class="text-xs px-1.5 py-0.5 rounded bg-red-600/20 text-red-300 flex-shrink-0">Low</span>`;
+  } else if (pct <= 25) {
+    warningBadge = `<span class="text-xs px-1.5 py-0.5 rounded bg-yellow-600/20 text-yellow-300 flex-shrink-0">Low</span>`;
+  }
+
+  const swatchHtml = colorInfo
+    ? `<span class="inline-block w-3 h-3 rounded-sm ${colorInfo.swatch} flex-shrink-0 border border-gray-600"></span>`
+    : '';
+
+  card.className = `bg-gray-800 rounded-lg p-3 border-l-4 ${borderColor} w-52 flex-shrink-0`;
+  card.innerHTML = `
+    <div class="flex items-start justify-between gap-1 mb-2">
+      <div class="flex items-center gap-1.5 min-w-0">
+        ${swatchHtml}
+        <span class="text-xs font-medium text-white truncate" title="${escapeHtml(supply.description)}">${escapeHtml(supply.description)}</span>
+      </div>
+      ${warningBadge}
+    </div>
+
+    <div class="${textColor} text-2xl font-bold leading-none mb-2">${escapeHtml(levelDisplay)}</div>
+
+    <!-- Level gauge -->
+    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
+      <div class="absolute h-full ${barColor} transition-all duration-300 rounded-full" style="width: ${pct}%"></div>
+    </div>
+    <div class="flex justify-between text-xs text-gray-500">
+      <span>Empty</span>
+      <span>Full</span>
+    </div>
+  `;
+
+  return card;
+}
+
+// Decode HR Storage type OIDs to human-readable labels
+function decodeFilesystemType(typeOid) {
+  const map = {
+    '1.3.6.1.2.1.25.2.1.1':  'Other',
+    '1.3.6.1.2.1.25.2.1.2':  'RAM',
+    '1.3.6.1.2.1.25.2.1.3':  'Virtual Memory',
+    '1.3.6.1.2.1.25.2.1.4':  'Fixed Disk',
+    '1.3.6.1.2.1.25.2.1.5':  'Removable Disk',
+    '1.3.6.1.2.1.25.2.1.6':  'Floppy Disk',
+    '1.3.6.1.2.1.25.2.1.7':  'Compact Disc',
+    '1.3.6.1.2.1.25.2.1.8':  'RAM Disk',
+    '1.3.6.1.2.1.25.2.1.9':  'Flash Memory',
+    '1.3.6.1.2.1.25.2.1.10': 'Network Disk',
+  };
+  return map[typeOid] || typeOid || 'Unknown';
+}
+
+// Create a filesystem card with a capacity gauge
+function createFilesystemCard(fs) {
+  const card = document.createElement('div');
+
+  const usedPct  = typeof fs.used_pct === 'number' ? fs.used_pct : 0;
+  const pct      = Math.min(Math.max(usedPct * 100, 0), 100);
+  const pctText  = pct.toFixed(1);
+  const freePct  = (100 - pct).toFixed(1);
+
+  const usedBytes  = fs.used_bytes  || 0;
+  const totalBytes = fs.total_bytes || 0;
+  const freeBytes  = Math.max(totalBytes - usedBytes, 0);
+
+  // Colour thresholds mirroring CPU cores
+  let barColor, textColor, borderColor;
+  if (pct >= 90) {
+    barColor = 'bg-red-500';   textColor = 'text-red-400';    borderColor = 'border-red-500';
+  } else if (pct >= 75) {
+    barColor = 'bg-yellow-500'; textColor = 'text-yellow-400'; borderColor = 'border-yellow-500';
+  } else {
+    barColor = 'bg-emerald-500'; textColor = 'text-emerald-400'; borderColor = 'border-emerald-500';
+  }
+
+  const typeLabel = decodeFilesystemType(fs.type);
+
+  card.className = `bg-gray-800 rounded-lg p-3 border-l-4 ${borderColor}`;
+  card.innerHTML = `
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="text-sm font-semibold text-white font-mono truncate" title="${escapeHtml(fs.mount_point || '/')}">${escapeHtml(fs.mount_point || '/')}</span>
+      <span class="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 whitespace-nowrap flex-shrink-0">${escapeHtml(typeLabel)}</span>
+    </div>
+
+    <div class="${textColor} text-2xl font-bold leading-none mb-2">${pctText}%</div>
+
+    <!-- Capacity gauge -->
+    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2">
+      <div class="absolute h-full ${barColor} transition-all duration-300 rounded-full" style="width: ${pct}%"></div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-1 text-xs">
+      <div>
+        <span class="text-gray-500 block">Used</span>
+        <span class="${textColor} font-mono">${formatBytes(usedBytes)}</span>
+      </div>
+      <div>
+        <span class="text-gray-500 block">Free</span>
+        <span class="text-gray-300 font-mono">${formatBytes(freeBytes)}</span>
+      </div>
+      <div>
+        <span class="text-gray-500 block">Total</span>
+        <span class="text-gray-300 font-mono">${formatBytes(totalBytes)}</span>
+      </div>
+    </div>
+  `;
+
+  return card;
+}
+
+// Map short band codes to human-readable 802.11 standard + frequency labels
+function decodeWirelessBand(band) {
+  if (!band) return { label: 'Unknown', freq: '', color: 'text-gray-400', badge: 'bg-gray-600/20 text-gray-300' };
+  const b = band.toLowerCase();
+  const map = {
+    'b':    { label: '802.11b',  freq: '2.4 GHz', color: 'text-gray-400',   badge: 'bg-gray-600/20 text-gray-300' },
+    'g':    { label: '802.11g',  freq: '2.4 GHz', color: 'text-blue-400',   badge: 'bg-blue-600/20 text-blue-300' },
+    'ng':   { label: '802.11n',  freq: '2.4 GHz', color: 'text-blue-400',   badge: 'bg-blue-600/20 text-blue-300' },
+    'na':   { label: '802.11n',  freq: '5 GHz',   color: 'text-violet-400', badge: 'bg-violet-600/20 text-violet-300' },
+    'a':    { label: '802.11a',  freq: '5 GHz',   color: 'text-violet-400', badge: 'bg-violet-600/20 text-violet-300' },
+    'ac':   { label: '802.11ac', freq: '5 GHz',   color: 'text-violet-400', badge: 'bg-violet-600/20 text-violet-300' },
+    'ax':   { label: 'Wi-Fi 6',  freq: '6 GHz',   color: 'text-emerald-400','badge': 'bg-emerald-600/20 text-emerald-300' },
+    'ax6':  { label: 'Wi-Fi 6E', freq: '6 GHz',   color: 'text-emerald-400','badge': 'bg-emerald-600/20 text-emerald-300' },
+    'be':   { label: 'Wi-Fi 7',  freq: '6 GHz',   color: 'text-pink-400',   badge: 'bg-pink-600/20 text-pink-300' },
+  };
+  return map[b] || { label: band.toUpperCase(), freq: '', color: 'text-blue-400', badge: 'bg-blue-600/20 text-blue-300' };
+}
+
+// Create a wireless radio card
+function createWirelessRadioCard(radio) {
+  const card = document.createElement('div');
+
+  const bandInfo = decodeWirelessBand(radio.band);
+  const inBytes     = radio.in_bytes     || 0;
+  const outBytes    = radio.out_bytes    || 0;
+  const outDiscards = radio.out_discards || 0;
+  const outErrors   = radio.out_errors   || 0;
+  const hasErrors   = outDiscards > 0 || outErrors > 0;
+
+  card.className = 'bg-gray-800 rounded-lg p-4 border border-gray-600 hover:border-blue-500 transition-colors w-64 flex-shrink-0';
+  card.innerHTML = `
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 ${bandInfo.color} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+        </svg>
+        <span class="text-sm font-semibold text-white font-mono">${escapeHtml(radio.name || `Radio ${radio.index}`)}</span>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded ${bandInfo.badge}">${bandInfo.label}</span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs mb-3">
+      ${bandInfo.freq ? `
+      <div>
+        <span class="text-gray-500 block">Frequency</span>
+        <span class="${bandInfo.color} font-medium">${bandInfo.freq}</span>
+      </div>` : ''}
+      ${radio.channel !== '' && radio.channel !== null && radio.channel !== undefined ? `
+      <div>
+        <span class="text-gray-500 block">Channel</span>
+        <span class="text-white font-medium">${escapeHtml(String(radio.channel))}</span>
+      </div>` : ''}
+    </div>
+
+    <div class="border-t border-gray-700 pt-2 space-y-1 text-xs">
+      <div class="flex justify-between">
+        <span class="text-gray-500">Rx</span>
+        <span class="text-green-400 font-mono">${formatBytes(inBytes)}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-gray-500">Tx</span>
+        <span class="text-blue-400 font-mono">${formatBytes(outBytes)}</span>
+      </div>
+      ${hasErrors ? `
+      <div class="flex justify-between">
+        <span class="text-gray-500">Tx Discards</span>
+        <span class="${outDiscards > 0 ? 'text-yellow-400' : 'text-gray-400'} font-mono">${outDiscards}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-gray-500">Tx Errors</span>
+        <span class="${outErrors > 0 ? 'text-red-400' : 'text-gray-400'} font-mono">${outErrors}</span>
+      </div>` : ''}
+    </div>
+  `;
+
+  return card;
+}
+
+// Decode CDP/LLDP capabilities hex string (e.g. "00:00:00:28") into human-readable labels
+function decodeCdpCapabilities(capHex) {
+  if (!capHex) return [];
+  // Strip colons and parse as a 32-bit integer
+  const hex = capHex.replace(/:/g, '');
+  const bits = parseInt(hex, 16);
+  if (isNaN(bits)) return [];
+
+  const capMap = [
+    [0x0001, 'Router'],
+    [0x0002, 'Bridge'],
+    [0x0004, 'SR Bridge'],
+    [0x0008, 'Switch'],
+    [0x0010, 'Host'],
+    [0x0020, 'IGMP'],
+    [0x0040, 'Repeater'],
+    [0x0080, 'VoIP Phone'],
+    [0x0100, 'Remotely Managed'],
+    [0x0200, 'CVTA'],
+    [0x0400, 'Two-Port MAC Relay'],
+  ];
+
+  return capMap.filter(([mask]) => bits & mask).map(([, label]) => label);
+}
+
+// Create a neighbor card showing CDP/LLDP adjacency details
+function createNeighborCard(neighbor) {
+  const card = document.createElement('div');
+
+  const caps = decodeCdpCapabilities(neighbor.capabilities);
+  const capsBadges = caps.map(c =>
+    `<span class="text-xs px-1.5 py-0.5 rounded bg-indigo-600/20 text-indigo-300">${escapeHtml(c)}</span>`
+  ).join('');
+
+  // Shorten platform — strip leading vendor word if it duplicates common prefixes
+  const platform = neighbor.platform || '';
+
+  // Extract a short OS version line from the multi-line version string
+  let versionShort = '';
+  if (neighbor.version) {
+    const firstLine = neighbor.version.split('\n')[0].trim();
+    // Try to pull just the "Version X.Y(Z)" fragment
+    const versionMatch = firstLine.match(/Version\s+[\w().]+/i);
+    versionShort = versionMatch ? versionMatch[0] : firstLine.slice(0, 60);
+  }
+
+  card.className = 'bg-gray-800 rounded-lg p-3 border border-gray-600 hover:border-indigo-500 transition-colors';
+  card.innerHTML = `
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+        </svg>
+        <span class="text-sm font-semibold text-white truncate">${escapeHtml(neighbor.device_id || 'Unknown')}</span>
+      </div>
+      ${neighbor.address ? `<span class="text-xs text-gray-400 font-mono flex-shrink-0">${escapeHtml(neighbor.address)}</span>` : ''}
+    </div>
+
+    <div class="space-y-1 text-xs mb-2">
+      ${neighbor.port ? `
+      <div class="flex items-center gap-1.5">
+        <span class="text-gray-500 w-16 flex-shrink-0">Remote Port</span>
+        <span class="text-gray-200 font-mono truncate">${escapeHtml(neighbor.port)}</span>
+      </div>` : ''}
+      ${platform ? `
+      <div class="flex items-center gap-1.5">
+        <span class="text-gray-500 w-16 flex-shrink-0">Platform</span>
+        <span class="text-gray-200 truncate">${escapeHtml(platform)}</span>
+      </div>` : ''}
+      ${versionShort ? `
+      <div class="flex items-center gap-1.5">
+        <span class="text-gray-500 w-16 flex-shrink-0">Version</span>
+        <span class="text-gray-400 truncate italic">${escapeHtml(versionShort)}</span>
+      </div>` : ''}
+    </div>
+
+    ${caps.length > 0 ? `
+    <div class="flex flex-wrap gap-1 pt-2 border-t border-gray-700">
+      ${capsBadges}
+    </div>` : ''}
+  `;
+
+  return card;
+}
+
+// Create a CPU core card with a load percentage gauge and colour-coded utilisation
+function createCpuCoreCard(core, displayIndex) {
+  const card = document.createElement('div');
+
+  const loadPct = typeof core.load_pct === 'number' ? core.load_pct : 0;
+  // load_pct arrives as a fraction (e.g. 0.06 = 6%)
+  const pct = Math.min(Math.max(loadPct * 100, 0), 100);
+  const pctRounded = pct.toFixed(1);
+
+  // Colour thresholds: green < 60 %, yellow 60–85 %, red > 85 %
+  let barColor, textColor, borderColor;
+  if (pct >= 85) {
+    barColor = 'bg-red-500';
+    textColor = 'text-red-400';
+    borderColor = 'border-red-500';
+  } else if (pct >= 60) {
+    barColor = 'bg-yellow-500';
+    textColor = 'text-yellow-400';
+    borderColor = 'border-yellow-500';
+  } else {
+    barColor = 'bg-blue-500';
+    textColor = 'text-blue-400';
+    borderColor = 'border-blue-500';
+  }
+
+  card.className = `bg-gray-800 rounded-lg p-3 border-l-4 ${borderColor} w-36 flex-shrink-0`;
+  card.innerHTML = `
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-semibold text-gray-300 uppercase">Core ${displayIndex}</span>
+      <span class="text-xs text-gray-500 font-mono">#${escapeHtml(String(core.index))}</span>
+    </div>
+
+    <div class="${textColor} text-2xl font-bold leading-none mb-2">${pctRounded}%</div>
+
+    <!-- Load gauge -->
+    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+      <div class="absolute h-full ${barColor} transition-all duration-300" style="width: ${pct}%"></div>
+    </div>
+    <div class="flex justify-between text-xs text-gray-500 mt-1">
+      <span>0%</span>
+      <span>100%</span>
     </div>
   `;
 

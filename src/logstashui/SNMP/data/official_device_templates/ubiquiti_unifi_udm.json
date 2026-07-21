@@ -1,0 +1,17 @@
+{
+  "official_key": "ubiquiti_unifi_udm",
+  "name": "ubiquiti_unifi_udm",
+  "type": "Router",
+  "description": "System, interfaces, and Linux/Net-SNMP metrics for Ubiquiti UniFi Dream Machine devices.",
+  "vendor": "Ubiquiti",
+  "product": "UniFi Dream Machine",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "generic_ucd_system_metrics"
+  ],
+  "matching_rules": [
+    "UDM"
+  ]
+}

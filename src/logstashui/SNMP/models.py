@@ -4,6 +4,7 @@
 
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from Common.encryption import encrypt_credential, decrypt_credential
 from PipelineManager.models import Connection
 import ipaddress
@@ -13,7 +14,12 @@ class Network(models.Model):
     """
     SNMP Network model for defining networks to monitor
     """
-    
+
+    DEPLOYMENT_MODE_CHOICES = [
+        ('CENTRALIZED', 'Centralized Pipeline Management'),
+        ('AGENT', 'LogstashAgent'),
+    ]
+
     name = models.CharField(
         max_length=255,
         unique=True,
@@ -24,20 +30,40 @@ class Network(models.Model):
         max_length=50,
         help_text="Network in CIDR notation (e.g., 192.168.1.0/24)"
     )
-    
+
+    deployment_mode = models.CharField(
+        max_length=20,
+        choices=DEPLOYMENT_MODE_CHOICES,
+        default='CENTRALIZED',
+        help_text="Deployment mode for this network (Centralized Pipeline Management or LogstashAgent)"
+    )
+
+    credential_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('KEYSTORE', 'Manage Keystore Manually'),
+            ('PLAINTEXT', 'Plaintext Credentials'),
+        ],
+        default='KEYSTORE',
+        help_text="How credentials are supplied to pipelines (Centralized Pipeline Management mode only)"
+    )
+
     connection = models.ForeignKey(
         Connection,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='snmp_networks',
-        help_text="Logstash connection that will monitor this network"
+        help_text="Elasticsearch connection for this network"
     )
-    
-    logstash_name = models.CharField(
-        max_length=255,
+
+    agent_connection = models.ForeignKey(
+        Connection,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text="Name of the Logstash node that will monitor this network (deprecated, use connection instead)"
+        related_name='agent_snmp_networks',
+        help_text="LogstashAgent connection for deployment (AGENT mode only)"
     )
     
     discovery_enabled = models.BooleanField(
@@ -73,6 +99,17 @@ class Network(models.Model):
         help_text="Polling interval in seconds"
     )
     
+    namespace = models.CharField(
+        max_length=100,
+        default='default',
+        help_text="Data stream namespace for organizing data (e.g., dev, prod, qa). Max 100 bytes."
+    )
+
+    namespace_from_device_template = models.BooleanField(
+        default=False,
+        help_text="When enabled, the normalized device template name is used as the data stream namespace instead of the fixed namespace value."
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -116,7 +153,16 @@ class Device(models.Model):
     
     ip_address = models.CharField(
         max_length=255,
-        help_text="IP address or hostname of the device"
+        null=True,
+        blank=True,
+        help_text="IP address of the device (optional if hostname is provided)"
+    )
+
+    hostname = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="DNS hostname of the device (optional if IP address is provided)"
     )
     
     port = models.IntegerField(
@@ -154,13 +200,58 @@ class Device(models.Model):
     
     device_template = models.ForeignKey(
         'DeviceTemplate',
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='devices',
-        help_text="Device template assigned to this device"
+        help_text="Device template assigned to this device (defaults to 'Default' template if not specified)"
     )
-    
+
+    # Location fields
+    site = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Site or campus this device is located at"
+    )
+
+    building = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Building within the site"
+    )
+
+    room = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Room or rack location within the building"
+    )
+
+    latitude = models.DecimalField(
+        max_digits=15,
+        decimal_places=10,
+        null=True,
+        blank=True,
+        help_text="Geographic latitude of the device location"
+    )
+
+    longitude = models.DecimalField(
+        max_digits=15,
+        decimal_places=10,
+        null=True,
+        blank=True,
+        help_text="Geographic longitude of the device location"
+    )
+
+    # Arbitrary user-defined key/value metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Arbitrary key-value metadata for this device"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -171,32 +262,57 @@ class Device(models.Model):
         indexes = [
             models.Index(fields=['name']),
             models.Index(fields=['ip_address']),
+            models.Index(fields=['hostname']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['network', 'name']),
         ]
     
     def __str__(self):
-        return f"{self.name} ({self.ip_address})"
+        identifier = self.ip_address or self.hostname or 'no address'
+        return f"{self.name} ({identifier})"
     
     def clean(self):
         """
         Validate device fields
         """
         super().clean()
-        
-        # Validate IP address or hostname
+
+        # At least one of ip_address or hostname must be provided
+        if not self.ip_address and not self.hostname:
+            raise ValidationError(
+                'At least one of IP address or hostname must be provided.'
+            )
+
+        # Validate IP address format when present
         if self.ip_address:
             try:
-                # Try to parse as IP address
                 ipaddress.ip_address(self.ip_address)
             except ValueError:
-                # If not a valid IP, check if it's a reasonable hostname
-                if not self.ip_address.replace('-', '').replace('.', '').replace('_', '').isalnum():
-                    raise ValidationError({
-                        'ip_address': 'Must be a valid IP address or hostname'
-                    })
+                # Not a valid IP address
+                raise ValidationError({
+                    'ip_address': 'Must be a valid IP address (e.g. 192.168.1.1)'
+                })
+
+        # Validate hostname format when present
+        if self.hostname:
+            if not self.hostname.replace('-', '').replace('.', '').replace('_', '').isalnum():
+                raise ValidationError({
+                    'hostname': 'Must be a valid hostname'
+                })
     
     def save(self, *args, **kwargs):
+        # If no device template is assigned, use the Default template
+        # (synced from official_device_templates/default.json as 'default')
+        if not self.device_template_id:
+            default_template = DeviceTemplate.objects.filter(
+                name='default',
+                official=True
+            ).first()
+            
+            if default_template:
+                self.device_template = default_template
+            # If Default template doesn't exist, leave as None (will be handled by sync)
+        
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -458,6 +574,21 @@ class Profile(models.Model):
         help_text="Product line or series (e.g., iDRAC, Catalyst, ASR)"
     )
     
+    normalizers = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of normalizer configurations to apply to profile fields"
+    )
+    
+    official_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Stable identifier from the official JSON file (e.g. 'generic_interfaces'). Null for user-created profiles."
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -524,6 +655,12 @@ class DeviceTemplate(models.Model):
         help_text="Product line or series (e.g., iDRAC, Catalyst, ASR)"
     )
     
+    type = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Device type (e.g., Router, Switch, Server, Firewall)"
+    )
+    
     matching_rules = models.JSONField(
         default=list,
         blank=True,
@@ -533,6 +670,15 @@ class DeviceTemplate(models.Model):
     official = models.BooleanField(
         default=False,
         help_text="Whether this is an official/built-in template (official templates cannot be edited or deleted)"
+    )
+    
+    official_key = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Stable identifier from the official JSON file (e.g. 'dell_idrac'). Null for user-created templates."
     )
     
     profiles = models.ManyToManyField(
@@ -576,6 +722,28 @@ class DeviceTemplate(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
     
+    def delete(self, *args, **kwargs):
+        """
+        Before deleting a template, reassign all its devices to the Default template.
+        Prevents deletion of the Default template itself.
+        """
+        # Prevent deletion of the Default template
+        if self.name == 'default' and self.official:
+            raise ValidationError("Cannot delete the Default template")
+
+        # Get the Default template
+        default_template = DeviceTemplate.objects.filter(
+            name='default',
+            official=True
+        ).exclude(id=self.id).first()
+        
+        if default_template:
+            # Reassign all devices using this template to Default
+            self.devices.all().update(device_template=default_template)
+        
+        # Now safe to delete
+        super().delete(*args, **kwargs)
+    
     def matches_device(self, device_info):
         """
         Check if this template matches the given device information
@@ -591,4 +759,62 @@ class DeviceTemplate(models.Model):
         
         device_info_lower = device_info.lower()
         return any(rule.lower() in device_info_lower for rule in self.matching_rules)
+
+
+class SNMPDeploymentState(models.Model):
+    """
+    Track SNMP deployment state to optimize change detection.
+    Uses timestamps to avoid expensive reconciliation for the indicator.
+    """
+    last_deployment = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Timestamp of last successful deployment"
+    )
+    last_config_change = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of last configuration change"
+    )
+    
+    class Meta:
+        db_table = 'snmp_deployment_state'
+        verbose_name = 'SNMP Deployment State'
+        verbose_name_plural = 'SNMP Deployment State'
+    
+    @classmethod
+    def mark_config_changed(cls):
+        """
+        Mark that SNMP configuration has changed.
+        Call this after any CRUD operation on networks, devices, credentials, templates, or profiles.
+        """
+        from django.utils import timezone
+        state, _ = cls.objects.get_or_create(id=1)
+        state.last_config_change = timezone.now()
+        state.save(update_fields=['last_config_change'])
+    
+    @classmethod
+    def has_undeployed_changes(cls):
+        """
+        Fast timestamp-based check for undeployed changes.
+        Returns True if config has changed since last deployment.
+        
+        Note: May have false positives if user changes then reverts config.
+        These are cleared when user opens the diff modal and sees no changes.
+        """
+        state = cls.objects.filter(id=1).first()
+        
+        # Never deployed or no state
+        if not state or not state.last_deployment:
+            return True
+        
+        # Compare timestamps
+        if not state.last_config_change:
+            return False
+        return state.last_config_change > state.last_deployment
+    
+    def __str__(self):
+        if self.last_deployment:
+            return f"Last deployed: {self.last_deployment}"
+        return "Never deployed"
 

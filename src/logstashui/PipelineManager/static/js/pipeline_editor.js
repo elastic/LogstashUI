@@ -932,13 +932,6 @@ function validateRequiredFields(component) {
     return result;
 }
 
-// Helper function to escape HTML to prevent injection and template literal evaluation
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str);
-    return div.innerHTML;
-}
-
 // Helper function to format config values for display
 function formatConfigValue(value, key) {
     // Helper to clean up string values

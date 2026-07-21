@@ -924,8 +924,8 @@ document.addEventListener('DOMContentLoaded', function() {
         quickSetupRow?.classList.add('hidden');
         tipTile?.classList.add('hidden');
 
-        // No banner row for enrollment tokens
-        if (file === 'enrollment-tokens') {
+        // No banner row for enrollment tokens or the Agents tab
+        if (file === 'enrollment-tokens' || file === 'nodes') {
             bannerRow.classList.add('hidden');
             return;
         }
@@ -2090,13 +2090,6 @@ function toggleTokenDisplay(tokenId, rawToken, encodedToken) {
     }
 }
 
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Toggle enrollment token menu dropdown
 function toggleEnrollmentTokenMenu(tokenId) {
     const menu = document.getElementById(`token-menu-${tokenId}`);
@@ -3121,8 +3114,8 @@ function renderPolicyNodes(nodes) {
                         <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                         </svg>
-                        <p>No nodes found</p>
-                        <p class="text-sm">Nodes will appear here when agents enroll with this policy</p>
+                        <p>No agents found</p>
+                        <p class="text-sm">Agents will appear here when they enroll with this policy</p>
                     </div>
                 </td>
             </tr>
@@ -3130,7 +3123,20 @@ function renderPolicyNodes(nodes) {
         return;
     }
 
-    tbody.innerHTML = nodes.map(node => `
+    tbody.innerHTML = nodes.map(node => {
+        // Involvement badges: LogstashAgent always; CPM if policy enables it;
+        // SNMP if this agent has Agent-mode SNMP networks (merged list).
+        const badges = [
+            `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30">LogstashAgent</span>`
+        ];
+        if (node.cpm_enabled) {
+            badges.push(`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30">CPM</span>`);
+        }
+        if (node.snmp_networks && node.snmp_networks.length) {
+            const title = node.snmp_networks.join(', ');
+            badges.push(`<span title="${title}" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">SNMP (${node.snmp_networks.length})</span>`);
+        }
+        return `
         <tr class="hover:bg-gray-700/50 transition-colors">
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
                 <div class="flex flex-col items-center">
@@ -3148,6 +3154,7 @@ function renderPolicyNodes(nodes) {
                             <span class="text-xs text-gray-500">v${node.agent_version}</span>
                         </div>
                     ` : ''}
+                    <div class="flex flex-wrap items-center gap-1 mt-1.5">${badges.join('')}</div>
                 </div>
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${node.host || '—'}</td>
@@ -3158,7 +3165,8 @@ function renderPolicyNodes(nodes) {
                 </span>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // ---------------------------------------------------------------------------

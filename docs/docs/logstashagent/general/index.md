@@ -6,13 +6,13 @@ General guides for building, running, and deploying LogstashAgent.
 
 ## **[Building and Running](/docs/docs/logstashagent/general/build.md)**
 
-Instructions for running LogstashAgent in different modes.
+Instructions for building and running LogstashAgent.
 
 **Covers:**
+- Installing from the pre-built binary (recommended)
+- Building a standalone binary with PyInstaller
 - Docker Compose deployment (testing/standalone)
-- Running natively with Python
-- Enrollment and controller modes
-- Development setup
+- Running from source (development)
 
 **📖 [View build guide →](/docs/docs/logstashagent/general/build.md)**
 

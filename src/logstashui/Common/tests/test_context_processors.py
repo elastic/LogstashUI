@@ -11,7 +11,6 @@ from Common.context_processors import (
     navigation_highlight
 )
 from PipelineManager.models import Connection
-from SNMP.models import Device
 
 
 @pytest.fixture
@@ -80,187 +79,117 @@ class TestVersionUpdateInfo:
 
 
 class TestNavigationHighlight:
-    """Test navigation_highlight context processor"""
+    """Test navigation_highlight context processor.
+
+    highlight_snmp_devices was removed from the server-side context processor;
+    that logic now lives in client-side localStorage.  The processor only tracks
+    whether any Connection exists and exposes:
+      - highlight_connection_manager (bool)
+      - has_connections (bool)
+    """
 
     def test_no_connections_highlights_connection_manager(self, mock_request, db):
-        """Test that Connection Manager is highlighted when no connections exist"""
-        # Ensure no connections exist
+        """Connection Manager is highlighted when no connections exist"""
         Connection.objects.all().delete()
-        Device.objects.all().delete()
-        
-        context = navigation_highlight(mock_request)
-        
-        assert context['highlight_connection_manager'] is True
-        assert context['highlight_snmp_devices'] is False
 
-    def test_connections_exist_no_devices_highlights_snmp(self, mock_request, db):
-        """Test that SNMP Devices is highlighted when connections exist but no devices"""
-        # Create a connection
+        context = navigation_highlight(mock_request)
+
+        assert context['highlight_connection_manager'] is True
+        assert context['has_connections'] is False
+
+    def test_connections_exist_does_not_highlight_connection_manager(self, mock_request, db):
+        """Connection Manager is NOT highlighted when at least one connection exists"""
         Connection.objects.create(
             name='Test Connection',
             connection_type='CENTRALIZED',
             host='https://localhost:9200',
             username='elastic',
-            password='changeme'
+            password='changeme',
+            port=None,
         )
-        # Ensure no devices exist
-        Device.objects.all().delete()
-        
-        context = navigation_highlight(mock_request)
-        
-        assert context['highlight_connection_manager'] is False
-        assert context['highlight_snmp_devices'] is True
 
-    def test_both_exist_no_highlights(self, mock_request, db):
-        """Test that nothing is highlighted when both connections and devices exist"""
-        # Create a connection
-        connection = Connection.objects.create(
-            name='Test Connection',
-            connection_type='CENTRALIZED',
-            host='https://localhost:9200',
-            username='elastic',
-            password='changeme'
-        )
-        # Create a device
-        Device.objects.create(
-            name='Test Device',
-            ip_address='192.168.1.1'
-        )
-        
         context = navigation_highlight(mock_request)
-        
-        assert context['highlight_connection_manager'] is False
-        assert context['highlight_snmp_devices'] is False
 
-    def test_multiple_connections_no_devices(self, mock_request, db):
-        """Test with multiple connections but no devices"""
+        assert context['highlight_connection_manager'] is False
+        assert context['has_connections'] is True
+
+    def test_multiple_connections(self, mock_request, db):
+        """has_connections is True when multiple connections exist"""
         Connection.objects.create(
             name='Connection 1',
             connection_type='CENTRALIZED',
             host='https://localhost:9200',
             username='elastic',
-            password='changeme'
+            password='changeme',
+            port=None,
         )
         Connection.objects.create(
             name='Connection 2',
             connection_type='CENTRALIZED',
             cloud_id='test-id',
-            api_key='test-api-key'
+            api_key='test-api-key',
         )
-        Device.objects.all().delete()
-        
-        context = navigation_highlight(mock_request)
-        
-        assert context['highlight_connection_manager'] is False
-        assert context['highlight_snmp_devices'] is True
 
-    def test_no_connections_multiple_devices(self, mock_request, db):
-        """Test with no connections but devices exist (edge case)"""
-        # This is an edge case - devices shouldn't exist without connections
-        # but we test the logic anyway
-        Connection.objects.all().delete()
-        
-        # Create a connection temporarily to create device, then delete it
-        connection = Connection.objects.create(
-            name='Temp Connection',
-            connection_type='CENTRALIZED',
-            host='https://localhost:9200',
-            username='elastic',
-            password='changeme'
-        )
-        Device.objects.create(
-            name='Device 1',
-            ip_address='192.168.1.1'
-        )
-        
         context = navigation_highlight(mock_request)
-        
-        # Should highlight connection manager since no connections exist
-        assert context['highlight_connection_manager'] is False  # Connection exists
-        assert context['highlight_snmp_devices'] is False  # Device exists
+
+        assert context['highlight_connection_manager'] is False
+        assert context['has_connections'] is True
 
     def test_context_keys_always_present(self, mock_request, db):
-        """Test that context keys are always present regardless of state"""
+        """highlight_connection_manager and has_connections are always in context"""
         Connection.objects.all().delete()
-        Device.objects.all().delete()
-        
+
         context = navigation_highlight(mock_request)
-        
+
         assert 'highlight_connection_manager' in context
-        assert 'highlight_snmp_devices' in context
+        assert 'has_connections' in context
         assert isinstance(context['highlight_connection_manager'], bool)
-        assert isinstance(context['highlight_snmp_devices'], bool)
+        assert isinstance(context['has_connections'], bool)
 
     def test_navigation_highlight_with_different_request_types(self, request_factory, db):
-        """Test navigation_highlight works with different request types"""
+        """navigation_highlight works regardless of HTTP method"""
         Connection.objects.all().delete()
-        Device.objects.all().delete()
-        
-        # Test with GET request
-        get_request = request_factory.get('/test/')
-        context = navigation_highlight(get_request)
-        assert context['highlight_connection_manager'] is True
-        
-        # Test with POST request
-        post_request = request_factory.post('/test/')
-        context = navigation_highlight(post_request)
-        assert context['highlight_connection_manager'] is True
-        
-        # Test with PUT request
-        put_request = request_factory.put('/test/')
-        context = navigation_highlight(put_request)
-        assert context['highlight_connection_manager'] is True
+
+        for method in ('get', 'post', 'put'):
+            request = getattr(request_factory, method)('/test/')
+            context = navigation_highlight(request)
+            assert context['highlight_connection_manager'] is True
 
     def test_navigation_highlight_database_queries(self, mock_request, db):
-        """Test that navigation_highlight makes expected database queries"""
+        """navigation_highlight queries Connection.objects.exists() exactly once"""
         Connection.objects.all().delete()
-        Device.objects.all().delete()
-        
-        # This should make 2 queries: one for Connection.exists(), one for Device.exists()
+
         with patch.object(Connection.objects, 'exists', return_value=False) as mock_conn_exists:
-            with patch.object(Device.objects, 'exists', return_value=False) as mock_dev_exists:
-                context = navigation_highlight(mock_request)
-                
-                mock_conn_exists.assert_called_once()
-                mock_dev_exists.assert_called_once()  # Both queries are made
-                assert context['highlight_connection_manager'] is True
-                assert context['highlight_snmp_devices'] is False
+            context = navigation_highlight(mock_request)
+
+            mock_conn_exists.assert_called_once()
+            assert context['highlight_connection_manager'] is True
+            assert context['has_connections'] is False
 
     def test_navigation_highlight_logic_flow(self, mock_request, db):
-        """Test the complete logic flow of navigation_highlight"""
-        # State 1: No connections, no devices
+        """Complete logic: no connections → highlight; connection added → no highlight"""
         Connection.objects.all().delete()
-        Device.objects.all().delete()
+
+        # State 1: No connections
         context = navigation_highlight(mock_request)
         assert context == {
             'highlight_connection_manager': True,
-            'highlight_snmp_devices': False
+            'has_connections': False,
         }
-        
-        # State 2: Has connections, no devices
+
+        # State 2: Connection added
         Connection.objects.create(
             name='Test',
             connection_type='CENTRALIZED',
             host='https://localhost:9200',
             username='elastic',
-            password='changeme'
+            password='changeme',
+            port=None,
         )
         context = navigation_highlight(mock_request)
         assert context == {
             'highlight_connection_manager': False,
-            'highlight_snmp_devices': True
-        }
-        
-        # State 3: Has connections and devices
-        connection = Connection.objects.first()
-        Device.objects.create(
-            name='Device',
-            ip_address='192.168.1.1'
-        )
-        context = navigation_highlight(mock_request)
-        assert context == {
-            'highlight_connection_manager': False,
-            'highlight_snmp_devices': False
+            'has_connections': True,
         }
 
 
@@ -269,30 +198,27 @@ class TestContextProcessorsIntegration:
 
     @patch('Common.context_processors.check_for_update')
     def test_both_context_processors_together(self, mock_check_update, mock_request, db):
-        """Test that both context processors can be used together"""
+        """Both context processors can be used together without key collisions"""
         mock_check_update.return_value = {'update_available': True}
         Connection.objects.all().delete()
-        Device.objects.all().delete()
-        
+
         version_context = version_update_info(mock_request)
         navigation_context = navigation_highlight(mock_request)
-        
-        # Combine contexts (as Django would do)
+
         combined_context = {**version_context, **navigation_context}
-        
+
         assert 'version_update' in combined_context
         assert 'highlight_connection_manager' in combined_context
-        assert 'highlight_snmp_devices' in combined_context
+        assert 'has_connections' in combined_context
+        # version_update + highlight_connection_manager + has_connections
         assert len(combined_context) == 3
 
     def test_context_processors_dont_interfere(self, mock_request, db):
-        """Test that context processors don't interfere with each other"""
+        """Context processors return disjoint key sets"""
         with patch('Common.context_processors.check_for_update') as mock_check:
             mock_check.return_value = {'test': 'data'}
-            
-            # Call both processors
+
             version_context = version_update_info(mock_request)
             navigation_context = navigation_highlight(mock_request)
-            
-            # Verify they return different keys
+
             assert set(version_context.keys()).isdisjoint(set(navigation_context.keys()))

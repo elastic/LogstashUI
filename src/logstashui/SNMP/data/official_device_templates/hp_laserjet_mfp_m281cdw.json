@@ -1,0 +1,17 @@
+{
+  "official_key": "hp_laserjet_mfp_m281cdw",
+  "name": "hp_laserjet_mfp_m281cdw",
+  "type": "Printer",
+  "description": "Toner levels, page count, paper tray capacity, cover status, and alerts for the HP Color LaserJet MFP M281cdw.",
+  "vendor": "HP",
+  "product": "Color LaserJet MFP M281cdw",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_printer_mib"
+  ],
+  "matching_rules": [
+    "M281cdw",
+    "M281"
+  ]
+}

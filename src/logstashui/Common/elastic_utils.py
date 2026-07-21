@@ -400,6 +400,99 @@ def create_index_template(connection_id, template_name, template_definition):
         raise
 
 
+def get_index_template(connection_id, template_name):
+    """
+    Fetch an installed Elasticsearch index template by name.
+
+    Args:
+        connection_id: ID of the Elasticsearch connection
+        template_name: Name of the index template to fetch
+
+    Returns:
+        The index_template dict if found, or None if not installed.
+        Raises on unexpected errors (not 404).
+    """
+    try:
+        es_client = get_elastic_connection(connection_id)
+        response = es_client.indices.get_index_template(name=template_name)
+        templates = response.get('index_templates', [])
+        if templates:
+            return templates[0].get('index_template', {})
+        return None
+    except Exception as e:
+        error_str = str(e).lower()
+        if '404' in error_str or 'index_template_missing_exception' in error_str or 'resource_not_found' in error_str:
+            return None
+        logger.error(f"Error fetching index template '{template_name}': {e}", exc_info=True)
+        raise
+
+
+# Fields compared when diffing a desired template against the installed version.
+# We compare structural keys and _meta.version to detect meaningful changes while
+# avoiding false positives from ES-normalized mapping content.
+# Note: data_stream is handled separately as a presence-only check because ES
+# normalizes {} to {"hidden": false} on retrieval, causing false positives.
+_TEMPLATE_COMPARE_KEYS = ['index_patterns', 'composed_of', 'priority']
+
+
+def check_index_template(connection_id, template_name, template_definition):
+    """
+    Check whether an index template is installed and matches the desired definition.
+
+    Compares index_patterns, composed_of, priority, and _meta.version (if present).
+    Mapping content is intentionally excluded to avoid false positives from
+    ES field-level normalization.
+
+    Args:
+        connection_id: ID of the Elasticsearch connection
+        template_name: Name of the index template to check
+        template_definition: The desired template definition dict
+
+    Returns:
+        {
+            'status': 'not_installed' | 'installed' | 'installed_but_outdated' | 'error',
+            'differences': [str],   # list of field names that differ
+            'error': str | None
+        }
+    """
+    try:
+        current = get_index_template(connection_id, template_name)
+
+        if current is None:
+            return {'status': 'not_installed', 'differences': [], 'error': None}
+
+        differences = []
+
+        for key in _TEMPLATE_COMPARE_KEYS:
+            desired_val = template_definition.get(key)
+            current_val = current.get(key)
+            if desired_val != current_val:
+                differences.append(key)
+
+        # data_stream is a presence-only check: {} and {"hidden": false} are
+        # both "yes, this is a data stream template", so we only compare existence.
+        desired_has_ds = 'data_stream' in template_definition
+        current_has_ds = 'data_stream' in current
+        if desired_has_ds != current_has_ds:
+            differences.append('data_stream')
+
+        # Compare version string from _meta if the desired template declares one
+        desired_version = template_definition.get('_meta', {}).get('version')
+        if desired_version is not None:
+            current_version = current.get('_meta', {}).get('version')
+            if desired_version != current_version:
+                differences.append('_meta.version')
+
+        if differences:
+            return {'status': 'installed_but_outdated', 'differences': differences, 'error': None}
+
+        return {'status': 'installed', 'differences': [], 'error': None}
+
+    except Exception as e:
+        logger.error(f"Error checking index template '{template_name}': {e}", exc_info=True)
+        return {'status': 'error', 'differences': [], 'error': str(e)}
+
+
 def ingest_to_data_stream(connection_id, data_stream_name, documents, pipeline_name=None):
     """
     Ingest documents to an Elasticsearch data stream
@@ -474,6 +567,41 @@ def ingest_to_data_stream(connection_id, data_stream_name, documents, pipeline_n
         return response_dict
     except Exception as e:
         logger.error(f"Error ingesting to data stream: {e}", exc_info=True)
+        raise
+
+
+def bulk_index_documents(connection_id, index_name, documents):
+    """
+    Bulk index documents into a regular Elasticsearch index.
+
+    Args:
+        connection_id: ES connection ID
+        index_name:    Target index name (must be lowercase, no spaces)
+        documents:     List of dicts to index.  String values are wrapped in
+                       {"message": value} automatically.
+
+    Returns:
+        Bulk response dict from Elasticsearch
+    """
+    try:
+        es_client = get_elastic_connection(connection_id)
+
+        bulk_body = []
+        for doc in documents:
+            bulk_body.append({"index": {"_index": index_name}})
+            bulk_body.append({"message": doc} if isinstance(doc, str) else doc)
+
+        response = es_client.bulk(body=bulk_body, refresh=True)
+        response_dict = dict(response)
+
+        if response_dict.get('errors'):
+            logger.error("Bulk index had errors for %s: %s", index_name, response_dict)
+        else:
+            logger.info("Indexed %d documents into %s", len(documents), index_name)
+
+        return response_dict
+    except Exception as e:
+        logger.error("Error bulk indexing to %s: %s", index_name, e, exc_info=True)
         raise
 
 

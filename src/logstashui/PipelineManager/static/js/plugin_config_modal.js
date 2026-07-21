@@ -136,15 +136,20 @@ window.PluginConfigModal = (function () {
             const searchContainer = document.createElement('div');
             searchContainer.className = 'mb-4 pb-4 border-b border-gray-700';
             searchContainer.innerHTML = `
-                <div class="relative">
-                    <input type="text" 
-                           id="configFieldSearch" 
-                           placeholder="Search fields..."
-                           class="w-full p-2 pl-10 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                           oninput="PluginConfigModal.filterFields(this.value)">
-                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                <div class="rounded-lg border border-blue-500/40 bg-blue-950/30 px-3 pt-2 pb-3">
+                    <div class="flex items-center gap-1.5 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-blue-400">Filter Fields</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text"
+                               id="configFieldSearch"
+                               placeholder="Type to filter fields below..."
+                               class="w-full p-2 pl-9 bg-gray-900 border border-blue-500/30 rounded text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               oninput="PluginConfigModal.filterFields(this.value)">
+                        <svg class="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-400/70 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
                 </div>
             `;
             configForm.appendChild(searchContainer);
@@ -329,6 +334,14 @@ window.PluginConfigModal = (function () {
                            placeholder="Value (e.g., pattern1)"
                            onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
                     <button type="button"
+                            class="flex-shrink-0 p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                            title="Expand editor"
+                            onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                      </svg>
+                    </button>
+                    <button type="button"
                             class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
                             onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -370,14 +383,22 @@ window.PluginConfigModal = (function () {
             <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
-                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Key"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
                 <span class="text-gray-400">=></span>
                 <input type="text"
-                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
+                <button type="button"
+                        class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                        title="Expand editor"
+                        onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                </button>
                 <button type="button"
                         class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
@@ -419,9 +440,17 @@ window.PluginConfigModal = (function () {
             <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
-                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
+                <button type="button"
+                        class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                        title="Expand editor"
+                        onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                </button>
                 <button type="button"
                         class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
@@ -527,11 +556,22 @@ window.PluginConfigModal = (function () {
             </div>
           `;
                 } else {
-                    // Default to text input
+                    // Default to text input with expand button
                     inputField = `
-            <input type="text" id="${fieldId}" name="${key}"
-                   value="${escapeHtml(value)}"
-                   class="${inputClasses}">
+            <div class="flex items-center gap-1">
+              <input type="text" id="${fieldId}" name="${key}"
+                     value="${escapeHtml(value)}"
+                     class="${inputClasses} flex-1">
+              <button type="button"
+                      class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                      title="Expand editor"
+                      aria-label="Expand editor for ${escapeHtml(key)}"
+                      onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                </svg>
+              </button>
+            </div>
           `;
                 }
 
@@ -747,6 +787,14 @@ window.PluginConfigModal = (function () {
                            placeholder="Value (e.g., pattern1)"
                            onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
                     <button type="button"
+                            class="flex-shrink-0 p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                            title="Expand editor"
+                            onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                      </svg>
+                    </button>
+                    <button type="button"
                             class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
                             onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -788,14 +836,22 @@ window.PluginConfigModal = (function () {
             <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
-                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Key"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
                 <span class="text-gray-400">=></span>
                 <input type="text"
-                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
+                <button type="button"
+                        class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                        title="Expand editor"
+                        onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                </button>
                 <button type="button"
                         class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeHashPair('${containerId}', this)">
@@ -837,9 +893,17 @@ window.PluginConfigModal = (function () {
             <div id="${containerId}" class="p-3 bg-gray-800/30 border border-gray-600/50 rounded space-y-2">
               <div class="flex items-center space-x-2">
                 <input type="text"
-                       class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                       class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                        placeholder="Value"
                        onchange="updateArrayItem('${containerId}', '${fieldId}', this, 0)">
+                <button type="button"
+                        class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                        title="Expand editor"
+                        onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                </button>
                 <button type="button"
                         class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                         onclick="removeArrayItem('${containerId}', this)">
@@ -945,11 +1009,22 @@ window.PluginConfigModal = (function () {
             </div>
           `;
                     } else {
-                        // Default to text input
+                        // Default to text input with expand button
                         inputField = `
-            <input type="text" id="${fieldId}" name="${key}"
-                   value="${escapeHtml(value)}"
-                   class="${inputClasses}">
+            <div class="flex items-center gap-1">
+              <input type="text" id="${fieldId}" name="${key}"
+                     value="${escapeHtml(value)}"
+                     class="${inputClasses} flex-1">
+              <button type="button"
+                      class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                      title="Expand editor"
+                      aria-label="Expand editor for ${escapeHtml(key)}"
+                      onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                </svg>
+              </button>
+            </div>
           `;
                     }
 
@@ -1132,16 +1207,24 @@ window.PluginConfigModal = (function () {
                         newPair.className = 'flex items-center space-x-2';
                         newPair.innerHTML = `
               <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                     class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                      placeholder="Key"
                      value="${String(key).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'key')">
               <span class="text-gray-400">=></span>
               <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                     class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                      placeholder="Value"
                      value="${String(value).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                      onchange="updateHashPair('${container.id}', '${hiddenField.id}', this, 'value')">
+              <button type="button"
+                      class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                      title="Expand editor"
+                      onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                </svg>
+              </button>
               <button type="button"
                       class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeHashPair('${container.id}', this)">
@@ -1184,10 +1267,18 @@ window.PluginConfigModal = (function () {
                         newItem.className = 'flex items-center space-x-2';
                         newItem.innerHTML = `
               <input type="text"
-                     class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                     class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
                      placeholder="Value"
                      value="${String(value).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                      onchange="updateArrayItem('${container.id}', '${hiddenField.id}', this, ${index})">
+              <button type="button"
+                      class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                      title="Expand editor"
+                      onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                </svg>
+              </button>
               <button type="button"
                       class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                       onclick="removeArrayItem('${container.id}', this)">
@@ -1591,14 +1682,22 @@ window.addHashPair = function (containerId, fieldId) {
     newPair.className = 'flex items-center space-x-2';
     newPair.innerHTML = `
     <input type="text"
-           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+           class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
            placeholder="Key"
            onchange="updateHashPair('${containerId}', '${fieldId}', this, 'key')">
     <span class="text-gray-400">=></span>
     <input type="text"
-           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+           class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
            placeholder="Value"
            onchange="updateHashPair('${containerId}', '${fieldId}', this, 'value')">
+    <button type="button"
+            class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+            title="Expand editor"
+            onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+      </svg>
+    </button>
     <button type="button"
             class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeHashPair('${containerId}', this)">
@@ -1667,9 +1766,17 @@ window.addArrayItem = function (containerId, fieldId) {
     newItem.className = 'flex items-center space-x-2';
     newItem.innerHTML = `
     <input type="text"
-           class="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+           class="flex-1 min-w-0 p-2 bg-gray-700 border border-gray-600 rounded text-white"
            placeholder="Value"
            onchange="updateArrayItem('${containerId}', '${fieldId}', this, ${newIndex})">
+    <button type="button"
+            class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+            title="Expand editor"
+            onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+      </svg>
+    </button>
     <button type="button"
             class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
             onclick="removeArrayItem('${containerId}', this)">
@@ -1989,6 +2096,14 @@ window.addKeyListHashSection = function (containerId, fieldId) {
                        placeholder="Value (e.g., pattern1)"
                        onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
                 <button type="button"
+                        class="flex-shrink-0 p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                        title="Expand editor"
+                        onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                </button>
+                <button type="button"
                         class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
                         onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2051,6 +2166,14 @@ window.addKeyListHashValue = function (containerId, fieldId, button) {
                placeholder="Value"
                onchange="updateKeyListHashField('${containerId}', '${fieldId}')">
         <button type="button"
+                class="flex-shrink-0 p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                title="Expand editor"
+                onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+          </svg>
+        </button>
+        <button type="button"
                 class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
                 onclick="removeKeyListHashValue('${containerId}', '${fieldId}', this)">
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2065,7 +2188,7 @@ window.addKeyListHashValue = function (containerId, fieldId, button) {
 };
 
 window.removeKeyListHashValue = function (containerId, fieldId, button) {
-    const valueDiv = button.closest('.flex.items-center.space-x-2');
+    const valueDiv = button.closest('.flex.items-center.gap-2');
     if (valueDiv) {
         valueDiv.remove();
         updateKeyListHashField(containerId, fieldId);
@@ -2153,6 +2276,14 @@ function populateKeyListHashValues(component) {
                                        value="${String(val).replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"
                                        onchange="updateKeyListHashField('${container.id}', '${hiddenField.id}')">
                                 <button type="button"
+                                        class="flex-shrink-0 p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-600/50 rounded transition-colors"
+                                        title="Expand editor"
+                                        onclick="ExpandedValueEditor.open(this.previousElementSibling)">
+                                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                                  </svg>
+                                </button>
+                                <button type="button"
                                         class="px-3 py-1 text-red-400 hover:bg-gray-700 rounded text-xs transition-colors flex items-center gap-1"
                                         onclick="removeKeyListHashValue('${container.id}', '${hiddenField.id}', this)">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2175,7 +2306,7 @@ function populateKeyListHashValues(component) {
                                     class="px-3 py-2 text-red-400 hover:bg-gray-700 rounded text-sm transition-colors flex items-center gap-1"
                                     onclick="removeKeyListHashSection('${container.id}', '${hiddenField.id}', this)">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 0 00-1 1v3M4 7h16" />
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                                 Remove Section
                             </button>
@@ -2415,3 +2546,104 @@ if (document.readyState === 'loading') {
 } else {
     initializePluginConfigModal();
 }
+
+// ---------------------------------------------------------------------------
+// Expanded Value Editor
+// A universal focused overlay editor for any single text-input value.
+// Usage: ExpandedValueEditor.open(inputElement)
+// ---------------------------------------------------------------------------
+window.ExpandedValueEditor = (function () {
+    let _target = null;     // the original <input> element we are editing
+    let _onKeydown = null;  // bound keyboard handler so we can remove it
+
+    function _getContext(inputEl) {
+        // Walk up to the field-group div that carries data-field-name / data-field-type
+        const fieldGroup = inputEl.closest('[data-field-name]');
+        const fieldName = fieldGroup ? fieldGroup.dataset.fieldName : '';
+        const fieldType = fieldGroup ? fieldGroup.dataset.fieldType : '';
+
+        // Plugin name lives in the first <span> child of the modal <h3>
+        const pluginNameEl = document.querySelector('#configModal h3 div > span:first-child');
+        const pluginName = pluginNameEl ? pluginNameEl.textContent.trim() : '';
+
+        let parts = [];
+        if (pluginName) parts.push('Plugin: ' + pluginName);
+        if (fieldName)  parts.push('Field: ' + fieldName);
+        if (fieldType)  parts.push('Type: ' + fieldType);
+
+        // For key_list_hash value inputs, include the section key if available
+        const section = inputEl.closest('[data-section-id]');
+        if (section) {
+            const sectionKey = section.querySelector('.section-key');
+            if (sectionKey && sectionKey.value.trim()) {
+                parts.push('Key: ' + sectionKey.value.trim());
+            }
+        }
+
+        return parts.length ? parts.join('  ·  ') : 'value';
+    }
+
+    function _updateCharCount() {
+        const ta = document.getElementById('expandedValueEditorTextarea');
+        const el = document.getElementById('expandedValueEditorCharCount');
+        if (!ta || !el) return;
+        const n = ta.value.length;
+        el.textContent = n.toLocaleString() + ' character' + (n !== 1 ? 's' : '');
+    }
+
+    function open(inputEl) {
+        if (!inputEl) return;
+        _target = inputEl;
+
+        const overlay  = document.getElementById('expandedValueEditorOverlay');
+        const textarea = document.getElementById('expandedValueEditorTextarea');
+        const ctxEl    = document.getElementById('expandedValueEditorContext');
+        if (!overlay || !textarea) return;
+
+        textarea.value = inputEl.value;
+        if (ctxEl) ctxEl.textContent = _getContext(inputEl);
+        _updateCharCount();
+
+        overlay.classList.remove('hidden');
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+
+        textarea.addEventListener('input', _updateCharCount);
+
+        _onKeydown = function (e) {
+            if (e.key === 'Escape') { e.stopPropagation(); cancel(); }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); apply(); }
+        };
+        // Use capture so Escape is caught before any parent modal handler
+        document.addEventListener('keydown', _onKeydown, true);
+    }
+
+    function cancel() {
+        _close();
+    }
+
+    function apply() {
+        const textarea = document.getElementById('expandedValueEditorTextarea');
+        if (_target && textarea) {
+            _target.value = textarea.value;
+            // Trigger both change and input so all update handlers (hash/array/keylisthash) fire
+            _target.dispatchEvent(new Event('input',  { bubbles: true }));
+            _target.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        const returnTo = _target;
+        _close();
+        if (returnTo) returnTo.focus();
+    }
+
+    function _close() {
+        const overlay  = document.getElementById('expandedValueEditorOverlay');
+        const textarea = document.getElementById('expandedValueEditorTextarea');
+        if (overlay)  overlay.classList.add('hidden');
+        if (textarea) textarea.removeEventListener('input', _updateCharCount);
+        if (_onKeydown) document.removeEventListener('keydown', _onKeydown, true);
+        _target   = null;
+        _onKeydown = null;
+    }
+
+    return { open, cancel, apply };
+}());

@@ -20,7 +20,8 @@
                 "tags": [
                     "beats_ssl"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_http_1",
@@ -43,7 +44,8 @@
                 "tags": [
                     "http_api"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_kafka_2",
@@ -71,7 +73,8 @@
                 "tags": [
                     "kafka_stream"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_jdbc_3",
@@ -92,7 +95,8 @@
                 "tags": [
                     "jdbc_poll"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_file_4",
@@ -117,7 +121,8 @@
                 "tags": [
                     "file_input"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_tcp_5",
@@ -135,7 +140,8 @@
                 "tags": [
                     "tcp_secure"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_udp_6",
@@ -150,7 +156,8 @@
                 "tags": [
                     "syslog_udp"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_rabbitmq_7",
@@ -173,7 +180,8 @@
                 "tags": [
                     "amqp"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_redis_8",
@@ -192,7 +200,8 @@
                 "tags": [
                     "redis_queue"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_s3_9",
@@ -211,7 +220,8 @@
                 "tags": [
                     "s3_archive"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_kinesis_10",
@@ -227,7 +237,8 @@
                 "tags": [
                     "aws_kinesis"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -260,7 +271,8 @@
                                                     "match": {
                                                         "message": "%{IPORHOST:client_ip} - %{DATA:user} \\[%{HTTPDATE:timestamp}\\] \"%{WORD:method} %{DATA:path} HTTP/%{NUMBER:version}\" %{NUMBER:status:int} %{NUMBER:bytes:int} \"%{DATA:referrer}\" \"%{DATA:agent}\""
                                                     }
-                                                }
+                                                },
+                                                "comments": []
                                             },
                                             {
                                                 "id": "filter_date_15",
@@ -272,7 +284,8 @@
                                                         "dd/MMM/yyyy:HH:mm:ss Z"
                                                     ],
                                                     "target": "@timestamp"
-                                                }
+                                                },
+                                                "comments": []
                                             },
                                             {
                                                 "id": "filter_useragent_16",
@@ -281,7 +294,8 @@
                                                 "config": {
                                                     "source": "agent",
                                                     "target": "ua"
-                                                }
+                                                },
+                                                "comments": []
                                             },
                                             {
                                                 "id": "filter_geoip_17",
@@ -291,7 +305,8 @@
                                                     "source": "client_ip",
                                                     "target": "geo",
                                                     "database": "/usr/share/GeoIP/GeoLite2-City.mmdb"
-                                                }
+                                                },
+                                                "comments": []
                                             },
                                             {
                                                 "id": "filter_if_18",
@@ -312,7 +327,8 @@
                                                                 "add_field": {
                                                                     "severity": "critical"
                                                                 }
-                                                            }
+                                                            },
+                                                            "comments": []
                                                         }
                                                     ],
                                                     "else_ifs": [
@@ -331,7 +347,8 @@
                                                                         "add_field": {
                                                                             "severity": "warning"
                                                                         }
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 }
                                                             ]
                                                         }
@@ -345,7 +362,8 @@
                                                 "plugin": "ruby",
                                                 "config": {
                                                     "code": "\n            bytes = event.get(\"bytes\").to_i\n            if bytes > 10485760\n              event.set(\"size_class\", \"large\")\n            elsif bytes > 1048576\n              event.set(\"size_class\", \"medium\")\n            else\n              event.set(\"size_class\", \"small\")\n            end\n          "
-                                                }
+                                                },
+                                                "comments": []
                                             },
                                             {
                                                 "id": "filter_fingerprint_22",
@@ -359,7 +377,8 @@
                                                     ],
                                                     "target": "[@metadata][fingerprint]",
                                                     "method": "SHA256"
-                                                }
+                                                },
+                                                "comments": []
                                             }
                                         ],
                                         "else_ifs": [
@@ -373,7 +392,8 @@
                                                         "config": {
                                                             "source": "message",
                                                             "target": "app"
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     },
                                                     {
                                                         "id": "filter_if_24",
@@ -397,7 +417,8 @@
                                                                             "FATAL": "5"
                                                                         },
                                                                         "fallback": "2"
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 },
                                                                 {
                                                                     "id": "filter_mutate_26",
@@ -407,7 +428,8 @@
                                                                         "convert": {
                                                                             "severity_num": "integer"
                                                                         }
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 }
                                                             ],
                                                             "else_ifs": [],
@@ -429,7 +451,8 @@
                                                                         "add_tag": [
                                                                             "exception"
                                                                         ]
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 },
                                                                 {
                                                                     "id": "filter_ruby_29",
@@ -437,7 +460,8 @@
                                                                     "plugin": "ruby",
                                                                     "config": {
                                                                         "code": "\n              exc = event.get(\"[app][exception]\")\n              if exc.is_a?(Hash)\n                event.set(\"exception_class\", exc[\"class\"])\n                event.set(\"exception_msg\", exc[\"message\"])\n              end\n            "
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 }
                                                             ],
                                                             "else_ifs": [],
@@ -468,7 +492,8 @@
                                                         "plugin": "ruby",
                                                         "config": {
                                                             "code": "\n            cpu = event.get(\"[system][cpu]\")\n            if cpu && cpu[\"cores\"]\n              total = 0.0\n              cpu[\"cores\"].each { |c| total += c[\"user\"][\"pct\"].to_f if c[\"user\"] }\n              avg = total / cpu[\"cores\"].length\n              event.set(\"[system][cpu][avg_pct]\", avg.round(2))\n              event.tag(\"cpu_warning\") if avg > 75\n              event.tag(\"cpu_critical\") if avg > 90\n            end\n          "
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     }
                                                 ],
                                                 "else_ifs": [],
@@ -488,7 +513,8 @@
                                                         "plugin": "ruby",
                                                         "config": {
                                                             "code": "\n            pct = event.get(\"[system][memory][actual][used][pct]\").to_f * 100\n            event.set(\"mem_used_pct\", pct.round(2))\n            event.tag(\"memory_warning\") if pct > 85\n            event.tag(\"memory_critical\") if pct > 95\n          "
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     }
                                                 ],
                                                 "else_ifs": [],
@@ -520,7 +546,8 @@
                                             "config": {
                                                 "source": "message",
                                                 "target": "security"
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_if_36",
@@ -545,7 +572,8 @@
                                                             "add_tag": [
                                                                 "internal_ip"
                                                             ]
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     },
                                                     {
                                                         "id": "filter_if_38",
@@ -562,7 +590,8 @@
                                                                         "source": "[security][ip]",
                                                                         "target": "threat_geo",
                                                                         "database": "/usr/share/GeoIP/GeoLite2-City.mmdb"
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 },
                                                                 {
                                                                     "id": "filter_geoip_40",
@@ -573,7 +602,8 @@
                                                                         "target": "threat_asn",
                                                                         "database": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
                                                                         "default_database_type": "ASN"
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 }
                                                             ],
                                                             "else_ifs": [],
@@ -608,7 +638,8 @@
                                                                 "malware": "100"
                                                             },
                                                             "fallback": "50"
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     },
                                                     {
                                                         "id": "filter_mutate_43",
@@ -618,7 +649,8 @@
                                                             "convert": {
                                                                 "threat_score": "integer"
                                                             }
-                                                        }
+                                                        },
+                                                        "comments": []
                                                     },
                                                     {
                                                         "id": "filter_if_44",
@@ -635,7 +667,8 @@
                                                                         "add_tag": [
                                                                             "critical_threat"
                                                                         ]
-                                                                    }
+                                                                    },
+                                                                    "comments": []
                                                                 }
                                                             ],
                                                             "else_ifs": [],
@@ -653,7 +686,8 @@
                                             "plugin": "ruby",
                                             "config": {
                                                 "code": "\n          score = event.get(\"threat_score\").to_i\n          is_ext = event.get(\"tags\").include?(\"internal_ip\") ? 0 : 20\n          composite = score + is_ext\n          event.set(\"composite_risk\", [composite, 100].min)\n\t\t\t\t\t\t\n          if composite >= 100\n            event.set(\"risk\", \"critical\")\n          elsif composite >= 80\n            event.set(\"risk\", \"high\")\n          elsif composite >= 60\n            event.set(\"risk\", \"medium\")\n          else\n            event.set(\"risk\", \"low\")\n          end\n        "
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [
@@ -668,7 +702,8 @@
                                                         "mapping": {
                                                             "metric": "%{env}.%{dc}.%{host}.%{service}.%{type}.%{name}"
                                                         }
-                                                    }
+                                                    },
+                                                    "comments": []
                                                 },
                                                 {
                                                     "id": "filter_if_48",
@@ -683,7 +718,8 @@
                                                                 "plugin": "ruby",
                                                                 "config": {
                                                                     "code": "\n            val = event.get(\"value\").to_f\n            if val > 5000\n              event.set(\"perf_status\", \"critical\")\n            elsif val > 2000\n              event.set(\"perf_status\", \"slow\")\n            else\n              event.set(\"perf_status\", \"normal\")\n            end\n          "
-                                                                }
+                                                                },
+                                                                "comments": []
                                                             }
                                                         ],
                                                         "else_ifs": [],
@@ -698,7 +734,8 @@
                                                         "task_id": "%{service}_%{name}",
                                                         "code": "\n          map[\"count\"] ||= 0\n          map[\"sum\"] ||= 0.0\n          map[\"min\"] ||= Float::INFINITY\n          map[\"max\"] ||= -Float::INFINITY\n\t\t\t\t\t\t\n          val = event.get(\"value\").to_f\n          map[\"count\"] += 1\n          map[\"sum\"] += val\n          map[\"min\"] = [map[\"min\"], val].min\n          map[\"max\"] = [map[\"max\"], val].max\n\t\t\t\t\t\t\n          avg = map[\"sum\"] / map[\"count\"]\n          event.set(\"rolling_avg\", avg.round(2))\n          event.set(\"rolling_min\", map[\"min\"])\n          event.set(\"rolling_max\", map[\"max\"])\n        ",
                                                         "timeout": "300"
-                                                    }
+                                                    },
+                                                    "comments": []
                                                 }
                                             ]
                                         }
@@ -725,7 +762,8 @@
                                             "config": {
                                                 "source": "event_data",
                                                 "target": "evt"
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [],
@@ -743,7 +781,8 @@
                                         "yyyy-MM-dd HH:mm:ss"
                                     ],
                                     "target": "@timestamp"
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_elasticsearch_54",
@@ -759,7 +798,8 @@
                                         "department": "user_dept",
                                         "role": "user_role"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_if_55",
@@ -776,7 +816,8 @@
                                                 "add_tag": [
                                                     "auth_event"
                                                 ]
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [
@@ -791,7 +832,8 @@
                                                         "add_tag": [
                                                             "data_operation"
                                                         ]
-                                                    }
+                                                    },
+                                                    "comments": []
                                                 }
                                             ]
                                         }
@@ -818,7 +860,8 @@
                                             "config": {
                                                 "source": "[headers][user-agent]",
                                                 "target": "webhook_ua"
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [],
@@ -839,7 +882,8 @@
                                             "config": {
                                                 "init": "require \"openssl\"",
                                                 "code": "\n          sig = event.get(\"[headers][x-signature]\")\n          payload = event.get(\"message\").to_s\n          secret = ENV[\"WEBHOOK_SECRET\"]\n          expected = \"sha256=\" + OpenSSL::HMAC.hexdigest(\"SHA256\", secret, payload)\n\t\t\t\t\t\t\n          if sig == expected\n            event.set(\"sig_valid\", true)\n          else\n            event.set(\"sig_valid\", false)\n            event.tag(\"invalid_signature\")\n          end\n        "
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [],
@@ -854,7 +898,8 @@
                                     "task_id": "%{[headers][x-forwarded-for]}",
                                     "code": "\n        map[\"count\"] ||= 0\n        map[\"count\"] += 1\n        event.set(\"request_count\", map[\"count\"])\n      ",
                                     "timeout": "60"
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_if_63",
@@ -871,7 +916,8 @@
                                                 "add_tag": [
                                                     "rate_limit_exceeded"
                                                 ]
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [],
@@ -900,7 +946,8 @@
                             "field_split": "&",
                             "value_split": "=",
                             "target": "parsed"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -921,7 +968,8 @@
                         "config": {
                             "source": "user_agent",
                             "target": "ua"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -949,7 +997,8 @@
                             ],
                             "hit_cache_size": "10000",
                             "hit_cache_ttl": "3600"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -968,7 +1017,8 @@
                     "tags",
                     "message"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_mutate_72",
@@ -982,7 +1032,8 @@
                 "remove_field": [
                     "@version"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_73",
@@ -995,7 +1046,8 @@
                         "id": "filter_drop_74",
                         "type": "filter",
                         "plugin": "drop",
-                        "config": {}
+                        "config": {},
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1014,7 +1066,8 @@
                 "add_tag": [
                     "throttled"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_76",
@@ -1034,7 +1087,8 @@
                             "add_field": {
                                 "cloned": "true"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1058,7 +1112,8 @@
                     5,
                     15
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_79",
@@ -1079,7 +1134,8 @@
                             "add_tag": [
                                 "p1"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -1097,7 +1153,8 @@
                                     "add_tag": [
                                         "p2"
                                     ]
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -1113,7 +1170,8 @@
                 "source": "message",
                 "target": "event_hash",
                 "method": "MURMUR3"
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_uuid_83",
@@ -1121,7 +1179,8 @@
             "plugin": "uuid",
             "config": {
                 "target": "event_id"
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_ruby_84",
@@ -1129,7 +1188,8 @@
             "plugin": "ruby",
             "config": {
                 "code": "\n      event.set(\"processed_at\", Time.now.utc.iso8601)\n      event.set(\"pipeline_v\", \"2.0\")\n    "
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -1161,7 +1221,8 @@
                             "ilm_pattern": "{now/d}-000001",
                             "ilm_policy": "logs-policy",
                             "http_compression": "true"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1188,7 +1249,8 @@
                             "ssl": "true",
                             "cacert": "/etc/logstash/certs/siem-ca.crt",
                             "index": "security-%{+YYYY.MM.dd}"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1219,7 +1281,8 @@
                             "prefix": "logs/%{type}/year=%{+YYYY}/month=%{+MM}/day=%{+dd}",
                             "encoding": "gzip",
                             "server_side_encryption": "true"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1241,7 +1304,8 @@
                 "security_protocol": "SASL_SSL",
                 "sasl_mechanism": "SCRAM-SHA-512",
                 "sasl_jaas_config": "org.apache.kafka.common.security.scram.ScramLoginModule required username='${KAFKA_USER}' password='${KAFKA_PASS}';"
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_if_92",
@@ -1263,7 +1327,8 @@
                             "password": "${REDIS_PASS}",
                             "data_type": "list",
                             "key": "alerts:critical"
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "output_http_94",
@@ -1278,7 +1343,8 @@
                                 "Content-Type": "application/json"
                             },
                             "automatic_retries": "3"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1301,7 +1367,8 @@
                             "codec": {
                                 "json_lines": {}
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1324,7 +1391,8 @@
                             "port": "2003",
                             "metrics_format": "logstash.%{env}.%{type}.count",
                             "fields_are_metrics": "true"
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "output_influxdb_99",
@@ -1338,7 +1406,8 @@
                             "password": "${INFLUX_PASS}",
                             "measurement": "%{type}_metrics",
                             "use_event_fields_for_data_points": "true"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1363,7 +1432,8 @@
                             "isodate": "true",
                             "bulk": "true",
                             "bulk_size": "100"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1391,7 +1461,8 @@
                             "use_tls": "true",
                             "username": "${SMTP_USER}",
                             "password": "${SMTP_PASS}"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1408,7 +1479,8 @@
                 "codec": {
                     "json_lines": {}
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_stdout_105",
@@ -1418,7 +1490,8 @@
                 "codec": {
                     "rubydebug": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

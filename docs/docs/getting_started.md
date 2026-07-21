@@ -7,6 +7,12 @@
 - 8 GB RAM
 - 4 CPU Cores
 
+**Why these requirements?**
+
+LogstashUI can run on smaller instances for light usage, especially when only using the editor or basic configuration workflows. The minimum requirements above are intended to provide a reliable baseline for common usage and heavier operations like pipeline simulation and multiple instances of Logstash Agent.
+
+If you choose to run LogstashUI with fewer resources, it will likely work fine, but performance can vary depending on the operation. If the UI feels slow, simulations take too long, or agent operations appear delayed, increase CPU and memory before troubleshooting further.
+
 ### Software
 
 #### For Embedded mode (See Quick Start)
@@ -15,13 +21,17 @@
 #### For [Host mode](/docs/docs/logstashui/configuration/host_mode.md) (If you have a simulation-heavy use case)
 - [Docker](https://www.docker.com/get-started/)
 - [Python 3.12+](https://www.python.org/downloads/)
-- [Logstash 8.x, 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
 
 ### For Local Development
+**Required:**
 - [Python 3.12+](https://www.python.org/downloads/)
-- [Node.js & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
-- [Elasticsearch 8.x or later](https://cloud.elastic.co)
-- [Docker](https://www.docker.com/get-started/)
+- [uv](https://docs.astral.sh/uv/) — the Python package/dependency manager the dev commands use
+- [Node.js 20+ & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
+
+**Optional:**
+- [Docker](https://www.docker.com/get-started/) — not required for local development, but handy: if you're developing you'll likely want to test container builds and run the simulation agent.
+- [Elasticsearch 8.x or later](https://cloud.elastic.co) — only needed for Monitoring, Centralized Pipeline Management connections, and saving pipelines to Elasticsearch. The pipeline editor and simulation work without it.
 
 ## Quick Start
 > [!TIP]
@@ -30,7 +40,7 @@
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
-cd logstashui/bin
+cd LogstashUI/bin
 ```
 
 ### Run LogstashUI

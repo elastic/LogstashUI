@@ -83,7 +83,7 @@ pip install -e .
 
 ### Configure
 
-Copy and edit the example config:
+(OPTIONAL) Copy and edit the example config:
 
 ```bash
 cp src/logstashagent/config/logstashagent.example.yml src/logstashagent/config/logstashagent.yml
@@ -91,9 +91,7 @@ cp src/logstashagent/config/logstashagent.example.yml src/logstashagent/config/l
 
 Edit `logstashagent.yml` to point to your local Logstash installation.
 
-### Run
-
-Start the agent in simulation mode (default):
+### Start the agent in simulation mode (default)
 
 ```bash
 python src/logstashagent/main.py
@@ -125,13 +123,60 @@ python src/logstashagent/main.py --run
 ## Docker Build Notes
 
 The Dockerfile:
-- Starts from the official Logstash 9.3.1 image
-- Compiles Python 3.12 from source (microdnf only provides Python 3.9)
+- Starts from the official Logstash image — see the [Compatibility Matrix](/docs/docs/logstashui/compatibility.md) for the supported version
+- Installs Python 3.12 via `microdnf`
 - Installs dependencies using `uv` for faster resolution
 - Copies the entire `src/` directory for proper package structure
 - Sets `PYTHONPATH=/app/src` for module imports
 
-Build time is approximately 5-10 minutes due to Python compilation.
+---
+
+## Building a Standalone Binary (PyInstaller)
+
+The CI/CD release pipeline uses [PyInstaller](https://pyinstaller.org/) to produce a self-contained `logstash-agent` executable. You can replicate this locally whenever you need to cut a manual build.
+
+### Prerequisites
+
+- Python 3.12+
+- `uv` installed
+
+### Steps
+
+**1. Install dev dependencies** (PyInstaller lives in the `dev` dependency group):
+
+```bash
+cd LogstashAgent
+uv sync --dev
+```
+
+**2. Run PyInstaller against the spec file:**
+
+```bash
+uv run pyinstaller logstash-agent.spec
+```
+
+The spec file (`logstash-agent.spec` at the repo root) points PyInstaller at `src/logstashagent/main.py` as the entry point and produces a **directory bundle** (not a single file) under `dist/logstash-agent/`.
+
+**3. Archive the bundle for distribution:**
+
+```bash
+mkdir -p release
+tar -czf release/logstash-agent-linux-amd64.tar.gz -C dist logstash-agent
+```
+
+The resulting archive matches what is uploaded as a GitHub release asset on every `v*` tag.
+
+### Spec File Notes
+
+The `logstash-agent.spec` uses `COLLECT` mode (i.e. `exclude_binaries=True` on the `EXE`), so the output is a **folder** containing the executable and its bundled libraries, not a single standalone file. UPX compression is enabled for both the executable and collected binaries.
+
+| Setting | Value |
+|---|---|
+| Entry point | `src/logstashagent/main.py` |
+| Output name | `logstash-agent` |
+| Output mode | Directory bundle (`dist/logstash-agent/`) |
+| UPX compression | Enabled |
+| Console | Yes |
 
 ---
 

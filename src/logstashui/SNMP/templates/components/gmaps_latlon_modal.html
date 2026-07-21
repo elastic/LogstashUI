@@ -1,0 +1,93 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- Google Maps Lat/Lon Picker Modal -->
+<div id="gmapsLatLonModal" class="hidden fixed inset-0 overflow-hidden z-[60]">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeGmapsModal()"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+    <div class="bg-base-200 rounded-xl shadow-2xl w-full max-w-lg pointer-events-auto">
+
+      <!-- Header -->
+      <div class="flex justify-between items-center p-5 border-b border-base-300">
+        <div class="flex items-center gap-3">
+          <!-- Google Maps icon -->
+          <svg class="w-6 h-6 flex-shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+            <circle cx="12" cy="9" r="2.5" fill="white"/>
+          </svg>
+          <h2 class="text-lg font-bold">Extract Coordinates from Google Maps</h2>
+        </div>
+        <button onclick="closeGmapsModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 space-y-4">
+
+        <!-- Instructions -->
+        <div class="bg-base-300 rounded-lg p-4 text-sm text-gray-300 leading-relaxed space-y-2">
+          <p>
+            Go to <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer"
+                     class="text-primary underline underline-offset-2 hover:text-primary/80">maps.google.com</a>
+            and search for the address of the location.
+          </p>
+          <p>
+            Once it has placed a pin on the desired location, <strong class="text-white">copy the URL
+            from your browser's address bar</strong> and paste it into the box below — we will
+            extract the Latitude and Longitude for you automatically.
+          </p>
+        </div>
+
+        <!-- URL input -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Google Maps URL</label>
+          <textarea id="gmapsUrlInput"
+                    class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed resize-none"
+                    rows="3"
+                    placeholder="https://www.google.com/maps/place/..."
+                    oninput="onGmapsUrlInput(this.value)"></textarea>
+        </div>
+
+        <!-- Extracted result -->
+        <div id="gmapsResult" class="hidden">
+          <div class="bg-base-300 rounded-lg p-4">
+            <p class="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Extracted Coordinates</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <p class="text-xs text-gray-400 mb-1">Latitude</p>
+                <p id="gmapsResultLat" class="font-mono text-sm text-white font-semibold"></p>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 mb-1">Longitude</p>
+                <p id="gmapsResultLon" class="font-mono text-sm text-white font-semibold"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error -->
+        <div id="gmapsError" class="hidden">
+          <div class="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-sm text-red-300">
+            Could not extract coordinates from that URL. Make sure you copied the full URL from the browser address bar after searching for a location on Google Maps.
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex justify-end gap-3 p-5 border-t border-base-300">
+        <button type="button" onclick="closeGmapsModal()" class="btn btn-secondary btn-sm">Cancel</button>
+        <button type="button" id="gmapsApplyBtn" class="btn btn-primary btn-sm" disabled onclick="applyGmapsCoordinates()">
+          Apply Coordinates
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

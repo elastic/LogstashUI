@@ -8,6 +8,7 @@
 
 function openDiscoveredDevicesModal() {
     const modal = document.getElementById('discoveredDevicesModal');
+    if (!modal) return;
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     
@@ -17,6 +18,7 @@ function openDiscoveredDevicesModal() {
 
 function closeDiscoveredDevicesModal() {
     const modal = document.getElementById('discoveredDevicesModal');
+    if (!modal) return;
     modal.classList.add('hidden');
     document.body.style.overflow = 'auto';
 }
@@ -41,7 +43,8 @@ function loadDiscoveredDevices() {
         document.getElementById('discoveredDevicesLoading').classList.add('hidden');
         
         if (data.success) {
-            if (data.devices && data.devices.length > 0) {
+            const hasDiscovered = data.devices && data.devices.length > 0;
+            if (hasDiscovered) {
                 // Show table and populate it
                 document.getElementById('discoveredDevicesTable').classList.remove('hidden');
                 populateDiscoveredDevicesTable(data.devices);
@@ -56,9 +59,17 @@ function loadDiscoveredDevices() {
             if (data.errors && data.errors.length > 0) {
                 console.warn('Some connections had errors:', data.errors);
             }
+
+            // Notify smart tab selector (one-shot hook set by Onboarding.html)
+            if (typeof window._onDiscoveredDevicesLoaded === 'function') {
+                window._onDiscoveredDevicesLoaded(hasDiscovered);
+            }
         } else {
             // Show error state
             showDiscoveredDevicesError(data.error || 'Failed to load discovered devices');
+            if (typeof window._onDiscoveredDevicesLoaded === 'function') {
+                window._onDiscoveredDevicesLoaded(false);
+            }
         }
     })
     .catch(error => {
@@ -74,6 +85,15 @@ function showDiscoveredDevicesError(message) {
     document.getElementById('discoveredDevicesCount').textContent = '0';
 }
 
+// Returns true when value is an IPv4 or IPv6 address rather than a hostname.
+// Used to detect when DNS resolution failed and host.hostname still holds an IP.
+function _isIpAddress(value) {
+    if (!value) return false;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return true;  // IPv4
+    if (/^[0-9a-fA-F:]{2,39}$/.test(value) && value.includes(':')) return true;  // IPv6
+    return false;
+}
+
 function populateDiscoveredDevicesTable(devices) {
     const tbody = document.getElementById('discoveredDevicesTableBody');
     tbody.innerHTML = '';
@@ -82,14 +102,27 @@ function populateDiscoveredDevicesTable(devices) {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-700/50';
         
-        // Use hostname if available, otherwise use IP
-        const ipOrHostname = device.host_hostname || device.host_ip || 'N/A';
-        
         // Store device data in a global array for access by the button
         if (!window.discoveredDevicesData) {
             window.discoveredDevicesData = [];
         }
         window.discoveredDevicesData[index] = device;
+
+        // Resolve what to show in each column.
+        // host_hostname is DNS-resolved; if DNS failed it will still be an IP.
+        const resolvedHostname = (device.host_hostname && !_isIpAddress(device.host_hostname))
+            ? device.host_hostname
+            : null;
+        const resolvedIp = device.host_ip
+            || (_isIpAddress(device.host_hostname) ? device.host_hostname : null)
+            || null;
+
+        const hostnameCell = resolvedHostname
+            ? `<span class="font-mono text-white">${escapeHtml(resolvedHostname)}</span>`
+            : '<span class="text-gray-500 italic">—</span>';
+        const ipCell = resolvedIp
+            ? `<span class="font-mono">${escapeHtml(resolvedIp)}</span>`
+            : '<span class="text-gray-500 italic">—</span>';
         
         // Format suggested template display
         let suggestedTemplateHtml = '<span class="text-gray-500 text-xs">None</span>';
@@ -104,18 +137,21 @@ function populateDiscoveredDevicesTable(devices) {
             `;
         }
         
-        // Prepare OS description for tooltip
-        const hostDescription = device.host_description || 'No description available';
+        // Prepare OS description for tooltip (sysDescr from SNMP)
+        const sysDescr = device.sys_descr || 'No description available';
         const hostName = device.host_name || 'N/A';
         
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(hostDescription)}">
+                <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(sysDescr)}">
                     ${escapeHtml(hostName)}
                 </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                ${escapeHtml(ipOrHostname)}
+                ${hostnameCell}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                ${ipCell}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${escapeHtml(device.network_name || 'N/A')}
@@ -149,19 +185,23 @@ function addDiscoveredDevice(deviceIndex) {
     
     // Close the discovered devices modal
     closeDiscoveredDevicesModal();
-    
-    // Use hostname if available, otherwise use IP
-    const ipOrHostname = device.host_hostname || device.host_ip || '';
-    
+
+    // host_ip always goes to the IP field.
+    // host_hostname goes to the Hostname field only when it is a real hostname
+    // (DNS succeeded). If DNS failed, host_hostname is the same IP as host_ip,
+    // so we discard it rather than populating the wrong field.
+    const ipAddress = device.host_ip || (_isIpAddress(device.host_hostname) ? device.host_hostname : '') || '';
+    const hostname  = (device.host_hostname && !_isIpAddress(device.host_hostname)) ? device.host_hostname : '';
+
     // Open the device modal with pre-filled data
-    // The openDeviceModal function is defined in snmp_devices_modal.js
     if (typeof openDeviceModal === 'function') {
         openDeviceModal({
             name: device.host_name,
-            ip_address: ipOrHostname,
+            hostname: hostname,
+            ip_address: ipAddress,
             credential: device.credential_id,
             network: device.network_id,
-            device_template: device.suggested_template_id  // Pre-select suggested template
+            device_template: device.suggested_template_id
         });
     } else {
         console.error('openDeviceModal function not found');

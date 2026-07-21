@@ -127,6 +127,21 @@
 
       </div>
 
+      <!-- CPU Cores Row (Full Width) -->
+      <div class="mt-6 device-cpu-cores-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+            CPU Cores
+          </h3>
+          <div class="cpu-cores-container flex flex-wrap gap-3">
+            <!-- CPU core cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
       <!-- Interfaces Row (Full Width) -->
       <div class="mt-6 device-interfaces-section" style="display: none;">
         <div class="bg-gray-700/50 rounded-lg p-4">
@@ -138,6 +153,66 @@
           </h3>
           <div class="interfaces-container grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-3">
             <!-- Interface cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Printer Supplies Row (Full Width) -->
+      <div class="mt-6 device-printer-supplies-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Printer Supplies
+          </h3>
+          <div class="printer-supplies-container flex flex-wrap gap-3">
+            <!-- Printer supply cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Filesystems Row (Full Width) -->
+      <div class="mt-6 device-filesystems-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            Filesystems
+          </h3>
+          <div class="filesystems-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <!-- Filesystem cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Wireless Radios Row (Full Width) -->
+      <div class="mt-6 device-wireless-radios-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+            </svg>
+            Wireless Radios
+          </h3>
+          <div class="wireless-radios-container flex flex-wrap gap-4">
+            <!-- Wireless radio cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Neighbors Row (Full Width) -->
+      <div class="mt-6 device-neighbors-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            CDP / LLDP Neighbors
+          </h3>
+          <div class="neighbors-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <!-- Neighbor cards will be dynamically inserted here -->
           </div>
         </div>
       </div>

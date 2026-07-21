@@ -7,7 +7,8 @@
             "config": {
                 "port": 5044,
                 "host": "0.0.0.0"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -41,7 +42,8 @@
                                             "LOCALDATETIME": "[0-9]+ %{TIME}"
                                         },
                                         "remove_field": "message"
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_mutate_4",
@@ -51,7 +53,8 @@
                                         "rename": {
                                             "[mysql][error][message1]": "[mysql][error][message]"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_mutate_5",
@@ -61,7 +64,8 @@
                                         "rename": {
                                             "[mysql][error][message2]": "[mysql][error][message]"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_date_6",
@@ -74,7 +78,8 @@
                                             "YYMMdd H:m:s"
                                         ],
                                         "remove_field": "[mysql][error][time]"
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [
@@ -95,7 +100,8 @@
                                                     "GREEDYMULTILINE": "(.|\n)*"
                                                 },
                                                 "remove_field": "message"
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_date_8",
@@ -106,7 +112,8 @@
                                                     "[mysql][slowlog][timestamp]",
                                                     "UNIX"
                                                 ]
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_mutate_9",
@@ -118,7 +125,8 @@
                                                     "\n# Time: [0-9]+ [0-9][0-9]:[0-9][0-9]:[0-9][0-9](\\.[0-9]+)?$",
                                                     ""
                                                 ]
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ]
                                 }
@@ -141,7 +149,8 @@
                 "hosts": "localhost",
                 "manage_template": "false",
                 "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
-            }
+            },
+            "comments": []
         }
     ]
 }

@@ -4,10 +4,13 @@ LogstashUI will notify you when a new version is available via a banner in the n
 
 To update LogstashUI to the latest version:
 
+> [!WARNING]
+> `--update` switches the repository to the `main` branch (`git checkout main`) before pulling. If you are running from a feature branch or have local modifications, note that you will be moved off your branch.
+
 ## Linux
 
 ```bash
-cd logstashui/bin
+cd LogstashUI/bin
 ./start_logstashui.sh --update
 ```
 

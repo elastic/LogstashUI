@@ -6,7 +6,8 @@
             "plugin": "beats",
             "config": {
                 "port": "5044"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -18,7 +19,8 @@
                 "match": {
                     "message": "%{COMBINEDAPACHELOG}"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_geoip_2",
@@ -26,7 +28,8 @@
             "plugin": "geoip",
             "config": {
                 "source": "clientip"
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -38,7 +41,8 @@
                 "hosts": [
                     "localhost:9200"
                 ]
-            }
+            },
+            "comments": []
         }
     ]
 }

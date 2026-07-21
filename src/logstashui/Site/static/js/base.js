@@ -44,9 +44,28 @@ function createToastContainer() {
 
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
   const div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = String(text);
   return div.innerHTML;
+}
+
+// Convert a slug-style identifier (e.g. 'dell_x1026', 'generic_interfaces.json')
+// into a human-friendly display label (e.g. 'Dell X1026', 'Generic Interfaces').
+// Mirrors Common/formatters.py:format_display_name - used as a client-side
+// fallback when an API response only provides the raw name/slug.
+function formatDisplayName(name) {
+  if (!name) return '';
+  let label = String(name);
+  if (label.endsWith('.json')) {
+    label = label.slice(0, -5);
+  }
+  return label
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 // Scroll to top functionality

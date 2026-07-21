@@ -1,0 +1,36 @@
+{
+  "official_key": "brocade_fibre_channel_switch_system_metrics",
+  "name": "system_metrics",
+  "description": "CPU and memory utilization as normalized percentages for Brocade FC switches.",
+  "product": "FC Switch",
+  "vendor": "Brocade",
+  "model": "Any",
+  "get": {
+    "system.cpu.total.norm.pct": "1.3.6.1.4.1.1588.2.1.1.1.26.1.0",
+    "system.memory.actual.used.pct": "1.3.6.1.4.1.1588.2.1.1.1.26.6.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.total.norm.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    }
+  ]
+}

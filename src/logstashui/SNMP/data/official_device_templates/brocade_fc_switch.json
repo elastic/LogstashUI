@@ -1,17 +1,20 @@
 {
+  "official_key": "brocade_fc_switch",
   "name": "brocade_fc_switch",
-  "description": "Fibre Channel switch metrics, FC port telemetry, and fabric endpoint visibility",
+  "type": "Fibre Channel Switch",
+  "description": "FC switch system metrics, per-port telemetry, and fabric name server for Brocade FC switches.",
   "vendor": "Brocade",
   "product": "FC Switch",
   "model": "Any",
   "profiles": [
-    "brocade_fc_switch_system_metrics",
-    "brocade_fc_switch_fc_ports",
-    "brocade_fc_switch_name_server",
+    "brocade_fibre_channel_switch_system_metrics",
+    "brocade_fibre_channel_switch_fibre_channel_ports",
+    "brocade_fibre_channel_switch_name_server",
     "generic_system",
     "generic_interfaces"
   ],
   "matching_rules": [
-
+    "Fabric OS",
+    "FabricOS"
   ]
 }

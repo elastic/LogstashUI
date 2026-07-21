@@ -6,7 +6,8 @@
             "plugin": "beats",
             "config": {
                 "port": "5044"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -18,7 +19,8 @@
                 "match": {
                     "message": "%{SYSLOGLINE}"
                 }
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -30,7 +32,8 @@
                 "codec": {
                     "rubydebug": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

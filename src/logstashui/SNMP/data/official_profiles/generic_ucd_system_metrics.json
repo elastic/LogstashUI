@@ -1,0 +1,40 @@
+{
+  "official_key": "generic_ucd_system_metrics",
+  "name": "generic_ucd_system_metrics",
+  "description": "Memory, load averages, and per-state CPU counters via Net-SNMP for Linux and BSD devices.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
+    "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
+    "system.memory.actual.free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
+    "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
+    "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
+    "system.cpu.raw.idle": "1.3.6.1.4.1.2021.11.53.0",
+    "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
+    "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
+    "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
+    "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
+        "complement_ratio_output_field": "system.memory.actual.used.pct"
+      }
+    }
+  ]
+}

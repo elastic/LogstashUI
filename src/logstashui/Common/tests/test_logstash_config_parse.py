@@ -113,17 +113,29 @@ class TestStripInlineComments:
     """Unit tests for _strip_inline_comments"""
 
     def test_removes_inline_comment_after_value(self):
-        """Inline comments after a config value are stripped"""
+        """Inline comments inside plugin blocks are stripped from the value line
+        and re-injected as standalone comment lines before the plugin's closing }"""
         config = 'input {\n  beats {\n    port => 5044 # this is a comment\n  }\n}\n'
         result = _strip_inline_comments(config)
-        assert '# this is a comment' not in result
-        assert 'port => 5044' in result
+        # The comment is moved, not discarded — it should appear somewhere in the output
+        assert '# this is a comment' in result
+        # The original value line must have the comment stripped
+        lines = result.split('\n')
+        port_line = next(l for l in lines if 'port' in l)
+        assert '# this is a comment' not in port_line
+        assert 'port => 5044' in port_line
 
     def test_removes_inline_comment_after_closing_brace(self):
-        """Inline comments after } are stripped"""
+        """Inline comments on a plugin's closing } line are emitted as a
+        standalone comment line at the outer scope after the }"""
         config = 'input {\n  beats {\n    port => 5044\n  } # end beats\n}\n'
         result = _strip_inline_comments(config)
-        assert '# end beats' not in result
+        # Comment is re-emitted after the closing }, not discarded
+        assert '# end beats' in result
+        # The } line itself must be clean
+        lines = result.split('\n')
+        close_line = next(l for l in lines if l.strip() == '}')
+        assert '# end beats' not in close_line
 
     def test_preserves_hash_in_string_value(self):
         """# inside a quoted string is NOT treated as a comment"""
@@ -137,11 +149,12 @@ class TestStripInlineComments:
         result = _strip_inline_comments(config)
         assert '# This is a top-level comment' in result
 
-    def test_removes_standalone_comment_inside_plugin_block(self):
-        """Standalone comment lines INSIDE a plugin block are removed"""
+    def test_preserves_standalone_comment_inside_plugin_block(self):
+        """Standalone comment lines INSIDE a plugin block are preserved in place
+        (the grammar now supports them and attaches them as plugin.comments[])"""
         config = 'input {\n  beats {\n    # comment inside plugin\n    port => 5044\n  }\n}\n'
         result = _strip_inline_comments(config)
-        assert '# comment inside plugin' not in result
+        assert '# comment inside plugin' in result
         assert 'port => 5044' in result
 
     def test_preserves_standalone_comment_inside_conditional(self):

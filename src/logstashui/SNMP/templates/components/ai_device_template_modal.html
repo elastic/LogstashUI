@@ -1,0 +1,46 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<!-- AI Generate Device Template Modal -->
+<div id="aiDeviceTemplateModal" class="hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+  <!-- Backdrop -->
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" id="aiDeviceTemplateBackdrop"></div>
+
+  <!-- Modal Content -->
+  <div class="bg-gray-800 rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
+
+    <!-- Modal Header -->
+    <div class="p-4 border-b border-purple-900/50">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-purple-400 flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
+          Generate Template and Profiles
+          <div class="relative group">
+            <div class="flex items-center justify-center w-4 h-4 rounded-full bg-purple-500/20 border border-purple-500/50 cursor-help hover:bg-purple-500/30 transition-colors">
+              <span class="text-xs font-bold text-purple-400">?</span>
+            </div>
+            <div class="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute left-0 top-full mt-2 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-4 z-50">
+              <h4 class="text-sm font-semibold text-white mb-2">AI Template Generation</h4>
+              <p class="text-xs text-gray-300">Select an Elasticsearch connection and paste the output of an SNMP walk to automatically generate a Device Template and associated Profiles with the correct OIDs and metrics.</p>
+            </div>
+          </div>
+        </h2>
+        <button id="closeAiDeviceTemplateModal" class="text-gray-400 hover:text-white transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="p-6 flex-1 overflow-y-auto" style="min-height: 0;">
+      {% include 'components/ai_generate_template_content.html' %}
+    </div>
+  </div>
+</div>

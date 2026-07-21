@@ -166,49 +166,15 @@ document.getElementById('credentialForm').addEventListener('submit', function (e
       return response.json();
     })
     .then(data => {
-      // Get the new credential ID from response
       const newCredentialId = data.id || data.credential_id || null;
-
       showToast(credentialId ? 'Credential updated successfully!' : 'Credential created successfully!', 'success');
-
-      // Check if device modal is open (called from device modal)
-      const deviceModal = document.getElementById('deviceFormModal');
-      const isCalledFromDeviceModal = deviceModal && !deviceModal.classList.contains('hidden');
-
-      // Check if network modal is open (called from network modal)
-      const networkModal = document.getElementById('networkFormModal');
-      const isCalledFromNetworkModal = networkModal && !networkModal.classList.contains('hidden');
-
-      if (isCalledFromDeviceModal) {
-        // Store the new credential ID for device modal to use (if we got one)
-        if (newCredentialId) {
-          window.lastCreatedCredentialId = newCredentialId;
-        }
-        // Use window.closeCredentialModal to ensure device modal override is called
-        if (typeof window.closeCredentialModal === 'function') {
-          window.closeCredentialModal();
-        } else {
-          closeCredentialModal();
-        }
-        // Don't reload - let device modal handle the refresh
-      } else if (isCalledFromNetworkModal) {
-        // Store the new credential ID for network modal to use (if we got one)
-        if (newCredentialId) {
-          window.lastCreatedCredentialIdForNetwork = newCredentialId;
-        }
-        // Use window.closeCredentialModal to ensure network modal override is called
-        if (typeof window.closeCredentialModal === 'function') {
-          window.closeCredentialModal();
-        } else {
-          closeCredentialModal();
-        }
-        // Don't reload - let network modal handle the refresh
-      } else {
-        closeCredentialModal();
-        // Refresh credentials data without page reload
-        if (typeof refreshCredentialsData === 'function') {
-          refreshCredentialsData();
-        }
+      document.dispatchEvent(new CustomEvent('credentialSaved', { detail: { id: newCredentialId } }));
+      closeCredentialModal();
+      if (typeof refreshCredentialsData === 'function') {
+        refreshCredentialsData();
+      }
+      if (typeof triggerUndeployedChangesCheck === 'function') {
+        triggerUndeployedChangesCheck();
       }
     })
     .catch(error => {

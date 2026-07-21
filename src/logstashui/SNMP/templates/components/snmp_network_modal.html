@@ -42,32 +42,193 @@
             <p class="text-gray-400 text-xs mt-1">Network in CIDR notation (e.g., 192.168.1.0/24)</p>
           </div>
 
-          <!-- Connection -->
-          <div class="mb-4">
-            <label for="networkConnection" class="block text-sm font-medium text-gray-300 mb-2">
-              Connection <span class="text-red-500">*</span>
-            </label>
-            <div class="flex gap-2">
-              <select id="networkConnection" name="connection" class="select select-bordered w-full" required>
-                <option value="">Select a connection...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Connection</option>
-              </select>
-              <button type="button" onclick="refreshConnections()" class="btn btn-square btn-ghost" title="Refresh connections">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+          <!-- Shared hidden inputs (written by whichever dropdown is active) -->
+          <input type="hidden" id="networkConnection" name="connection">
+          <input type="hidden" id="networkAgentConnection" name="agent_connection">
+
+          <!-- Deployment Mode + Connection (unified dark card) -->
+          <div class="mb-4 bg-base-300 rounded-lg border border-base-content/10 p-4 flex flex-col gap-4">
+
+            <!-- Deployment Mode radios -->
+            <div>
+              <label class="block text-sm font-semibold text-gray-300 mb-2">
+                Deployment Mode <span class="text-red-500">*</span>
+              </label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="deployment_mode" value="CENTRALIZED" class="radio radio-primary radio-sm" checked
+                         onchange="toggleDeploymentMode(this.value)">
+                  <span class="text-xs text-gray-300">Centralized Pipeline Management</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="deployment_mode" value="AGENT" class="radio radio-primary radio-sm"
+                         onchange="toggleDeploymentMode(this.value)">
+                  <span class="text-xs text-gray-300">Logstash Agent</span>
+                </label>
+              </div>
             </div>
-            <p class="text-gray-400 text-xs mt-1">Connection to centralized pipeline management cluster</p>
+
+            <!-- Centralized Connection (default) -->
+            <div id="centralizedConnectionSection">
+              <label class="block text-sm font-medium text-gray-300 mb-2">
+                Connection <span class="text-red-500">*</span>
+              </label>
+              <div id="networkConnectionDropdownWrapper" class="relative">
+                <button type="button" id="networkConnectionDropdownTrigger"
+                        onclick="toggleConnectionDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="networkConnectionSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a connection...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="networkConnectionDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="networkConnectionSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search connections..."
+                           autocomplete="off"
+                           oninput="filterConnectionDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="networkConnectionOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
+              <p class="text-gray-400 text-xs mt-1">Elasticsearch connection for centralized pipeline management</p>
+
+              <!-- Credential Mode (Centralized only) -->
+              <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Credential Mode <span class="text-red-500">*</span></label>
+                <div class="flex flex-col gap-2">
+
+                  <!-- Manage Keystore Manually -->
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="credential_mode" value="KEYSTORE" class="radio radio-primary radio-sm" checked>
+                    <span class="text-xs text-gray-300">Manage Keystore Manually</span>
+                    <span class="relative inline-block group cursor-help">
+                      <span class="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-base-content/20 text-base-content/60 font-bold leading-none">?</span>
+                      <div class="absolute hidden group-hover:block z-50 w-56 p-3 text-xs text-gray-300 bg-gray-800 border border-gray-600 rounded-lg shadow-xl bottom-6 left-1/2 -translate-x-1/2">
+                        LogstashAgent can't manage your keystore for you in this mode. We supply you with the necessary commands for adding credentials to your keystore. If you do not apply them, your pipelines will fail.
+                      </div>
+                    </span>
+                  </label>
+
+                  <!-- Plaintext Credentials -->
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="credential_mode" value="PLAINTEXT" class="radio radio-primary radio-sm">
+                    <span class="text-xs text-gray-300">Plaintext Credentials</span>
+                    <span class="relative inline-block group cursor-help">
+                      <span class="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-base-content/20 text-base-content/60 font-bold leading-none">?</span>
+                      <div class="absolute hidden group-hover:block z-50 w-56 p-3 text-xs text-gray-300 bg-gray-800 border border-gray-600 rounded-lg shadow-xl bottom-6 left-1/2 -translate-x-1/2">
+                        We highly recommend that you do not select this option. We will place your plaintext credentials into the Logstash pipeline.
+                      </div>
+                    </span>
+                  </label>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- Agent Mode connections (hidden by default) -->
+            <div id="agentConnectionSection" class="hidden flex flex-col gap-4">
+
+              <!-- LogstashAgent Connection -->
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">
+                  LogstashAgent Connection <span class="text-red-500">*</span>
+                </label>
+                <div id="networkAgentConnectionDropdownWrapper" class="relative">
+                  <button type="button" id="networkAgentConnectionDropdownTrigger"
+                          onclick="toggleAgentConnectionDropdown(event)"
+                          class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                    <span id="networkAgentConnectionSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a LogstashAgent connection...</span>
+                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                  <div id="networkAgentConnectionDropdownList"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                    <div class="p-2 border-b border-gray-700">
+                      <input type="text" id="networkAgentConnectionSearch"
+                             class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                             placeholder="Search LogstashAgent connections..."
+                             autocomplete="off"
+                             oninput="filterAgentConnectionDropdown(this.value)"
+                             onclick="event.stopPropagation()">
+                    </div>
+                    <div id="networkAgentConnectionOptionsList" class="max-h-48 overflow-y-auto">
+                      <!-- Options populated by JS -->
+                    </div>
+                  </div>
+                </div>
+                <p class="text-gray-400 text-xs mt-1">The LogstashAgent that will run the pipeline on this network</p>
+              </div>
+
+              <!-- Elasticsearch Connection (agent mode) -->
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">
+                  Elasticsearch Connection <span class="text-red-500">*</span>
+                </label>
+                <div id="networkAgentEsConnectionDropdownWrapper" class="relative">
+                  <button type="button" id="networkAgentEsConnectionDropdownTrigger"
+                          onclick="toggleAgentEsConnectionDropdown(event)"
+                          class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                    <span id="networkAgentEsConnectionSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select an Elasticsearch connection...</span>
+                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                  <div id="networkAgentEsConnectionDropdownList"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                    <div class="p-2 border-b border-gray-700">
+                      <input type="text" id="networkAgentEsConnectionSearch"
+                             class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                             placeholder="Search connections..."
+                             autocomplete="off"
+                             oninput="filterAgentEsConnectionDropdown(this.value)"
+                             onclick="event.stopPropagation()">
+                    </div>
+                    <div id="networkAgentEsConnectionOptionsList" class="max-h-48 overflow-y-auto">
+                      <!-- Options populated by JS -->
+                    </div>
+                  </div>
+                </div>
+                <p class="text-gray-400 text-xs mt-1">Elasticsearch instance to send SNMP data to</p>
+              </div>
+
+            </div>
           </div>
 
-          <!-- Logstash Name -->
-          <div class="mb-4">
-            <label for="logstashName" class="block text-sm font-medium text-gray-300 mb-2">
-              Logstash Node Name <span class="text-red-500">*</span>
+          <!-- Namespace -->
+          <div class="mb-2">
+            <label for="networkNamespace" class="block text-sm font-medium text-gray-300 mb-2">
+              <a href="https://www.elastic.co/docs/reference/fleet/data-streams#data-streams-naming-scheme" target="_blank" class="text-primary hover:text-primary-focus mr-1" title="Learn more about data stream namespaces">
+                <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </a>
+              Namespace <span class="text-red-500">*</span>
             </label>
-            <input type="text" id="logstashName" name="logstash_name" class="input input-bordered w-full" required placeholder="logstash-01">
-            <p class="text-gray-400 text-xs mt-1">The name of the Logstash node on this network.</p>
+            <input type="text" id="networkNamespace" name="namespace" class="input input-bordered w-full" required value="default" maxlength="100" placeholder="default">
+            <p class="text-gray-400 text-xs mt-1">User-configurable grouping (e.g., dev, prod, qa). Max 100 bytes.</p>
+          </div>
+
+          <!-- Use device template as namespace toggle -->
+          <div class="mb-4">
+            <!-- Hidden input ensures the field is always present in FormData -->
+            <input type="hidden" name="namespace_from_device_template" value="false">
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" id="namespaceFromTemplate" name="namespace_from_device_template"
+                     value="true" class="toggle toggle-primary toggle-sm"
+                     onchange="toggleNamespaceFromTemplate(this.checked)">
+              <span class="text-sm text-gray-300">Use device template name as namespace</span>
+            </label>
+            <p id="namespaceFromTemplateHint" class="text-gray-500 text-xs mt-1 ml-10 hidden">
+              The normalized template name (e.g. <span class="font-mono">cisco_ios</span>) will be used as the namespace at pipeline generation time. The field above is ignored.
+            </p>
           </div>
 
           <!-- Polling Interval -->
@@ -75,7 +236,7 @@
             <label for="pollingInterval" class="block text-sm font-medium text-gray-300 mb-2">
               Polling Interval (seconds) <span class="text-red-500">*</span>
             </label>
-            <input type="number" id="pollingInterval" name="interval" class="input input-bordered w-full" required min="1" max="3600" value="30">
+            <input type="number" id="pollingInterval" name="interval" class="input input-bordered w-full" required min="1" max="3600" value="60">
             <p class="text-gray-400 text-xs mt-1">How often to poll devices in this network (in seconds)</p>
           </div>
 
@@ -99,19 +260,35 @@
 
           <!-- Discovery Credential Selection (shown only when discovery enabled) -->
           <div id="discoveryCredentialSection" class="mb-4">
-            <label for="discoveryCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Discovery SNMP Credential <span class="text-red-500">*</span>
             </label>
             <div class="flex gap-2">
-              <select id="discoveryCredentialSelect" name="discovery_credential" class="select select-bordered w-full">
-                <option value="">Select a credential...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-              </select>
-              <button type="button" onclick="refreshDiscoveryCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <input type="hidden" id="discoveryCredentialSelect" name="discovery_credential">
+              <div id="discoveryCredentialDropdownWrapper" class="relative flex-1">
+                <button type="button" id="discoveryCredentialDropdownTrigger"
+                        onclick="toggleDiscoveryCredentialDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="discoveryCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="discoveryCredentialDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="discoveryCredentialSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search credentials..."
+                           autocomplete="off"
+                           oninput="filterDiscoveryCredentialDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="discoveryCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
             </div>
             <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for device discovery</p>
           </div>
@@ -136,19 +313,35 @@
 
           <!-- Trap Credential Selection (shown only when traps enabled) -->
           <div id="trapsCredentialSection" class="mb-4 hidden">
-            <label for="networkCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Trap SNMP Credential <span class="text-red-500">*</span>
             </label>
             <div class="flex gap-2">
-              <select id="networkCredentialSelect" name="credential" class="select select-bordered w-full">
-                <option value="">Select a credential...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-              </select>
-              <button type="button" onclick="refreshNetworkCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <input type="hidden" id="networkCredentialSelect" name="credential">
+              <div id="trapCredentialDropdownWrapper" class="relative flex-1">
+                <button type="button" id="trapCredentialDropdownTrigger"
+                        onclick="toggleTrapCredentialDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="trapCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="trapCredentialDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="trapCredentialSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search credentials..."
+                           autocomplete="off"
+                           oninput="filterTrapCredentialDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="trapCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
             </div>
             <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for trap reception</p>
           </div>
@@ -157,7 +350,7 @@
             <button type="button" onclick="closeNetworkModal()" class="btn btn-secondary">
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" id="networkSaveBtn" class="btn btn-primary">
               Save Network
             </button>
           </div>

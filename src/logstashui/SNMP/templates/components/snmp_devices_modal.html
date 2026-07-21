@@ -3,6 +3,7 @@
  * or more contributor license agreements. Licensed under the Elastic License;
  * you may not use this file except in compliance with the Elastic License.
 -->
+{% load static %}
 
 <!-- SNMP Device Form Modal -->
 <div id="deviceFormModal" class="hidden fixed inset-0 overflow-hidden z-50">
@@ -33,67 +34,151 @@
             <p class="text-gray-400 text-xs mt-1">A descriptive name for this device</p>
           </div>
 
-          <!-- IP Address / Hostname -->
-          <div class="mb-4">
-            <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
-              IP Address / Hostname <span class="text-red-500">*</span>
-            </label>
-            <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" required placeholder="192.168.1.1 or switch.local">
-            <p class="text-gray-400 text-xs mt-1">IP address or hostname of the device</p>
+          <!-- Device Identifiers -->
+          <div class="mb-4 bg-base-300 rounded-lg p-4 border border-base-content/10">
+            <p class="text-sm font-semibold text-gray-200 mb-1">Device Identifiers</p>
+            <p class="text-xs text-gray-400 mb-3">At least one of the following is required</p>
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Hostname -->
+              <div>
+                <label for="deviceHostname" class="block text-sm font-medium text-gray-300 mb-2">
+                  Hostname
+                </label>
+                <input type="text" id="deviceHostname" name="hostname" class="input input-bordered w-full" placeholder="switch.corp.local">
+                <p class="text-gray-400 text-xs mt-1">DNS hostname</p>
+              </div>
+              <!-- IP Address -->
+              <div>
+                <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
+                  IP Address
+                </label>
+                <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" placeholder="192.168.1.1">
+                <p class="text-gray-400 text-xs mt-1">IPv4 or IPv6</p>
+              </div>
+            </div>
           </div>
 
           <!-- Credential Selection -->
           <div class="mb-4">
-            <label for="deviceCredentialSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               SNMP Credential
             </label>
             <div class="flex gap-2">
-              <select id="deviceCredentialSelect" name="credential" class="select select-bordered w-full">
-                <option value="">Select a credential...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Credential</option>
-              </select>
-              <button type="button" onclick="refreshCredentials()" class="btn btn-square btn-ghost" title="Refresh credentials">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <input type="hidden" id="deviceCredentialSelect" name="credential">
+              <div id="deviceCredentialDropdownWrapper" class="relative flex-1">
+                <button type="button" id="deviceCredentialDropdownTrigger"
+                        onclick="toggleCredentialDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="deviceCredentialSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a credential...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="deviceCredentialDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="deviceCredentialSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search credentials..."
+                           autocomplete="off"
+                           oninput="filterCredentialDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="deviceCredentialOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
             </div>
             <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for this device</p>
           </div>
 
           <!-- Network Selection -->
           <div class="mb-4">
-            <label for="deviceNetworkSelect" class="block text-sm font-medium text-gray-300 mb-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">
               Network
             </label>
             <div class="flex gap-2">
-              <select id="deviceNetworkSelect" name="network" class="select select-bordered w-full">
-                <option value="">Select a network...</option>
-                <option value="add_new" class="font-bold text-primary">+ Add Network</option>
-              </select>
-              <button type="button" onclick="refreshNetworks()" class="btn btn-square btn-ghost" title="Refresh networks">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <input type="hidden" id="deviceNetworkSelect" name="network">
+              <div id="deviceNetworkDropdownWrapper" class="relative flex-1">
+                <button type="button" id="deviceNetworkDropdownTrigger"
+                        onclick="toggleNetworkDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <span id="deviceNetworkSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a network...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="deviceNetworkDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="deviceNetworkSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search networks..."
+                           autocomplete="off"
+                           oninput="filterNetworkDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <div id="deviceNetworkOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
             </div>
             <p class="text-gray-400 text-xs mt-1">Select the network this device belongs to</p>
           </div>
 
           <!-- Device Template Selection -->
           <div class="mb-4">
-            <label for="deviceTemplateSelect" class="block text-sm font-medium text-gray-300 mb-2">
-              Device Template
-            </label>
-            <div class="flex gap-2">
-              <select id="deviceTemplateSelect" name="device_template" class="select select-bordered w-full">
-                <option value="">Select a template...</option>
-              </select>
-              <button type="button" onclick="refreshDeviceTemplates()" class="btn btn-square btn-ghost" title="Refresh templates">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <div class="flex items-center gap-2 mb-2">
+              <label class="block text-sm font-medium text-gray-300">
+                Device Template
+              </label>
+              <a id="deviceTemplateWizardLink"
+                 href="/SNMP/Onboarding/?tab=wizard"
+                 title="Open Device Wizard to generate a template for this device"
+                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium
+                        bg-purple-600/20 text-purple-300 border border-purple-500/30
+                        hover:bg-purple-500/30 hover:border-purple-400/50 hover:text-purple-200
+                        transition-colors cursor-pointer">
+                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
                 </svg>
-              </button>
+                Wizard
+              </a>
+            </div>
+            <div class="flex gap-2">
+              <input type="hidden" id="deviceTemplateSelect" name="device_template">
+              <div id="deviceTemplateDropdownWrapper" class="relative flex-1"
+                   data-images-url="{% static 'images/' %}">
+                <button type="button" id="deviceTemplateDropdownTrigger"
+                        onclick="toggleTemplateDropdown(event)"
+                        class="select select-bordered w-full flex items-center gap-2 text-left h-auto min-h-[2.5rem] py-2 px-3">
+                  <img id="deviceTemplateSelectedImg" src="" alt=""
+                       class="w-5 h-5 object-contain flex-shrink-0 hidden rounded">
+                  <span id="deviceTemplateSelectedText" class="flex-1 text-sm text-gray-400 truncate">Select a template...</span>
+                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+                <div id="deviceTemplateDropdownList"
+                     class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl">
+                  <!-- Search input - stays fixed at top -->
+                  <div class="p-2 border-b border-gray-700">
+                    <input type="text" id="deviceTemplateSearch"
+                           class="input input-sm w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 text-sm"
+                           placeholder="Search templates..."
+                           autocomplete="off"
+                           oninput="filterTemplateDropdown(this.value)"
+                           onclick="event.stopPropagation()">
+                  </div>
+                  <!-- Scrollable options -->
+                  <div id="deviceTemplateOptionsList" class="max-h-48 overflow-y-auto">
+                    <!-- Options populated by JS -->
+                  </div>
+                </div>
+              </div>
             </div>
             <p class="text-gray-400 text-xs mt-1">Select a device template to automatically apply profiles and matching rules</p>
           </div>
@@ -126,6 +211,108 @@
               <input type="number" id="deviceTimeout" name="timeout" class="input input-bordered w-full" value="1000" min="100" step="100" placeholder="1000">
               <p class="text-gray-400 text-xs mt-1">Default: 1000</p>
             </div>
+          </div>
+
+          <!-- Location -->
+          <div class="mb-4 bg-base-300 rounded-lg p-4 border border-base-content/10">
+            <p class="text-sm font-semibold text-gray-200 mb-1">Location</p>
+            <p class="text-xs text-gray-400 mb-3">Optional physical location details for this device</p>
+
+            <div class="grid grid-cols-1 gap-3">
+              <!-- Site combobox -->
+              <div>
+                <label for="deviceSite" class="block text-sm font-medium text-gray-300 mb-1">Site</label>
+                <div class="relative" id="deviceSiteWrapper">
+                  <input type="text" id="deviceSite" name="site"
+                         class="input input-bordered w-full"
+                         placeholder="e.g., HQ Campus"
+                         autocomplete="off"
+                         oninput="onSiteInput(this.value)"
+                         onfocus="onSiteFocus()">
+                  <div id="deviceSiteDropdown"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  </div>
+                </div>
+              </div>
+              <!-- Building combobox (disabled until Site is filled) -->
+              <div>
+                <label for="deviceBuilding" class="block text-sm font-medium text-gray-300 mb-1">Building</label>
+                <div class="relative" id="deviceBuildingWrapper">
+                  <input type="text" id="deviceBuilding" name="building"
+                         class="input input-bordered w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                         placeholder="Select a Site first"
+                         autocomplete="off"
+                         disabled
+                         oninput="onBuildingInput(this.value)"
+                         onfocus="onBuildingFocus()">
+                  <div id="deviceBuildingDropdown"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  </div>
+                </div>
+              </div>
+              <!-- Room combobox (disabled until Building is filled) -->
+              <div>
+                <label for="deviceRoom" class="block text-sm font-medium text-gray-300 mb-1">Room</label>
+                <div class="relative" id="deviceRoomWrapper">
+                  <input type="text" id="deviceRoom" name="room"
+                         class="input input-bordered w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                         placeholder="Select a Building first"
+                         autocomplete="off"
+                         disabled
+                         oninput="onRoomInput(this.value)"
+                         onfocus="onRoomFocus()">
+                  <div id="deviceRoomDropdown"
+                       class="hidden absolute z-[100] left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Coordinates -->
+            <div class="mt-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-medium text-gray-300">Coordinates</span>
+                <button type="button" onclick="openGmapsModal()"
+                        class="btn btn-ghost btn-xs flex items-center gap-1.5 text-gray-400 hover:text-white border border-base-content/10 hover:border-base-content/30">
+                  <!-- Google Maps pin icon -->
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+                    <circle cx="12" cy="9" r="2.5" fill="white"/>
+                  </svg>
+                  Pick from Google Maps
+                </button>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label for="deviceLatitude" class="block text-xs text-gray-400 mb-1">Latitude</label>
+                  <input type="number" id="deviceLatitude" name="latitude" class="input input-bordered w-full font-mono"
+                         step="any" min="-90" max="90" placeholder="e.g., 37.774929">
+                </div>
+                <div>
+                  <label for="deviceLongitude" class="block text-xs text-gray-400 mb-1">Longitude</label>
+                  <input type="number" id="deviceLongitude" name="longitude" class="input input-bordered w-full font-mono"
+                         step="any" min="-180" max="180" placeholder="e.g., -122.419416">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Device Metadata -->
+          <div class="mb-4 bg-base-300 rounded-lg p-4 border border-base-content/10">
+            <p class="text-sm font-semibold text-gray-200 mb-1">Device Metadata</p>
+            <p class="text-xs text-gray-400 mb-3">Arbitrary key-value pairs for custom device attributes</p>
+
+            <div id="deviceMetadataRows" class="flex flex-col gap-2">
+              <!-- Rows injected by JS -->
+            </div>
+
+            <button type="button" onclick="addMetadataRow()"
+                    class="btn btn-ghost btn-xs mt-2 text-primary border border-primary/30 hover:bg-primary/10">
+              + Add Field
+            </button>
+
+            <!-- Hidden field serialized to JSON on submit -->
+            <input type="hidden" id="deviceMetadataJson" name="metadata">
           </div>
 
           <div class="form-actions pt-6 mt-6 border-t border-gray-700">

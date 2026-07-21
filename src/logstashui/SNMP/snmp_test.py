@@ -5,10 +5,14 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
-from .models import Device, DeviceTemplate, Profile
+from .models import Device, DeviceTemplate, Profile, Credential
+from Common.formatters import format_display_name
 import json
+import logging
 import os
 import traceback
+
+logger = logging.getLogger(__name__)
 
 # Import PySNMP asyncio API
 from pysnmp.hlapi.v3arch.asyncio import (
@@ -84,7 +88,7 @@ def _load_profile_data(profile):
             with open(profile_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading official profile {profile_name}: {e}")
+            logger.debug(f"Error loading official profile {profile_name}: {e}")
             return {'get': {}, 'walk': {}, 'table': {}}
     else:
         return profile.profile_data
@@ -469,17 +473,17 @@ def RunSNMPTest(request):
     start_time = time.time()
     
     try:
-        print("=== SNMP Test Started ===")
+        logger.debug("=== SNMP Test Started ===")
         data = json.loads(request.body)
         device_id = data.get('device_id')
         template_id = data.get('template_id')
-        print(f"Device ID: {device_id}, Template ID: {template_id}")
+        logger.debug(f"Device ID: {device_id}, Template ID: {template_id}")
         
         if not device_id:
             return JsonResponse({'success': False, 'error': 'device_id is required'}, status=400)
         
         device = Device.objects.select_related('credential', 'device_template').get(pk=device_id)
-        print(f"Device found: {device.name}, Credential: {device.credential}")
+        logger.debug(f"Device found: {device.name}")
         
         if not device.credential:
             return JsonResponse({'success': False, 'error': 'Device has no credential assigned'}, status=400)
@@ -492,16 +496,16 @@ def RunSNMPTest(request):
             return JsonResponse({'success': False, 'error': 'No template specified and device has no assigned template'}, status=400)
         
         profiles = list(template.profiles.all())
-        print(f"Template: {template.name}, Profiles: {[p.name for p in profiles]}")
+        logger.debug(f"Template: {template.name}, Profiles: {[p.name for p in profiles]}")
         
         if not profiles:
             return JsonResponse({'success': False, 'error': 'Template has no profiles assigned'}, status=400)
         
-        print("Merging profile OIDs...")
+        logger.debug("Merging profile OIDs...")
         merged_oids = _merge_profile_oids(profiles)
-        print(f"Merged OIDs - GET: {len(merged_oids['get'])}, WALK: {len(merged_oids['walk'])}, TABLE: {len(merged_oids['table'])}")
+        logger.debug(f"Merged OIDs - GET: {len(merged_oids['get'])}, WALK: {len(merged_oids['walk'])}, TABLE: {len(merged_oids['table'])}")
         
-        print("Performing SNMP operations...")
+        logger.debug("Performing SNMP operations...")
         
         # Use threading to enforce overall timeout
         import threading
@@ -524,7 +528,7 @@ def RunSNMPTest(request):
         
         if operation_thread.is_alive():
             # Operations took too long, return timeout error
-            print("SNMP operations timed out after 60 seconds")
+            logger.debug("SNMP operations timed out after 60 seconds")
             return JsonResponse({
                 'success': False,
                 'error': 'Test timed out after 60 seconds - device may be unreachable or too slow to respond',
@@ -538,9 +542,10 @@ def RunSNMPTest(request):
                 'template': {
                     'id': template.id,
                     'name': template.name,
+                    'display_name': format_display_name(template.name),
                     'description': template.description,
                     'vendor': template.vendor,
-                    'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                    'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
                 }
             })
         
@@ -548,52 +553,85 @@ def RunSNMPTest(request):
             raise exception_container[0]
         
         results = results_container[0]
-        print("SNMP operations completed")
+        logger.debug("SNMP operations completed")
         
-        # Check if there are any errors in the results
-        has_errors = False
-        error_messages = []
+        # Collect all error messages and check for authentication failures
+        auth_error_count = 0
+        total_operations = 0
+        all_errors = []
         has_any_success = False
         
-        # Check for top-level errors
-        for category in ['get', 'walk', 'table']:
-            if isinstance(results[category], dict) and 'error' in results[category]:
-                has_errors = True
-                error_messages.append(f"{category.upper()}: {results[category]['error']}")
-            elif results[category]:  # Has some data
-                has_any_success = True
-        
-        # Check for field-level errors in get results
+        # Check GET results
         if isinstance(results['get'], dict):
-            for field, value in results['get'].items():
-                if isinstance(value, dict) and 'error' in value:
-                    has_errors = True
-                else:
-                    has_any_success = True
+            if 'error' in results['get']:
+                # Top-level error
+                total_operations += 1
+                all_errors.append(results['get']['error'])
+                if 'Unknown USM user' in results['get']['error'] or 'authentication' in results['get']['error'].lower():
+                    auth_error_count += 1
+            else:
+                # Field-level results
+                for field, value in results['get'].items():
+                    total_operations += 1
+                    if isinstance(value, dict) and 'error' in value:
+                        if value['error'] not in all_errors:
+                            all_errors.append(value['error'])
+                        if 'Unknown USM user' in value['error'] or 'authentication' in value['error'].lower():
+                            auth_error_count += 1
+                    else:
+                        has_any_success = True
         
-        # Check for field-level errors in walk results
+        # Check WALK results
         if isinstance(results['walk'], dict):
-            for field, value in results['walk'].items():
-                if isinstance(value, dict) and 'error' in value:
-                    has_errors = True
-                else:
-                    has_any_success = True
+            if 'error' in results['walk']:
+                total_operations += 1
+                all_errors.append(results['walk']['error'])
+                if 'Unknown USM user' in results['walk']['error'] or 'authentication' in results['walk']['error'].lower():
+                    auth_error_count += 1
+            else:
+                for field, value in results['walk'].items():
+                    total_operations += 1
+                    if isinstance(value, dict) and 'error' in value:
+                        if value['error'] not in all_errors:
+                            all_errors.append(value['error'])
+                        if 'Unknown USM user' in value['error'] or 'authentication' in value['error'].lower():
+                            auth_error_count += 1
+                    else:
+                        has_any_success = True
         
-        # Check for field-level errors in table results
+        # Check TABLE results
         if isinstance(results['table'], dict):
-            for table, value in results['table'].items():
-                if isinstance(value, dict) and 'error' in value:
-                    has_errors = True
-                else:
-                    has_any_success = True
+            if 'error' in results['table']:
+                total_operations += 1
+                all_errors.append(results['table']['error'])
+                if 'Unknown USM user' in results['table']['error'] or 'authentication' in results['table']['error'].lower():
+                    auth_error_count += 1
+            else:
+                for table, value in results['table'].items():
+                    total_operations += 1
+                    if isinstance(value, dict) and 'error' in value:
+                        if value['error'] not in all_errors:
+                            all_errors.append(value['error'])
+                        if 'Unknown USM user' in value['error'] or 'authentication' in value['error'].lower():
+                            auth_error_count += 1
+                    else:
+                        has_any_success = True
         
         execution_time = time.time() - start_time
         
-        # If everything failed, return error response
-        if has_errors and not has_any_success:
+        logger.debug(f"Auth errors: {auth_error_count}/{total_operations}, has_any_success: {has_any_success}")
+        
+        # If we have authentication errors and no successes, it's an auth failure
+        if auth_error_count > 0 and not has_any_success:
+            unique_errors = list(dict.fromkeys(all_errors))
+            if len(unique_errors) == 1:
+                error_text = f'Authentication failed: {unique_errors[0]}'
+            else:
+                error_text = 'Authentication failed - check SNMP credentials'
+            
             return JsonResponse({
                 'success': False,
-                'error': '; '.join(error_messages) if error_messages else 'All SNMP operations failed',
+                'error': error_text,
                 'execution_time': round(execution_time, 2),
                 'device': {
                     'id': device.id,
@@ -604,16 +642,44 @@ def RunSNMPTest(request):
                 'template': {
                     'id': template.id,
                     'name': template.name,
+                    'display_name': format_display_name(template.name),
                     'description': template.description,
                     'vendor': template.vendor,
-                    'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                    'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
                 }
             })
         
+        # If all operations failed (but not auth-related), return generic error
+        if len(all_errors) > 0 and not has_any_success:
+            unique_errors = list(dict.fromkeys(all_errors))
+            error_text = '; '.join(unique_errors) if unique_errors else 'All SNMP operations failed'
+            
+            return JsonResponse({
+                'success': False,
+                'error': error_text,
+                'execution_time': round(execution_time, 2),
+                'device': {
+                    'id': device.id,
+                    'name': device.name,
+                    'ip_address': device.ip_address,
+                    'port': device.port
+                },
+                'template': {
+                    'id': template.id,
+                    'name': template.name,
+                    'display_name': format_display_name(template.name),
+                    'description': template.description,
+                    'vendor': template.vendor,
+                    'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
+                }
+            })
+        
+        # Partial success or full success
+        has_errors = len(all_errors) > 0
         response_data = {
             'success': True,  # True if we got at least some results
             'has_errors': has_errors,
-            'error_summary': '; '.join(error_messages) if error_messages else None,
+            'error_summary': '; '.join(list(dict.fromkeys(all_errors))) if all_errors else None,
             'execution_time': round(execution_time, 2),
             'device': {
                 'id': device.id,
@@ -624,16 +690,16 @@ def RunSNMPTest(request):
             'template': {
                 'id': template.id,
                 'name': template.name,
+                'display_name': format_display_name(template.name),
                 'description': template.description,
                 'vendor': template.vendor,
-                'profiles': [{'name': p.name, 'description': p.description} for p in profiles]
+                'profiles': [{'name': p.name, 'display_name': format_display_name(p.name), 'description': p.description} for p in profiles]
             },
             'results': results
         }
         
-        print(f"Returning response - success: {response_data['success']}, has_errors: {response_data['has_errors']}")
-        print(f"Response data keys: {list(response_data.keys())}")
-        print("=== SNMP Test Completed ===")
+        logger.debug(f"Returning response - success: {response_data['success']}, has_errors: {response_data['has_errors']}")
+        logger.debug("=== SNMP Test Completed ===")
         
         return JsonResponse(response_data)
         
@@ -643,11 +709,172 @@ def RunSNMPTest(request):
         return JsonResponse({'success': False, 'error': 'Template not found'}, status=404)
     except Exception as e:
         error_trace = traceback.format_exc()
-        print(f"SNMP Test Error: {str(e)}")
-        print(f"Traceback:\n{error_trace}")
+        logger.error(f"SNMP Test Error: {str(e)}\n{error_trace}")
         return JsonResponse({
             'success': False, 
             'error': str(e),
             'error_type': type(e).__name__,
             'traceback': error_trace
+        }, status=500)
+
+
+async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
+    """Perform a full SNMP walk from a starting OID (async)"""
+    try:
+        auth_data = _create_auth_data(credential)
+    except Exception as e:
+        return {'error': f'Failed to create authentication data: {str(e)}'}
+
+    try:
+        transport = await UdpTransportTarget.create((host, port))
+    except Exception as e:
+        return {'error': f'Failed to create transport: {str(e)}'}
+
+    snmp_engine = SnmpEngine()
+    results = []
+    current_oid = start_oid
+    max_iterations = 10000
+    oid_prefix = start_oid + '.'
+
+    for _ in range(max_iterations):
+        try:
+            errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
+                snmp_engine,
+                auth_data,
+                transport,
+                ContextData(),
+                ObjectType(ObjectIdentity(current_oid)),
+                lexicographic_mode=False
+            )
+        except Exception as e:
+            return {'error': f'SNMP error: {str(e)}', 'results': results}
+
+        if errorIndication:
+            if results:
+                break
+            return {'error': str(errorIndication), 'results': results}
+
+        if errorStatus:
+            if results:
+                break
+            return {'error': f'{errorStatus.prettyPrint()}', 'results': results}
+
+        if not varBinds:
+            break
+
+        varBind = varBinds[0]
+        next_oid_str = str(varBind[0])
+
+        # Stop if we've walked past the starting subtree
+        if not next_oid_str.startswith(oid_prefix):
+            break
+
+        results.append({
+            'oid': next_oid_str,
+            'value': _format_snmp_value(varBind[1])
+        })
+
+        current_oid = next_oid_str
+
+    return {'results': results}
+
+
+def _perform_full_walk(host, port, credential, start_oid='1.3.6.1'):
+    """Synchronous wrapper for the full walk"""
+    import threading
+    result = [None]
+    exception = [None]
+
+    def run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result[0] = loop.run_until_complete(
+                _perform_full_walk_async(host, port, credential, start_oid)
+            )
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.close()
+        except Exception as e:
+            exception[0] = e
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout=300)
+
+    if thread.is_alive():
+        return {'error': 'SNMP walk timed out after 5 minutes - device may be unreachable or the MIB tree is too large'}
+
+    if exception[0]:
+        return {'error': str(exception[0])}
+
+    return result[0] if result[0] is not None else {'error': 'No response from device'}
+
+
+@require_http_methods(["POST"])
+def RunSNMPWalk(request):
+    """
+    Perform a full SNMP walk against a host using a credential.
+
+    Expected POST data:
+    {
+        "host": str,           # IP address or hostname
+        "port": int,           # optional, defaults to 161
+        "credential_id": int,
+        "start_oid": str       # optional, defaults to "1.3.6.1"
+    }
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        data = json.loads(request.body)
+        host = data.get('host', '').strip()
+        port = int(data.get('port', 161))
+        credential_id = data.get('credential_id')
+        start_oid = data.get('start_oid', '1.3.6.1').strip() or '1.3.6.1'
+
+        if not host:
+            return JsonResponse({'success': False, 'error': 'host is required'}, status=400)
+        if not credential_id:
+            return JsonResponse({'success': False, 'error': 'credential_id is required'}, status=400)
+
+        credential = Credential.objects.get(pk=credential_id)
+
+        walk_result = _perform_full_walk(host, port, credential, start_oid)
+
+        execution_time = round(time.time() - start_time, 2)
+
+        if 'error' in walk_result and not walk_result.get('results'):
+            return JsonResponse({
+                'success': False,
+                'error': walk_result['error'],
+                'execution_time': execution_time,
+            })
+
+        results = walk_result.get('results', [])
+        return JsonResponse({
+            'success': True,
+            'execution_time': execution_time,
+            'host': host,
+            'port': port,
+            'start_oid': start_oid,
+            'credential': credential.name,
+            'oid_count': len(results),
+            'results': results,
+            'partial_error': walk_result.get('error'),
+        })
+
+    except Credential.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Credential not found'}, status=404)
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        logger.error(f"SNMP Walk Error: {str(e)}\n{error_trace}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__,
         }, status=500)

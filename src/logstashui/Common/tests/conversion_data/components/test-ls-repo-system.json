@@ -7,7 +7,8 @@
             "config": {
                 "port": 5044,
                 "host": "0.0.0.0"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -45,7 +46,8 @@
                                             "GREEDYMULTILINE": "(.|\n)*"
                                         },
                                         "remove_field": "message"
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_date_4",
@@ -57,7 +59,8 @@
                                             "MMM  d HH:mm:ss",
                                             "MMM dd HH:mm:ss"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 },
                                 {
                                     "id": "filter_geoip_5",
@@ -66,7 +69,8 @@
                                     "config": {
                                         "source": "[system][auth][ssh][ip]",
                                         "target": "[system][auth][ssh][geoip]"
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [
@@ -87,7 +91,8 @@
                                                     "GREEDYMULTILINE": "(.|\n)*"
                                                 },
                                                 "remove_field": "message"
-                                            }
+                                            },
+                                            "comments": []
                                         },
                                         {
                                             "id": "filter_date_7",
@@ -99,7 +104,8 @@
                                                     "MMM  d HH:mm:ss",
                                                     "MMM dd HH:mm:ss"
                                                 ]
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ]
                                 }
@@ -122,7 +128,8 @@
                 "hosts": "localhost",
                 "manage_template": "false",
                 "index": "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
-            }
+            },
+            "comments": []
         }
     ]
 }

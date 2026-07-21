@@ -49,11 +49,13 @@ New to LogstashUI? Start here:
 
 ## Documentation Tree
 
-### 📚 Getting Started
+### Getting Started
 - **[Getting Started Guide](/docs/docs/getting_started.md)** - Installation and first steps
 
-### 🎨 LogstashUI
+### LogstashUI
 - **[LogstashUI Overview](/docs/docs/logstashui/index.md)** - Features and introduction
+- **[Architecture](/docs/docs/logstashui/architecture.md)** - System architecture
+- **[Compatibility](/docs/docs/logstashui/compatibility.md)** - Logstash version compatibility
 
 #### Configuration
 - **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)**
@@ -61,12 +63,28 @@ New to LogstashUI? Start here:
   - **[Simulation Modes](/docs/docs/logstashui/configuration/simulation.md)** - Embedded vs Host mode
   - **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - High-performance simulation setup
 
+#### SNMP Monitoring
+- **[SNMP Overview](/docs/docs/logstashui/SNMP/index.md)** - Network monitoring introduction
+  - **[Quickstart Guide](/docs/docs/logstashui/SNMP/Quickstart.md)** - From zero to metrics
+  - **[SNMP Architecture](/docs/docs/logstashui/SNMP/architecture.md)** - How the pieces fit together
+  - **[SNMP Configuration](/docs/docs/logstashui/SNMP/configuration.md)** - Credentials, networks, devices, templates, profiles
+  - **[Device Discovery](/docs/docs/logstashui/SNMP/discovery.md)** - Automatic device discovery
+  - **[Trap Support](/docs/docs/logstashui/SNMP/traps.md)** - Device-initiated notifications
+  - **[Pipeline Generation](/docs/docs/logstashui/SNMP/pipeline_generation.md)** - How pipelines are built
+  - **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** - Deploy flow and deployment modes
+  - **[Data Overview](/docs/docs/logstashui/SNMP/data_overview.md)** - Core Network Vitals
+  - **[SNMP Field Reference](/docs/docs/logstashui/SNMP/schema.md)** - Field names, MIBs, and OIDs
+  - **[TSDS Implementation](/docs/docs/logstashui/SNMP/tsds_implementation.md)** - Time series storage
+  - **[Testing & Validation](/docs/docs/logstashui/SNMP/testing.md)** - Test profiles and walk devices
+  - **[Device Support](/docs/docs/logstashui/SNMP/device_support.md)** - Unsupported device workflow
+
 #### General
 - **[General Overview](/docs/docs/logstashui/general/index.md)**
-  - **[Building and Running](/docs/docs/logstashui/general/build.md)** - Docker Compose and local development
+  - **[Deploying LogstashUI](/docs/docs/logstashui/general/deploy.md)** - All deployment options
+  - **[Building from Source](/docs/docs/logstashui/general/build.md)** - Source builds and local development
   - **[Updating LogstashUI](/docs/docs/logstashui/general/updating.md)** - How to update to latest version
 
-### 🤖 LogstashAgent
+### LogstashAgent
 - **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Features and introduction
 
 #### Configuration
@@ -89,4 +107,4 @@ Found a bug or have a feature request? [Open an issue](https://github.com/elasti
 
 Copyright 2024–2026 Elasticsearch and contributors.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE.txt) for details.
+Licensed under the Elastic License 2.0 (ELv2). See [LICENSE](https://github.com/elastic/LogstashUI/blob/main/LICENSE.txt) for details.

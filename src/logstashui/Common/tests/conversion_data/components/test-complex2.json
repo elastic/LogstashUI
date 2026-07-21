@@ -21,7 +21,8 @@
                 "tags": [
                     "from_beats"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_comment_2",
@@ -48,7 +49,8 @@
                 "tags": [
                     "from_tcp"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_comment_4",
@@ -74,7 +76,8 @@
                 "tags": [
                     "from_udp"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_comment_6",
@@ -100,7 +103,8 @@
                 "tags": [
                     "from_http"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_comment_8",
@@ -125,7 +129,8 @@
                 "tags": [
                     "from_stdin"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_comment_10",
@@ -153,7 +158,8 @@
                 "tags": [
                     "from_generator"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -175,7 +181,8 @@
                     "[@metadata][pipeline]": "logstashui_kitchen_sink",
                     "event.module": "logstashui"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_14",
@@ -201,7 +208,8 @@
                             "copy": {
                                 "[event][original]": "message"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -234,7 +242,8 @@
                             "tag_on_failure": [
                                 "_jsonparsefailure_message"
                             ]
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_comment_20",
@@ -260,7 +269,8 @@
                                         "copy": {
                                             "[json][@timestamp]": "@timestamp"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -283,7 +293,8 @@
                                         "copy": {
                                             "[json][source_ip]": "source_ip"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -306,7 +317,8 @@
                                         "copy": {
                                             "[json][user_agent]": "user_agent"
                                         }
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -353,7 +365,8 @@
                             "tag_on_failure": [
                                 "_dissectfailure_syslogish"
                             ]
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_if_31",
@@ -376,7 +389,8 @@
                                         "tag_on_failure": [
                                             "_grokparsefailure_syslogish"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -412,7 +426,8 @@
                                         "tag_on_failure": [
                                             "_dateparsefailure_syslog"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -453,7 +468,8 @@
                             "tag_on_failure": [
                                 "_kvfailure_message"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -483,7 +499,8 @@
                 "lowercase": [
                     "level"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_41",
@@ -508,7 +525,8 @@
                             "id": "f_useragent",
                             "source": "user_agent",
                             "target": "user_agent_parsed"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -539,7 +557,8 @@
                             "copy": {
                                 "[source][ip]": "source_ip"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -578,7 +597,8 @@
                             "add_tag": [
                                 "src_private"
                             ]
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_comment_50",
@@ -603,7 +623,8 @@
                                         "id": "f_geoip",
                                         "source": "source_ip",
                                         "target": "source_geo"
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -628,7 +649,8 @@
                                 "source_ip"
                             ],
                             "action": "replace"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -660,7 +682,8 @@
                     "fatal": "5"
                 },
                 "fallback": "2"
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_mutate_57",
@@ -671,7 +694,8 @@
                 "convert": {
                     "severity": "integer"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_58",
@@ -692,7 +716,8 @@
                 ],
                 "method": "MURMUR3",
                 "target": "[@metadata][fingerprint]"
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_60",
@@ -721,7 +746,8 @@
                             "add_field": {
                                 "event.category": "authentication"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -740,7 +766,8 @@
                                     "add_field": {
                                         "event.category": "availability"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -756,7 +783,8 @@
                                 "add_tag": [
                                     "category_generic"
                                 ]
-                            }
+                            },
+                            "comments": []
                         }
                     ]
                 }
@@ -791,7 +819,8 @@
                     "^syslog_.*$",
                     "^ingest_transport$"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -814,7 +843,8 @@
                         "metadata": "true"
                     }
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_comment_69",
@@ -834,7 +864,8 @@
                 "codec": {
                     "json_lines": {}
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_comment_71",
@@ -855,7 +886,8 @@
                 ],
                 "index": "logstashui-%{+YYYY.MM.dd}",
                 "ilm_enabled": "false"
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_comment_73",
@@ -874,7 +906,8 @@
                 "url": "http://localhost:9000/logstash/callback",
                 "http_method": "post",
                 "format": "json"
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_comment_75",
@@ -892,7 +925,8 @@
                 "id": "out_kafka",
                 "bootstrap_servers": "localhost:9092",
                 "topic_id": "logstashui-events"
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_comment_77",
@@ -911,7 +945,8 @@
                 "send_to": [
                     "downstream"
                 ]
-            }
+            },
+            "comments": []
         }
     ]
 }

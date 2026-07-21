@@ -51,6 +51,7 @@ Instead of editing configuration files manually, pipelines can be authored visua
 
 - **[Architecture](docs/docs/logstashui/architecture.md)** - System architecture and component overview
 - **[LogstashUI Documentation](docs/docs/logstashui/index.md)** - Installation, configuration, and usage guides for LogstashUI
+- **[SNMP Monitoring](docs/docs/logstashui/SNMP/index.md)** - Network monitoring with polling, traps, and discovery
 - **[LogstashAgent Documentation](docs/docs/logstashagent/index.md)** - Setup and configuration for LogstashAgent
 
 ---
@@ -62,32 +63,28 @@ Instead of editing configuration files manually, pipelines can be authored visua
 - 8 GB RAM
 - 4 CPU Cores
 
-### Software
+**Why these requirements?**
 
-#### For Embedded mode (See Quick Start)
-- [Docker](https://www.docker.com/get-started/)
+LogstashUI can run on smaller instances for light usage, especially when only using the editor or basic configuration workflows. The minimum requirements above are intended to provide a reliable baseline for common usage and heavier operations like pipeline simulation and multiple instances of Logstash Agent.
 
-#### For [Host mode](docs/docs/beta/PipelineEditor/host_mode.md) (If you have a simulation-heavy use case)
-- [Docker](https://www.docker.com/get-started/)
-- [Python 3.12+](https://www.python.org/downloads/)
-- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+If you choose to run LogstashUI with fewer resources, it will likely work fine, but performance can vary depending on the operation. If the UI feels slow, simulations take too long, or agent operations appear delayed, increase CPU and memory before troubleshooting further.
 
+## How to Deploy
 
-### For Local Development
-- [Python 3.12+](https://www.python.org/downloads/)
-- [Node.js & npm (for building Tailwind CSS assets)](https://nodejs.org/en/download)
-- [Elasticsearch 9.x or later](https://cloud.elastic.co)
-- [Docker](https://www.docker.com/get-started/)
+The **[Deployment Guide](docs/docs/logstashui/general/deploy.md)** covers the ways you can deploy LogstashUI — the standard Docker install, host-backed simulation, and running from source.
 
+If you have internet access and can use Docker and GitHub, the standard install is below in the Quick Start section.
+
+---
 
 ## Quick Start - Embedded Mode
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](docs/docs/beta/PipelineEditor/host_mode.md). It's more performant.
+> If you plan on doing a lot of simulations, consider using [host mode](docs/docs/logstashui/configuration/host_mode.md). It's more performant.
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
 cd LogstashUI/bin
-````
+```
 
 ### Run LogstashUI
 #### Linux
@@ -130,9 +127,12 @@ LogstashUI will notify you when a new version is available via a banner in the n
 
 To update LogstashUI to the latest version:
 
+> [!WARNING]
+> `--update` switches the repository to the `main` branch before pulling the latest code and images.
+
 #### Linux
 ```bash
-cd logstashui/bin
+cd LogstashUI/bin
 ./start_logstashui.sh --update
 ```
 
@@ -143,13 +143,25 @@ start_logstashui.bat --update
 ```
 
 ## Limitations
-- Currently, the translation engine cannot process comments inside plugin blocks. For example:
+- Comments inside plugin blocks (inline and standalone) are preserved through parsing and serialization, but their exact position relative to config keys is not guaranteed. All comments are grouped at the top of the plugin block in the output.
 
 ```
 input {
-    udp { # Translation engine doesn't like this
-		port => 5119 # This is a comment that we can't convert
-	}
+    udp { # inline comments are moved
+        port => 5119 # inline comments are moved
+    }
+}
+```
+
+Becomes:
+
+```
+input {
+    udp {
+        # inline comments are moved
+        # inline comments are moved
+        port => 5119
+    }
 }
 ```
 
@@ -168,4 +180,4 @@ Please open an issue to discuss large changes before submitting a pull request.
 
 Copyright 2024–2026 Elasticsearch and contributors.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE.txt) for details.
+Licensed under the Elastic License 2.0 (ELv2). See [LICENSE](LICENSE.txt) for details.

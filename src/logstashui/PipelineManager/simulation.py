@@ -93,7 +93,7 @@ def SimulatePipeline(request):
             else:
                 logstash_ui_url = "https://nginx"
 
-        print("USING THIS URL: ", logstash_ui_url)
+        logger.debug("USING THIS URL: %s", logstash_ui_url)
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls
 

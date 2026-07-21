@@ -26,6 +26,8 @@ urlpatterns = [
 
     path("GetConnections/", connections_crud.GetConnections, name="GetConnections"),
     path("AddConnection", connections_crud.AddConnection, name="AddConnection"),
+    path("GetConnection/<int:connection_id>/", connections_crud.GetConnection, name="GetConnection"),
+    path("UpdateConnection/<int:connection_id>/", connections_crud.UpdateConnection, name="UpdateConnection"),
     path("DeleteConnection/<int:connection_id>/", connections_crud.DeleteConnection, name="DeleteConnection"),
     path("UpgradeAgent/<int:connection_id>/", connections_crud.UpgradeAgent, name="UpgradeAgent"),
     path("ChangeConnectionPolicy/", connections_crud.change_connection_policy, name="ChangeConnectionPolicy"),
@@ -46,8 +48,6 @@ urlpatterns = [
     path("GetPolicyAgentCount/", agent_policies.get_policy_agent_count, name="GetPolicyAgentCount"),
     path("GetPolicyChangeCount/", agent_policies.get_policy_change_count, name="GetPolicyChangeCount"),
     path("DeployPolicy/", agent_policies.deploy_policy, name="DeployPolicy"),
-    path("GenerateEnrollmentToken/", agent_policies.generate_enrollment_token, name="GenerateEnrollmentToken"),
-
     path("Enroll/", agent_api.enroll, name="Enroll"),
     path("CheckIn/", agent_api.check_in, name="CheckIn"),
     path("GetConfigChanges/", agent_api.get_config_changes, name="GetConfigChanges"),

@@ -10,10 +10,10 @@ from . import snmp_test
 
 urlpatterns = [
     path("Overview/", views.Overview, name="SNMPOverview"),
+    path("Onboarding/", views.Onboarding, name="SNMPOnboarding"),
     path("Networks/", views.Networks, name="Networks"),
     path("Devices/", views.Devices, name="Devices"),
     path("DeviceTemplates/", views.DeviceTemplates, name="DeviceTemplates"),
-    path("Profiles/", views.Profiles, name="Profiles"),
     path("Credentials/", views.Credentials, name="Credentials"),
     
     # Overview API endpoints
@@ -21,6 +21,8 @@ urlpatterns = [
     
     # Network Map API endpoints
     path("GetNetworkMapData/", network_map.get_network_map_data, name="GetNetworkMapData"),
+    path("GetNetworksList/", network_map.get_networks_list, name="GetNetworksList"),
+    path("GetEdgeInterfaceDetail/", network_map.get_edge_interface_detail, name="GetEdgeInterfaceDetail"),
 
     # SNMP Credential endpoints
     path("GetCredentials/", snmp_crud.GetCredentials, name="GetSNMPCredentials"),
@@ -39,12 +41,14 @@ urlpatterns = [
          name="GetNetworkPipelineName"),
 
     # SNMP Deploy endpoints
+    path("CheckUndeployedChanges/", snmp_crud.CheckUndeployedChanges, name="CheckUndeployedChanges"),
     path("GetDeployDiff/", snmp_crud.GetDeployDiff, name="GetDeployDiff"),
-    path("GenerateDeployConfiguration/", snmp_crud.GenerateDeployConfiguration, name="DeployConfiguration"),
     path("DeployConfiguration/", snmp_crud.DeployConfiguration, name="DeployConfiguration"),
 
     # SNMP Device endpoints
+    path("GetDeviceLocationData/", snmp_crud.GetDeviceLocationData, name="GetDeviceLocationData"),
     path("GetDevices/", snmp_crud.GetDevices, name="GetSNMPDevices"),
+    path("FindDeviceByHost/", snmp_crud.FindDeviceByHost, name="FindDeviceByHost"),
     path("AddDevice/", snmp_crud.AddDevice, name="AddSNMPDevice"),
     path("UpdateDevice/<int:device_id>/", snmp_crud.UpdateDevice, name="UpdateSNMPDevice"),
     path("GetDevice/<int:device_id>/", snmp_crud.GetDevice, name="GetSNMPDevice"),
@@ -55,6 +59,7 @@ urlpatterns = [
     path("DiscoveredDevices/", snmp_crud.GetDiscoveredDevices, name="GetDiscoveredDevices"),
 
     # SNMP Profile endpoints
+    path("GetNormalizerDefinitions/", snmp_crud.GetNormalizerDefinitions, name="GetNormalizerDefinitions"),
     path("GetAllProfiles/", snmp_crud.GetAllProfiles, name="GetAllProfiles"),
     path("GetOfficialProfile/<str:profile_name>/", snmp_crud.GetOfficialProfile, name="GetOfficialProfile"),
     path("GetProfile/<str:profile_name>/", snmp_crud.GetProfile, name="GetSNMPProfile"),
@@ -72,5 +77,17 @@ urlpatterns = [
 
     # SNMP Test endpoints
     path("RunSNMPTest/", snmp_test.RunSNMPTest, name="RunSNMPTest"),
+    path("RunSNMPWalk/", snmp_test.RunSNMPWalk, name="RunSNMPWalk"),
+
+    # AI Template Generation endpoints
+    path("CheckAgentBuilderResources/", views.CheckAgentBuilderResources, name="CheckAgentBuilderResources"),
+    path("InstallAgentBuilderPackage/", views.InstallAgentBuilderPackage, name="InstallAgentBuilderPackage"),
+    path("GenerateTemplateAndProfiles/", views.GenerateTemplateAndProfiles, name="GenerateTemplateAndProfiles"),
+    path("ImportAIGeneratedDefinitions/", views.ImportAIGeneratedDefinitions, name="ImportAIGeneratedDefinitions"),
+    path("CheckDeviceType/", views.CheckDeviceType, name="CheckDeviceType"),
+
+    # SNMP Index Template management endpoints
+    path("CheckSNMPIndexTemplate/", views.CheckSNMPIndexTemplate, name="CheckSNMPIndexTemplate"),
+    path("InstallSNMPIndexTemplate/", views.InstallSNMPIndexTemplate, name="InstallSNMPIndexTemplate"),
 
 ]

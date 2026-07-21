@@ -1,0 +1,17 @@
+{
+  "official_key": "eaton_9px",
+  "name": "eaton_9px",
+  "type": "UPS",
+  "description": "Battery health, runtime, per-phase power quality, ambient temperature, and active alarms for the Eaton 9PX UPS.",
+  "vendor": "Eaton",
+  "product": "9PX",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "eaton_xups"
+  ],
+  "matching_rules": [
+    "9PX",
+    "Eaton 9PX"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "official_key": "generic_linux",
+  "name": "generic_linux",
+  "type": "Server",
+  "description": "System, interfaces, memory, load averages, CPU, and storage for Linux hosts running Net-SNMP.",
+  "vendor": "Any",
+  "product": "Linux",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "generic_host_system_metrics",
+    "generic_ucd_system_metrics"
+  ],
+  "matching_rules": [
+    "Linux"
+  ]
+}

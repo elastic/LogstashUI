@@ -1,0 +1,19 @@
+{
+  "official_key": "mellanox_sx6036",
+  "name": "mellanox_sx6036",
+  "type": "Network",
+  "description": "Interface counters, hardware sensors (temp, fan, PSU), and firmware metadata for the Mellanox SX6036.",
+  "vendor": "Mellanox",
+  "product": "SX6036",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "generic_entity_sensor",
+    "mellanox_mlnx_os"
+  ],
+  "matching_rules": [
+    "SX6036",
+    "MLNX-OS"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "multiply": {
+    "label": "Multiply value",
+    "description": "Multiplies a numeric SNMP value by a configured number. Useful for converting raw SNMP values into the expected unit.",
+    "applies_to": ["get", "table"],
+    "has_target_field": true,
+    "inputs": {
+      "multiply_value":{
+        "type": "float",
+        "default": 1.0,
+        "description": "The value to multiply the SNMP value by."
+      }
+    }
+  },
+  "translate": {
+    "label": "Map values",
+    "description": "Maps raw SNMP values to human-readable strings. Useful for integer status codes and enumerations (e.g. 1 -> UP, 2 -> DOWN).",
+    "applies_to": ["get", "table"],
+    "has_target_field": true,
+    "inputs": {
+      "mapping": {
+        "type": "key_value_pairs",
+        "description": "Mappings (e.g. '1' -> 'UP', '2' -> 'DOWN')."
+      }
+    }
+  },
+  "average": {
+    "label": "Average column",
+    "description": "Computes the average of a numeric table column across all rows and writes the scalar result to the metrics document (event.category: metrics). Does not affect individual row events.",
+    "applies_to": ["table"],
+    "has_target_field": true,
+    "inputs": {
+      "output_field": {
+        "type": "string",
+        "required": true,
+        "description": "Metrics-doc field to write the average to (e.g. 'interface.avg_in_octets')."
+      },
+      "multiply_value": {
+        "type": "float",
+        "default": 1.0,
+        "description": "Optional multiplier applied to the averaged result before writing (e.g. 0.01 to convert a 0-100 percentage to a 0.0-1.0 decimal)."
+      }
+    }
+  },
+  "ratio": {
+    "label": "Calculate ratio",
+    "description": "Derives ratios from two input fields. Any two of {used, free, total} are sufficient to compute all percentages.",
+    "applies_to": ["get", "table"],
+    "has_target_field": false,
+    "inputs": {
+      "value1_field": {
+        "type": "field_selector",
+        "description": "First field (e.g., system.memory.actual.used.bytes)"
+      },
+      "value2_field": {
+        "type": "field_selector",
+        "description": "Second field (e.g., system.memory.actual.free.bytes)"
+      },
+      "total_output_field": {
+        "type": "string",
+        "description": "Field to store value1 + value2. Leave empty to skip."
+      },
+      "ratio1_output_field": {
+        "type": "string",
+        "description": "Field to store value1 / (value1 + value2). Leave empty to skip."
+      },
+      "ratio2_output_field": {
+        "type": "string",
+        "description": "Field to store value2 / (value1 + value2). Leave empty to skip."
+      },
+      "complement_ratio_output_field": {
+        "type": "string",
+        "description": "Field to store (value1 - value2) / value1. Leave empty to skip."
+      },
+      "divide_output_field": {
+        "type": "string",
+        "description": "Field to store value2 / value1. Leave empty to skip."
+      }
+    }
+  }
+}

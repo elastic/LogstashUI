@@ -1,0 +1,16 @@
+{
+  "official_key": "dell_x1026",
+  "name": "dell_x1026",
+  "type": "Network",
+  "description": "Interface and system info for the Dell Networking X1026 26-port 1GbE switch.",
+  "vendor": "Dell",
+  "product": "Networking X1026",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "X1026"
+  ]
+}

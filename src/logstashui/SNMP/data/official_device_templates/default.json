@@ -1,0 +1,13 @@
+{
+  "official_key": "default",
+  "name": "default",
+  "type": "None",
+  "description": "Fallback template applied when no other template matches.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_system"
+  ],
+  "matching_rules": []
+}

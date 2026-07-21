@@ -11,29 +11,162 @@ from Common.encryption import decrypt_credential
 from Common.elastic_utils import get_elastic_connection
 from Common.logstash_config_parse import ComponentToPipeline
 from Common.decorators import require_admin_role
-from Common.formatters import _sanitize_pipeline_name_component
+from Common.formatters import _sanitize_pipeline_name_component, format_display_name
 
-from PipelineManager.models import Connection
+from .snmp_pipeline_generator import (
+    _generate_input, 
+    _generate_output, 
+    _generate_discovery_input, 
+    _generate_discovery_filters, 
+    _generate_filters,
+    _OFFICIAL_PROFILE_CACHE,
+    snmp_credential_keystore_entries,
+    es_connection_keystore_entries,
+    snmp_credential_keystore_key_names,
+    es_connection_keystore_key_names,
+    _uses_keystore,
+)
 
-from .models import Credential, Network, Profile, Device, DeviceTemplate
+from PipelineManager.models import Connection, Pipeline, Keystore
+
+from .models import Credential, Network, Profile, Device, DeviceTemplate, SNMPDeploymentState
 
 from datetime import datetime, timedelta, timezone
 
 import json
 import os
 import re
-import ipaddress
-
-import traceback
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+# Matches keystore key names generated for SNMP device credentials, e.g.
+# "snmp_16_v2" or "snmp_16_v3_auth" (see snmp_pipeline_generator.py naming
+# convention docstring).
+_SNMP_CRED_KEY_RE = re.compile(r'^snmp_(\d+)_(v1|v2|v3_auth|v3_priv)$')
+
+# Matches keystore key names generated for Elasticsearch output connection
+# credentials, e.g. "snmp_es_1_password".
+_SNMP_ES_KEY_RE = re.compile(r'^snmp_es_(\d+)_(api_key|user|password)$')
+
+
+def _resolve_manual_keystore_values(keys):
+    """
+    Resolve a list of ${KEY} names (extracted from a generated pipeline) back
+    to their plaintext credential values, for display in the "manual keystore"
+    deploy diff banner. Only used when the network manages its keystore
+    manually — the operator needs the actual values to run `logstash-keystore
+    add` on the Logstash node themselves.
+
+    Returns {key_name: plaintext_value}, omitting any key that can't be
+    resolved (unknown format, missing record, or empty value).
+    """
+    parsed = {}
+    cred_ids = set()
+    conn_ids = set()
+
+    for key in keys:
+        m = _SNMP_ES_KEY_RE.match(key)
+        if m:
+            conn_id = int(m.group(1))
+            conn_ids.add(conn_id)
+            parsed[key] = ('es', conn_id, m.group(2))
+            continue
+        m = _SNMP_CRED_KEY_RE.match(key)
+        if m:
+            cred_id = int(m.group(1))
+            cred_ids.add(cred_id)
+            parsed[key] = ('snmp', cred_id, m.group(2))
+
+    credentials = {c.id: c for c in Credential.objects.filter(id__in=cred_ids)} if cred_ids else {}
+    connections = {c.id: c for c in Connection.objects.filter(id__in=conn_ids)} if conn_ids else {}
+
+    values = {}
+    for key, (kind, obj_id, field) in parsed.items():
+        try:
+            if kind == 'es':
+                conn = connections.get(obj_id)
+                if not conn:
+                    continue
+                if field == 'api_key':
+                    values[key] = conn.get_api_key()
+                elif field == 'user':
+                    values[key] = conn.username
+                elif field == 'password':
+                    values[key] = conn.get_password()
+            else:
+                cred = credentials.get(obj_id)
+                if not cred:
+                    continue
+                if field in ('v1', 'v2'):
+                    values[key] = cred.get_community()
+                elif field == 'v3_auth':
+                    values[key] = cred.get_auth_pass()
+                elif field == 'v3_priv':
+                    values[key] = cred.get_priv_pass()
+        except Exception:
+            logger.warning(f"Could not resolve manual keystore value for key {key}", exc_info=True)
+
+    return {k: v for k, v in values.items() if v}
+
+
+def _get_unique_templates_for_network(devices):
+    """
+    Get unique device templates used by devices in a network.
+    
+    Args:
+        devices: QuerySet or list of Device objects
+        
+    Returns:
+        List of unique DeviceTemplate objects (including None for devices without templates)
+    """
+    templates_dict = {}
+    has_none_template = False
+    
+    for device in devices:
+        if device.device_template:
+            templates_dict[device.device_template.id] = device.device_template
+        else:
+            has_none_template = True
+    
+    templates = list(templates_dict.values())
+    
+    # Add None as a "template" if any devices don't have a template
+    if has_none_template:
+        templates.append(None)
+    
+    return templates
+
+
+def _get_template_pipeline_name(network, template, pipeline_type='polling'):
+    """
+    Generate pipeline name for a network+template combination.
+    
+    Args:
+        network: Network object
+        template: DeviceTemplate object or None
+        pipeline_type: Type of pipeline ('polling', 'trap', 'discovery')
+        
+    Returns:
+        Pipeline name string
+    """
+    network_name = _sanitize_pipeline_name_component(network.name)
+    
+    if template:
+        template_name = _sanitize_pipeline_name_component(template.name)
+        return f"snmp-{network_name}-{template_name}-{pipeline_type}"
+    else:
+        return f"snmp-{network_name}-no-template-{pipeline_type}"
+
+
 def GetCredentials(request):
     """Get all SNMP credentials"""
     try:
-        credentials = Credential.objects.all().values('id', 'name', 'version', 'description')
+        from django.db.models import Count
+        credentials = Credential.objects.annotate(
+            device_count=Count('devices')
+        ).values('id', 'name', 'version', 'description', 'security_level', 'device_count')
         return JsonResponse(list(credentials), safe=False, status=200)
     except Exception as e:
         return HttpResponse(f"Error fetching credentials: {str(e)}", status=500)
@@ -43,24 +176,32 @@ def GetNetworks(request):
     """Get all SNMP networks"""
     try:
         from django.db.models import Count
-        
-        networks = Network.objects.select_related('connection').annotate(
+
+        networks = Network.objects.select_related('connection', 'agent_connection').annotate(
             device_count=Count('devices')
         ).all()
         networks_data = []
         for network in networks:
-            networks_data.append({
+            namespace_value = getattr(network, 'namespace', 'default')
+            network_dict = {
                 'id': network.id,
                 'name': network.name,
                 'network_range': network.network_range,
-                'logstash_name': network.logstash_name,
+                'namespace': namespace_value,
+                'interval': network.interval,
                 'discovery_enabled': network.discovery_enabled,
                 'traps_enabled': network.traps_enabled,
                 'discovery_credential': network.discovery_credential_id,
+                'credential': network.credential_id,
                 'connection': network.connection_id,
                 'connection_name': network.connection.name if network.connection else None,
+                'deployment_mode': network.deployment_mode,
+                'credential_mode': network.credential_mode,
+                'agent_connection': network.agent_connection_id,
+                'agent_connection_name': network.agent_connection.name if network.agent_connection else None,
                 'device_count': network.device_count
-            })
+            }
+            networks_data.append(network_dict)
         return JsonResponse(networks_data, safe=False, status=200)
     except Exception as e:
         return HttpResponse(f"Error fetching networks: {str(e)}", status=500)
@@ -101,6 +242,10 @@ def AddCredential(request):
 
         # Save (this will trigger validation and encryption.py)
         credential.save()
+
+        # Mark config as changed: a new secret may need to be provisioned into
+        # keystores on the next deploy (Agent/CPM-keystore mode).
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential created successfully!'}, status=200)
 
@@ -158,6 +303,10 @@ def UpdateCredential(request, credential_id):
 
         # Save (this will trigger validation and encryption.py)
         credential.save()
+
+        # Mark config as changed: a rotated secret changes keystore values even
+        # though no pipeline LSCL changes, so the deploy indicator must light up.
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': credential.id, 'message': 'Credential updated successfully!'}, status=200)
 
@@ -217,6 +366,10 @@ def DeleteCredential(request, credential_id):
         credential = Credential.objects.get(pk=credential_id)
         credential.delete()
 
+        # Mark config as changed: removing a credential may orphan keystore
+        # entries that need to be pruned on the next deploy.
+        SNMPDeploymentState.mark_config_changed()
+
         return JsonResponse({
             'success': True,
             'message': 'Credential deleted successfully!'
@@ -233,12 +386,12 @@ def DeleteCredential(request, credential_id):
 
 def _get_pipeline_name(network):
     """
-    Generate a sanitized pipeline name for a network.
-    Format: snmp-{logstash_name}-{network_name}
+    Generate a sanitized pipeline name for a network (legacy single-pipeline format).
+    Format: snmp-{network_name}-polling
+    This is kept for backward compatibility to detect and delete old pipelines.
     """
-    sanitized_logstash_name = _sanitize_pipeline_name_component(network.logstash_name)
     sanitized_network_name = _sanitize_pipeline_name_component(network.name)
-    return f"snmp-{sanitized_logstash_name}-{sanitized_network_name}"
+    return f"snmp-{sanitized_network_name}-polling"
 
 
 def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, description=""):
@@ -285,9 +438,6 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
                 return (True, False, None, False)
             else:
                 logger.info(f"Pipeline {pipeline_name} has changes - updating")
-                # Log first 500 chars of each to see the difference
-                logger.info(f"Existing (first 500): {existing_pipeline_content[:500]}")
-                logger.info(f"New (first 500): {pipeline_content[:500]}")
 
         # Prepare pipeline body
         pipeline_body = {
@@ -328,6 +478,703 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
 
 
 # ============================================================================
+# Agent-mode pipeline generation helpers
+#
+# These centralize per-network pipeline generation so the Agent deploy path
+# (which stores pipelines as Django Pipeline records instead of ES CPM) can
+# reuse the exact same generation logic. Generation is mode-agnostic; the
+# generator itself decides keystore-vs-inline credentials from
+# network.deployment_mode.
+# ============================================================================
+
+
+def _build_trap_components(network, input_data=None):
+    """
+    Build the trap pipeline component dict for a network (traps input + output).
+
+    Mode-agnostic: credentials are emitted as keystore references or inline
+    based on _uses_keystore(network), which covers both Agent mode and
+    Centralized mode with credential_mode='KEYSTORE'.
+    """
+    if input_data is None:
+        input_data = {
+            "network": network,
+            "devices": {"v1_v2c": {}, "v3": {}},
+            "connection": network.connection,
+        }
+
+    credential = network.credential
+    trap_input_config = {
+        "host": "0.0.0.0",
+        "port": 1662,
+        "oid_map_field_values": False,
+        "oid_mapping_format": "dotted_string",
+        "supported_versions": []
+    }
+
+    use_keystore = _uses_keystore(network)
+
+    if credential.version in ['1', '2c']:
+        trap_input_config["supported_versions"].append(credential.version)
+        if credential.community:
+            if use_keystore:
+                suffix = 'v1' if credential.version == '1' else 'v2'
+                trap_input_config["community"] = ["${" + f"snmp_{credential.id}_{suffix}" + "}"]
+            else:
+                trap_input_config["community"] = [decrypt_credential(credential.community)]
+    elif credential.version == '3':
+        trap_input_config["supported_versions"].append("3")
+        if credential.security_name:
+            trap_input_config["security_name"] = credential.security_name
+        if credential.auth_protocol:
+            trap_input_config["auth_protocol"] = credential.auth_protocol
+        if credential.auth_pass:
+            trap_input_config["auth_pass"] = (
+                "${" + f"snmp_{credential.id}_v3_auth" + "}"
+                if use_keystore else decrypt_credential(credential.auth_pass)
+            )
+        if credential.priv_protocol:
+            trap_input_config["priv_protocol"] = credential.priv_protocol
+        if credential.priv_pass:
+            trap_input_config["priv_pass"] = (
+                "${" + f"snmp_{credential.id}_v3_priv" + "}"
+                if use_keystore else decrypt_credential(credential.priv_pass)
+            )
+        if credential.security_level:
+            trap_input_config["security_level"] = credential.security_level
+
+    return {
+        "input": [{
+            "id": "input_snmptrap_1",
+            "type": "input",
+            "plugin": "snmptrap",
+            "config": trap_input_config
+        }],
+        "filter": [
+            {
+                "id": "filter_mutate_trap_1",
+                "type": "filter",
+                "plugin": "mutate",
+                "config": {
+                    "add_field": {
+                        "[event][category]": "traps"
+                    }
+                }
+            }
+        ],
+        "output": _generate_output(network, snmp_type="traps")
+    }
+
+
+def _build_network_pipeline_configs(network, profile_cache=None):
+    """
+    Generate all pipeline configs a network should produce.
+
+    Mode-agnostic: the generator embeds credentials inline for CENTRALIZED
+    networks and emits keystore references for AGENT networks.
+
+    Returns:
+        list of dicts: {pipeline_name, config, pipeline_type, template_name}
+    """
+    if profile_cache is None:
+        profile_cache = {}
+
+    results = []
+    devices = list(network.devices.all())
+    templates = _get_unique_templates_for_network(devices)
+
+    # Per-template polling pipelines
+    for template in templates:
+        template_id = template.id if template else None
+        template_name = template.name if template else 'no-template'
+
+        input_data = {
+            "network": network,
+            "devices": {"v1_v2c": {}, "v3": {}},
+            "connection": network.connection
+        }
+
+        has_template_devices = False
+        for device in devices:
+            if not device.credential:
+                continue
+            device_template_id = device.device_template.id if device.device_template else None
+            if device_template_id != template_id:
+                continue
+            has_template_devices = True
+            credential = device.credential
+            if credential.version in ['1', '2c']:
+                input_data["devices"]["v1_v2c"][device.name] = device
+            elif credential.version == '3':
+                input_data["devices"]["v3"][device.name] = device
+
+        if not has_template_devices:
+            continue
+
+        input_components, oid_mappings, normalizers = _generate_input(
+            input_data, profile_cache, template_filter=template_id
+        )
+        filter_components = _generate_filters(oid_mappings, network, normalizers, input_data=input_data)
+        components = {
+            "input": input_components,
+            "filter": filter_components,
+            "output": _generate_output(network, snmp_type="polling", device_template=template)
+        }
+        config = ComponentToPipeline(components, test=False).components_to_logstash_config()
+        results.append({
+            'pipeline_name': _get_template_pipeline_name(network, template, 'polling'),
+            'config': config,
+            'pipeline_type': 'polling',
+            'template_name': template_name,
+        })
+
+    # Trap pipeline
+    if network.traps_enabled and network.credential:
+        trap_components = _build_trap_components(network)
+        config = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
+        results.append({
+            'pipeline_name': f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps",
+            'config': config,
+            'pipeline_type': 'trap',
+            'template_name': None,
+        })
+
+    # Discovery pipeline
+    if network.discovery_enabled and network.discovery_credential:
+        discovery_input_data = {
+            "network": network,
+            "devices": {"v1_v2c": {}, "v3": {}},
+            "connection": network.connection
+        }
+        discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
+        discovery_filter_components = _generate_discovery_filters(discovery_oid_mappings, network)
+        discovery_components = {
+            "input": discovery_input_components,
+            "filter": discovery_filter_components,
+            "output": _generate_output(network, snmp_type="discovery")
+        }
+        config = ComponentToPipeline(discovery_components, test=False).components_to_logstash_config()
+        results.append({
+            'pipeline_name': f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery",
+            'config': config,
+            'pipeline_type': 'discovery',
+            'template_name': None,
+        })
+
+    return results
+
+
+def _collect_network_keystore_entries(network):
+    """
+    Return {key_name: plaintext_value} of all keystore entries an Agent-mode
+    network's pipelines reference (SNMP device creds + ES output creds).
+    """
+    entries = {}
+    entries.update(es_connection_keystore_entries(network.connection))
+
+    for device in network.devices.all():
+        if device.credential:
+            entries.update(snmp_credential_keystore_entries(device.credential))
+
+    if network.traps_enabled and network.credential:
+        entries.update(snmp_credential_keystore_entries(network.credential))
+
+    if network.discovery_enabled and network.discovery_credential:
+        entries.update(snmp_credential_keystore_entries(network.discovery_credential))
+
+    return entries
+
+
+def _network_keystore_key_names(network):
+    """
+    Names-only mirror of _collect_network_keystore_entries(): the set of
+    keystore key names a network's pipelines reference, WITHOUT decrypting any
+    secret. Kept in lockstep with _collect_network_keystore_entries so scoping
+    never diverges from what actually gets provisioned.
+    """
+    names = set()
+    names.update(es_connection_keystore_key_names(network.connection))
+
+    for device in network.devices.all():
+        if device.credential:
+            names.update(snmp_credential_keystore_key_names(device.credential))
+
+    if network.traps_enabled and network.credential:
+        names.update(snmp_credential_keystore_key_names(network.credential))
+
+    if network.discovery_enabled and network.discovery_credential:
+        names.update(snmp_credential_keystore_key_names(network.discovery_credential))
+
+    return names
+
+
+def _network_has_pipeline_devices(network):
+    """True if a network should generate at least one pipeline."""
+    has_devices = any(d.credential for d in network.devices.all())
+    return has_devices or (network.traps_enabled and network.credential) \
+        or (network.discovery_enabled and network.discovery_credential)
+
+
+def _network_pipeline_names(network):
+    """
+    Names-only mirror of _build_network_pipeline_configs(): the set of SNMP
+    pipeline names a single network produces, without regenerating configs.
+    Kept in lockstep with _build_network_pipeline_configs so scoping never
+    diverges from what actually gets deployed.
+    """
+    names = set()
+    devices = list(network.devices.all())
+
+    for template in _get_unique_templates_for_network(devices):
+        template_id = template.id if template else None
+        has_template_devices = any(
+            d.credential and (d.device_template.id if d.device_template else None) == template_id
+            for d in devices
+        )
+        if has_template_devices:
+            names.add(_get_template_pipeline_name(network, template, 'polling'))
+
+    if network.traps_enabled and network.credential:
+        names.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
+
+    if network.discovery_enabled and network.discovery_credential:
+        names.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
+
+    return names
+
+
+def agent_snmp_pipeline_names(connection):
+    """
+    The set of SNMP pipeline names a specific agent should host, unioned across
+    every Agent-mode network assigned to that agent (agent_connection == it).
+
+    Scoping key is the agent, never the policy: multiple networks can share one
+    agent, but a network's pipelines belong to exactly one agent, so agents that
+    merely share a base policy must not receive each other's SNMP pipelines.
+    """
+    if not connection:
+        return set()
+    names = set()
+    networks = Network.objects.filter(
+        agent_connection=connection, deployment_mode='AGENT'
+    ).prefetch_related('devices__credential', 'devices__device_template')
+    for network in networks:
+        names.update(_network_pipeline_names(network))
+    return names
+
+
+def agent_snmp_keystore_keys(connection):
+    """
+    The set of SNMP keystore key names a specific agent needs, unioned across
+    every Agent-mode network assigned to that agent. Same agent-scoping rule as
+    agent_snmp_pipeline_names().
+
+    Derives names WITHOUT decrypting secrets (names come from credential/
+    connection ids + presence of the encrypted columns), so this can run on
+    every check-in without materializing plaintext credentials in memory.
+    """
+    if not connection:
+        return set()
+    keys = set()
+    networks = Network.objects.filter(
+        agent_connection=connection, deployment_mode='AGENT'
+    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related('devices__credential')
+    for network in networks:
+        keys.update(_network_keystore_key_names(network))
+    return keys
+
+
+def _reconcile_policy_snmp_keystore(policy):
+    """
+    Ensure a policy's SNMP-managed keystore entries exactly match what all
+    Agent-mode networks assigned to it require. Adds/updates needed entries and
+    removes orphaned snmp-managed entries.
+    """
+    import hashlib
+
+    needed = {}
+    agent_networks = Network.objects.filter(
+        deployment_mode='AGENT', agent_connection__policy_id=policy.id
+    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related(
+        'devices__credential'
+    )
+    for network in agent_networks:
+        needed.update(_collect_network_keystore_entries(network))
+
+    # Upsert needed entries (Keystore.save encrypts + hashes plaintext values)
+    for key_name, value in needed.items():
+        expected_hash = hashlib.sha256(f"{key_name}{value}".encode('utf-8')).hexdigest()
+        existing = Keystore.objects.filter(policy=policy, key_name=key_name).first()
+        if existing:
+            if existing.kv_hash != expected_hash or existing.managed_by != 'snmp':
+                existing.key_value = value
+                existing.managed_by = 'snmp'
+                existing.save()
+        else:
+            Keystore.objects.create(
+                policy=policy, key_name=key_name, key_value=value, managed_by='snmp'
+            )
+
+    # Remove orphaned snmp-managed entries no longer referenced by any network
+    for entry in Keystore.objects.filter(policy=policy, managed_by='snmp'):
+        if entry.key_name not in needed:
+            entry.delete()
+
+
+def _agent_policy_keystore_drift(policy):
+    """
+    Compare the SNMP keystore entries an agent policy SHOULD have (derived from
+    its Agent-mode networks) against the Keystore rows currently stored.
+
+    This catches credential/secret rotation: rotating a secret does not change
+    any pipeline LSCL (it only holds a ${ref}), so without this the change would
+    never surface in the deploy diff and never propagate to the agent.
+
+    Returns {added: [...], changed: [...], removed: [...]} of key NAMES only
+    (never values), or None when there is no drift.
+    """
+    import hashlib
+
+    needed = {}
+    agent_networks = Network.objects.filter(
+        deployment_mode='AGENT', agent_connection__policy_id=policy.id
+    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related(
+        'devices__credential'
+    )
+    for network in agent_networks:
+        needed.update(_collect_network_keystore_entries(network))
+
+    existing = {
+        e.key_name: e.kv_hash
+        for e in Keystore.objects.filter(policy=policy, managed_by='snmp')
+    }
+
+    added, changed = [], []
+    for key_name, value in needed.items():
+        expected_hash = hashlib.sha256(f"{key_name}{value}".encode('utf-8')).hexdigest()
+        if key_name not in existing:
+            added.append(key_name)
+        elif existing[key_name] != expected_hash:
+            changed.append(key_name)
+
+    removed = [k for k in existing if k not in needed]
+
+    if not (added or changed or removed):
+        return None
+    return {'added': sorted(added), 'changed': sorted(changed), 'removed': sorted(removed)}
+
+
+def _cleanup_stale_es_pipelines(networks):
+    """
+    Best-effort removal of leftover [MANAGED] Elasticsearch CPM pipelines for
+    networks now managed via Agent mode (handles CPM -> AGENT transition).
+
+    Batched per ES connection (one get_pipeline() call per connection instead of
+    one per network). Failures are logged as warnings, never surfaced as deploy
+    errors, so a flaky/unreachable ES cluster can't block an Agent deploy.
+    Returns the number of pipelines deleted.
+    """
+    by_conn = {}
+    for network in networks:
+        if network.connection_id:
+            by_conn.setdefault(network.connection_id, []).append(network)
+
+    total = 0
+    for conn_id, conn_networks in by_conn.items():
+        try:
+            es = get_elastic_connection(conn_id)
+            all_pipelines = es.logstash.get_pipeline()
+        except Exception as e:
+            logger.warning(f"Skipping stale-ES cleanup for connection {conn_id}: {e}")
+            continue
+
+        prefixes = [f"snmp-{_sanitize_pipeline_name_component(n.name)}-" for n in conn_networks]
+        for name, data in all_pipelines.items():
+            if '[MANAGED]' not in data.get('description', ''):
+                continue
+            if any(name.startswith(p) for p in prefixes):
+                try:
+                    es.logstash.delete_pipeline(id=name)
+                    total += 1
+                    logger.info(f"Removed stale ES pipeline '{name}' (now Agent-managed)")
+                except Exception as e:
+                    logger.warning(f"Failed to remove stale ES pipeline '{name}': {e}")
+    return total
+
+
+def _compute_agent_network_diffs(networks, profile_cache=None):
+    """
+    Build the list of Agent-mode deployment diff entries by comparing freshly
+    generated pipeline configs against existing Django Pipeline records.
+
+    Handles create/update for current Agent networks plus policy-level orphan
+    detection (networks that switched AGENT -> CPM or were deleted).
+
+    Args:
+        networks: iterable of Network objects
+        profile_cache: optional shared profile cache dict
+
+    Returns:
+        list of diff entries (each with deployment_mode == 'AGENT')
+    """
+    if profile_cache is None:
+        profile_cache = {}
+
+    diffs = []
+    agent_expected_by_policy = {}
+    policies_by_id = {}
+
+    for network in networks:
+        if network.deployment_mode != 'AGENT':
+            continue
+
+        policy = network.agent_connection.policy if network.agent_connection else None
+        if not policy:
+            diffs.append({
+                'network_name': network.name,
+                'pipeline_name': '(no agent policy)',
+                'current': '',
+                'new': '',
+                'pipeline_type': 'error',
+                'action': 'error',
+                'deployment_mode': 'AGENT',
+                'note': 'Network is in Agent mode but has no agent connection/policy assigned.'
+            })
+            continue
+
+        agent_expected_by_policy.setdefault(policy.id, set())
+        policies_by_id[policy.id] = policy
+        agent_name = network.agent_connection.name if network.agent_connection else policy.name
+
+        expected_configs = (
+            _build_network_pipeline_configs(network, profile_cache)
+            if _network_has_pipeline_devices(network) else []
+        )
+
+        for cfg in expected_configs:
+            pipeline_name = cfg['pipeline_name']
+            agent_expected_by_policy[policy.id].add(pipeline_name)
+            new_config = cfg['config']
+
+            existing = Pipeline.objects.filter(
+                policy=policy, name=pipeline_name, managed_by='snmp'
+            ).first()
+            current_config = existing.lscl if existing else ''
+
+            if not existing:
+                action = 'create'
+            elif current_config != new_config:
+                action = 'update'
+            else:
+                action = 'none'
+
+            if action != 'none':
+                diffs.append({
+                    'network_name': network.name,
+                    'template_name': cfg['template_name'],
+                    'pipeline_name': pipeline_name,
+                    'current': current_config,
+                    'new': new_config,
+                    'pipeline_type': cfg['pipeline_type'],
+                    'action': action,
+                    'deployment_mode': 'AGENT',
+                    'agent_policy_id': policy.id,
+                    'network_id': network.id,
+                    'destination_type': 'agent',
+                    'destination_name': agent_name,
+                })
+
+    # Policy-level orphan detection (AGENT -> CPM transitions, deleted networks)
+    snmp_policy_ids = set(
+        Pipeline.objects.filter(managed_by='snmp').values_list('policy_id', flat=True)
+    )
+    keystore_policy_ids = set(
+        Keystore.objects.filter(managed_by='snmp').values_list('policy_id', flat=True)
+    )
+
+    def _resolve_policy(pid):
+        if pid in policies_by_id:
+            return policies_by_id[pid]
+        from PipelineManager.models import Policy
+        policy = Policy.objects.filter(id=pid).first()
+        if policy:
+            policies_by_id[pid] = policy
+        return policy
+
+    for policy_id in snmp_policy_ids | set(agent_expected_by_policy.keys()):
+        expected = agent_expected_by_policy.get(policy_id, set())
+        for pl in Pipeline.objects.filter(policy_id=policy_id, managed_by='snmp'):
+            if pl.name not in expected:
+                orphan_policy = _resolve_policy(policy_id)
+                diffs.append({
+                    'network_name': 'Orphaned (Agent)',
+                    'pipeline_name': pl.name,
+                    'current': pl.lscl,
+                    'new': '',
+                    'pipeline_type': 'orphaned',
+                    'action': 'delete',
+                    'deployment_mode': 'AGENT',
+                    'agent_policy_id': policy_id,
+                    'destination_type': 'agent',
+                    'destination_name': orphan_policy.name if orphan_policy else str(policy_id),
+                    'note': 'Pipeline no longer matches any Agent-mode network.'
+                })
+
+    # Keystore drift per affected policy. Secret rotation leaves pipeline LSCL
+    # untouched, so it must be surfaced independently or it never deploys.
+    for policy_id in set(policies_by_id.keys()) | keystore_policy_ids:
+        policy = _resolve_policy(policy_id)
+        if not policy:
+            continue
+        drift = _agent_policy_keystore_drift(policy)
+        if not drift:
+            continue
+        parts = []
+        if drift['added']:
+            parts.append(f"{len(drift['added'])} added")
+        if drift['changed']:
+            parts.append(f"{len(drift['changed'])} changed")
+        if drift['removed']:
+            parts.append(f"{len(drift['removed'])} removed")
+        diffs.append({
+            'network_name': 'Keystore',
+            'pipeline_name': f'Keystore: {policy.name}',
+            'current': '\n'.join(sorted(drift['removed'])),
+            'new': '\n'.join(sorted(drift['added'] + drift['changed'])),
+            'pipeline_type': 'keystore',
+            'action': 'update',
+            'deployment_mode': 'AGENT',
+            'agent_policy_id': policy_id,
+            'destination_type': 'agent',
+            'destination_name': policy.name,
+            'keystore_drift': drift,
+            'note': 'Keystore values changed: ' + ', '.join(parts),
+        })
+
+    return diffs
+
+
+def _deploy_agent_diffs(agent_diffs):
+    """
+    Apply Agent-mode deployment diffs to Django Pipeline/Keystore records.
+
+    Args:
+        agent_diffs: list of diff entries with deployment_mode == 'AGENT'
+
+    Returns:
+        dict: {created, updated, deleted, errors}
+    """
+    created = 0
+    updated = 0
+    deleted = 0
+    keystore_changed = 0
+    errors = []
+
+    # Group diffs by policy
+    diffs_by_policy = {}
+    for diff in agent_diffs:
+        if diff.get('action') == 'error':
+            errors.append(diff.get('note', 'Agent network misconfiguration'))
+            continue
+        policy_id = diff.get('agent_policy_id')
+        if policy_id is None:
+            errors.append(f"Pipeline '{diff.get('pipeline_name')}': missing agent policy")
+            continue
+        diffs_by_policy.setdefault(policy_id, []).append(diff)
+
+    from PipelineManager.models import Policy
+
+    all_affected_network_ids = set()
+
+    for policy_id, diffs in diffs_by_policy.items():
+        try:
+            policy = Policy.objects.get(id=policy_id)
+        except Policy.DoesNotExist:
+            errors.append(f"Agent policy {policy_id} not found")
+            continue
+
+        # Keystore password gate: required so the agent can decrypt SNMP secrets
+        if not policy.keystore_password:
+            errors.append(
+                f"The policy '{policy.name}' assigned to this agent does not have a "
+                f"keystore password set. Please set a keystore password for this policy "
+                f"before deploying."
+            )
+            continue
+
+        for diff in diffs:
+            pipeline_name = diff.get('pipeline_name')
+            action = diff.get('action')
+            network_id = diff.get('network_id')
+            if network_id:
+                all_affected_network_ids.add(network_id)
+
+            # Keystore-drift entries carry no real pipeline; they exist only to
+            # pull the policy into this loop so reconcile (below) runs. Count the
+            # affected keys so the deploy doesn't misreport "no changes".
+            if diff.get('pipeline_type') == 'keystore':
+                drift = diff.get('keystore_drift') or {}
+                keystore_changed += (
+                    len(drift.get('added', [])) + len(drift.get('changed', []))
+                    + len(drift.get('removed', []))
+                )
+                continue
+
+            try:
+                if action in ('create', 'update'):
+                    description = f"[MANAGED] SNMP {diff.get('pipeline_type', 'polling')} pipeline"
+                    existing = Pipeline.objects.filter(
+                        policy=policy, name=pipeline_name, managed_by='snmp'
+                    ).first()
+                    if existing:
+                        existing.lscl = diff.get('new', '')
+                        existing.description = description
+                        existing.managed_by = 'snmp'
+                        existing.save()
+                        updated += 1
+                    else:
+                        Pipeline.objects.create(
+                            policy=policy,
+                            name=pipeline_name,
+                            lscl=diff.get('new', ''),
+                            description=description,
+                            managed_by='snmp',
+                        )
+                        created += 1
+                elif action == 'delete':
+                    Pipeline.objects.filter(
+                        policy=policy, name=pipeline_name, managed_by='snmp'
+                    ).delete()
+                    deleted += 1
+            except Exception as e:
+                errors.append(f"Pipeline '{pipeline_name}': {str(e)}")
+
+        # Reconcile keystore entries for this policy (SNMP + ES output creds).
+        # Always runs for every affected policy, so credential/secret rotation
+        # (surfaced as a keystore-drift diff) updates the Keystore rows even when
+        # no pipeline LSCL changed.
+        try:
+            _reconcile_policy_snmp_keystore(policy)
+        except Exception as e:
+            errors.append(f"Keystore reconciliation failed for policy '{policy.name}': {str(e)}")
+
+    # CPM -> AGENT transition cleanup: remove leftover ES pipelines (batched
+    # per connection; best-effort, never blocks the deploy).
+    if all_affected_network_ids:
+        _cleanup_stale_es_pipelines(
+            Network.objects.filter(id__in=all_affected_network_ids).select_related('connection')
+        )
+
+    return {
+        'created': created,
+        'updated': updated,
+        'deleted': deleted,
+        'keystore_changed': keystore_changed,
+        'errors': errors,
+    }
+
+
+# ============================================================================
 # Network CRUD Operations
 # ============================================================================
 
@@ -338,27 +1185,52 @@ def AddNetwork(request):
         # Extract form data
         name = request.POST.get('name')
         network_range = request.POST.get('network_range')
-        logstash_name = request.POST.get('logstash_name')
+
+        # Reject networks larger than /20 — discovery IP expansion would OOM
+        import ipaddress as _ipaddress
+        try:
+            _net = _ipaddress.ip_network(network_range or '', strict=False)
+            if _net.prefixlen < 20:
+                return JsonResponse(
+                    {'success': False, 'message': f'Network range {network_range} is too large. '
+                     'Networks larger than /20 are not supported. '
+                     'Please break it into smaller subnets (/20 or smaller).'},
+                    status=400
+                )
+        except ValueError:
+            pass  # Invalid CIDR will be caught by model validation below
         connection_id = request.POST.get('connection')
+        agent_connection_id = request.POST.get('agent_connection')
         credential_id = request.POST.get('credential')
         discovery_credential_id = request.POST.get('discovery_credential')
         discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         interval = int(request.POST.get('interval', 30))
+        namespace = request.POST.get('namespace', 'default')
+        namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
+        deployment_mode = request.POST.get('deployment_mode', 'CENTRALIZED')
+        credential_mode = request.POST.get('credential_mode', 'KEYSTORE')
 
         # Create network object
         network = Network(
             name=name,
             network_range=network_range,
-            logstash_name=logstash_name,
             discovery_enabled=discovery_enabled,
             traps_enabled=traps_enabled,
-            interval=interval
+            interval=interval,
+            namespace=namespace,
+            namespace_from_device_template=namespace_from_device_template,
+            deployment_mode=deployment_mode,
+            credential_mode=credential_mode,
         )
 
         # Set connection if provided
         if connection_id:
             network.connection_id = connection_id
+
+        # Set agent connection if provided (AGENT mode only)
+        if agent_connection_id:
+            network.agent_connection_id = agent_connection_id
 
         # Set discovery credential if provided
         if discovery_credential_id:
@@ -370,6 +1242,9 @@ def AddNetwork(request):
 
         # Save (this will trigger validation)
         network.save()
+        
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': network.id, 'message': 'Network created successfully!'}, status=200)
 
@@ -391,9 +1266,26 @@ def UpdateNetwork(request, network_id):
         # Update fields
         network.name = request.POST.get('name', network.name)
         network.network_range = request.POST.get('network_range', network.network_range)
-        network.logstash_name = request.POST.get('logstash_name', network.logstash_name)
+
+        # Reject networks larger than /20 — discovery IP expansion would OOM
+        import ipaddress as _ipaddress
+        try:
+            _net = _ipaddress.ip_network(network.network_range or '', strict=False)
+            if _net.prefixlen < 20:
+                return JsonResponse(
+                    {'success': False, 'message': f'Network range {network.network_range} is too large. '
+                     'Networks larger than /20 are not supported. '
+                     'Please break it into smaller subnets (/20 or smaller).'},
+                    status=400
+                )
+        except ValueError:
+            pass  # Invalid CIDR will be caught by model validation below
+        network.namespace = request.POST.get('namespace', network.namespace)
+        network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
+        network.deployment_mode = request.POST.get('deployment_mode', network.deployment_mode)
+        network.credential_mode = request.POST.get('credential_mode', network.credential_mode)
 
         # Update interval (convert to int)
         interval = request.POST.get('interval')
@@ -406,6 +1298,13 @@ def UpdateNetwork(request, network_id):
             network.connection_id = connection_id
         else:
             network.connection = None
+
+        # Update agent connection
+        agent_connection_id = request.POST.get('agent_connection')
+        if agent_connection_id:
+            network.agent_connection_id = agent_connection_id
+        else:
+            network.agent_connection = None
 
         # Update discovery credential
         discovery_credential_id = request.POST.get('discovery_credential')
@@ -423,6 +1322,9 @@ def UpdateNetwork(request, network_id):
 
         # Save (this will trigger validation)
         network.save()
+        
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({'id': network.id, 'message': 'Network updated successfully!'}, status=200)
 
@@ -446,8 +1348,12 @@ def GetNetwork(request, network_id):
             'id': network.id,
             'name': network.name,
             'network_range': network.network_range,
-            'logstash_name': network.logstash_name,
+            'namespace': network.namespace,
+            'namespace_from_device_template': network.namespace_from_device_template,
+            'deployment_mode': network.deployment_mode,
+            'credential_mode': network.credential_mode,
             'connection': network.connection_id if network.connection else None,
+            'agent_connection': network.agent_connection_id if network.agent_connection else None,
             'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,
             'credential': network.credential_id if network.credential else None,
             'discovery_enabled': network.discovery_enabled,
@@ -470,7 +1376,7 @@ def DeleteNetwork(request, network_id):
 
         network = Network.objects.get(pk=network_id)
         pipeline_name = _get_pipeline_name(network)
-        trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+        trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
         pipeline_deleted = False
         trap_pipeline_deleted = False
         pipeline_error = None
@@ -508,6 +1414,9 @@ def DeleteNetwork(request, network_id):
 
         # Delete the network from database
         network.delete()
+        
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
 
         # Build response message
         deleted_items = []
@@ -540,19 +1449,18 @@ def DeleteNetwork(request, network_id):
 
 
 def GetNetworkPipelineName(request, network_id):
-    """Get the pipeline name for a network based on its logstash_name and network name"""
+    """Get the pipeline name pattern for a network based on its name"""
     try:
         network = Network.objects.get(pk=network_id)
 
-        # Generate sanitized pipeline name pattern: snmp-{logstash_name}-*
-        sanitized_logstash_name = _sanitize_pipeline_name_component(network.logstash_name)
-        pipeline_name = f"snmp-{sanitized_logstash_name}-*"
+        # Generate sanitized pipeline name pattern: snmp-{network_name}-*
+        sanitized_network_name = _sanitize_pipeline_name_component(network.name)
+        pipeline_name = f"snmp-{sanitized_network_name}-*"
 
         return JsonResponse({
             'success': True,
             'pipeline_name': pipeline_name,
-            'network_name': network.name,
-            'logstash_name': network.logstash_name
+            'network_name': network.name
         })
 
     except Network.DoesNotExist:
@@ -561,746 +1469,31 @@ def GetNetworkPipelineName(request, network_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-# Cache for official profile data to avoid repeated file I/O
-_OFFICIAL_PROFILE_CACHE = {}
-
-
-def _get_device_profiles(device, profile_cache=None):
+def CheckUndeployedChanges(request):
     """
-    Get all profiles for a device and return merged OID data.
-    Returns a tuple: (profile_ids_tuple, merged_oids_dict)
-
-    Args:
-        device: Device object with prefetched device_template and its profiles
-        profile_cache: Optional dict to cache loaded profile data
-    """
-
-    if profile_cache is None:
-        profile_cache = _OFFICIAL_PROFILE_CACHE
-
-    # Get all profiles from the device's template (should already be prefetched)
-    if device.device_template:
-        profiles = list(device.device_template.profiles.all())
-        logger.debug(f"Device '{device.name}' using template '{device.device_template.name}' with {len(profiles)} profiles")
-    else:
-        # No template assigned - device has no profiles
-        profiles = []
-        logger.debug(f"Device '{device.name}' has no template assigned")
-
-    if not profiles:
-        return (tuple(), {'get': {}, 'walk': {}, 'table': {}})
-
-    # Create a tuple of profile IDs for grouping (sorted for consistency)
-    profile_ids = tuple(sorted([p.id for p in profiles]))
-
-    # Merge OIDs from all profiles
-    merged_oids = {
-        'get': {},
-        'walk': {},
-        'table': {}
-    }
-
-    for profile in profiles:
-        profile_data = profile.profile_data or {}
-
-        # Check if this is an official profile placeholder
-        if profile_data.get('is_official_placeholder'):
-            profile_name = profile.name.replace('.json', '')
-
-            # Check cache first
-            if profile_name in profile_cache:
-                profile_data = profile_cache[profile_name]
-            else:
-                # Load the actual profile data from JSON file
-                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-                profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
-
-                if os.path.exists(profile_path):
-                    try:
-                        with open(profile_path, 'r') as f:
-                            profile_data = json.load(f)
-                            # Cache it for future use
-                            profile_cache[profile_name] = profile_data
-                    except Exception as e:
-                        # If we can't load the file, skip this profile
-                        continue
-                else:
-                    # Profile file doesn't exist, skip
-                    continue
-
-        # Merge get OIDs (handle conflicts by appending profile name)
-        if 'get' in profile_data and isinstance(profile_data['get'], dict):
-            for key, value in profile_data['get'].items():
-                if key in merged_oids['get'] and merged_oids['get'][key] != value:
-                    # Key exists with different value - append profile name to make it unique
-                    profile_suffix = profile.name.replace('.json', '').replace('_', '-')
-                    unique_key = f"{key}.{profile_suffix}"
-                    merged_oids['get'][unique_key] = value
-                else:
-                    merged_oids['get'][key] = value
-
-        # Merge walk OIDs (handle conflicts by appending profile name)
-        if 'walk' in profile_data and isinstance(profile_data['walk'], dict):
-            for key, value in profile_data['walk'].items():
-                if key in merged_oids['walk'] and merged_oids['walk'][key] != value:
-                    # Key exists with different value - append profile name to make it unique
-                    profile_suffix = profile.name.replace('.json', '').replace('_', '-')
-                    unique_key = f"{key}.{profile_suffix}"
-                    merged_oids['walk'][unique_key] = value
-                else:
-                    merged_oids['walk'][key] = value
-
-        # Merge table OIDs
-        if 'table' in profile_data and isinstance(profile_data['table'], dict):
-            merged_oids['table'].update(profile_data['table'])
-
-    return (profile_ids, merged_oids)
-
-
-def _generate_input(input_data, profile_cache=None):
-    """
-    Generate SNMP input components grouped by:
-    1. Credential version (v1/v2c vs v3)
-    2. Profile combination (devices with same set of profiles)
-
-    Args:
-        input_data: Dict containing network and device information
-        profile_cache: Optional dict to cache loaded profile data
-
-    Returns: (input_components, oid_mappings)
-    """
-    input_components = []
-    network_id = input_data['network'].id
-
-    # Collect all OID mappings (key-value pairs) for filter generation
-    oid_mappings = {
-        'get': {},
-        'walk': {},
-        'table': {}
-    }
-
-    global_input_config = {
-        "ecs_compatibility": "disabled",
-        "oid_mapping_format": "dotted_string"
-    }
-
-    # Process v1/v2c devices
-    if input_data['devices']['v1_v2c']:
-        # Group v1/v2c devices by their profile combinations
-        v1_v2c_groups = {}
-
-        for device_name, device in input_data['devices']['v1_v2c'].items():
-            profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
-
-            # Use profile_ids tuple as grouping key
-            if profile_ids not in v1_v2c_groups:
-                v1_v2c_groups[profile_ids] = {
-                    'devices': [],
-                    'oids': merged_oids
-                }
-
-            v1_v2c_groups[profile_ids]['devices'].append(device)
-
-        # Create an input for each profile group
-        for group_idx, (profile_ids, group_data) in enumerate(v1_v2c_groups.items()):
-            hosts = []
-
-            for device in group_data['devices']:
-                credential = device.credential
-                hosts.append({
-                    "host": f"udp:{device.ip_address}/{device.port}",
-                    "community": credential.get_community(),
-                    "version": credential.version,
-                    "timeout": device.timeout,
-                    "retries": device.retries
-                })
-
-            if hosts:
-                interval_value = getattr(input_data['network'], 'interval', 30) or 30
-                logger.info(
-                    f"Network {input_data['network'].name} interval: {interval_value} (type: {type(interval_value)})")
-                config = {
-                             "hosts": hosts,
-                             "interval": interval_value
-                         } | global_input_config
-
-                # Add OIDs from merged profiles
-                oids = group_data['oids']
-                if oids['get']:
-                    config['get'] = list(oids['get'].values())
-                    # Collect OID mappings for filter generation
-                    oid_mappings['get'].update(oids['get'])
-                if oids['walk']:
-                    config['walk'] = list(oids['walk'].values())
-                    # Collect OID mappings for filter generation
-                    oid_mappings['walk'].update(oids['walk'])
-                if oids['table']:
-                    # Tables have structure: {"ifTable": {"columns": {"ifIndex": "oid", "ifDescr": "oid", ...}}}
-                    config['tables'] = [
-                        {
-                            'name': table_name,
-                            'columns': list(table_data.get('columns', {}).values()) if isinstance(table_data,
-                                                                                                  dict) and isinstance(
-                                table_data.get('columns'), dict) else []
-                        }
-                        for table_name, table_data in oids['table'].items()
-                    ]
-                    # Collect OID mappings for filter generation
-                    oid_mappings['table'].update(oids['table'])
-
-                input_components.append({
-                    "id": f"input_snmp_v1_v2c_{network_id}_group_{group_idx}",
-                    "type": "input",
-                    "plugin": "snmp",
-                    "config": config
-                })
-
-    # Process v3 devices
-    if input_data['devices']['v3']:
-        # Group v3 devices by their profile combinations AND credential
-        # (v3 devices with different credentials need separate inputs even with same profiles)
-        v3_groups = {}
-
-        for device_name, device in input_data['devices']['v3'].items():
-            profile_ids, merged_oids = _get_device_profiles(device, profile_cache)
-            credential = device.credential
-
-            # Use both profile_ids and credential_id as grouping key
-            group_key = (profile_ids, credential.id)
-
-            if group_key not in v3_groups:
-                v3_groups[group_key] = {
-                    'devices': [],
-                    'oids': merged_oids,
-                    'credential': credential
-                }
-
-            v3_groups[group_key]['devices'].append(device)
-
-        # Create an input for each profile+credential group
-        for group_idx, (group_key, group_data) in enumerate(v3_groups.items()):
-            hosts = []
-
-            for device in group_data['devices']:
-                hosts.append({
-                    "host": f"udp:{device.ip_address}/{device.port}",
-                    "version": device.credential.version,
-                    "timeout": device.timeout,
-                    "retries": device.retries
-                })
-
-            if hosts:
-                credential = group_data['credential']
-                interval_value = getattr(input_data['network'], 'interval', 30) or 30
-                logger.info(
-                    f"Network {input_data['network'].name} (v3) interval: {interval_value} (type: {type(interval_value)})")
-
-                config = {
-                             "hosts": hosts,
-                             "interval": interval_value,
-                             "security_name": credential.security_name,
-                             "security_level": credential.security_level
-                         } | global_input_config
-
-                # Add auth settings based on security level
-                if credential.security_level in ['authNoPriv', 'authPriv']:
-                    config["auth_protocol"] = credential.auth_protocol
-                    config["auth_pass"] = credential.get_auth_pass()
-
-                if credential.security_level == 'authPriv':
-                    config["priv_protocol"] = credential.priv_protocol
-                    config["priv_pass"] = credential.get_priv_pass()
-
-                # Add OIDs from merged profiles
-                oids = group_data['oids']
-                if oids['get']:
-                    config['get'] = list(oids['get'].values())
-                    # Collect OID mappings for filter generation
-                    oid_mappings['get'].update(oids['get'])
-                if oids['walk']:
-                    config['walk'] = list(oids['walk'].values())
-                    # Collect OID mappings for filter generation
-                    oid_mappings['walk'].update(oids['walk'])
-                if oids['table']:
-                    # Tables have structure: {"ifTable": {"columns": {"ifIndex": "oid", "ifDescr": "oid", ...}}}
-                    config['tables'] = [
-                        {
-                            'name': table_name,
-                            'columns': list(table_data.get('columns', {}).values()) if isinstance(table_data,
-                                                                                                  dict) and isinstance(
-                                table_data.get('columns'), dict) else []
-                        }
-                        for table_name, table_data in oids['table'].items()
-                    ]
-                    # Collect OID mappings for filter generation
-                    oid_mappings['table'].update(oids['table'])
-
-                input_components.append({
-                    "id": f"input_snmp_v3_{network_id}_group_{group_idx}",
-                    "type": "input",
-                    "plugin": "snmp",
-                    "config": config
-                })
-
-    return input_components, oid_mappings
-
-
-def _load_system_profile_oids():
-    """
-    Load the System profile OIDs for discovery.
-    Returns a dictionary with 'get', 'walk', 'table' keys.
-    """
-    system_profile_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles', 'generic_system.json')
-
-    try:
-        with open(system_profile_path, 'r') as f:
-            profile_data = json.load(f)
-            return {
-                'get': profile_data.get('get', {}),
-                'walk': profile_data.get('walk', {}),
-                'table': profile_data.get('table', {})
-            }
-    except Exception as e:
-        # If we can't load the system profile, return empty OIDs
-        return {'get': {}, 'walk': {}, 'table': {}}
-
-
-def _get_discovery_ip_addresses(network):
-    """
-    Get all IP addresses in the network range, excluding existing devices.
-
-    Args:
-        network: Network object with network_range field
-
+    Lightweight endpoint to check if there are undeployed SNMP changes.
+    Uses timestamp comparison instead of full reconciliation for performance.
+    
     Returns:
-        List of IP addresses (as strings) to scan for discovery
+        JSON with has_changes boolean
     """
     try:
-        # Parse the network range
-        network_obj = ipaddress.ip_network(network.network_range, strict=False)
-
-        # Get all IP addresses in the range (excluding network and broadcast)
-        all_ips = set(str(ip) for ip in network_obj.hosts())
-
-        # Get existing devices in this network
-        existing_devices = Device.objects.filter(network=network).values_list('ip_address', flat=True)
-
-        # Filter out IPs that are already devices (only if they're valid IP addresses)
-        for device_ip in existing_devices:
-            try:
-                # Check if device IP is a valid IP address (not a hostname)
-                ipaddress.ip_address(device_ip)
-                # If it's a valid IP and in our network range, remove it
-                if device_ip in all_ips:
-                    all_ips.discard(device_ip)
-            except ValueError:
-                # Not a valid IP address (probably a hostname), skip it
-                continue
-
-        result = sorted(list(all_ips))
-        logger.debug(f"Network {network.name}: Generated {len(result)} discovery IPs")
-        return result
+        has_changes = SNMPDeploymentState.has_undeployed_changes()
+        
+        return JsonResponse({
+            'success': True,
+            'has_changes': has_changes
+        })
     except Exception as e:
-        logger.error(f"Error generating discovery IPs for network {network.name}: {str(e)}", exc_info=True)
-        return []
-
-
-def _generate_discovery_input(network):
-    """
-    Generate SNMP input components for network discovery.
-    Uses the System profile OIDs and scans all IPs in the network range
-    (excluding existing devices).
-
-    Args:
-        network: Network object
-
-    Returns:
-        Tuple of (input_components, oid_mappings)
-    """
-    input_components = []
-
-    # Check if discovery is enabled and has a credential
-    if not network.discovery_enabled or not network.discovery_credential:
-        return input_components, {'get': {}, 'walk': {}, 'table': {}}
-
-    # Load System profile OIDs
-    oid_mappings = _load_system_profile_oids()
-
-    # Get IP addresses to scan
-    ip_addresses = _get_discovery_ip_addresses(network)
-
-    # If no IPs to scan, still create a minimal pipeline with a dummy host
-    # This ensures the pipeline exists and can be updated when devices are removed
-    if not ip_addresses:
-        # Use a non-routable IP as placeholder - pipeline will exist but won't actually scan anything
-        ip_addresses = ['192.0.2.1']  # RFC 5737 TEST-NET-1 address
-
-    # Get the discovery credential
-    credential = network.discovery_credential
-
-    # Global input configuration
-    global_input_config = {
-        "ecs_compatibility": "disabled",
-        "oid_mapping_format": "dotted_string"
-    }
-
-    # Build hosts list with credential info
-    hosts = []
-    for ip in ip_addresses:
-        host_config = {
-            "host": f"udp:{ip}/161"
-        }
-
-        # Add version-specific configuration
-        if credential.version in ['1', '2c']:
-            host_config["community"] = credential.get_community()
-            host_config["version"] = credential.version
-
-        hosts.append(host_config)
-
-    # Create input configuration with 5-minute interval for discovery
-    config = {
-                 "hosts": hosts,
-                 "interval": 300  # 5 minutes in seconds
-             } | global_input_config
-
-    # Add SNMPv3 configuration if needed
-    if credential.version == '3':
-        config["security_name"] = credential.security_name
-        config["security_level"] = credential.security_level
-
-        if credential.security_level in ['authNoPriv', 'authPriv']:
-            config["auth_protocol"] = credential.auth_protocol
-            config["auth_pass"] = credential.get_auth_pass()
-
-        if credential.security_level == 'authPriv':
-            config["priv_protocol"] = credential.priv_protocol
-            config["priv_pass"] = credential.get_priv_pass()
-
-    # Add OIDs from System profile
-    if oid_mappings['get']:
-        config['get'] = list(oid_mappings['get'].values())
-
-    input_components.append({
-        "id": f"input_snmp_discovery_{network.id}",
-        "type": "input",
-        "plugin": "snmp",
-        "config": config
-    })
-
-    return input_components, oid_mappings
-
-
-def _generate_discovery_filters(oid_mappings, network):
-    """
-    Generate filter components for discovery pipeline.
-    Adds event.kind: discovery field to distinguish from regular metrics.
-
-    Args:
-        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
-        network: Network object for accessing network name
-
-    Returns:
-        List of filter components
-    """
-    # Build rename mappings for get OIDs
-    get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
-
-    filter_components = [
-        {
-            "id": "filter_mutate_discovery_1",
-            "type": "filter",
-            "plugin": "mutate",
-            "config": {
-                "rename": {
-                              "host": "[host][hostname]"
-                          } | get_renames
-            }
-        },
-        {
-            "id": "filter_mutate_discovery_2",
-            "type": "filter",
-            "plugin": "mutate",
-            "config": {
-                "add_field": {
-                    "[network][name]": f"{network.name}",
-                    "[metricset][module]": "snmp",
-                    "[event][kind]": "discovery"
-                }
-            }
-        }
-    ]
-
-    return filter_components
-
-
-def _format_field_name(field_name):
-    """
-    Format field name for Logstash filter usage.
-
-    Rules:
-    - If starts with [ and ends with ], leave it alone
-    - If doesn't start with [ and has a dot, convert to bracket notation: system.cpu -> [system][cpu]
-    - Otherwise, leave it alone
-
-    Args:
-        field_name: The field name to format
-
-    Returns:
-        Formatted field name
-    """
-    # Already in bracket notation
-    if field_name.startswith('[') and field_name.endswith(']'):
-        return field_name
-
-    # Has dots, convert to bracket notation
-    if '.' in field_name:
-        parts = field_name.split('.')
-        return ''.join(f'[{part}]' for part in parts)
-
-    # No dots and not in bracket notation, leave alone
-    return field_name
-
-
-def _get_special_case_filters(oid_mappings):
-    special_case_filters = {
-        'get': {
-            "system.cpu.total.norm.pct": [
-                {
-                    "id": "comp_1770526174120",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": "    v = event.get(\"[system][cpu][total][norm][pct]\")\n    if v\n      event.set(\"[system][cpu][total][norm][pct]\", v.to_f / 100.0)\n    end"
-                    }
-                }
-            ],
-            "system.memory.actual.used.bytes": [
-                {
-                    "id": "comp_1770526174120",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": '''
-      used = event.get("[system][memory][actual][used][bytes]")
-      free = event.get("[system][memory][actual][free][bytes]")
-
-      if used && free
-        used_f  = used.to_f
-        free_f  = free.to_f
-        total_f = used_f + free_f
-
-        if total_f > 0
-          event.set("[system][memory][total]", total_f)
-          event.set("[system][memory][actual][used][pct]", (used_f / total_f))
-          event.set("[system][memory][actual][free][pct]", (free_f / total_f))
-        end
-      end
-    '''
-                    }
-                }
-            ]
-        },
-        'walk': {}
-    }
-
-    special_filters = []
-
-    # Add special case filters for get and walk
-    types = ['get', 'walk']
-    for snmp_type in types:
-        for name_of_oid in oid_mappings[snmp_type]:
-            if name_of_oid in special_case_filters[snmp_type]:
-                for entry in special_case_filters[snmp_type][name_of_oid]:
-                    special_filters.append(entry)
-
-    # Generate dynamic table splitters for all tables in oid_mappings
-    for table_name, table_data in oid_mappings.get('table', {}).items():
-        if isinstance(table_data, dict) and 'columns' in table_data:
-            columns = table_data.get('columns', {})
-            if isinstance(columns, dict) and columns:
-                # Generate the row rename statements using list comprehension
-                rename_statements = '\n'.join([
-                    f"    row[\"{field_name}\"] = row.delete(\"{oid}\")"
-                    for field_name, oid in columns.items()
-                ])
-
-                # Build the Ruby code for this table
-                ruby_code = (
-                    f"rows = event.get(\"[{table_name}]\")\n"
-                    f"if rows.is_a?(Array)\n"
-                    f"  host_name = event.get(\"[host][name]\")\n"
-                    f"  host_hostname = event.get(\"[host][hostname]\")\n"
-                    f"  network_name = event.get(\"[network][name]\")\n"
-                    f"  timestamp = event.get(\"@timestamp\")\n"
-                    f"  rows.each do |row|\n"
-                    f"    next unless row.is_a?(Hash)\n"
-                    f"{rename_statements}\n"
-                    f"    new_event = LogStash::Event.new({{\n"
-                    f"      \"@timestamp\" => timestamp,\n"
-                    f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname }},\n"
-                    f"      \"network\" => {{ \"name\" => network_name }},\n"
-                    f"      \"table\" => row,\n"
-                    f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
-                    f"      \"event\" => {{ \"kind\" => \"{table_name.lower()}\" }}\n"
-                    f"    }})\n"
-                    f"    new_event_block.call(new_event)\n"
-                    f"  end\n"
-                    f"  event.remove(\"[{table_name}]\")\n"
-                    f"  event.set(\"[event][kind]\", \"metrics\")\n"
-                    f"end"
-                )
-
-                special_filters.append({
-                    "id": f"comp_table_split_{table_name}",
-                    "type": "filter",
-                    "plugin": "ruby",
-                    "config": {
-                        "code": ruby_code
-                    }
-                })
-
-    return special_filters
-
-
-def _generate_filters(oid_mappings, network):
-    """
-    Generate filter components based on OID mappings from profiles.
-
-    Args:
-        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
-        network: Network object for accessing network name and other properties
-
-    Returns:
-        List of filter components
-    """
-    # Build rename mappings for get OIDs
-    get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
-
-    # Build rename mappings for table columns: [table_name][oid] -> [table_name][column_name]
-    table_renames = {}
-    for table_name, table_data in oid_mappings['table'].items():
-        if isinstance(table_data, dict) and 'columns' in table_data:
-            columns = table_data['columns']
-            if isinstance(columns, dict):
-                for column_name, oid in columns.items():
-                    # Create rename from [table_name][oid] to [table_name][column_name]
-                    from_field = f"[{table_name}][{oid}]"
-                    to_field = f"[{table_name}][{column_name}]"
-                    table_renames[from_field] = to_field
-
-    filter_components = [
-        {
-            "id": "filter_mutate_1",
-            "type": "filter",
-            "plugin": "mutate",
-            "config": {
-                "rename": {
-                    "host": "[host][hostname]"
-                }
-            }
-        },
-        {
-            "id": "filter_mutate_2",
-            "type": "filter",
-            "plugin": "mutate",
-            "config": {
-                "rename": get_renames
-            }
-        },
-        {
-            "id": "filter_mutate_3",
-            "type": "filter",
-            "plugin": "mutate",
-            "config": {
-                "add_field": {
-                    "[network][name]": f"{network}",
-                    "[metricset][module]": "system"
-                }
-            }
-        }
-    ]
-
-    # ATTENTION: This is where I'm planning on implementing special logic
-    # to preprocess some data. I'm avoiding having to have 'magic functions'
-    # where the user may not understand why one OID works one way and another works in a different way
-    # we'll see if we need to add that.
-    # oid_mappings['get'] contains key-value pairs like {"host.hostname": "1.3.6.1.2.1.1.5.0", ...}
-    # oid_mappings['walk'] contains walk OID mappings
-    # oid_mappings['table'] contains table OID mappings
-
-    for mapping in oid_mappings['get']:
-        pass
-
-    filter_components.extend(_get_special_case_filters(oid_mappings))
-    return filter_components
-
-
-def _generate_output(input_data, network_db_object, snmp_type="polling"):
-    """
-    Generate Elasticsearch output configuration with data stream settings.
-
-    Args:
-        input_data: Dict containing network and device information
-        network_db_object: Network model instance
-        snmp_type: Type of SNMP operation - "discovery", "traps", or "polling" (default)
-
-    Returns:
-        List of output components
-    """
-    output_components = []
-
-    # Get the connection from the network
-    connection = network_db_object.connection
-
-    if not connection:
-        return output_components
-
-    # Configure data stream based on snmp_type
-    if snmp_type == "discovery":
-        data_stream_type = "logs"
-        data_stream_dataset = "snmp.discovery"
-    elif snmp_type == "traps":
-        data_stream_type = "logs"
-        data_stream_dataset = "snmp.traps"
-    else:  # polling (default)
-        data_stream_type = "metrics"
-        data_stream_dataset = "snmp.polling"
-
-    config = {
-        "data_stream": True,
-        "data_stream_type": data_stream_type,
-        "data_stream_namespace": "default",
-        "data_stream_dataset": data_stream_dataset
-    }
-
-    # Add connection details based on what's available
-    if connection.cloud_id:
-        config["cloud_id"] = connection.cloud_id
-    elif connection.host:
-        # Add port to host if available
-        host_with_port = f"{connection.host}:{connection.port}" if connection.port else connection.host
-        config["hosts"] = [host_with_port]
-
-    # Add authentication
-    if connection.api_key:
-        config["api_key"] = connection.get_api_key()
-    elif connection.username and connection.password:
-        config["user"] = connection.username
-        config["password"] = connection.get_password()
-
-    output_components.append(
-        {
-            "id": f"output_elasticsearch_{network_db_object.id}",
-            "type": "output",
-            "plugin": "elasticsearch",
-            "config": config
-        }
-    )
-
-    return output_components
-
-
+        logger.error(f"Error checking undeployed changes: {str(e)}", exc_info=True)
+        # On error, assume changes exist to be safe
+        return JsonResponse({
+            'success': True,
+            'has_changes': True
+        })
+
+
+@require_admin_role
 def GetDeployDiff(request):
     """Get diff for all network pipeline configurations"""
     try:
@@ -1324,22 +1517,45 @@ def GetDeployDiff(request):
 
         # Collect all pipeline names we need to fetch from ES
         pipeline_names_by_connection = {}
+        connection_name_map = {}
         network_pipeline_map = {}
 
         for network in networks:
+            # Agent-mode networks are reconciled against Django Pipeline records,
+            # not Elasticsearch CPM. Handled in a dedicated section below.
+            if network.deployment_mode == 'AGENT':
+                continue
             if network.connection:
                 conn_id = network.connection.id
                 if conn_id not in pipeline_names_by_connection:
                     pipeline_names_by_connection[conn_id] = []
+                connection_name_map[conn_id] = network.connection.name
 
-                pipeline_name = _get_pipeline_name(network)
-                trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
-                discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                # Get unique templates for this network
+                devices = network.devices.all()
+                templates = _get_unique_templates_for_network(devices)
+                
+                # Generate pipeline names for each template
+                polling_pipelines = {}
+                for template in templates:
+                    template_id = template.id if template else None
+                    pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+                    polling_pipelines[template_id] = pipeline_name
+                    pipeline_names_by_connection[conn_id].append(pipeline_name)
+                
+                # Also fetch old single-pipeline format for cleanup (backwards compatibility)
+                old_pipeline_name = _get_pipeline_name(network)
+                pipeline_names_by_connection[conn_id].append(old_pipeline_name)
+                
+                # Trap and discovery pipelines remain network-level (not per-template)
+                trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
+                discovery_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery"
 
                 pipeline_names_by_connection[conn_id].extend(
-                    [pipeline_name, trap_pipeline_name, discovery_pipeline_name])
+                    [trap_pipeline_name, discovery_pipeline_name])
+                
                 network_pipeline_map[network.id] = {
-                    'main': pipeline_name,
+                    'polling': polling_pipelines,  # Changed from 'main' to 'polling' dict
                     'trap': trap_pipeline_name,
                     'discovery': discovery_pipeline_name
                 }
@@ -1350,10 +1566,13 @@ def GetDeployDiff(request):
             try:
                 es_client = get_elastic_connection(conn_id)
 
-                # Fetch all pipelines for this connection in one call
+                # Fetch ALL pipelines for this connection (avoids URL length limits with many pipelines)
                 try:
-                    response = es_client.logstash.get_pipeline(id=','.join(pipeline_names))
-                    existing_pipelines.update(response)
+                    all_pipelines = es_client.logstash.get_pipeline()
+                    # Filter to only the ones we care about
+                    for pipeline_name in pipeline_names:
+                        if pipeline_name in all_pipelines:
+                            existing_pipelines[pipeline_name] = all_pipelines[pipeline_name]
                 except Exception:
                     # Pipelines don't exist or error, continue
                     pass
@@ -1363,134 +1582,138 @@ def GetDeployDiff(request):
 
         network_diffs = []
 
-        # Iterate through each network and build pipeline configuration
+        # Iterate through each network and build pipeline configurations
         for network in networks:
-            # Initialize pipeline data structure for this network
-            input_data = {
-                "network": network,
-                "devices": {
-                    "v1_v2c": {},
-                    "v3": {}
-                },
-                "connection": network.connection
-            }
-
+            # Agent-mode networks handled separately (compared vs Django records)
+            if network.deployment_mode == 'AGENT':
+                continue
             # Get all devices for this network (already prefetched)
             devices = network.devices.all()
-
-            for device in devices:
-                if not device.credential:
-                    continue
-
-                credential = device.credential
-
-                # Group v1 and v2c together
-                if credential.version in ['1', '2c']:
-                    input_data["devices"]["v1_v2c"][device.name] = device
-
-                # Group v3 devices
-                elif credential.version == '3':
-                    input_data["devices"]["v3"][device.name] = device
-
-            # Skip networks with no devices (unless they have traps enabled)
-            has_devices = bool(input_data["devices"]["v1_v2c"] or input_data["devices"]["v3"])
-            if not has_devices and not network.traps_enabled:
+            
+            # Get unique templates for this network
+            templates = _get_unique_templates_for_network(devices)
+            
+            # Skip networks that have nothing to generate a pipeline for
+            has_devices = bool(devices.filter(credential__isnull=False).exists())
+            has_special_pipelines = (
+                (network.traps_enabled and network.credential)
+                or (network.discovery_enabled and network.discovery_credential)
+            )
+            if not has_devices and not has_special_pipelines:
                 continue
+            
+            # Generate a pipeline for each template
+            for template in templates:
+                template_id = template.id if template else None
+                
+                # Initialize pipeline data structure for this template
+                input_data = {
+                    "network": network,
+                    "devices": {
+                        "v1_v2c": {},
+                        "v3": {}
+                    },
+                    "connection": network.connection
+                }
 
-            # Generate components for this network (only if has devices)
-            if has_devices:
-                input_components, oid_mappings = _generate_input(input_data, profile_cache)
-                filter_components = _generate_filters(oid_mappings, network)
-            else:
-                input_components = []
-                filter_components = []
+                # Collect devices for this template
+                device_ids = []
+                for device in devices:
+                    if not device.credential:
+                        continue
+                    
+                    # Skip devices that don't match this template
+                    device_template_id = device.device_template.id if device.device_template else None
+                    if device_template_id != template_id:
+                        continue
+                    
+                    device_ids.append(device.id)
+                    credential = device.credential
 
-            components = {
-                "input": input_components,
-                "filter": filter_components,
-                "output": _generate_output(input_data, network, snmp_type="polling")
-            }
+                    # Group v1 and v2c together
+                    if credential.version in ['1', '2c']:
+                        input_data["devices"]["v1_v2c"][device.name] = device
 
-            # Generate new pipeline configuration
-            new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
+                    # Group v3 devices
+                    elif credential.version == '3':
+                        input_data["devices"]["v3"][device.name] = device
+                
+                # Skip if no devices for this template
+                if not device_ids:
+                    continue
+                
+                # Generate pipeline configuration
+                input_components, oid_mappings, normalizers = _generate_input(
+                    input_data, profile_cache, template_filter=template_id
+                )
+                filter_components = _generate_filters(oid_mappings, network, normalizers, input_data=input_data)
 
-            # Get current pipeline configuration from pre-fetched data
-            current_config = ""
-            pipeline_name = network_pipeline_map.get(network.id, {}).get('main', _get_pipeline_name(network))
+                components = {
+                    "input": input_components,
+                    "filter": filter_components,
+                    "output": _generate_output(network, snmp_type="polling", device_template=template)
+                }
 
-            if pipeline_name in existing_pipelines:
-                pipeline_data = existing_pipelines[pipeline_name]
-                if 'pipeline' in pipeline_data:
-                    current_config = pipeline_data['pipeline']
+                new_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
 
-            # Build network diff object (only include main pipeline if has devices)
-            network_diff = {
-                'network_name': network.name,
-                'pipeline_name': pipeline_name if has_devices else None,
-                'current': current_config if has_devices else "",
-                'new': new_config if has_devices else "",
-                'trap_pipeline': None,
-                'discovery_pipeline': None,
-                'has_devices': has_devices
-            }
+                # Get current pipeline configuration from pre-fetched data
+                current_config = ""
+                pipeline_name = network_pipeline_map.get(network.id, {}).get('polling', {}).get(template_id, '')
 
+                if pipeline_name and pipeline_name in existing_pipelines:
+                    pipeline_data = existing_pipelines[pipeline_name]
+                    if 'pipeline' in pipeline_data:
+                        current_config = pipeline_data['pipeline']
+                
+                # Add this template's pipeline to the network diff
+                template_name = template.name if template else 'no-template'
+                
+                # Determine action based on whether pipeline exists and if it's different
+                if not current_config:
+                    action = 'create'
+                elif current_config != new_config:
+                    action = 'update'
+                else:
+                    action = 'none'  # No changes
+                
+                # Only add to diffs if there's an actual change
+                if action != 'none':
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'template_name': template_name,
+                        'pipeline_name': pipeline_name,
+                        'current': current_config,
+                        'new': new_config,
+                        'pipeline_type': 'polling',
+                        'action': action,
+                        'has_devices': True
+                    })
+            
+            # Check for old single-pipeline format and mark for deletion (backwards compatibility)
+            old_pipeline_name = _get_pipeline_name(network)
+            if old_pipeline_name in existing_pipelines:
+                old_pipeline_data = existing_pipelines[old_pipeline_name]
+                if 'pipeline' in old_pipeline_data:
+                    old_config = old_pipeline_data['pipeline']
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'pipeline_name': old_pipeline_name,
+                        'current': old_config,
+                        'new': '',
+                        'pipeline_type': 'polling_legacy',
+                        'action': 'delete',
+                        'note': 'Legacy single-pipeline format - replaced by per-template pipelines'
+                    })
+                    logger.info(f"Marking legacy pipeline {old_pipeline_name} for deletion")
+            
             # Handle trap pipeline if traps are enabled
             if network.traps_enabled and network.credential:
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap',
-                                                                                  f"snmp-{network.logstash_name}-traps")
+                                                                                  f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
 
-                # Build trap input configuration
-                credential = network.credential
-                trap_input_config = {
-                    "host": "0.0.0.0",
-                    "port": 1662,
-                    "oid_map_field_values": False,
-                    "oid_mapping_format": "dotted_string",
-                    "supported_versions": []
-                }
-
-                # Add version-specific configuration
-                if credential.version in ['1', '2c']:
-                    trap_input_config["supported_versions"].append(credential.version)
-                    if credential.community:
-                        trap_input_config["community"] = [decrypt_credential(credential.community)]
-                elif credential.version == '3':
-                    trap_input_config["supported_versions"].append("3")
-                    if credential.security_name:
-                        trap_input_config["security_name"] = credential.security_name
-                    if credential.auth_protocol:
-                        trap_input_config["auth_protocol"] = credential.auth_protocol
-                    if credential.auth_pass:
-                        trap_input_config["auth_pass"] = decrypt_credential(credential.auth_pass)
-                    if credential.priv_protocol:
-                        trap_input_config["priv_protocol"] = credential.priv_protocol
-                    if credential.priv_pass:
-                        trap_input_config["priv_pass"] = decrypt_credential(credential.priv_pass)
-                    if credential.security_level:
-                        trap_input_config["security_level"] = credential.security_level
-
-                # Build trap pipeline components
-                trap_components = {
-                    "input": [{
-                        "id": "input_snmptrap_1",
-                        "type": "input",
-                        "plugin": "snmptrap",
-                        "config": trap_input_config
-                    }],
-                    "filter": [
-                        {
-                            "id": "filter_mutate_trap_1",
-                            "type": "filter",
-                            "plugin": "mutate",
-                            "config": {
-                                "add_field": {
-                                    "[event][kind]": "traps"
-                                }
-                            }
-                        }
-                    ],
-                    "output": _generate_output(input_data, network, snmp_type="traps")
-                }
+                # Build trap pipeline components (keystore vs inline credentials
+                # is decided by the network's deployment/credential mode).
+                trap_components = _build_trap_components(network)
 
                 # Generate new trap pipeline configuration
                 new_trap_config = ComponentToPipeline(trap_components, test=False).components_to_logstash_config()
@@ -1502,16 +1725,27 @@ def GetDeployDiff(request):
                     if 'pipeline' in pipeline_data:
                         current_trap_config = pipeline_data['pipeline']
 
-                network_diff['trap_pipeline'] = {
-                    'pipeline_name': trap_pipeline_name,
-                    'current': current_trap_config,
-                    'new': new_trap_config,
-                    'action': 'create' if not current_trap_config else 'update'
-                }
+                # Only add if there's an actual change
+                if not current_trap_config:
+                    trap_action = 'create'
+                elif current_trap_config != new_trap_config:
+                    trap_action = 'update'
+                else:
+                    trap_action = 'none'
+                
+                if trap_action != 'none':
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'pipeline_name': trap_pipeline_name,
+                        'current': current_trap_config,
+                        'new': new_trap_config,
+                        'pipeline_type': 'trap',
+                        'action': trap_action
+                    })
             else:
                 # Traps disabled or no credential - check if trap pipeline exists and needs to be deleted
                 trap_pipeline_name = network_pipeline_map.get(network.id, {}).get('trap',
-                                                                                  f"snmp-{network.logstash_name}-traps")
+                                                                                  f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
                 current_trap_config = ""
 
                 if trap_pipeline_name in existing_pipelines:
@@ -1520,17 +1754,19 @@ def GetDeployDiff(request):
                         current_trap_config = pipeline_data['pipeline']
 
                 if current_trap_config:
-                    network_diff['trap_pipeline'] = {
+                    network_diffs.append({
+                        'network_name': network.name,
                         'pipeline_name': trap_pipeline_name,
                         'current': current_trap_config,
                         'new': '',
+                        'pipeline_type': 'trap',
                         'action': 'delete'
-                    }
+                    })
 
             # Handle discovery pipeline if discovery is enabled
             if network.discovery_enabled and network.discovery_credential:
                 discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery',
-                                                                                       f"snmp-{network.logstash_name}-discovery")
+                                                                                       f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
 
                 # Generate discovery pipeline components
                 discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
@@ -1539,7 +1775,7 @@ def GetDeployDiff(request):
                 discovery_components = {
                     "input": discovery_input_components,
                     "filter": discovery_filter_components,
-                    "output": _generate_output(input_data, network, snmp_type="discovery")
+                    "output": _generate_output(network, snmp_type="discovery")
                 }
 
                 # Generate new discovery pipeline configuration
@@ -1553,16 +1789,27 @@ def GetDeployDiff(request):
                     if 'pipeline' in pipeline_data:
                         current_discovery_config = pipeline_data['pipeline']
 
-                network_diff['discovery_pipeline'] = {
-                    'pipeline_name': discovery_pipeline_name,
-                    'current': current_discovery_config,
-                    'new': new_discovery_config,
-                    'action': 'create' if not current_discovery_config else 'update'
-                }
+                # Only add if there's an actual change
+                if not current_discovery_config:
+                    discovery_action = 'create'
+                elif current_discovery_config != new_discovery_config:
+                    discovery_action = 'update'
+                else:
+                    discovery_action = 'none'
+                
+                if discovery_action != 'none':
+                    network_diffs.append({
+                        'network_name': network.name,
+                        'pipeline_name': discovery_pipeline_name,
+                        'current': current_discovery_config,
+                        'new': new_discovery_config,
+                        'pipeline_type': 'discovery',
+                        'action': discovery_action
+                    })
             else:
                 # Discovery is disabled or no credential - check if pipeline exists and needs to be deleted
                 discovery_pipeline_name = network_pipeline_map.get(network.id, {}).get('discovery',
-                                                                                       f"snmp-{network.logstash_name}-discovery")
+                                                                                       f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
                 current_discovery_config = ""
 
                 if discovery_pipeline_name in existing_pipelines:
@@ -1571,18 +1818,178 @@ def GetDeployDiff(request):
                         current_discovery_config = pipeline_data['pipeline']
 
                 if current_discovery_config:
-                    network_diff['discovery_pipeline'] = {
+                    network_diffs.append({
+                        'network_name': network.name,
                         'pipeline_name': discovery_pipeline_name,
                         'current': current_discovery_config,
                         'new': '',
+                        'pipeline_type': 'discovery',
                         'action': 'delete'
-                    }
+                    })
 
-            network_diffs.append(network_diff)
+        # ---- Agent-mode networks: compare generated configs vs Django records ----
+        network_diffs.extend(_compute_agent_network_diffs(networks, profile_cache))
 
+        # Check for orphaned pipelines that will be deleted
+        # Build a set of expected pipeline names
+        expected_pipelines = set()
+        for network in networks:
+            if network.deployment_mode == 'AGENT':
+                continue
+            if network.connection:
+                # Add per-template polling pipelines
+                devices = Device.objects.filter(network=network).select_related('device_template')
+                if devices.exists():
+                    templates = _get_unique_templates_for_network(devices)
+                    for template in templates:
+                        pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+                        expected_pipelines.add(pipeline_name)
+                
+                # Add trap pipeline if traps are enabled
+                if network.traps_enabled:
+                    expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
+                # Add discovery pipeline if discovery is enabled
+                if network.discovery_enabled:
+                    expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
+        
+        # Pipelines already scheduled for an explicit delete by the per-network
+        # branches above (e.g. discovery/traps toggled off). Exclude these from
+        # the orphan scan so the same pipeline doesn't get two delete entries.
+        already_in_diff = {d['pipeline_name'] for d in network_diffs}
+
+        # Check each connection for orphaned pipelines
+        connections_checked = set()
+        for network in networks:
+            if network.deployment_mode == 'AGENT':
+                continue
+            if network.connection and network.connection.id not in connections_checked:
+                connections_checked.add(network.connection.id)
+                conn_id = network.connection.id
+                
+                try:
+                    # Fetch ALL pipelines from this connection to find orphans
+                    es_client = get_elastic_connection(conn_id)
+                    all_pipelines = es_client.logstash.get_pipeline()
+                    
+                    # Find orphaned SNMP pipelines
+                    for pipeline_name, pipeline_data in all_pipelines.items():
+                        # Check if it's a managed SNMP pipeline (starts with "snmp-")
+                        if pipeline_name.startswith("snmp-"):
+                            description = pipeline_data.get('description', '')
+                            
+                            if '[MANAGED]' in description and pipeline_name not in expected_pipelines and pipeline_name not in already_in_diff:
+                                # This is an orphaned pipeline - add to diffs as delete
+                                network_diffs.append({
+                                    'network_name': 'Orphaned',
+                                    'pipeline_name': pipeline_name,
+                                    'current': pipeline_data.get('pipeline', ''),
+                                    'new': '',
+                                    'pipeline_type': 'orphaned',
+                                    'action': 'delete',
+                                    'connection_id': conn_id,
+                                    'destination_type': 'cpm',
+                                    'destination_name': network.connection.name,
+                                    'note': 'Pipeline no longer matches any configured network/template'
+                                })
+                except Exception as e:
+                    # Connection error or ES error - skip orphan detection for this connection
+                    logger.warning(f"Could not check for orphaned pipelines on connection {conn_id}: {str(e)}")
+        
+        # Enrich centralized (CPM) diff entries with destination + connection info
+        # and, for keystore-credential-mode networks, the ${KEY} names the operator
+        # must add manually via logstash-keystore. Agent-mode entries already carry
+        # their destination from _compute_agent_network_diffs.
+        _ref_re = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
+        networks_by_name = {n.name: n for n in networks}
+        for d in network_diffs:
+            if d.get('deployment_mode') == 'AGENT':
+                continue
+            net = networks_by_name.get(d.get('network_name'))
+            if net and net.connection:
+                d.setdefault('connection_id', net.connection.id)
+                d.setdefault('destination_type', 'cpm')
+                d.setdefault('destination_name', net.connection.name)
+                if getattr(net, 'credential_mode', 'KEYSTORE') == 'KEYSTORE' and d.get('action') in ('create', 'update'):
+                    keys = sorted(set(_ref_re.findall(d.get('new') or '')))
+                    if keys:
+                        d['manual_keystore_keys'] = keys
+                        d['manual_keystore_values'] = _resolve_manual_keystore_values(keys)
+
+        # ---- Pre-deploy blocking validation ----
+        # These misconfigurations make a correct deploy impossible, so we block the
+        # entire deploy (not just the offending network) and tell the user why.
+        blocking_errors = []
+        _seen_block_msgs = set()
+
+        def _add_block(message, policy_id=None):
+            if message in _seen_block_msgs:
+                return
+            _seen_block_msgs.add(message)
+            entry = {'message': message}
+            if policy_id is not None:
+                entry['policy_id'] = policy_id
+            blocking_errors.append(entry)
+
+        for network in networks:
+            if not _network_has_pipeline_devices(network):
+                continue
+            # Every SNMP pipeline emits an Elasticsearch output, so a network with
+            # no ES connection can never be deployed.
+            if not network.connection:
+                _add_block(
+                    f"Network '{network.name}' no longer has an Elasticsearch connection. "
+                    f"Please assign one before deploying."
+                )
+            if network.deployment_mode == 'AGENT':
+                policy = network.agent_connection.policy if network.agent_connection else None
+                if not policy:
+                    _add_block(
+                        f"Network '{network.name}' is in Agent mode but is not assigned to an "
+                        f"agent policy. Please assign an agent before deploying."
+                    )
+                elif not policy.keystore_password:
+                    _add_block(
+                        f"The policy '{policy.name}' assigned to this agent does not have a "
+                        f"keystore password set. Please set a keystore password for this policy "
+                        f"before deploying.",
+                        policy_id=policy.id,
+                    )
+
+        # Check if there are actual changes
+        # If user changed config then reverted, indicator may show changes but diff is empty
+        has_actual_changes = any(
+            diff.get('action') in ['create', 'update', 'delete']
+            for diff in network_diffs
+        )
+        
+        # Debug: log the planned changes
+        logger.debug(f"Network diffs: {network_diffs}")
+        logger.debug(f"Actions found: {[diff.get('action') for diff in network_diffs]}")
+        logger.debug(f"has_actual_changes={has_actual_changes}")
+        
+        if not has_actual_changes:
+            # No actual changes found - sync timestamps to clear the indicator
+            # This handles the "change then revert" scenario
+            state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+            state.last_deployment = state.last_config_change
+            state.save(update_fields=['last_deployment'])
+            logger.info("No actual changes found in diff - cleared deployment indicator")
+        
+        # Cache the deployment plan for reuse when user clicks "Confirm Deploy"
+        # Short timeout (60 seconds) - just long enough for user to review and click deploy
+        from django.core.cache import cache
+        cache.set('snmp_deployment_plan', network_diffs, timeout=60)
+        logger.info(f"Cached deployment plan with {len(network_diffs)} pipeline changes")
+        
         return JsonResponse({
             'success': True,
-            'networks': network_diffs
+            'networks': network_diffs,
+            'has_changes': has_actual_changes,
+            'blocking_errors': blocking_errors,
+            'connections': [
+                {'id': conn_id, 'name': name}
+                for conn_id, name in connection_name_map.items()
+            ]
         })
 
     except Exception as e:
@@ -1594,6 +2001,148 @@ def GetDeployDiff(request):
 def DeployConfiguration(request):
     """Deploy SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
     try:
+        # Try to use cached deployment plan from GetDeployDiff
+        from django.core.cache import cache
+        cached_plan = cache.get('snmp_deployment_plan')
+        
+        if cached_plan:
+            logger.info(f"Using cached deployment plan with {len(cached_plan)} pipeline changes")
+            # Clear cache immediately to prevent reuse
+            cache.delete('snmp_deployment_plan')
+            
+            # Execute the cached plan
+            pipelines_created = 0
+            pipelines_updated = 0
+            pipelines_deleted = 0
+            errors = []
+
+            # Split by deployment mode: Agent-mode entries go to Django records,
+            # Centralized entries go to Elasticsearch CPM.
+            agent_diffs = [d for d in cached_plan if d.get('deployment_mode') == 'AGENT']
+            centralized_diffs = [d for d in cached_plan if d.get('deployment_mode') != 'AGENT']
+
+            for diff in centralized_diffs:
+                pipeline_name = diff.get('pipeline_name')
+                action = diff.get('action')
+                network_name = diff.get('network_name')
+                connection_id = diff.get('connection_id')
+                
+                try:
+                    # Prefer the connection_id captured at diff time (correct even for
+                    # orphans and networks that were later edited); fall back to a
+                    # name lookup only for older cached plans.
+                    if connection_id is None:
+                        if network_name == 'Orphaned':
+                            errors.append(
+                                f"Pipeline '{pipeline_name}': orphaned pipeline has no "
+                                f"connection recorded — remove it manually from Elasticsearch."
+                            )
+                            continue
+                        network = Network.objects.select_related('connection').get(name=network_name)
+                        if not network or not network.connection:
+                            errors.append(f"Pipeline '{pipeline_name}': No connection found")
+                            continue
+                        connection_id = network.connection.id
+                    
+                    es = get_elastic_connection(connection_id)
+                    
+                    if action == 'create' or action == 'update':
+                        # Create or update pipeline using helper function
+                        new_config = diff.get('new', '')
+                        description = f"[MANAGED] SNMP {diff.get('pipeline_type', 'polling')} pipeline"
+                        
+                        try:
+                            success, is_new, error, was_updated = _create_or_update_pipeline(
+                                es, pipeline_name, new_config, description
+                            )
+                            
+                            if success:
+                                if is_new:
+                                    pipelines_created += 1
+                                    logger.info(f"Created pipeline: {pipeline_name}")
+                                elif was_updated:
+                                    pipelines_updated += 1
+                                    logger.info(f"Updated pipeline: {pipeline_name}")
+                            else:
+                                errors.append(f"Failed to {action} '{pipeline_name}': {error}")
+                        except Exception as e:
+                            errors.append(f"Failed to {action} '{pipeline_name}': {str(e)}")
+                    
+                    elif action == 'delete':
+                        # Delete pipeline
+                        try:
+                            es.logstash.delete_pipeline(id=pipeline_name)
+                            pipelines_deleted += 1
+                            logger.info(f"Deleted pipeline: {pipeline_name}")
+                        except Exception as e:
+                            errors.append(f"Failed to delete '{pipeline_name}': {str(e)}")
+                
+                except Network.DoesNotExist:
+                    errors.append(f"Pipeline '{pipeline_name}': Network '{network_name}' not found")
+                except Exception as e:
+                    errors.append(f"Pipeline '{pipeline_name}': {str(e)}")
+
+            # Apply Agent-mode diffs to Django Pipeline/Keystore records
+            keystore_changed = 0
+            if agent_diffs:
+                agent_result = _deploy_agent_diffs(agent_diffs)
+                pipelines_created += agent_result['created']
+                pipelines_updated += agent_result['updated']
+                pipelines_deleted += agent_result['deleted']
+                keystore_changed += agent_result.get('keystore_changed', 0)
+                errors.extend(agent_result['errors'])
+            
+            # Build response message
+            if (pipelines_created == 0 and pipelines_updated == 0
+                    and pipelines_deleted == 0 and keystore_changed == 0):
+                if errors:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
+                    }, status=500)
+                else:
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'All pipelines are already up to date - no changes needed',
+                        'pipelines_created': 0,
+                        'pipelines_updated': 0,
+                        'pipelines_deleted': 0,
+                        'errors': None
+                    })
+            
+            message_parts = []
+            if pipelines_created > 0:
+                message_parts.append(f"{pipelines_created} pipeline(s) created")
+            if pipelines_updated > 0:
+                message_parts.append(f"{pipelines_updated} pipeline(s) updated")
+            if pipelines_deleted > 0:
+                message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
+            if keystore_changed > 0:
+                message_parts.append(f"{keystore_changed} keystore value(s) updated")
+            
+            message = "Successfully deployed: " + ", ".join(message_parts)
+            if errors:
+                message += f". Warnings: {'; '.join(errors)}"
+            
+            # Mark deployment as successful
+            from django.utils import timezone
+            state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+            state.last_deployment = timezone.now()
+            state.save(update_fields=['last_deployment'])
+            logger.info("Deployment completed successfully using cached plan")
+            
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'pipelines_created': pipelines_created,
+                'pipelines_updated': pipelines_updated,
+                'pipelines_deleted': pipelines_deleted,
+                'errors': errors if errors else None
+            })
+        
+        # No cached plan - fall back to full reconciliation
+        logger.info("No cached deployment plan found, performing full reconciliation")
+        
         # Clear the official profile cache to ensure we load fresh data from disk
         # This is important when profile JSON files have been edited
         global _OFFICIAL_PROFILE_CACHE
@@ -1615,6 +2164,9 @@ def DeployConfiguration(request):
 
         # Iterate through each network and create/update pipeline
         for network in networks:
+            # Agent-mode networks are deployed to Django records below, not ES CPM
+            if network.deployment_mode == 'AGENT':
+                continue
             try:
                 # Initialize pipeline data structure for this network
                 input_data = {
@@ -1658,58 +2210,101 @@ def DeployConfiguration(request):
                 # Check if network has devices with credentials
                 has_devices = devices.exists() and (input_data["devices"]["v1_v2c"] or input_data["devices"]["v3"])
 
-                # Only create main discovery pipeline if there are devices
-                if has_devices:
-                    # Generate components for this network
-                    input_components, oid_mappings = _generate_input(input_data)
-                    filter_components = _generate_filters(oid_mappings, network)
-
-                    components = {
-                        "input": input_components,
-                        "filter": filter_components,
-                        "output": _generate_output(input_data, network, snmp_type="polling")
-                    }
-
-                    # Generate pipeline configuration
-                    pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
-                    pipeline_name = _get_pipeline_name(network)
-
-                    # Use helper function to create or update the pipeline
-                    success, is_new, error, was_updated = _create_or_update_pipeline(
-                        es,
-                        pipeline_name,
-                        pipeline_content,
-                        description=f"[MANAGED] SNMP pipeline for network: {network.name}"
-                    )
-
-                    if success:
-                        if is_new:
-                            pipelines_created += 1
-                            logger.info(f"Created new pipeline: {pipeline_name}")
-                        elif was_updated:
-                            pipelines_updated += 1
-                            logger.info(f"Updated pipeline: {pipeline_name}")
-                        else:
-                            logger.info(f"Pipeline {pipeline_name} unchanged - skipped")
-                    else:
-                        errors.append(f"Network '{network.name}': {error}")
-                        logger.error(f"Failed to create/update pipeline {pipeline_name}: {error}")
-                        continue
-                else:
-                    # Network has no devices - delete main pipeline if it exists
+                # Delete old legacy single-pipeline format if it exists
+                try:
+                    old_pipeline_name = _get_pipeline_name(network)
                     try:
-                        pipeline_name = _get_pipeline_name(network)
-                        try:
-                            existing = es.logstash.get_pipeline(id=pipeline_name)
-                            if pipeline_name in existing:
-                                # Pipeline exists, delete it
-                                es.logstash.delete_pipeline(id=pipeline_name)
-                                pipelines_deleted += 1
-                        except Exception:
-                            # Pipeline doesn't exist, that's okay
-                            pass
-                    except Exception as delete_e:
-                        errors.append(f"Network '{network.name}' main pipeline deletion: {str(delete_e)}")
+                        existing = es.logstash.get_pipeline(id=old_pipeline_name)
+                        if old_pipeline_name in existing:
+                            # Legacy pipeline exists, delete it
+                            es.logstash.delete_pipeline(id=old_pipeline_name)
+                            pipelines_deleted += 1
+                            logger.info(f"Deleted legacy pipeline: {old_pipeline_name}")
+                    except Exception:
+                        # Pipeline doesn't exist, that's okay
+                        pass
+                except Exception as delete_e:
+                    logger.warning(f"Error checking for legacy pipeline: {str(delete_e)}")
+
+                # Generate per-template pipelines if network has devices
+                if has_devices:
+                    # Get unique templates for this network
+                    templates = _get_unique_templates_for_network(devices)
+                    
+                    # Generate a pipeline for each template
+                    for template in templates:
+                        template_id = template.id if template else None
+                        template_name = template.name if template else 'no-template'
+                        
+                        # Initialize pipeline data for this template
+                        template_input_data = {
+                            "network": network,
+                            "devices": {
+                                "v1_v2c": {},
+                                "v3": {}
+                            },
+                            "connection": network.connection
+                        }
+                        
+                        # Collect devices for this template
+                        for device in devices:
+                            if not device.credential:
+                                continue
+                            
+                            # Skip devices that don't match this template
+                            device_template_id = device.device_template.id if device.device_template else None
+                            if device_template_id != template_id:
+                                continue
+                            
+                            credential = device.credential
+                            
+                            # Group v1 and v2c together
+                            if credential.version in ['1', '2c']:
+                                template_input_data["devices"]["v1_v2c"][device.name] = device
+                            # Group v3 devices
+                            elif credential.version == '3':
+                                template_input_data["devices"]["v3"][device.name] = device
+                        
+                        # Skip if no devices for this template
+                        if not (template_input_data["devices"]["v1_v2c"] or template_input_data["devices"]["v3"]):
+                            continue
+                        
+                        # Generate components for this template
+                        input_components, oid_mappings, normalizers = _generate_input(
+                            template_input_data, template_filter=template_id
+                        )
+                        filter_components = _generate_filters(oid_mappings, network, normalizers, input_data=template_input_data)
+
+                        components = {
+                            "input": input_components,
+                            "filter": filter_components,
+                            "output": _generate_output(network, snmp_type="polling", device_template=template)
+                        }
+
+                        # Generate pipeline configuration
+                        pipeline_content = ComponentToPipeline(components, test=False).components_to_logstash_config()
+                        pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+
+                        # Use helper function to create or update the pipeline
+                        success, is_new, error, was_updated = _create_or_update_pipeline(
+                            es,
+                            pipeline_name,
+                            pipeline_content,
+                            description=f"[MANAGED] SNMP polling pipeline for network: {network.name}, template: {template_name}"
+                        )
+
+                        if success:
+                            if is_new:
+                                pipelines_created += 1
+                                logger.info(f"Created new pipeline: {pipeline_name}")
+                            elif was_updated:
+                                pipelines_updated += 1
+                                logger.info(f"Updated pipeline: {pipeline_name}")
+                            else:
+                                logger.info(f"Pipeline {pipeline_name} unchanged - skipped")
+                        else:
+                            errors.append(f"Network '{network.name}', template '{template_name}': {error}")
+                            logger.error(f"Failed to create/update pipeline {pipeline_name}: {error}")
 
                 # Handle SNMP Trap pipeline if traps are enabled
                 if network.traps_enabled:
@@ -1718,60 +2313,11 @@ def DeployConfiguration(request):
                     else:
                         try:
                             # Generate trap pipeline name
-                            trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                            trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
 
-                            # Build trap input configuration
-                            credential = network.credential
-                            trap_input_config = {
-                                "host": "0.0.0.0",
-                                "port": 1662,
-                                "oid_map_field_values": False,
-                                "oid_mapping_format": "dotted_string",
-                                "supported_versions": []
-                            }
-
-                            # Add version-specific configuration
-                            if credential.version in ['1', '2c']:
-                                trap_input_config["supported_versions"].append(credential.version)
-                                if credential.community:
-                                    trap_input_config["community"] = [decrypt_credential(credential.community)]
-                            elif credential.version == '3':
-                                trap_input_config["supported_versions"].append("3")
-                                if credential.security_name:
-                                    trap_input_config["security_name"] = credential.security_name
-                                if credential.auth_protocol:
-                                    trap_input_config["auth_protocol"] = credential.auth_protocol
-                                if credential.auth_pass:
-                                    trap_input_config["auth_pass"] = decrypt_credential(credential.auth_pass)
-                                if credential.priv_protocol:
-                                    trap_input_config["priv_protocol"] = credential.priv_protocol
-                                if credential.priv_pass:
-                                    trap_input_config["priv_pass"] = decrypt_credential(credential.priv_pass)
-                                if credential.security_level:
-                                    trap_input_config["security_level"] = credential.security_level
-
-                            # Build trap pipeline components
-                            trap_components = {
-                                "input": [{
-                                    "id": "input_snmptrap_1",
-                                    "type": "input",
-                                    "plugin": "snmptrap",
-                                    "config": trap_input_config
-                                }],
-                                "filter": [
-                                    {
-                                        "id": "filter_mutate_trap_1",
-                                        "type": "filter",
-                                        "plugin": "mutate",
-                                        "config": {
-                                            "add_field": {
-                                                "[event][kind]": "traps"
-                                            }
-                                        }
-                                    }
-                                ],
-                                "output": _generate_output(input_data, network, snmp_type="traps")
-                            }
+                            # Build trap pipeline components (keystore vs inline
+                            # credentials decided by the network's mode).
+                            trap_components = _build_trap_components(network)
 
                             # Generate trap pipeline configuration
                             trap_pipeline_content = ComponentToPipeline(trap_components,
@@ -1799,7 +2345,7 @@ def DeployConfiguration(request):
                 else:
                     # Traps are disabled, check if trap pipeline exists and delete it
                     try:
-                        trap_pipeline_name = f"snmp-{network.logstash_name}-traps"
+                        trap_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps"
 
                         # Check if pipeline exists
                         try:
@@ -1821,7 +2367,7 @@ def DeployConfiguration(request):
                     else:
                         try:
                             # Generate discovery pipeline name
-                            discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                            discovery_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery"
 
                             # Generate discovery pipeline components
                             discovery_input_components, discovery_oid_mappings = _generate_discovery_input(network)
@@ -1830,7 +2376,7 @@ def DeployConfiguration(request):
                             discovery_components = {
                                 "input": discovery_input_components,
                                 "filter": discovery_filter_components,
-                                "output": _generate_output(input_data, network, snmp_type="discovery")
+                                "output": _generate_output(network, snmp_type="discovery")
                             }
 
                             # Generate discovery pipeline configuration
@@ -1860,7 +2406,7 @@ def DeployConfiguration(request):
                 else:
                     # Discovery is disabled, check if discovery pipeline exists and delete it
                     try:
-                        discovery_pipeline_name = f"snmp-{network.logstash_name}-discovery"
+                        discovery_pipeline_name = f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery"
 
                         # Check if pipeline exists
                         try:
@@ -1885,19 +2431,29 @@ def DeployConfiguration(request):
             # Build a set of expected pipeline names
             expected_pipelines = set()
             for network in networks:
+                if network.deployment_mode == 'AGENT':
+                    continue
                 if network.connection:
-                    # Add main pipeline
-                    expected_pipelines.add(_get_pipeline_name(network))
+                    # Add per-template polling pipelines
+                    devices = Device.objects.filter(network=network).select_related('device_template')
+                    if devices.exists():
+                        templates = _get_unique_templates_for_network(devices)
+                        for template in templates:
+                            pipeline_name = _get_template_pipeline_name(network, template, 'polling')
+                            expected_pipelines.add(pipeline_name)
+                    
                     # Add trap pipeline if traps are enabled
                     if network.traps_enabled:
-                        expected_pipelines.add(f"snmp-{network.logstash_name}-traps")
+                        expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
                     # Add discovery pipeline if discovery is enabled
                     if network.discovery_enabled:
-                        expected_pipelines.add(f"snmp-{network.logstash_name}-discovery")
+                        expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
 
             # Get all pipelines from Elasticsearch for each connection
             connections_checked = set()
             for network in networks:
+                if network.deployment_mode == 'AGENT':
+                    continue
                 if network.connection and network.connection.id not in connections_checked:
                     connections_checked.add(network.connection.id)
                     try:
@@ -1927,8 +2483,23 @@ def DeployConfiguration(request):
         except Exception as cleanup_err:
             errors.append(f"Pipeline cleanup error: {str(cleanup_err)}")
 
+        # Deploy Agent-mode networks to Django Pipeline/Keystore records
+        keystore_changed = 0
+        try:
+            agent_diffs = _compute_agent_network_diffs(networks)
+            if agent_diffs:
+                agent_result = _deploy_agent_diffs(agent_diffs)
+                pipelines_created += agent_result['created']
+                pipelines_updated += agent_result['updated']
+                pipelines_deleted += agent_result['deleted']
+                keystore_changed += agent_result.get('keystore_changed', 0)
+                errors.extend(agent_result['errors'])
+        except Exception as agent_err:
+            errors.append(f"Agent deployment error: {str(agent_err)}")
+
         # Build response message
-        if pipelines_created == 0 and pipelines_updated == 0 and pipelines_deleted == 0:
+        if (pipelines_created == 0 and pipelines_updated == 0
+                and pipelines_deleted == 0 and keystore_changed == 0):
             if errors:
                 return JsonResponse({
                     'success': False,
@@ -1952,11 +2523,20 @@ def DeployConfiguration(request):
             message_parts.append(f"{pipelines_updated} pipeline(s) updated")
         if pipelines_deleted > 0:
             message_parts.append(f"{pipelines_deleted} pipeline(s) deleted")
+        if keystore_changed > 0:
+            message_parts.append(f"{keystore_changed} keystore value(s) updated")
 
         message = "Successfully deployed: " + ", ".join(message_parts)
 
         if errors:
             message += f". Warnings: {'; '.join(errors)}"
+
+        # Mark deployment as successful to clear the indicator
+        from django.utils import timezone
+        state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+        state.last_deployment = timezone.now()
+        state.save(update_fields=['last_deployment'])
+        logger.info("Deployment completed successfully - updated deployment timestamp")
 
         return JsonResponse({
             'success': True,
@@ -1975,61 +2555,6 @@ def DeployConfiguration(request):
         }, status=500)
 
 
-@require_admin_role
-def GenerateDeployConfiguration(request):
-    """Deploy SNMP configuration - builds and deploys Logstash pipelines"""
-    try:
-        # Query all networks
-        networks = Network.objects.all()
-        components = {
-            "input": [],
-            "filter": [],
-            "output": []
-        }
-
-        # Iterate through each network and build pipeline configuration
-        for network in networks:
-            # Initialize pipeline data structure for this network
-            input_data = {
-                "network": network,
-                "devices": {
-                    "v1_v2c": {},
-                    "v3": {}
-                },
-                "connection": network.connection
-            }
-
-            # Get all devices for this network
-            devices = Device.objects.filter(network=network).select_related('credential')
-
-            for device in devices:
-                if not device.credential:
-                    continue
-
-                credential = device.credential
-
-                # Group v1 and v2c together
-                if credential.version in ['1', '2c']:
-                    input_data["devices"]["v1_v2c"][device.name] = device
-
-                # Group v3 devices
-                elif credential.version == '3':
-                    input_data["devices"]["v3"][device.name] = device
-
-            # Generate inputs
-            components["input"] = _generate_input(input_data)
-            components["output"] = _generate_output(input_data, network, snmp_type="polling")
-
-            logstash_config = ComponentToPipeline(components, test=False).components_to_logstash_config()
-
-        return JsonResponse({
-            'success': True,
-            'message': f'Configuration deployment initiated for {networks.count()} network(s).'
-        })
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
-
 
 # ============================================================================
 # Device API Endpoints
@@ -2047,16 +2572,17 @@ def GetDevices(request):
 
         # Start with all devices - only fetch needed fields for performance
         queryset = Device.objects.select_related('credential', 'network', 'device_template').only(
-            'id', 'name', 'ip_address', 'port', 'retries', 'timeout', 'created_at',
+            'id', 'name', 'ip_address', 'hostname', 'port', 'retries', 'timeout', 'created_at',
+            'site', 'building', 'room',
             'credential__id', 'credential__name',
-            'network__id', 'network__name',
+            'network__id', 'network__name', 'network__deployment_mode',
             'device_template__id', 'device_template__name'
         )
 
-        # Apply search filter (name or IP address)
+        # Apply search filter (name, IP address, or hostname)
         if search:
             queryset = queryset.filter(
-                Q(name__icontains=search) | Q(ip_address__icontains=search)
+                Q(name__icontains=search) | Q(ip_address__icontains=search) | Q(hostname__icontains=search)
             )
 
         # Apply network filter
@@ -2064,7 +2590,7 @@ def GetDevices(request):
             queryset = queryset.filter(network_id=network_filter)
 
         # Apply sorting
-        valid_sort_fields = ['name', '-name', 'ip_address', '-ip_address', 'created_at', '-created_at']
+        valid_sort_fields = ['name', '-name', 'ip_address', '-ip_address', 'hostname', '-hostname', 'created_at', '-created_at']
         if sort_by in valid_sort_fields:
             queryset = queryset.order_by(sort_by)
 
@@ -2095,6 +2621,7 @@ def GetDevices(request):
                 'id': device.id,
                 'name': device.name,
                 'ip_address': device.ip_address,
+                'hostname': device.hostname,
                 'port': device.port,
                 'retries': device.retries,
                 'timeout': device.timeout,
@@ -2102,8 +2629,13 @@ def GetDevices(request):
                 'credential_name': device.credential.name if device.credential else None,
                 'network_id': device.network.id if device.network else None,
                 'network_name': device.network.name if device.network else None,
+                'network_deployment_mode': device.network.deployment_mode if device.network else None,
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
+                'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
+                'site': device.site,
+                'building': device.building,
+                'room': device.room,
                 'created_at': device.created_at.isoformat(),
             })
 
@@ -2121,13 +2653,45 @@ def GetDevices(request):
         return HttpResponse(f"Error fetching devices: {str(e)}", status=500)
 
 
+def FindDeviceByHost(request):
+    """Find a device by exact ip_address, hostname, or name match. Returns device details or null."""
+    host = request.GET.get('host', '').strip()
+    if not host:
+        return JsonResponse({'device': None}, status=200)
+    try:
+        device = Device.objects.select_related('credential', 'network', 'device_template').filter(
+            Q(ip_address=host) | Q(hostname=host) | Q(name=host)
+        ).first()
+        if not device:
+            return JsonResponse({'device': None}, status=200)
+        return JsonResponse({
+            'device': {
+                'id':                   device.id,
+                'name':                 device.name,
+                'ip_address':           device.ip_address or '',
+                'hostname':             device.hostname or '',
+                'port':                 device.port,
+                'credential_id':        device.credential.id   if device.credential   else None,
+                'credential_name':      device.credential.name if device.credential   else None,
+                'network_id':           device.network.id      if device.network       else None,
+                'network_name':         device.network.name    if device.network       else None,
+                'device_template_id':   device.device_template.id   if device.device_template else None,
+                'device_template_name': device.device_template.name if device.device_template else None,
+                'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
+            }
+        }, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 @require_admin_role
 def AddDevice(request):
     """Add a new SNMP device"""
     try:
         # Extract form data
         name = request.POST.get('name')
-        ip_address = request.POST.get('ip_address')
+        ip_address = request.POST.get('ip_address') or None
+        hostname = request.POST.get('hostname') or None
         port = request.POST.get('port', 161)
         retries = request.POST.get('retries', 2)
         timeout = request.POST.get('timeout', 1000)
@@ -2140,6 +2704,7 @@ def AddDevice(request):
         device = Device(
             name=name,
             ip_address=ip_address,
+            hostname=hostname,
             port=int(port) if port else 161,
             retries=int(retries) if retries else 2,
             timeout=int(timeout) if timeout else 1000
@@ -2153,8 +2718,27 @@ def AddDevice(request):
         if device_template_id:
             device.device_template_id = device_template_id
 
+        # Location fields
+        device.site = request.POST.get('site') or None
+        device.building = request.POST.get('building') or None
+        device.room = request.POST.get('room') or None
+        _lat = request.POST.get('latitude') or None
+        _lon = request.POST.get('longitude') or None
+        device.latitude = round(float(_lat), 6) if _lat else None
+        device.longitude = round(float(_lon), 6) if _lon else None
+
+        # Metadata JSON blob
+        metadata_raw = request.POST.get('metadata', '{}')
+        try:
+            device.metadata = json.loads(metadata_raw) if metadata_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            device.metadata = {}
+
         # Save (this will trigger validation)
         device.save()
+        
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
 
         # Note: Profiles are now managed through device templates, not directly on devices
         # The device_template relationship handles profile assignment
@@ -2178,7 +2762,8 @@ def UpdateDevice(request, device_id):
 
         # Update fields
         device.name = request.POST.get('name', device.name)
-        device.ip_address = request.POST.get('ip_address', device.ip_address)
+        device.ip_address = request.POST.get('ip_address') or None
+        device.hostname = request.POST.get('hostname') or None
         port = request.POST.get('port')
         if port:
             device.port = int(port)
@@ -2208,8 +2793,25 @@ def UpdateDevice(request, device_id):
         else:
             device.device_template = None
 
+        # Location fields
+        device.site = request.POST.get('site') or None
+        device.building = request.POST.get('building') or None
+        device.room = request.POST.get('room') or None
+        device.latitude = request.POST.get('latitude') or None
+        device.longitude = request.POST.get('longitude') or None
+
+        # Metadata JSON blob
+        metadata_raw = request.POST.get('metadata', '{}')
+        try:
+            device.metadata = json.loads(metadata_raw) if metadata_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            device.metadata = {}
+
         # Save (this will trigger validation)
         device.save()
+        
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
 
         # Note: Profiles are now managed through device templates, not directly on devices
         # The device_template relationship handles profile assignment
@@ -2227,6 +2829,50 @@ def UpdateDevice(request, device_id):
         return HttpResponse(f"Error updating device: {str(e)}", status=500)
 
 
+def GetDeviceLocationData(request):
+    """
+    Return aggregated location data from all devices so the modal can build
+    hierarchical combobox suggestions without a dedicated location table.
+
+    Response shape:
+      {
+        "sites":         ["HQ", ...],                              # all unique non-null site values
+        "site_building": [{"site": "HQ", "building": "Bld A"}, ...]  # all (site, building) pairs
+        "full":          [{"site":…, "building":…, "room":…, "latitude":…, "longitude":…}, ...]
+      }
+    """
+    sites = list(
+        Device.objects
+        .exclude(site__isnull=True).exclude(site='')
+        .values_list('site', flat=True)
+        .distinct()
+        .order_by('site')
+    )
+
+    site_building = list(
+        Device.objects
+        .exclude(building__isnull=True).exclude(building='')
+        .values('site', 'building')
+        .distinct()
+        .order_by('site', 'building')
+    )
+
+    full = list(
+        Device.objects
+        .exclude(room__isnull=True).exclude(room='')
+        .values('site', 'building', 'room', 'latitude', 'longitude')
+        .distinct()
+        .order_by('site', 'building', 'room')
+    )
+
+    # Coerce Decimal to str so JsonResponse can serialise them
+    for entry in full:
+        entry['latitude'] = str(entry['latitude']) if entry['latitude'] is not None else None
+        entry['longitude'] = str(entry['longitude']) if entry['longitude'] is not None else None
+
+    return JsonResponse({'sites': sites, 'site_building': site_building, 'full': full})
+
+
 def GetDevice(request, device_id):
     """Get a single device"""
     try:
@@ -2236,12 +2882,19 @@ def GetDevice(request, device_id):
             'id': device.id,
             'name': device.name,
             'ip_address': device.ip_address,
+            'hostname': device.hostname,
             'port': device.port,
             'retries': device.retries,
             'timeout': device.timeout,
             'credential': device.credential_id if device.credential else None,
             'network': device.network_id if device.network else None,
             'device_template': device.device_template_id if device.device_template else None,
+            'site': device.site,
+            'building': device.building,
+            'room': device.room,
+            'latitude': str(device.latitude) if device.latitude is not None else None,
+            'longitude': str(device.longitude) if device.longitude is not None else None,
+            'metadata': device.metadata,
         }
 
         return JsonResponse(data)
@@ -2258,6 +2911,9 @@ def DeleteDevice(request, device_id):
     try:
         device = Device.objects.get(pk=device_id)
         device.delete()
+        
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
 
         return HttpResponse("""
             <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
@@ -2278,6 +2934,26 @@ def DeleteDevice(request, device_id):
 
 # ==================== Profile API Endpoints ====================
 
+def GetNormalizerDefinitions(request):
+    """Get normalizer definitions from JSON file"""
+    try:
+        normalizers_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'normalizers.json')
+        
+        if not os.path.exists(normalizers_path):
+            return JsonResponse({'success': False, 'message': 'Normalizers file not found'}, status=404)
+        
+        with open(normalizers_path, 'r') as f:
+            normalizers = json.load(f)
+        
+        return JsonResponse({
+            'success': True,
+            'normalizers': normalizers
+        }, status=200)
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
 def GetOfficialProfile(request, profile_name):
     """Get an official profile from JSON file"""
     try:
@@ -2290,13 +2966,16 @@ def GetOfficialProfile(request, profile_name):
         with open(profile_path, 'r') as f:
             profile_data = json.load(f)
 
+        resolved_name = profile_data.get('name', profile_name)
         return JsonResponse({
             'success': True,
-            'name': profile_data.get('name', profile_name),
+            'name': resolved_name,
+            'display_name': format_display_name(resolved_name),
             'description': profile_data.get('description', ''),
             'vendor': profile_data.get('vendor', ''),
             'product': profile_data.get('product', ''),
-            'profile_data': profile_data
+            'profile_data': profile_data,
+            'normalizers': profile_data.get('normalizers', [])
         }, status=200)
 
     except Exception as e:
@@ -2310,10 +2989,12 @@ def GetProfile(request, profile_name):
         return JsonResponse({
             'success': True,
             'name': profile.name,
+            'display_name': format_display_name(profile.name),
             'description': profile.description,
             'vendor': profile.vendor,
             'product': profile.product,
-            'profile_data': profile.profile_data
+            'profile_data': profile.profile_data,
+            'normalizers': profile.normalizers
         }, status=200)
 
     except Profile.DoesNotExist:
@@ -2333,6 +3014,7 @@ def AddProfile(request):
         vendor = data.get('vendor', '')
         product = data.get('product', '')
         profile_data = data.get('profile_data', {})
+        normalizers = data.get('normalizers', [])
 
         # Validate required fields
         if not name:
@@ -2348,9 +3030,11 @@ def AddProfile(request):
             description=description,
             vendor=vendor,
             product=product,
-            profile_data=profile_data
+            profile_data=profile_data,
+            normalizers=normalizers
         )
         profile.save()
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -2379,6 +3063,7 @@ def UpdateProfile(request, profile_name):
         profile.vendor = data.get('vendor', profile.vendor)
         profile.product = data.get('product', profile.product)
         profile.profile_data = data.get('profile_data', profile.profile_data)
+        profile.normalizers = data.get('normalizers', profile.normalizers)
 
         # If name changed, check for conflicts
         if new_name != profile.name:
@@ -2388,6 +3073,7 @@ def UpdateProfile(request, profile_name):
             profile.name = new_name
 
         profile.save()
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -2415,6 +3101,7 @@ def DeleteProfile(request, profile_name):
 
         profile = Profile.objects.get(name=profile_name)
         profile.delete()
+        SNMPDeploymentState.mark_config_changed()
 
         return JsonResponse({
             'success': True,
@@ -2436,17 +3123,11 @@ def GetAllProfiles(request):
         for profile in Profile.objects.all():
             # Determine if it's an official profile (name ends with .json)
             is_official = profile.name.endswith('.json')
-            
-            # Create friendly display name for official profiles
-            if is_official:
-                display_name = profile.name[:-5].replace('_', ' ').title()
-            else:
-                display_name = profile.name
-            
+
             all_profiles.append({
                 'id': profile.id,  # Always use database ID
                 'name': profile.name,
-                'display_name': display_name,
+                'display_name': format_display_name(profile.name),
                 'is_official': is_official,
                 'vendor': profile.vendor or ''
             })
@@ -2458,6 +3139,20 @@ def GetAllProfiles(request):
 
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+def _device_host_filter(device):
+    """Return an ES filter matching a device by its SNMP poll address.
+
+    The polling pipeline records the raw address used to reach the device in
+    ``host.polled_address`` (the hostname when one is configured, otherwise the
+    IP).  Querying this single field is simpler and more reliable than checking
+    both ``host.ip`` and ``host.hostname``.
+    """
+    identifier = device.hostname or device.ip_address
+    if not identifier:
+        return {"match_none": {}}
+    return {"term": {"host.polled_address": identifier}}
 
 
 def GetDevicesStatus(request):
@@ -2586,26 +3281,28 @@ def GetDeviceVisualization(request, device_id):
 def GetDiscoveredDevices(request):
     """
     Query Elasticsearch for discovered devices from logs-snmp.discovery-* indices.
-    Aggregates by host.name and returns top hits from the last 2 hours.
+    Aggregates by host.ip and returns top hits from the last 15 minutes.
     """
     try:
 
-        # Get all connections
-        connections = Connection.objects.all()
+        # Only query connections that are assigned to SNMP networks
+        connection_ids = Network.objects.filter(
+            connection__isnull=False
+        ).values_list('connection_id', flat=True).distinct()
+        connections = Connection.objects.filter(id__in=connection_ids)
 
         if not connections.exists():
             return JsonResponse({
                 'success': False,
-                'error': 'No Elasticsearch connections configured'
+                'error': 'No Elasticsearch connections associated with SNMP networks'
             }, status=400)
 
         all_discovered_devices = []
         errors = []
 
-        # Calculate time range (last 2 hours)
+        # Calculate time range (last 15 minutes — matches device online status threshold)
         now = datetime.now(timezone.utc)
-        ten_minutes_ago = now - timedelta(minutes=10)
-        #two_hours_ago = now - timedelta(hours=2)
+        fifteen_minutes_ago = now - timedelta(minutes=15)
 
         # Query each connection for discovered devices
         for connection in connections:
@@ -2621,7 +3318,7 @@ def GetDiscoveredDevices(request):
                                 {
                                     "range": {
                                         "@timestamp": {
-                                            "gte": ten_minutes_ago.isoformat(),
+                                            "gte": fifteen_minutes_ago.isoformat(),
                                             "lte": now.isoformat()
                                         }
                                     }
@@ -2632,7 +3329,7 @@ def GetDiscoveredDevices(request):
                     "aggs": {
                         "devices_by_host": {
                             "terms": {
-                                "field": "host.name",
+                                "field": "host.ip",
                                 "size": 1000
                             },
                             "aggs": {
@@ -2648,12 +3345,12 @@ def GetDiscoveredDevices(request):
                                         ],
                                         "_source": {
                                             "includes": [
-                                                "host.name",
+                                                "host.sysname",
                                                 "host.hostname",
                                                 "host.ip",
                                                 "network.name",
                                                 "@timestamp",
-                                                "host.description"
+                                                "observer.sys_descr"
                                             ]
                                         }
                                     }
@@ -2705,28 +3402,26 @@ def GetDiscoveredDevices(request):
                                     except Exception as e:
                                         logger.warning(f"Could not query network '{network_name}': {str(e)}")
 
-                                # Get suggested device template based on host.description (sysDescr)
-                                host_description = source.get('host', {}).get('description', '')
+                                # Get suggested device template based on observer.sys_descr (sysDescr)
+                                sys_descr = source.get('observer', {}).get('sys_descr', '')
                                 suggested_template_ids = []
                                 suggested_template_name = None
                                 
-                                if host_description:
-                                    from .views import suggest_device_template
-                                    suggested_template_ids = suggest_device_template(host_description)
+                                if sys_descr:
+                                    suggested_template_ids = suggest_device_template(sys_descr)
                                     
                                     # Get the name of the first (best) suggested template
                                     if suggested_template_ids:
                                         try:
-                                            from .models import DeviceTemplate
                                             best_template = DeviceTemplate.objects.get(id=suggested_template_ids[0])
                                             suggested_template_name = best_template.name.replace('_', ' ').title()
                                         except DeviceTemplate.DoesNotExist:
                                             pass
                                 
                                 device = {
-                                    'host_name': source.get('host', {}).get('name', 'Unknown'),
+                                    'host_name': source.get('host', {}).get('sysname', 'Unknown'),
                                     'host_hostname': source.get('host', {}).get('hostname', ''),
-                                    'host_description': host_description,
+                                    'sys_descr': sys_descr,
                                     'host_ip': source.get('host', {}).get('ip', ''),
                                     'network_name': network_name,
                                     'network_id': network_id,
@@ -2743,6 +3438,25 @@ def GetDiscoveredDevices(request):
                 errors.append(f"Connection '{connection.name}': {str(e)}")
                 continue
 
+        # Filter out devices already registered in the DB.
+        # A polled address lands in host.ip (when it's an IP) or host.hostname
+        # (when it's a hostname) — both stored in the Device model as ip_address
+        # and hostname respectively. Build one set covering all known addresses
+        # then drop any ES result that matches.
+        known_addresses = set(
+            Device.objects.exclude(ip_address='').exclude(ip_address__isnull=True)
+                          .values_list('ip_address', flat=True)
+        ) | set(
+            Device.objects.exclude(hostname='').exclude(hostname__isnull=True)
+                          .values_list('hostname', flat=True)
+        )
+
+        all_discovered_devices = [
+            d for d in all_discovered_devices
+            if d['host_ip'] not in known_addresses
+            and d['host_hostname'] not in known_addresses
+        ]
+
         return JsonResponse({
             'success': True,
             'devices': all_discovered_devices,
@@ -2751,7 +3465,7 @@ def GetDiscoveredDevices(request):
         })
 
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error in GetDiscoveredDevices")
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -2773,14 +3487,10 @@ def _get_device_interfaces(device, es_connection):
                             }
                         }
                     },
+                    _device_host_filter(device),
                     {
                         "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
-                    {
-                        "term": {
-                            "event.kind": "interfaces"
+                            "event.category": "interface"
                         }
                     }
                 ]
@@ -2789,7 +3499,7 @@ def _get_device_interfaces(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "table.ifDescr",
+                    "field": "interface.name",
                     "size": 1000
                 },
                 "aggregations": {
@@ -2809,7 +3519,7 @@ def _get_device_interfaces(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_if_doc']['hits']['hits']:
-            visualization_data['interfaces'].append(doc['_source']['table'])
+            visualization_data['interfaces'].append(doc['_source']['interface'])
 
     return visualization_data
 
@@ -2830,14 +3540,10 @@ def _get_device_metrics(device, es_connection):
                             }
                         }
                     },
+                    _device_host_filter(device),
                     {
                         "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
-                    {
-                        "term": {
-                            "event.kind": "metrics"
+                            "event.category": "metrics"
                         }
                     }
                 ]
@@ -2888,14 +3594,10 @@ def _get_device_fans(device, es_connection):
                             }
                         }
                     },
+                    _device_host_filter(device),
                     {
                         "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
-                    {
-                        "term": {
-                            "event.kind": "fans"
+                            "event.category": "fans"
                         }
                     }
                 ]
@@ -2904,14 +3606,14 @@ def _get_device_fans(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "table.description",
+                    "field": "fans.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_fan_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["table.state", "table.description"]
+                            "_source": ["fans.state", "fans.description"]
                         }
                     }
                 }
@@ -2925,7 +3627,7 @@ def _get_device_fans(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_fan_doc']['hits']['hits']:
-            visualization_data['fans'].append(doc['_source']['table'])
+            visualization_data['fans'].append(doc['_source']['fans'])
 
     return visualization_data
 
@@ -2946,14 +3648,10 @@ def _get_device_sensors(device, es_connection):
                             }
                         }
                     },
+                    _device_host_filter(device),
                     {
                         "term": {
-                            "host.hostname": device.ip_address
-                        }
-                    },
-                    {
-                        "term": {
-                            "event.kind": "sensors"
+                            "event.category": "sensors"
                         }
                     }
                 ]
@@ -2962,15 +3660,15 @@ def _get_device_sensors(device, es_connection):
         aggregations={
             "sensors": {
                 "terms": {
-                    "field": "table.description",
+                    "field": "sensors.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_sensor_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["table.state", "table.description", "table.temp_celsius",
-                                        "table.temp_threshold"]
+                            "_source": ["sensors.state", "sensors.description", "sensors.temp_celsius",
+                                        "sensors.temp_threshold"]
                         }
                     }
                 }
@@ -2984,7 +3682,355 @@ def _get_device_sensors(device, es_connection):
 
     for sensor in results['aggregations']['sensors']['buckets']:
         for doc in sensor['top_sensor_doc']['hits']['hits']:
-            visualization_data['sensors'].append(doc['_source']['table'])
+            visualization_data['sensors'].append(doc['_source']['sensors'])
+
+    return visualization_data
+
+
+def _get_device_cpu_cores(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    _device_host_filter(device),
+                    {
+                        "term": {
+                            "event.category": "component.cpu"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "cores": {
+                "terms": {
+                    "field": "component.cpu.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": ["component.cpu.index", "component.cpu.load_pct"]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "cores": []
+    }
+
+    for bucket in results['aggregations']['cores']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            cpu = doc['_source'].get('component', {}).get('cpu', {})
+            visualization_data['cores'].append({
+                "index": cpu.get('index', bucket['key']),
+                "load_pct": cpu.get('load_pct', 0)
+            })
+
+    # Sort cores by index so they render in a consistent order
+    visualization_data['cores'].sort(key=lambda c: int(c['index']) if str(c['index']).isdigit() else 0)
+
+    return visualization_data
+
+
+def _get_device_neighbors(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    _device_host_filter(device),
+                    {
+                        "term": {
+                            "event.category": "network.neighbor"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "neighbors": {
+                "terms": {
+                    "field": "network.neighbor.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "network.neighbor.index",
+                                "network.neighbor.device_id",
+                                "network.neighbor.port",
+                                "network.neighbor.platform",
+                                "network.neighbor.version",
+                                "network.neighbor.address",
+                                "network.neighbor.capabilities",
+                                "network.neighbor.local_interface"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "neighbors": []
+    }
+
+    for bucket in results['aggregations']['neighbors']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            neighbor = doc['_source'].get('network', {}).get('neighbor', {})
+            visualization_data['neighbors'].append({
+                "index": neighbor.get('index', bucket['key']),
+                "device_id": neighbor.get('device_id', ''),
+                "port": neighbor.get('port', ''),
+                "platform": neighbor.get('platform', ''),
+                "version": neighbor.get('version', ''),
+                "address": neighbor.get('address', ''),
+                "capabilities": neighbor.get('capabilities', ''),
+                "local_interface": neighbor.get('local_interface', {})
+            })
+
+    visualization_data['neighbors'].sort(key=lambda n: n['device_id'].lower())
+
+    return visualization_data
+
+
+def _get_device_wireless_radios(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    _device_host_filter(device),
+                    {
+                        "term": {
+                            "event.category": "wireless.radio"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "radios": {
+                "terms": {
+                    "field": "wireless.radio.index",
+                    "size": 100
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "wireless.radio.index",
+                                "wireless.radio.name",
+                                "wireless.radio.band",
+                                "wireless.radio.channel",
+                                "wireless.radio.in_bytes",
+                                "wireless.radio.out_bytes",
+                                "wireless.radio.out_discards",
+                                "wireless.radio.out_errors"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "radios": []
+    }
+
+    for bucket in results['aggregations']['radios']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            radio = doc['_source'].get('wireless', {}).get('radio', {})
+            visualization_data['radios'].append({
+                "index": radio.get('index', bucket['key']),
+                "name": radio.get('name', ''),
+                "band": radio.get('band', ''),
+                "channel": radio.get('channel', ''),
+                "in_bytes": radio.get('in_bytes', 0),
+                "out_bytes": radio.get('out_bytes', 0),
+                "out_discards": radio.get('out_discards', 0),
+                "out_errors": radio.get('out_errors', 0)
+            })
+
+    visualization_data['radios'].sort(key=lambda r: int(r['index']) if str(r['index']).isdigit() else 0)
+
+    return visualization_data
+
+
+def _get_device_filesystems(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    _device_host_filter(device),
+                    {
+                        "term": {
+                            "event.category": "system.filesystem"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "filesystems": {
+                "terms": {
+                    "field": "system.filesystem.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "system.filesystem.index",
+                                "system.filesystem.mount_point",
+                                "system.filesystem.type",
+                                "system.filesystem.used.pct",
+                                "system.filesystem.used.bytes",
+                                "system.filesystem.total.bytes",
+                                "system.filesystem.allocation_units"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "filesystems": []
+    }
+
+    for bucket in results['aggregations']['filesystems']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            fs = doc['_source'].get('system', {}).get('filesystem', {})
+            visualization_data['filesystems'].append({
+                "index": fs.get('index', bucket['key']),
+                "mount_point": fs.get('mount_point', ''),
+                "type": fs.get('type', ''),
+                "used_pct": fs.get('used', {}).get('pct', 0),
+                "used_bytes": fs.get('used', {}).get('bytes', 0),
+                "total_bytes": fs.get('total', {}).get('bytes', 0),
+                "allocation_units": fs.get('allocation_units', 0)
+            })
+
+    visualization_data['filesystems'].sort(key=lambda f: f['mount_point'])
+
+    return visualization_data
+
+
+def _get_device_printer_supplies(device, es_connection):
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    _device_host_filter(device),
+                    {
+                        "term": {
+                            "event.category": "printer.supply"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "supplies": {
+                "terms": {
+                    "field": "printer.supply.index",
+                    "size": 1000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "printer.supply.index",
+                                "printer.supply.description",
+                                "printer.supply.level",
+                                "printer.supply.capacity_max",
+                                "printer.supply.unit"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "supplies": []
+    }
+
+    for bucket in results['aggregations']['supplies']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            supply = doc['_source'].get('printer', {}).get('supply', {})
+            visualization_data['supplies'].append({
+                "index": supply.get('index', bucket['key']),
+                "description": supply.get('description', ''),
+                "level": supply.get('level', 0),
+                "capacity_max": supply.get('capacity_max', 100),
+                "unit": supply.get('unit', 0)
+            })
+
+    visualization_data['supplies'].sort(key=lambda s: s['description'].lower())
 
     return visualization_data
 
@@ -3000,8 +4046,18 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)
     if "fans" in visualizations:
         visualization_data['fans'] = _get_device_fans(device, es_connection)
-    if "interfaces" in visualizations:
+    if "interface" in visualizations:
         visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)
+    if "component.cpu" in visualizations:
+        visualization_data['cpu_cores'] = _get_device_cpu_cores(device, es_connection)
+    if "network.neighbor" in visualizations:
+        visualization_data['neighbors'] = _get_device_neighbors(device, es_connection)
+    if "wireless.radio" in visualizations:
+        visualization_data['wireless_radios'] = _get_device_wireless_radios(device, es_connection)
+    if "system.filesystem" in visualizations:
+        visualization_data['filesystems'] = _get_device_filesystems(device, es_connection)
+    if "printer.supply" in visualizations:
+        visualization_data['printer_supplies'] = _get_device_printer_supplies(device, es_connection)
 
     return visualization_data
 
@@ -3037,12 +4093,18 @@ def get_devices_online_batch(devices):
         try:
             es = get_elastic_connection(connection_id)
 
-            # Build list of IP addresses to check
-            ip_addresses = [device.ip_address for device in device_list]
+            # Each device is polled by hostname (if set) or IP - that value is
+            # stored verbatim in host.polled_address
+            poll_addresses = [d.hostname or d.ip_address for d in device_list if d.hostname or d.ip_address]
+            addr_to_device = {(d.hostname or d.ip_address): d for d in device_list if d.hostname or d.ip_address}
 
-            # Single query checking all IPs at once
+            if not poll_addresses:
+                for device in device_list:
+                    results[device.id] = False
+                continue
+
             search_results = es.search(
-                size=0,  # We only need aggregations, not actual documents
+                size=0,
                 query={
                     "bool": {
                         "filter": [
@@ -3055,7 +4117,7 @@ def get_devices_online_batch(devices):
                             },
                             {
                                 "terms": {
-                                    "host.hostname": ip_addresses
+                                    "host.polled_address": poll_addresses
                                 }
                             }
                         ]
@@ -3064,22 +4126,21 @@ def get_devices_online_batch(devices):
                 aggregations={
                     "online_devices": {
                         "terms": {
-                            "field": "host.hostname",
-                            "size": len(ip_addresses)
+                            "field": "host.polled_address.keyword",
+                            "size": len(poll_addresses)
                         }
                     }
                 }
             )
 
-            # Extract which IPs have data (are online)
-            online_ips = set()
+            online_addresses = set()
             if 'aggregations' in search_results and 'online_devices' in search_results['aggregations']:
                 for bucket in search_results['aggregations']['online_devices']['buckets']:
-                    online_ips.add(bucket['key'])
+                    online_addresses.add(bucket['key'])
 
-            # Map back to device IDs
             for device in device_list:
-                results[device.id] = device.ip_address in online_ips
+                addr = device.hostname or device.ip_address
+                results[device.id] = addr in online_addresses if addr else False
 
         except Exception as e:
             # If query fails, mark all devices on this connection as offline
@@ -3129,18 +4190,14 @@ def decide_visualizations(device, es):
                                 }
                             }
                         },
-                        {
-                            "term": {
-                                "host.hostname": device.ip_address
-                            }
-                        }
+                        _device_host_filter(device)
                     ]
                 }
             },
             aggregations={
                 "data_kinds": {
                     "terms": {
-                        "field": "event.kind",
+                        "field": "event.category",
                         "size": 20
                     }
                 }
@@ -3188,8 +4245,10 @@ def GetOfficialDeviceTemplate(request, template_name):
                 # We'll just use the name as-is
                 profile_ids.append(profile_name)
 
+        resolved_name = template_data.get('name', template_name)
         return JsonResponse({
-            'name': template_data.get('name', template_name),
+            'name': resolved_name,
+            'display_name': format_display_name(resolved_name),
             'description': template_data.get('description', ''),
             'vendor': template_data.get('vendor', ''),
             'model': template_data.get('model', ''),
@@ -3213,9 +4272,11 @@ def GetDeviceTemplates(request):
             templates_list.append({
                 'id': template.id,
                 'name': template.name,
+                'display_name': format_display_name(template.name),
                 'vendor': template.vendor,
                 'model': template.model,
                 'product': template.product,
+                'type': template.type,
                 'official': template.official
             })
         
@@ -3236,7 +4297,7 @@ def GetDeviceTemplate(request, template_id):
                 {
                     'id': profile.id,
                     'name': profile.name,
-                    'display_name': profile.name.replace('_', ' ').title() if profile.name.endswith('.json') else profile.name
+                    'display_name': format_display_name(profile.name)
                 }
                 for profile in template.profiles.all()
             ]
@@ -3248,10 +4309,12 @@ def GetDeviceTemplate(request, template_id):
             return JsonResponse({
                 'id': template.id,
                 'name': template.name,
+                'display_name': format_display_name(template.name),
                 'description': template.description,
                 'vendor': template.vendor,
                 'model': template.model,
                 'product': template.product,
+                'type': template.type,
                 'matching_rules': template.matching_rules,
                 'official': template.official,
                 'profiles': profiles_data
@@ -3263,6 +4326,7 @@ def GetDeviceTemplate(request, template_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def AddDeviceTemplate(request):
     """Add a new device template"""
     if request.method != 'POST':
@@ -3276,6 +4340,7 @@ def AddDeviceTemplate(request):
         vendor = request.POST.get('vendor')
         model = request.POST.get('model', '')
         product = request.POST.get('product', '')
+        type_value = request.POST.get('type', '')
         matching_rules_json = request.POST.get('matching_rules', '[]')
         profiles_json = request.POST.get('profiles', '[]')
         
@@ -3296,6 +4361,7 @@ def AddDeviceTemplate(request):
             vendor=vendor,
             model=model,
             product=product,
+            type=type_value,
             matching_rules=matching_rules,
             official=False
         )
@@ -3322,6 +4388,9 @@ def AddDeviceTemplate(request):
                     logger.warning(f"Profile with ID/name '{profile_id}' not found, skipping")
                     pass  # Skip profiles that don't exist
         
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
+        
         return JsonResponse({
             'success': True,
             'message': 'Device template created successfully',
@@ -3331,6 +4400,7 @@ def AddDeviceTemplate(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def UpdateDeviceTemplate(request, template_id):
     """Update an existing device template"""
     if request.method != 'POST':
@@ -3351,6 +4421,7 @@ def UpdateDeviceTemplate(request, template_id):
         template.vendor = request.POST.get('vendor', template.vendor)
         template.model = request.POST.get('model', template.model)
         template.product = request.POST.get('product', template.product)
+        template.type = request.POST.get('type', template.type)
         
         # Update matching rules
         matching_rules_json = request.POST.get('matching_rules')
@@ -3391,6 +4462,9 @@ def UpdateDeviceTemplate(request, template_id):
                     logger.warning(f"Profile with ID/name '{profile_id}' not found, skipping")
                     pass  # Skip profiles that don't exist
         
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
+        
         return JsonResponse({
             'success': True,
             'message': 'Device template updated successfully'
@@ -3401,6 +4475,7 @@ def UpdateDeviceTemplate(request, template_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@require_admin_role
 def DeleteDeviceTemplate(request, template_id):
     """Delete a device template"""
     if request.method != 'POST':
@@ -3416,6 +4491,9 @@ def DeleteDeviceTemplate(request, template_id):
         template_name = template.name
         template.delete()
         
+        # Mark config as changed to show deployment indicator
+        SNMPDeploymentState.mark_config_changed()
+        
         return JsonResponse({
             'success': True,
             'message': f'Device template "{template_name}" deleted successfully'
@@ -3424,3 +4502,188 @@ def DeleteDeviceTemplate(request, template_id):
         return JsonResponse({'error': 'Device template not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Official data sync helpers
+# ---------------------------------------------------------------------------
+
+def sync_official_profiles():
+    """Sync official profiles from JSON files to database as placeholders"""
+    official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
+
+    if not os.path.exists(official_profiles_dir):
+        return
+
+    for filename in os.listdir(official_profiles_dir):
+        if filename.endswith('.json'):
+            profile_name = filename  # Keep .json extension for database storage
+
+            try:
+                profile_path = os.path.join(official_profiles_dir, filename)
+                with open(profile_path, 'r') as f:
+                    profile_data = json.load(f)
+
+                official_key = profile_data.get('official_key')
+                if not official_key:
+                    logger.warning(f"Official profile {filename} has no official_key — skipping")
+                    continue
+
+                # 1. Already migrated — find by official_key (fast path, rename-safe)
+                try:
+                    profile = Profile.objects.get(official_key=official_key)
+                except Profile.DoesNotExist:
+                    # 2. Upgrade path — old record exists by name but has no official_key yet
+                    try:
+                        profile = Profile.objects.get(name=profile_name, official_key__isnull=True)
+                        profile.official_key = official_key
+                        logger.debug(f"Backfilled official_key for existing profile '{profile_name}'")
+                    except Profile.DoesNotExist:
+                        # 3. Genuinely new record
+                        profile = Profile(official_key=official_key, name=profile_name)
+
+                # Update all mutable fields and save
+                profile.name = profile_name
+                profile.description = profile_data.get('description', '')
+                profile.vendor = profile_data.get('vendor', 'Any')
+                profile.product = profile_data.get('product', '')
+                # Always reset to a clean placeholder — clears any stale flags such as
+                # 'is_orphaned' that may have been set during a previous cleanup run.
+                profile.profile_data = {'is_official_placeholder': True}
+                profile.save()
+
+            except Exception as e:
+                logger.error(f"Error syncing official profile {filename}: {e}")
+                continue
+
+
+def sync_official_device_templates():
+    """Sync official device templates from JSON files to database"""
+    official_templates_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_device_templates')
+
+    if not os.path.exists(official_templates_dir):
+        return
+
+    for filename in os.listdir(official_templates_dir):
+        if filename.endswith('.json'):
+            template_name = filename[:-5]  # Remove .json extension
+
+            try:
+                template_path = os.path.join(official_templates_dir, filename)
+                with open(template_path, 'r') as f:
+                    template_data = json.load(f)
+
+                official_key = template_data.get('official_key')
+                if not official_key:
+                    logger.warning(f"Official template {filename} has no official_key — skipping")
+                    continue
+
+                display_name = template_data.get('name', template_name)
+
+                # 1. Already migrated — find by official_key (fast path, rename-safe)
+                try:
+                    template = DeviceTemplate.objects.get(official_key=official_key)
+                except DeviceTemplate.DoesNotExist:
+                    # 2. Upgrade path — old record exists by name but has no official_key yet
+                    try:
+                        template = DeviceTemplate.objects.get(name=display_name, official_key__isnull=True)
+                        template.official_key = official_key
+                        logger.debug(f"Backfilled official_key for existing template '{display_name}'")
+                    except DeviceTemplate.DoesNotExist:
+                        # 3. Genuinely new record
+                        template = DeviceTemplate(official_key=official_key, name=display_name)
+
+                # Update all mutable fields and save
+                template.name = display_name
+                template.description = template_data.get('description', '')
+                template.vendor = template_data.get('vendor', 'Any')
+                template.model = template_data.get('model', '')
+                template.product = template_data.get('product', '')
+                template.type = template_data.get('type', '')
+                template.matching_rules = template_data.get('matching_rules', [])
+                template.official = True
+                template.save()
+
+                # Sync profiles — look up by official_key first (rename-proof),
+                # with fallbacks for profiles that haven't been migrated yet or are user-created
+                profile_names = template_data.get('profiles', [])
+                if profile_names:
+                    template.profiles.clear()
+                    profiles_added = 0
+                    for profile_name in profile_names:
+                        profile = None
+                        # Try official_key (already migrated official profile)
+                        try:
+                            profile = Profile.objects.get(official_key=profile_name)
+                        except Profile.DoesNotExist:
+                            pass
+                        # Try name with .json extension (un-migrated official profile)
+                        if profile is None:
+                            try:
+                                profile = Profile.objects.get(name=f"{profile_name}.json")
+                            except Profile.DoesNotExist:
+                                pass
+                        # Try bare name (user-created custom profile)
+                        if profile is None:
+                            try:
+                                profile = Profile.objects.get(name=profile_name)
+                            except Profile.DoesNotExist:
+                                pass
+
+                        if profile is not None:
+                            template.profiles.add(profile)
+                            profiles_added += 1
+                        else:
+                            logger.warning(f"Profile '{profile_name}' not found for template '{template.name}'")
+                    logger.debug(f"Synced template '{template.name}': {profiles_added}/{len(profile_names)} profiles linked")
+
+            except Exception as e:
+                logger.error(f"Error syncing official template {filename}: {e}")
+                continue
+
+
+def suggest_device_template(device_info):
+    """
+    Suggest device templates based on matching rules against device information.
+
+    Args:
+        device_info (str): Device identification string (e.g., sysDescr or sysObject)
+
+    Returns:
+        list: List of DeviceTemplate IDs ranked by match quality:
+              - First: Templates where ALL matching rules match
+              - Second: Templates where SOME matching rules match
+              - Templates with null/empty matching_rules are excluded
+    """
+    if not device_info:
+        return []
+
+    device_info_lower = device_info.lower()
+
+    # Get all device templates with matching rules
+    templates = DeviceTemplate.objects.exclude(matching_rules__isnull=True).exclude(matching_rules=[])
+
+    all_matches = []     # Templates where ALL rules match
+    partial_matches = [] # Templates where SOME rules match
+
+    for template in templates:
+        if not template.matching_rules:
+            continue
+
+        matching_count = 0
+        total_rules = len(template.matching_rules)
+
+        for rule in template.matching_rules:
+            if rule.lower() in device_info_lower:
+                matching_count += 1
+
+        if matching_count == total_rules and total_rules > 0:
+            all_matches.append(template.id)
+        elif matching_count > 0:
+            partial_matches.append((template.id, matching_count / total_rules))
+
+    # Sort partial matches by match percentage (descending)
+    partial_matches.sort(key=lambda x: x[1], reverse=True)
+    partial_match_ids = [template_id for template_id, _ in partial_matches]
+
+    return all_matches + partial_match_ids

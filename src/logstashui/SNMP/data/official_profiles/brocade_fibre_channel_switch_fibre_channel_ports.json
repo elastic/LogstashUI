@@ -1,0 +1,35 @@
+{
+  "official_key": "brocade_fibre_channel_switch_fibre_channel_ports",
+  "name": "fibre_channel_ports",
+  "description": "Per-port FC state, speed, WWN, and error counters for Brocade FC switches.",
+  "product": "Fibre Channel Switch",
+  "vendor": "Brocade",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.1",
+        "name": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.36",
+        "speed": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.35",
+        "physical_status": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.3",
+        "in_frames": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.2",
+        "out_frames": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.13"
+      }
+    },
+    "fibre_channel": {
+      "columns": {
+        "index": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.1",
+        "wwn": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.34",
+        "in_crc_errors": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.4",
+        "in_invalid_words": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.5",
+        "link_failures": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.6",
+        "loss_of_signal": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.7",
+        "loss_of_sync": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.8",
+        "in_encoding_disparity": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.9",
+        "out_link_resets": "1.3.6.1.4.1.1588.2.1.1.1.6.2.1.10"
+      }
+    }
+  }
+}

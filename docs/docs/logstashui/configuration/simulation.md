@@ -25,9 +25,15 @@ simulation.mode: "embedded" # (embedded | host)
 
 ## Host Settings
 ```yaml
-  host:
+simulation:
+  mode: host
+
+  logstash_agent:
+    mode: simulation
+
     logstash_binary: /usr/share/logstash/bin/logstash
-    logstash_settings: /etc/logstash/
+    logstash_settings: /etc/logstash
+    logstash_log_path: /var/log/logstash
 ```
 
 ---

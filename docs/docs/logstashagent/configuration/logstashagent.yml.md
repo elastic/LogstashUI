@@ -8,12 +8,15 @@ The `logstashagent.yml` file configures the LogstashAgent component, which is re
 
 ## File Location
 
-The configuration file should be placed in the LogstashAgent directory:
+The configuration file lives under the source package:
 
 ```
 LogstashAgent/
-├── logstashagent.yml
 ├── src/
+│   └── logstashagent/
+│       └── config/
+│           ├── logstashagent.example.yml
+│           └── logstashagent.yml
 └── ...
 ```
 
@@ -126,7 +129,7 @@ logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs
 
 ## Related Documentation
 
-- **[Simulation Configuration](../../logstashui/configuration/simulation.md)** - LogstashUI simulation modes
-- **[Host Mode Setup](../../logstashui/configuration/host_mode.md)** - Setting up host mode for high-performance simulations
+- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - LogstashUI simulation modes
+- **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - Setting up host mode for high-performance simulations
 - **[Configuration Overview](/docs/docs/logstashagent/configuration/index.md)** - Return to LogstashAgent configuration index
 - **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Return to LogstashAgent documentation

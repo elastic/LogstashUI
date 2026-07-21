@@ -7,7 +7,8 @@
             "config": {
                 "port": "5000",
                 "type": "syslog"
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_udp_1",
@@ -16,7 +17,8 @@
             "config": {
                 "port": "5000",
                 "type": "syslog"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -41,7 +43,8 @@
                                 "received_from",
                                 "%{host}"
                             ]
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_date_4",
@@ -53,7 +56,8 @@
                                 "MMM  d HH:mm:ss",
                                 "MMM dd HH:mm:ss"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -70,7 +74,8 @@
                 "hosts": [
                     "localhost:9200"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_stdout_6",
@@ -80,7 +85,8 @@
                 "codec": {
                     "rubydebug": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

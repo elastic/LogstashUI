@@ -42,18 +42,31 @@ Configure polling, traps, and discovery through a web interface.
 - **[Architecture](/docs/docs/logstashui/architecture.md)** - System architecture
 - **[Compatibility](/docs/docs/logstashui/compatibility.md)** - Logstash version compatibility and requirements
 - **[Configuration](/docs/docs/logstashui/configuration/index.md)** - Configuration options and settings for LogstashUI
+- **[SNMP Monitoring](/docs/docs/logstashui/SNMP/index.md)** - Network monitoring with SNMP polling, traps, and discovery
 - **[General](/docs/docs/logstashui/general/index.md)** - Build, update, and deployment guides
 
 ---
 
 ## Limitations
 
-Currently, the translation engine cannot process comments inside plugin blocks. For example:
+Comments inside plugin blocks (inline and standalone) are preserved through parsing and serialization, but their exact position relative to config keys is not guaranteed. All comments are grouped at the top of the plugin block in the output:
 
 ```
 input {
-    udp { # Translation engine doesn't like this
-        port => 5119 # This is a comment that we can't convert
+    udp { # inline comments are moved
+        port => 5119 # inline comments are moved
+    }
+}
+```
+
+Becomes:
+
+```
+input {
+    udp {
+        # inline comments are moved
+        # inline comments are moved
+        port => 5119
     }
 }
 ```
@@ -70,4 +83,4 @@ Found a bug or have a feature request? [Open an issue](https://github.com/elasti
 
 Copyright 2024–2026 Elasticsearch and contributors.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE.txt) for details.
+Licensed under the Elastic License 2.0 (ELv2). See [LICENSE](https://github.com/elastic/LogstashUI/blob/main/LICENSE.txt) for details.

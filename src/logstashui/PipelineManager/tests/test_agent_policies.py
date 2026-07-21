@@ -3,7 +3,7 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from Common.test_resources import authenticated_client, test_user
-from PipelineManager.models import Connection, Keystore, Pipeline, Policy, Revision
+from PipelineManager.models import Connection, EnrollmentToken, Keystore, Pipeline, Policy, Revision
 
 from datetime import datetime, timezone
 from unittest.mock import patch
@@ -102,77 +102,6 @@ def test_agent_connection(db, test_policy):
         policy=test_policy
     )
     return connection
-
-
-# ============================================================================
-# Generate Enrollment Token Tests
-# ============================================================================
-
-@pytest.mark.django_db
-class TestGenerateEnrollmentToken:
-    """Tests for the generate_enrollment_token endpoint"""
-
-    def test_generate_enrollment_token_success(self, authenticated_client):
-        """Test successful enrollment token generation"""
-        response = authenticated_client.post(
-            '/ConnectionManager/GenerateEnrollmentToken/',
-            data=json.dumps({
-                'policy_name': 'Test Policy'
-            }),
-            content_type='application/json'
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data['success'] is True
-        assert 'enrollment_token' in data
-        assert len(data['enrollment_token']) > 0
-
-    def test_generate_enrollment_token_default_policy(self, authenticated_client):
-        """Test enrollment token generation with default policy name"""
-        response = authenticated_client.post(
-            '/ConnectionManager/GenerateEnrollmentToken/',
-            data=json.dumps({}),
-            content_type='application/json'
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data['success'] is True
-        assert 'enrollment_token' in data
-
-    def test_generate_enrollment_token_wrong_method(self, authenticated_client):
-        """Test that GET requests are rejected"""
-        response = authenticated_client.get('/ConnectionManager/GenerateEnrollmentToken/')
-
-        assert response.status_code == 405
-        data = response.json()
-        assert data['success'] is False
-        assert 'Method not allowed' in data['error']
-
-    def test_generate_enrollment_token_invalid_json(self, authenticated_client):
-        """Test enrollment token generation with invalid JSON"""
-        response = authenticated_client.post(
-            '/ConnectionManager/GenerateEnrollmentToken/',
-            data='not valid json',
-            content_type='application/json'
-        )
-
-        assert response.status_code == 400
-        data = response.json()
-        assert data['success'] is False
-        assert 'Invalid JSON data' in data['error']
-
-    def test_generate_enrollment_token_requires_auth(self, client):
-        """Test that authentication is required"""
-        response = client.post(
-            '/ConnectionManager/GenerateEnrollmentToken/',
-            data=json.dumps({'policy_name': 'Test'}),
-            content_type='application/json'
-        )
-
-        # Should redirect to login or return 403
-        assert response.status_code in [302, 403]
 
 
 # ============================================================================

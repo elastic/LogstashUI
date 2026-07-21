@@ -49,6 +49,7 @@ function openDeviceTemplateModal(templateId = null, viewMode = false, isOfficial
     document.getElementById('deviceTemplateVendor').value = clonedData.vendor || '';
     document.getElementById('deviceTemplateModel').value = clonedData.model || '';
     document.getElementById('deviceTemplateProduct').value = clonedData.product || '';
+    document.getElementById('deviceTemplateType').value = clonedData.type || '';
 
     // Load matching rules
     if (clonedData.matching_rules && clonedData.matching_rules.length > 0) {
@@ -95,6 +96,7 @@ function openDeviceTemplateModal(templateId = null, viewMode = false, isOfficial
         document.getElementById('deviceTemplateVendor').value = data.vendor || '';
         document.getElementById('deviceTemplateModel').value = data.model || '';
         document.getElementById('deviceTemplateProduct').value = data.product || '';
+        document.getElementById('deviceTemplateType').value = data.type || '';
 
         // Load matching rules
         if (data.matching_rules && data.matching_rules.length > 0) {
@@ -446,10 +448,19 @@ function renderProfileSelectorChips() {
   }
 
   tempSelectedProfiles.forEach(profileId => {
-    // Find the checkbox to get the display name
-    const checkbox = document.querySelector(`input[name="profiles"][value="${profileId}"]`);
-    const displayName = checkbox ? checkbox.closest('label').querySelector('.text-sm.font-medium').textContent : profileId;
-    
+    const profile = profileDataCache[profileId];
+
+    let displayName = profileId; // final fallback
+    if (profile) {
+      displayName = profile.display_name || profile.name || profileId;
+    } else {
+      // fallback: look for rendered checkbox in DOM
+      const checkbox = document.querySelector(`input[name="profiles"][value="${profileId}"]`);
+      if (checkbox) {
+        displayName = checkbox.closest('label').querySelector('.text-sm.font-medium').textContent;
+      }
+    }
+
     const chip = document.createElement('div');
     chip.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-600 text-white';
     chip.innerHTML = `
@@ -638,6 +649,9 @@ document.addEventListener('DOMContentLoaded', function() {
           // Refresh templates data without page reload
           if (typeof refreshDeviceTemplatesData === 'function') {
             refreshDeviceTemplatesData();
+          }
+          if (typeof triggerUndeployedChangesCheck === 'function') {
+            triggerUndeployedChangesCheck();
           }
         })
         .catch(error => {

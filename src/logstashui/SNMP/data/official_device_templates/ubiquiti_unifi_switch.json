@@ -1,0 +1,17 @@
+{
+  "official_key": "ubiquiti_unifi_switch",
+  "name": "ubiquiti_unifi_switch",
+  "type": "Network",
+  "description": "Per-port traffic counters, system info, and interface stats for Ubiquiti UniFi switches.",
+  "vendor": "Ubiquiti",
+  "product": "UniFi Switch",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "ubiquiti_unifi_switch"
+  ],
+  "matching_rules": [
+    "US-"
+  ]
+}

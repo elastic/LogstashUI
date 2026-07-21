@@ -107,8 +107,19 @@
               </a>
             </li>
             <li>
-              <a href="/SNMP/Devices/"
-                class="nav-item {% if highlight_snmp_devices %}nav-highlight{% endif %} {% if '/SNMP/Devices' in request.path %}active{% endif %}">
+              <a href="/SNMP/Onboarding/"
+                class="nav-item {% if '/SNMP/Onboarding' in request.path %}active{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="nav-text">Onboarding</span>
+              </a>
+            </li>
+            <li>
+              <a href="/SNMP/Devices/" id="nav-snmp-devices-link"
+                class="nav-item {% if '/SNMP/Devices' in request.path %}active{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                   stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -472,6 +483,20 @@
         }
       }
     }
+
+    // Pulse the SNMP Devices link if: a connection exists AND user has never visited an SNMP page.
+    // Mark as visited whenever we're on any /SNMP/ page so the pulse stops immediately.
+    if (window.location.pathname.startsWith('/SNMP/')) {
+      localStorage.setItem('snmp_page_visited', 'true');
+    }
+    {% if has_connections %}
+    if (localStorage.getItem('snmp_page_visited') !== 'true') {
+      const devicesLink = document.getElementById('nav-snmp-devices-link');
+      if (devicesLink) {
+        devicesLink.classList.add('nav-highlight');
+      }
+    }
+    {% endif %}
   })();
   
   // Set up event listeners after DOM loads

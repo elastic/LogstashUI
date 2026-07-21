@@ -26,6 +26,43 @@ import time
 logger = logging.getLogger(__name__)
 
 
+def _logstash_yml_cpm_enabled(yml):
+    """
+    Determine whether a logstash.yml enables Centralized Pipeline Management
+    (xpack.management.enabled: true).
+
+    Logstash accepts both flat dotted keys and nested YAML for this setting, so
+    we parse the YAML and flatten it to dotted keys before checking. Falls back
+    to a whitespace-tolerant string match if the YAML can't be parsed.
+    """
+    if not yml:
+        return False
+
+    try:
+        import yaml
+
+        data = yaml.safe_load(yml)
+        if isinstance(data, dict):
+            flat = {}
+
+            def _flatten(prefix, obj):
+                if isinstance(obj, dict):
+                    for key, value in obj.items():
+                        _flatten(f"{prefix}{key}.", value)
+                else:
+                    flat[prefix[:-1]] = obj
+
+            _flatten('', data)
+            value = flat.get('xpack.management.enabled')
+            if value is not None:
+                return str(value).strip().lower() == 'true'
+    except Exception:
+        pass
+
+    normalized = yml.lower().replace(' ', '').replace('\t', '')
+    return 'xpack.management.enabled:true' in normalized
+
+
 @require_admin_role
 def AgentPolicies(request):
     """
@@ -48,6 +85,10 @@ def PipelineManager(request):
             conn['is_online'] = time_diff.total_seconds() < 600  # 10 minutes = 600 seconds
         else:
             conn['is_online'] = False
+        # Adopt the authoritative health-report status when the node-info root
+        # reports "unknown" (keeps the page-load fallback inspect card in sync
+        # with the live AgentInspect endpoint).
+        _normalize_status_blob_api_status(conn.get('status_blob'))
     
     # Sort connections: centralized first, then by policy name
     # This groups agents with the same policy together
@@ -96,7 +137,45 @@ def PipelineManager(request):
             conn['is_group_end'] = True
         
         prev_policy = current_policy
-    
+
+    # Feature badges per connection:
+    #  - CPM: Centralized connections always; Agents whose policy enables
+    #    xpack.management (centralized pipeline management via logstash.yml)
+    #  - LogstashAgent: every agent connection
+    #  - SNMP: agents that have Agent-mode SNMP networks assigned to them
+    from .models import Policy
+    from SNMP.models import Network
+
+    policy_ids = {c['policy_id'] for c in connections if c.get('policy_id')}
+    policy_cpm = {}
+    if policy_ids:
+        for pid, yml in Policy.objects.filter(id__in=policy_ids).values_list('id', 'logstash_yml'):
+            policy_cpm[pid] = _logstash_yml_cpm_enabled(yml)
+
+    # Any connection referenced by the SNMP Network table gets the SNMP flag.
+    # This covers both the Elasticsearch output connection (Network.connection,
+    # used by CENTRALIZED networks) and the agent connection
+    # (Network.agent_connection, used by AGENT networks). We can determine this
+    # purely from our own DB without calling out to Elasticsearch.
+    snmp_connection_ids = set(
+        Network.objects.values_list('connection_id', flat=True)
+    )
+    snmp_connection_ids.update(
+        Network.objects.exclude(agent_connection_id__isnull=True)
+        .values_list('agent_connection_id', flat=True)
+    )
+    snmp_connection_ids.discard(None)
+
+    for conn in connections:
+        if conn['connection_type'] == 'CENTRALIZED':
+            conn['feature_cpm'] = True
+            conn['feature_agent'] = False
+            conn['feature_snmp'] = conn['pk'] in snmp_connection_ids
+        else:
+            conn['feature_agent'] = True
+            conn['feature_cpm'] = policy_cpm.get(conn.get('policy_id'), False)
+            conn['feature_snmp'] = conn['pk'] in snmp_connection_ids
+
     context['connections'] = connections
     context['has_connections'] = len(connections) > 0
     context['form'] = ConnectionForm()
@@ -172,6 +251,48 @@ def TestConnectivity(request):
 
 
 
+def _normalize_status_blob_api_status(blob):
+    """
+    Surface the authoritative Logstash status on a status_blob.
+
+    The Logstash node-info root ("GET /") aggregates all health indicators and
+    frequently reports status="unknown" even when the instance is perfectly
+    healthy (e.g. immediately after a pipeline reload). The agent also polls the
+    dedicated /_health_report endpoint, which is the authoritative source of the
+    node's status.
+
+    The inspect card hides API details, the health report, and node stats
+    whenever ``logstash_api.status == 'unknown'``, so a root status of "unknown"
+    leaves the card stuck on the "status hasn't been read yet" warmup message —
+    hiding data the agent already collected. When the root status is unknown but
+    the health report has a real status, adopt it so the full details render.
+
+    Mutates the given ``blob`` dict in place (the caller's in-memory copy only;
+    never persisted).
+    """
+    if not blob:
+        return
+    logstash_api = blob.get('logstash_api') or {}
+
+    if not logstash_api.get('accessible'):
+        return
+    if logstash_api.get('status') not in (None, 'unknown'):
+        return
+
+    health = blob.get('health_report') or {}
+    health_status = health.get('status')
+    if health.get('accessible') and health_status and health_status != 'unknown':
+        logstash_api['status'] = health_status
+        blob['logstash_api'] = logstash_api
+
+
+def _normalize_logstash_api_status(connection):
+    """Normalize the Logstash API status on a ConnectionTable instance's blob."""
+    blob = connection.status_blob or {}
+    _normalize_status_blob_api_status(blob)
+    connection.status_blob = blob
+
+
 @require_admin_role
 def get_agent_inspect(request, connection_id):
     """
@@ -193,6 +314,8 @@ def get_agent_inspect(request, connection_id):
         connection.is_online = (now - connection.last_check_in).total_seconds() < 600
     else:
         connection.is_online = False
+
+    _normalize_logstash_api_status(connection)
 
     return render(
         request,

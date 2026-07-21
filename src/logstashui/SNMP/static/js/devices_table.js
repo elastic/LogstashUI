@@ -90,7 +90,7 @@ function loadDevices() {
       loadingState.classList.add('hidden');
       tableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="px-6 py-8 text-center text-red-400">
+          <td colspan="8" class="px-6 py-8 text-center text-red-400">
             Error loading devices: ${error.message}
           </td>
         </tr>
@@ -155,16 +155,27 @@ function renderDevices(devices) {
     row.className = 'hover:bg-gray-700/50 transition-colors';
     row.id = `device-row-${device.id}`;
     
-    const createdDate = new Date(device.created_at).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    
     // Render device template badge
     let templateHtml = '';
     if (device.device_template_name) {
-      templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(device.device_template_name)}</span>`;
+      if (device.device_template_name === 'default') {
+        // "default" means no real template configured — link to the wizard
+        const wizardUrl = `/SNMP/Onboarding/?tab=wizard&device_id=${device.id}`;
+        templateHtml = `
+          <a href="${wizardUrl}" title="No template configured — click to set one up in the wizard"
+             class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium
+                    bg-purple-600/20 text-purple-300 border border-purple-500/30
+                    hover:bg-purple-600/30 hover:border-purple-400/50 transition-colors cursor-pointer">
+            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+            </svg>
+            default
+          </a>`;
+      } else {
+        const templateLabel = device.device_template_display_name || formatDisplayName(device.device_template_name);
+        templateHtml = `<span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">${escapeHtml(templateLabel)}</span>`;
+      }
     } else {
       templateHtml = '<span class="text-gray-500 italic">None</span>';
     }
@@ -187,7 +198,10 @@ function renderDevices(devices) {
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-        <span class="font-mono">${escapeHtml(device.ip_address)}</span>
+        ${device.hostname ? `<span class="font-mono">${escapeHtml(device.hostname)}</span>` : '<span class="text-gray-500 italic">—</span>'}
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+        <span class="font-mono">${escapeHtml(device.ip_address || '—')}</span>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.credential_name ? escapeHtml(device.credential_name) : '<span class="text-gray-500 italic">None</span>'}
@@ -195,6 +209,7 @@ function renderDevices(devices) {
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.network_name ? `
           <div class="flex items-center gap-2 ${device.network_id ? 'cursor-pointer hover:text-blue-400 group' : ''}" ${device.network_id ? `onclick="copyPipelineName(${device.network_id}, '${escapeHtml(device.network_name)}')"` : ''} title="${device.network_id ? 'Click to copy pipeline name' : ''}">
+            <img src="${device.network_deployment_mode === 'AGENT' ? window.logstashAgentIconUrl : window.elasticIconUrl}" class="w-5 h-5 flex-shrink-0" title="${device.network_deployment_mode === 'AGENT' ? 'LogstashAgent' : 'Elasticsearch'}" />
             <span>${escapeHtml(device.network_name)}</span>
             ${device.network_id ? `
               <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,11 +219,20 @@ function renderDevices(devices) {
           </div>
         ` : '<span class="text-gray-500 italic">None</span>'}
       </td>
+      <td class="px-6 py-4 text-sm text-gray-300 max-w-[180px]">
+        ${(() => {
+          const parts = [device.site, device.building, device.room].filter(Boolean);
+          if (!parts.length) return '<span class="text-gray-500 italic">—</span>';
+          const full = parts.join(' › ');
+          const short = full.length > 28 ? full.slice(0, 27) + '…' : full;
+          return `<span class="block truncate cursor-default" title="${escapeHtml(full)}">${escapeHtml(short)}</span>`;
+        })()}
+      </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${templateHtml}
       </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${createdDate}</td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        ${window.isAdmin ? `
         <div class="action-menu relative">
           <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
             <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -240,6 +264,7 @@ function renderDevices(devices) {
             </div>
           </div>
         </div>
+        ` : ''}
       </td>
     `;
     
@@ -250,7 +275,7 @@ function renderDevices(devices) {
     expandRow.id = `device-preview-${device.id}`;
     expandRow.className = 'hidden bg-gray-900';
     expandRow.innerHTML = `
-      <td colspan="8">
+      <td colspan="10">
         <div class="p-4">
           <div class="htmx-indicator">
             <div class="flex justify-center items-center py-4">

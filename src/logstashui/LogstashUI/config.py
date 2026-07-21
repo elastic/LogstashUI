@@ -68,8 +68,14 @@ def load_config() -> dict:
             logger.info(f"LOGSTASHUI_CONFIG not set, using default path: {default_config_path}")
             config_path = str(default_config_path)
         else:
-            logger.info("LOGSTASHUI_CONFIG not set and no logstashui.yml found, using default configuration")
-            return config
+            # Second fallback: check data directory for persistent config
+            data_config_path = Path(__file__).resolve().parent.parent / 'data' / 'logstashui.yml'
+            if data_config_path.exists():
+                logger.info(f"LOGSTASHUI_CONFIG not set, using data directory path: {data_config_path}")
+                config_path = str(data_config_path)
+            else:
+                logger.info("LOGSTASHUI_CONFIG not set and no logstashui.yml found, using default configuration")
+                return config
 
     config_file = Path(config_path)
     

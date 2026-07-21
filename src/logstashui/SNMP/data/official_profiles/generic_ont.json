@@ -1,0 +1,77 @@
+{
+  "official_key": "generic_ont",
+  "name": "generic_ont",
+  "description": "System identity, memory utilization, and per-port link/speed for generic ONT devices.",
+  "vendor": "Unknown",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.mac_address": "1.3.6.1.4.1.52208.100.1.5.0",
+    "observer.chipset": "1.3.6.1.4.1.52208.100.1.11.1.0",
+    "observer.firmware_version": "1.3.6.1.4.1.52208.100.1.13.0",
+    "observer.product_id": "1.3.6.1.4.1.52208.100.1.100.0",
+    "observer.serial_number": "1.3.6.1.4.1.52208.100.1.101.0",
+    "system.memory.actual.total.bytes": "1.3.6.1.4.1.52208.100.1.11.6.0",
+    "system.memory.actual.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0"
+  },
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.4.1.52208.100.3.2.1.1",
+        "name": "1.3.6.1.4.1.52208.100.3.2.1.2",
+        "oper_status": "1.3.6.1.4.1.52208.100.3.2.1.3",
+        "admin_status": "1.3.6.1.4.1.52208.100.3.2.1.4",
+        "speed_kbps": "1.3.6.1.4.1.52208.100.3.2.1.9",
+        "speed_max_kbps": "1.3.6.1.4.1.52208.100.3.2.1.10"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.bytes",
+        "value2_field": "system.memory.actual.used.bytes",
+        "divide_output_field": "system.memory.actual.used.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 ################################ Logstash config to component JSON ################################
 LOGSTASH_GRAMMAR = r"""
-?start: [comment+] section+
+?start: comment* (section comment*)+
 
 section: section_type "{" [statement+] "}"
 
@@ -24,14 +24,16 @@ condition: CMP_OPERATORS
 else_if_condition: "else" "if" condition "{" [statement+] "}"
 else_condition: "else" "{" [statement+] "}"
 
-CMP_OPERATORS: /(?:[^\n{"']|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+/  // Matches anything except newline and unquoted {, handles quoted strings
+CMP_OPERATORS: /(?:[^\n{"'\/]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^\/\\]|\\.)*\/)+/  // Matches anything except newline and unquoted {, handles quoted strings and /regex/ literals
 section_type: "input" -> input_section
             | "filter" -> filter_section
             | "output" -> output_section
 
 
 // Define plugin with flexible parameter formatting
-plugin: CNAME "{" [pair (WS | ";")*]* "}"
+// plugin_item allows both key=>value pairs and standalone comment lines
+plugin: CNAME "{" [plugin_item (WS | ";")*]* "}"
+plugin_item: pair | comment
 
 
 pair: "codec" "=>" CNAME "{" codec_config "}"  -> codec_pair_with_config
@@ -286,21 +288,32 @@ class LogstashTransformer(Transformer):
         else:
             return (None, None)
 
+    def plugin_item(self, items):
+        """Pass through the single child (either a pair tuple or a comment dict)."""
+        return items[0] if items else None
+
     def plugin(self, items):
         name = items[0]
         settings = {}
-        # If there are items after the name, they are the pairs
+        comments = []
+        # If there are items after the name, they are plugin_items (pairs or comments)
         if len(items) > 1 and items[1]:
-            # Flatten the list of pairs (handling both direct pairs and nested lists)
-            pairs = []
+            # Flatten the list (handling both direct items and nested lists)
+            all_items = []
             for item in items[1:]:
                 if isinstance(item, list):
-                    pairs.extend([p for p in item if p is not None])
+                    all_items.extend([i for i in item if i is not None])
                 elif item is not None:
-                    pairs.append(item)
+                    all_items.append(item)
 
-            # Add pairs to settings with merging logic for duplicate keys
-            for pair in pairs:
+            for item in all_items:
+                # Comment dicts come from the comment() transformer
+                if isinstance(item, dict) and item.get('type') == 'comment':
+                    comments.append(item.get('text', ''))
+                    continue
+
+                # Everything else is a pair tuple
+                pair = item
                 if isinstance(pair, (list, tuple)) and len(pair) == 2:
                     k, v = pair
                     
@@ -327,7 +340,7 @@ class LogstashTransformer(Transformer):
                             settings[k] = [existing, v]
                     else:
                         settings[k] = v
-        return {"type": "plugin", "name": name, "settings": settings}
+        return {"type": "plugin", "name": name, "settings": settings, "comments": comments}
 
     def section(self, items):
         section_type = items[0]
@@ -355,7 +368,8 @@ class LogstashTransformer(Transformer):
             'id': f"{section_type}_{plugin_data['name']}_{component_count}",
             'type': section_type,
             'plugin': plugin_data['name'],
-            'config': plugin_data.get('settings', {})
+            'config': plugin_data.get('settings', {}),
+            'comments': plugin_data.get('comments', [])
         }
         return plugin, component_count + 1
 
@@ -502,159 +516,239 @@ def _extract_error_context(config_text: str, line: int, column: int, context_lin
     return "\n".join(context_parts)
 
 
+def _count_unquoted_braces(line: str):
+    """Count { and } that appear outside quoted strings and escape sequences."""
+    open_count = 0
+    close_count = 0
+    in_str = False
+    str_char = None
+    esc = False
+    for ch in line:
+        if esc:
+            esc = False
+            continue
+        if ch == '\\':
+            esc = True
+            continue
+        if ch in ('"', "'"):
+            if not in_str:
+                in_str = True
+                str_char = ch
+            elif ch == str_char:
+                in_str = False
+                str_char = None
+            continue
+        if not in_str:
+            if ch == '{':
+                open_count += 1
+            elif ch == '}':
+                close_count += 1
+    return open_count, close_count
+
+
+def _strip_line_comment(line: str):
+    """
+    Strip an inline # comment from a line (ignoring # inside quoted strings).
+
+    Returns (cleaned_line, comment_text_or_None, ends_in_unclosed_single_quote).
+    """
+    cleaned = []
+    comment_text = None
+    in_str = False
+    str_char = None
+    esc = False
+
+    for i, ch in enumerate(line):
+        if esc:
+            cleaned.append(ch)
+            esc = False
+            continue
+        if ch == '\\':
+            cleaned.append(ch)
+            esc = True
+            continue
+        if ch in ('"', "'"):
+            if not in_str:
+                in_str = True
+                str_char = ch
+                cleaned.append(ch)
+            elif ch == str_char:
+                in_str = False
+                str_char = None
+                cleaned.append(ch)
+            else:
+                cleaned.append(ch)
+            continue
+        if ch == '#' and not in_str:
+            text = line[i:].lstrip('#').strip()
+            comment_text = text if text else None
+            while cleaned and cleaned[-1] in (' ', '\t'):
+                cleaned.pop()
+            break
+        cleaned.append(ch)
+
+    return ''.join(cleaned), comment_text, (in_str and str_char == "'")
+
+
 def _strip_inline_comments(config_text: str) -> str:
     """
-    Remove inline comments that appear beside plugin configuration values.
-    
-    This preprocessor handles comments that would break parsing, such as:
-    - Comments after plugin settings: path => "/file.log" # comment
-    - Comments on lines with closing braces: } # comment
-    - Standalone comment lines inside plugin blocks (grammar doesn't support these)
-    
-    Standalone comment lines inside conditional blocks (if/else) are preserved.
-    Standalone comment lines at the section level are preserved.
-    
-    Multiline single-quoted strings (common for inline Ruby code) are passed
-    through completely unchanged — # characters inside them are not comments.
+    Preprocess Logstash config text before grammar parsing.
+
+    Behaviour by context:
+    - INSIDE PLUGIN BLOCKS: inline comments (on any line, at any brace depth)
+      are stripped from the line and collected. They are injected as standalone
+      # comment lines immediately before the plugin's closing brace, where the
+      grammar can parse them and attach them to the plugin as plugin.comments[].
+      Standalone # lines inside a plugin block are preserved in place.
+    - OUTSIDE PLUGIN BLOCKS (sections, conditionals): standalone # comment lines
+      are preserved unchanged. Inline comments on non-plugin lines are stripped
+      and discarded (they would break the grammar and carry no useful context).
+    - MULTILINE SINGLE-QUOTED STRINGS: passed through completely unchanged —
+      # characters inside them are not comments.
     """
     lines = config_text.split('\n')
     result_lines = []
-    
-    # Track whether we're inside a plugin block (not a conditional or section block)
-    # We need to track the stack of block types
-    block_stack = []  # Stack of block types: 'section', 'conditional', 'plugin'
 
-    # Track multiline single-quoted string state ACROSS line boundaries.
-    # Logstash uses single-quoted strings for multi-line Ruby code blocks, e.g.:
-    #   code => '
-    #     event.set("field", value)  # this # is NOT a comment
-    #   '
-    in_multiline_string = False  # True when we're inside an unclosed single-quote
-    
+    # outer_stack tracks section/conditional blocks only, for standalone-comment
+    # preservation decisions outside plugin blocks.
+    outer_stack = []  # entries: 'section' | 'conditional'
+
+    # Plugin block tracking (separate from outer_stack).
+    in_plugin = False
+    plugin_brace_depth = 0       # net open braces inside the current plugin block
+    pending_plugin_comments = [] # inline comments collected from the current plugin
+
+    in_multiline_string = False
+
     for line in lines:
         stripped = line.lstrip()
 
-        # If we're inside a multiline single-quoted string, check if this line
-        # closes it (contains an unescaped single quote). Pass the line through
-        # unchanged regardless — no comment stripping, no block tracking.
+        # ── Multiline single-quoted string passthrough ────────────────────────
         if in_multiline_string:
-            # Scan for a closing single quote (not escaped)
-            escaped = False
-            for char in line:
-                if escaped:
-                    escaped = False
+            esc = False
+            for ch in line:
+                if esc:
+                    esc = False
                     continue
-                if char == '\\':
-                    escaped = True
+                if ch == '\\':
+                    esc = True
                     continue
-                if char == "'":
+                if ch == "'":
                     in_multiline_string = False
                     break
             result_lines.append(line)
             continue
 
-        # Detect what kind of block is opening on this line
-        # Check for section blocks (input/filter/output)
-        if stripped.startswith(('input {', 'filter {', 'output {')):
-            block_stack.append('section')
-        # Check for conditional blocks (if/else if/else)
-        elif stripped.startswith('if ') and '{' in line:
-            block_stack.append('conditional')
-        elif stripped.startswith('else if ') and '{' in line:
-            block_stack.append('conditional')
-        elif stripped.startswith('else {'):
-            block_stack.append('conditional')
-        # Check for plugin blocks (any other word followed by {)
-        elif '{' in line and not stripped.startswith('#'):
-            # This is likely a plugin block
-            # Make sure it's not just a closing brace or part of a condition
-            if not stripped.startswith('}') and '=>' not in line.split('{')[0]:
-                block_stack.append('plugin')
-        
-        # Count closing braces to pop from stack (ignore braces in strings)
-        in_string = False
-        string_char = None
-        escaped = False
-        
-        for char in line:
-            if escaped:
-                escaped = False
-                continue
-            if char == '\\':
-                escaped = True
-                continue
-            if char in ['"', "'"]:
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
-                continue
-            
-            if not in_string and char == '}' and block_stack:
-                block_stack.pop()
-        
-        # Handle standalone comment lines
-        if stripped.startswith('#'):
-            # Only skip comments if we're directly inside a plugin block
-            # Preserve comments in sections and conditionals
-            if block_stack and block_stack[-1] == 'plugin':
-                # Skip comment lines inside plugin blocks
-                continue
-            else:
-                # Preserve comment lines in sections and conditionals
+        # ── INSIDE A PLUGIN BLOCK ─────────────────────────────────────────────
+        if in_plugin:
+            # Standalone comment lines are valid at plugin scope (grammar supports
+            # them after the grammar change) — keep them as-is.
+            if stripped.startswith('#'):
                 result_lines.append(line)
                 continue
-        
-        # For non-comment lines, remove inline comments while preserving # in strings
-        in_string = False
-        string_char = None
-        escaped = False
-        cleaned_chars = []
-        
-        for i, char in enumerate(line):
-            # Handle escape sequences
-            if escaped:
-                cleaned_chars.append(char)
-                escaped = False
-                continue
-            
-            if char == '\\':
-                cleaned_chars.append(char)
-                escaped = True
-                continue
-            
-            # Handle string boundaries
-            if char in ['"', "'"]:
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                    cleaned_chars.append(char)
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
-                    cleaned_chars.append(char)
-                else:
-                    cleaned_chars.append(char)
-                continue
-            
-            # If we encounter # outside of a string, it's an inline comment - strip it and everything after
-            if char == '#' and not in_string:
-                # Remove trailing whitespace before the comment
-                while cleaned_chars and cleaned_chars[-1] in [' ', '\t']:
-                    cleaned_chars.pop()
-                break
-            
-            cleaned_chars.append(char)
-        
-        # If we finished the line while still inside a single-quoted string,
-        # the string is multiline — mark it so subsequent lines are preserved.
-        if in_string and string_char == "'":
-            in_multiline_string = True
 
-        result_lines.append(''.join(cleaned_chars))
-    
+            # Strip inline comment, track multiline strings.
+            cleaned_line, inline_comment, ends_in_sq = _strip_line_comment(line)
+            if ends_in_sq:
+                in_multiline_string = True
+
+            # Count braces on the CLEANED line to maintain plugin depth.
+            brace_open, brace_close = _count_unquoted_braces(cleaned_line)
+            plugin_brace_depth += brace_open - brace_close
+
+            if plugin_brace_depth <= 0:
+                # This line closes the plugin block.
+                plugin_brace_depth = 0
+                indent = ' ' * (len(line) - len(line.lstrip()))
+                # Inject all collected inline comments before the closing }.
+                for c in pending_plugin_comments:
+                    result_lines.append(f'{indent}\t# {c}')
+                pending_plugin_comments = []
+                in_plugin = False
+                result_lines.append(cleaned_line)
+                # If the closing } itself had an inline comment, emit it at outer
+                # scope so the grammar picks it up as a section-level comment.
+                if inline_comment:
+                    result_lines.append(f'{indent}# {inline_comment}')
+            else:
+                # Still inside plugin — collect inline comment, emit cleaned line.
+                if inline_comment:
+                    pending_plugin_comments.append(inline_comment)
+                result_lines.append(cleaned_line)
+
+            continue
+
+        # ── OUTSIDE PLUGIN BLOCKS ─────────────────────────────────────────────
+
+        # Detect section / conditional openers for outer_stack.
+        if stripped.startswith(('input {', 'filter {', 'output {')):
+            outer_stack.append('section')
+            # If the section opener has an inline comment (e.g. "filter {# here2}"),
+            # strip it from the opener and re-emit it as a standalone comment line
+            # so the grammar picks it up as a section-level comment plugin.
+            cleaned_opener, section_opener_comment, ends_in_sq = _strip_line_comment(line)
+            if ends_in_sq:
+                in_multiline_string = True
+            result_lines.append(cleaned_opener)
+            if section_opener_comment:
+                result_lines.append(f'# {section_opener_comment}')
+            continue
+        elif not stripped.startswith('#'):
+            if stripped.startswith('if ') and '{' in line:
+                outer_stack.append('conditional')
+            elif stripped.startswith('else if ') and '{' in line:
+                outer_stack.append('conditional')
+            elif stripped.startswith('else {'):
+                outer_stack.append('conditional')
+            elif '{' in line and not stripped.startswith('}'):
+                pre_brace = line.split('{')[0]
+                if '=>' not in pre_brace:
+                    # Plugin opener (e.g. "mutate {").
+                    # Strip any inline comment from the opener line and begin tracking.
+                    cleaned_opener, opener_comment, ends_in_sq = _strip_line_comment(line)
+                    if ends_in_sq:
+                        in_multiline_string = True
+
+                    in_plugin = True
+                    pending_plugin_comments = []
+                    if opener_comment:
+                        pending_plugin_comments.append(opener_comment)
+
+                    # Count braces on the cleaned opener to set initial depth.
+                    brace_open, brace_close = _count_unquoted_braces(cleaned_opener)
+                    plugin_brace_depth = brace_open - brace_close
+
+                    if plugin_brace_depth <= 0:
+                        # Single-line plugin like "drop { }" — already closed.
+                        plugin_brace_depth = 0
+                        indent = ' ' * (len(line) - len(line.lstrip()))
+                        for c in pending_plugin_comments:
+                            result_lines.append(f'{indent}\t# {c}')
+                        pending_plugin_comments = []
+                        in_plugin = False
+
+                    result_lines.append(cleaned_opener)
+                    continue
+
+        # Count closing braces to pop outer_stack (skip comment lines — braces
+        # inside # comments are not structural).
+        if not stripped.startswith('#'):
+            _, close_count = _count_unquoted_braces(line)
+            for _ in range(close_count):
+                if outer_stack:
+                    outer_stack.pop()
+
+        # Standalone comment lines outside plugin blocks: preserve unchanged.
+        if stripped.startswith('#'):
+            result_lines.append(line)
+            continue
+
+        # Non-comment lines outside plugin blocks: strip inline comments and emit.
+        cleaned_line, _, ends_in_sq = _strip_line_comment(line)
+        if ends_in_sq:
+            in_multiline_string = True
+        result_lines.append(cleaned_line)
+
     return '\n'.join(result_lines)
 
 
@@ -728,46 +822,53 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
         if not isinstance(parsed, list):
             parsed = [parsed] if parsed else []
 
-        # Collect top-level comments (comments before any section)
-        top_level_comments = []
-        sections = []
+        # Walk parsed items in order.
+        # - Comments before the first section → input
+        # - Comments between input and filter → filter
+        # - Comments between filter and output → output
+        # - Trailing comments after the last section → last section seen
+        # Consecutive inter-section comments are grouped into a single comment plugin.
+        last_section_type = 'input'
+        pending_toplevel_comments = []
+
+        def _flush_toplevel_comments(target_section):
+            nonlocal component_count
+            if not pending_toplevel_comments:
+                return
+            comment_texts = [c.get('text', '') for c in pending_toplevel_comments]
+            data[target_section].append({
+                'id': f"{target_section}_comment_{component_count}",
+                'type': target_section,
+                'plugin': 'comment',
+                'config': {'text': '\n'.join(comment_texts)},
+            })
+            component_count += 1
+            pending_toplevel_comments.clear()
 
         for item in parsed:
             if isinstance(item, dict) and item.get('type') == 'comment':
-                top_level_comments.append(item)
-            else:
-                sections.append(item)
+                # Buffer the comment; will be flushed when the next section is seen.
+                pending_toplevel_comments.append(item)
+                continue
 
-        # If there are top-level comments, add them to the input section
-        if top_level_comments:
-            comment_texts = [c.get('text', '') for c in top_level_comments]
-            top_comment_plugin = {
-                'id': f"input_comment_{component_count}",
-                'type': 'input',
-                'plugin': 'comment',
-                'config': {
-                    'text': '\n'.join(comment_texts)
-                }
-            }
-            data['input'].append(top_comment_plugin)
-            component_count += 1
+            section = item
 
-        for section in sections:
-            # Defensive check: ensure section is a dict with 'type' key
+            # Defensive checks
             if not isinstance(section, dict):
                 logger.warning(f"Skipping non-dict section: {type(section)}")
                 continue
-
             if 'type' not in section:
                 logger.warning(f"Section missing 'type' key: {section}")
                 continue
 
             section_type = section['type']
-
-            # Validate section_type is one of the expected values
             if section_type not in ['input', 'filter', 'output']:
                 logger.warning(f"Warning: Unknown section type '{section_type}', skipping")
                 continue
+
+            # Flush any buffered inter-section comments into THIS section.
+            _flush_toplevel_comments(section_type)
+            last_section_type = section_type
 
             section_components = []
 
@@ -819,6 +920,9 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
             # Add all components to the section
             data[section_type].extend(section_components)
 
+        # Flush any trailing comments (after the last section) into the last section seen.
+        _flush_toplevel_comments(last_section_type)
+
         return json.dumps(data, indent=4)
 
     except Exception as e:
@@ -851,6 +955,33 @@ class ComponentToPipeline:
         
         # Generate ID in format: section_pluginname_count
         return f"{section}_{plugin_name}_{self.plugin_counters[counter_key]}"
+
+    def _format_hash_block(self, d, indent):
+        """Recursively format a Python dict as a Logstash hash block.
+
+        Returns a string starting with '{' and ending with '}' (no trailing newline),
+        suitable for inline use after a '=>' on the same line.
+
+        Args:
+            d: The dict to format.
+            indent: The tab depth of the *opening brace* line. Inner pairs are
+                    at indent+1, and the closing brace is at indent.
+        """
+        tabs = '\t' * indent
+        inner_tabs = '\t' * (indent + 1)
+        lines = ['{']
+        for k, v in d.items():
+            if isinstance(v, dict):
+                nested = self._format_hash_block(v, indent + 1)
+                lines.append(f'{inner_tabs}"{k}" => {nested}')
+            elif isinstance(v, bool):
+                lines.append(f'{inner_tabs}"{k}" => {str(v).lower()}')
+            elif isinstance(v, (int, float)):
+                lines.append(f'{inner_tabs}"{k}" => {v}')
+            else:
+                lines.append(f'{inner_tabs}"{k}" => {self._format_string_value(v)}')
+        lines.append(f'{tabs}}}')
+        return '\n'.join(lines)
 
     def _format_string_value(self, value):
         """Format a string value for Logstash config, choosing appropriate quoting.
@@ -910,6 +1041,10 @@ class ComponentToPipeline:
             config += f"\tif [plugin_num] >= {self.plugin_num} {{\n"
         config += f'{plugin["plugin"]} {{\n'
         
+        # Serialize any comments that were collected from this plugin block
+        for comment_text in plugin.get('comments', []):
+            config += f'\t# {comment_text}\n'
+
         # Add ID if requested and not already present
         if self.add_ids and 'id' not in plugin.get('config', {}):
             generated_id = self._generate_plugin_id(plugin['plugin'], section)
@@ -971,12 +1106,8 @@ class ComponentToPipeline:
                                 config += f'\t\t\t{json.dumps(item)}{comma}\n'
                         config += "\t\t]\n"
                     elif type(dict_value) is dict:
-                        # Nested hash - recursively format it
-                        config += f'\t\t"{dict_key}" => {{\n'
-                        for nested_key in dict_value:
-                            formatted_nested_value = self._format_string_value(dict_value[nested_key])
-                            config += f'\t\t\t"{nested_key}" => {formatted_nested_value}\n'
-                        config += "\t\t}\n"
+                        block = self._format_hash_block(dict_value, indent=2)
+                        config += f'\t\t"{dict_key}" => {block}\n'
                     elif type(dict_value) is bool:
                         config += f'\t\t"{dict_key}" => {str(dict_value).lower()}\n'
                     elif type(dict_value) in [int, float]:

@@ -8,7 +8,8 @@
                 "path": "/var/log/apache2/access.log",
                 "start_position": "beginning",
                 "sincedb_path": "/dev/null"
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -20,7 +21,8 @@
                 "match": {
                     "message": "%{COMBINEDAPACHELOG}"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_date_2",
@@ -31,7 +33,8 @@
                     "timestamp",
                     "dd/MMM/yyyy:HH:mm:ss Z"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_geoip_3",
@@ -39,7 +42,8 @@
             "plugin": "geoip",
             "config": {
                 "source": "clientip"
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -51,7 +55,8 @@
                 "hosts": [
                     "localhost:9200"
                 ]
-            }
+            },
+            "comments": []
         }
     ]
 }

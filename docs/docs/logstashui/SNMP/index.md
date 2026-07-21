@@ -1,6 +1,8 @@
 # SNMP Monitoring
 
-LogstashUI provides comprehensive SNMP monitoring capabilities, allowing you to collect and visualize metrics from network devices, servers, and other SNMP-enabled equipment.
+LogstashUI provides comprehensive SNMP monitoring capabilities, allowing you to collect and visualize metrics from network devices, servers, and other SNMP-enabled equipment — without hand-writing a single pipeline.
+
+![SNMP Support](/docs/images/snmp.gif)
 
 ## Overview
 
@@ -8,65 +10,49 @@ The SNMP module enables you to:
 
 - **Monitor Network Devices**: Collect metrics from switches, routers, firewalls, and other network equipment
 - **Track Server Health**: Monitor servers and infrastructure components via SNMP
-- **Custom Device Templates**: Define what metrics to collect from different device types
-- **Centralized Management**: Manage all your SNMP monitoring from a single interface
-- **Auto-Discovery**: Automatically discover SNMP devices on your network
-
-## Getting Started
-
-New to SNMP monitoring with LogstashUI? Start here:
-
-- **[Quickstart Guide](Quickstart.md)**: Get up and running in minutes with centralized pipeline management
+- **Auto-Discover Devices**: Scan network ranges to find SNMP devices automatically
+- **Receive Traps**: Listen for device-initiated notifications
+- **Manage Centrally**: Configure everything from one interface and deploy with a reviewable diff
 
 ## Key Concepts
 
-### Devices
-Individual network devices or servers you want to monitor via SNMP. Each device has an IP address, credentials, and optionally a device template.
+- **Devices** — individual endpoints to monitor. Each has an address, a credential, a network, and a device template.
+- **Networks** — monitoring zones with a CIDR range. Every network gets its own generated pipelines, deployment target, polling interval, and namespace.
+- **Credentials** — SNMP authentication (v1/v2c community strings or v3 security settings), stored encrypted.
+- **Device Templates** — bundles of profiles that define what to collect from a kind of device, with matching rules for auto-suggestion.
+- **Profiles** — the actual OID definitions (GET / walk / table) and normalizers. Official profiles ship with LogstashUI; custom profiles are yours.
 
-### Networks
-Logical groupings of devices. Each network has its own unique Logstash pipeline, allowing you to organize devices and manage them with separate Logstash instances.
-
-### Credentials
-SNMP authentication credentials (v2c community strings or v3 security settings) used to query devices.
-
-### Device Templates
-Define which SNMP metrics to collect from devices. Templates can include:
-
-- Vendor and model information
-- Matching rules for auto-assignment
-- Associated profiles that define the actual SNMP queries
-
-### Profiles
-Define the actual SNMP OIDs and metrics to collect. Profiles specify:
-
-- GET operations for scalar values
-- TABLE operations for tabular data
-- Column mappings and transformations
+Read more in **[SNMP Configuration](/docs/docs/logstashui/SNMP/configuration.md)**.
 
 ## Deployment Modes
 
-### Centralized Pipeline Management
+Each network deploys its pipelines one of two ways:
 
-Use Elasticsearch's centralized pipeline management to deploy and manage SNMP pipelines. This is the recommended approach for most deployments.
+- **Centralized Pipeline Management** — pipelines are written to Elasticsearch and picked up by your self-managed Logstash node
+- **Logstash Agent** — pipelines are pushed to a Logstash node fully managed by an enrolled [Logstash Agent](/docs/docs/logstashagent/index.md)
 
-[Learn more in the Quickstart Guide](Quickstart.md)
+See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for the comparison.
 
-### Logstash Agent (Coming Soon)
+## Documentation
 
-Deploy Logstash Agent for distributed monitoring with full remote management capabilities.
+### Getting Started
+- **[Quickstart Guide](/docs/docs/logstashui/SNMP/Quickstart.md)** - From zero to metrics, in either deployment mode
 
-## Features
+### Concepts & Configuration
+- **[SNMP Architecture](/docs/docs/logstashui/SNMP/architecture.md)** - How the pieces fit together
+- **[SNMP Configuration](/docs/docs/logstashui/SNMP/configuration.md)** - Credentials, networks, devices, templates, and profiles
+- **[Device Discovery](/docs/docs/logstashui/SNMP/discovery.md)** - What gets detected, and what doesn't
+- **[Trap Support](/docs/docs/logstashui/SNMP/traps.md)** - Receiving device-initiated notifications
 
-- **Visual Device Preview**: See a visual representation of your device's metrics before deployment
-- **Auto-Discovery**: Scan network ranges to automatically discover SNMP devices
-- **Official Templates**: Pre-built templates for popular devices from Cisco, Dell, HPE, and more
-- **Custom Profiles**: Create your own SNMP profiles for specialized equipment
-- **Change Management**: Review and deploy configuration changes with built-in diff viewer
-- **Real-time Monitoring**: View device status and metrics in real-time
+### Pipelines & Deployment
+- **[Pipeline Generation](/docs/docs/logstashui/SNMP/pipeline_generation.md)** - How configuration becomes Logstash pipelines
+- **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** - The deploy flow and deployment modes
 
-## Next Steps
+### Data
+- **[Data Overview](/docs/docs/logstashui/SNMP/data_overview.md)** - Core Network Vitals and monitoring philosophy
+- **[SNMP Field Reference](/docs/docs/logstashui/SNMP/schema.md)** - Canonical field names, MIBs, and OIDs
+- **[TSDS Implementation](/docs/docs/logstashui/SNMP/tsds_implementation.md)** - Time series storage and query performance
 
-- [Quickstart Guide](Quickstart.md) - Get started with SNMP monitoring
-- Explore official device templates
-- Create custom profiles for your equipment
-- Set up auto-discovery for your networks
+### Tools & Support
+- **[Testing & Validation](/docs/docs/logstashui/SNMP/testing.md)** - Test profiles, walk devices, AI-generate templates
+- **[Device Support](/docs/docs/logstashui/SNMP/device_support.md)** - When your device isn't in the official catalog

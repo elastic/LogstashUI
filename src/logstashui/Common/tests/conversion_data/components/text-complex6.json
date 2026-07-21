@@ -21,7 +21,8 @@
                     "critical"
                 ],
                 "max_poll_records": "500"
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_redis_1",
@@ -41,7 +42,8 @@
                 "codec": {
                     "plain": {}
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_tcp_2",
@@ -64,7 +66,8 @@
                     "tcp_input",
                     "sensitive"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -89,7 +92,8 @@
                             "add_tag": [
                                 "json_attempt"
                             ]
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_if_5",
@@ -113,7 +117,8 @@
                                         "remove_tag": [
                                             "_jsonparsefailure"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -138,7 +143,8 @@
                                             "(\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b)",
                                             "email_masked"
                                         ]
-                                    }
+                                    },
+                                    "comments": []
                                 }
                             ],
                             "else_ifs": [],
@@ -157,7 +163,8 @@
                             "add_field": {
                                 "correlation_id": "%{[parsed_service_log][request_id]}"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -184,7 +191,8 @@
                             "timeout": "60",
                             "timeout_code": "event.set('error_reason', 'Unmatched_START_Event')",
                             "timeout_task_id_field": "unmatched_correlation_id"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -209,7 +217,8 @@
                             "dictionary_path": "/etc/logstash/dicts/tenant_map.yml",
                             "fallback": "Unknown_Tenant",
                             "refresh_interval": "600"
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_mutate_14",
@@ -224,7 +233,8 @@
                                 "host",
                                 "port"
                             ]
-                        }
+                        },
+                        "comments": []
                     },
                     {
                         "id": "filter_date_15",
@@ -241,7 +251,8 @@
                             "remove_tag": [
                                 "_dateparsefailure"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -268,7 +279,8 @@
                             "add_field": {
                                 "dlq_reason": "Parsing_Failed"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -286,7 +298,8 @@
                     "_grokparsefailure",
                     "_dateparsefailure"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -309,7 +322,8 @@
                             "index": "tenant_priority-%{tenant_name}-%{+YYYY.MM}",
                             "workers": "1",
                             "manage_template": "false"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -328,7 +342,8 @@
                                     "index": "tenant_general-%{+YYYY.MM.dd}",
                                     "dlq_enabled": "true",
                                     "dlq_path": "/var/lib/logstash/dlq"
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -358,7 +373,8 @@
                             "add_tag": [
                                 "s3_backup"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -386,7 +402,8 @@
                                 "json_lines": {}
                             },
                             "temporary_directory": "/tmp/logstash_s3_tmp"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -414,7 +431,8 @@
                                     "short_message": "Log Aggregation Timeout/Error: %{unmatched_correlation_id}"
                                 }
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -439,7 +457,8 @@
                                     "metadata": "true"
                                 }
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],

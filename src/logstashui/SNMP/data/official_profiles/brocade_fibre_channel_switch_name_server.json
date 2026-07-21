@@ -1,0 +1,23 @@
+{
+  "official_key": "brocade_fibre_channel_switch_name_server",
+  "name": "name_server",
+  "description": "Local FC name server entries including FCID, WWPN, WWNN, and port type.",
+  "product": "Fibre Channel Switch",
+  "vendor": "Brocade",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "fibre_channel_name_server": {
+      "columns": {
+        "index": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.1",
+        "fcid": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.2",
+        "port.type": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.3",
+        "wwpn": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.4",
+        "port.description": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.5",
+        "wwnn": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.6",
+        "node.description": "1.3.6.1.4.1.1588.2.1.1.1.7.2.1.7"
+      }
+    }
+  }
+}

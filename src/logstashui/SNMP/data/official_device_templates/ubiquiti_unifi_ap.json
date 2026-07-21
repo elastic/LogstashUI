@@ -1,0 +1,19 @@
+{
+  "official_key": "ubiquiti_unifi_ap",
+  "name": "ubiquiti_unifi_ap",
+  "type": "Wireless AP",
+  "description": "Per-radio stats, per-SSID traffic, CPU, memory, and interface counters for Ubiquiti UniFi APs.",
+  "vendor": "Ubiquiti",
+  "product": "UniFi AP",
+  "model": "Any",
+  "profiles": [
+    "generic_interfaces",
+    "generic_system",
+    "generic_host_system_metrics",
+    "generic_ucd_system_metrics",
+    "ubiquiti_unifi_wireless"
+  ],
+  "matching_rules": [
+    "UAP"
+  ]
+}

@@ -1,0 +1,228 @@
+{
+    "input": [
+        {
+            "id": "input_syslog_0",
+            "type": "input",
+            "plugin": "syslog",
+            "config": {
+                "port": 514
+            },
+            "comments": []
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_if_1",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[message] =~ /^ERROR/",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_2",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "add_tag": [
+                                "error"
+                            ]
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_3",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[message] =~ /\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/",
+                "plugins": [
+                    {
+                        "id": "filter_date_4",
+                        "type": "filter",
+                        "plugin": "date",
+                        "config": {
+                            "match": [
+                                "message",
+                                "ISO8601"
+                            ],
+                            "target": "@timestamp"
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_5",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[host] =~ /^(web|app|db)-\\d+\\.example\\.com$/",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_6",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "add_field": {
+                                "internal": "true"
+                            }
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_7",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[message] !~ /^$/",
+                "plugins": [
+                    {
+                        "id": "filter_grok_8",
+                        "type": "filter",
+                        "plugin": "grok",
+                        "config": {
+                            "match": {
+                                "message": "%{GREEDYDATA:content}"
+                            }
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_9",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[path] =~ /\\/api\\/v[12]\\// and [method] == \"POST\"",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_10",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "add_tag": [
+                                "api_write"
+                            ]
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_11",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[status] =~ /^5\\d\\d$/",
+                "plugins": [
+                    {
+                        "id": "filter_mutate_12",
+                        "type": "filter",
+                        "plugin": "mutate",
+                        "config": {
+                            "add_tag": [
+                                "server_error"
+                            ]
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [
+                    {
+                        "condition": "[status] =~ /^4\\d\\d$/",
+                        "plugins": [
+                            {
+                                "id": "filter_mutate_13",
+                                "type": "filter",
+                                "plugin": "mutate",
+                                "config": {
+                                    "add_tag": [
+                                        "client_error"
+                                    ]
+                                },
+                                "comments": []
+                            }
+                        ]
+                    }
+                ],
+                "else": null
+            }
+        },
+        {
+            "id": "filter_if_14",
+            "type": "filter",
+            "plugin": "if",
+            "config": {
+                "condition": "[user_agent] =~ /(?i)bot|crawler|spider/",
+                "plugins": [
+                    {
+                        "id": "filter_drop_15",
+                        "type": "filter",
+                        "plugin": "drop",
+                        "config": {},
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        }
+    ],
+    "output": [
+        {
+            "id": "output_if_16",
+            "type": "output",
+            "plugin": "if",
+            "config": {
+                "condition": "\"error\" in [tags]",
+                "plugins": [
+                    {
+                        "id": "output_file_17",
+                        "type": "output",
+                        "plugin": "file",
+                        "config": {
+                            "path": "/var/log/errors.log",
+                            "codec": {
+                                "json": {}
+                            }
+                        },
+                        "comments": []
+                    }
+                ],
+                "else_ifs": [],
+                "else": null
+            }
+        },
+        {
+            "id": "output_stdout_18",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            },
+            "comments": []
+        }
+    ]
+}

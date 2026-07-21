@@ -7,13 +7,15 @@
             "config": {
                 "id": "input_udp_1",
                 "port": "5119"
-            }
+            },
+            "comments": []
         },
         {
             "id": "input_cloudwatch_1",
             "type": "input",
             "plugin": "cloudwatch",
-            "config": {}
+            "config": {},
+            "comments": []
         }
     ],
     "filter": [
@@ -30,7 +32,8 @@
                 "copy": {
                     "host": "sysloghost"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_grok_3",
@@ -45,7 +48,8 @@
                         "^<%{POSINT:syslog_pri}>%%{DATA:ciscotag}: %{GREEDYDATA:message}"
                     ]
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_grok_4",
@@ -59,7 +63,8 @@
                         "%{WORD}-%{WORD}-%{INT:event.severity}-%{INT:event.code}"
                     ]
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_mutate_5",
@@ -70,7 +75,8 @@
                 "add_field": {
                     "event.action": "firewall-rule"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_6",
@@ -90,7 +96,8 @@
                                     "Teardown dynamic %{WORD:network.transport} translation from %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}/%{INT:destination.port} duration %{DATA:cisco.duration_hms}$"
                                 ]
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -106,7 +113,8 @@
                                     "mapping": {
                                         "message": "%{network.direction} %{network.transport} connection %{event.outcome} from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} flags %{} on interface %{source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_9",
@@ -117,7 +125,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -133,7 +142,8 @@
                                     "mapping": {
                                         "message": "%{network.transport} Connection %{event.outcome} by %{network.direction} list %{cisco.list_id} src %{source.address} dest %{destination.address}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_11",
@@ -144,7 +154,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -160,7 +171,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.direction} %{network.transport} from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_13",
@@ -171,7 +183,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -187,7 +200,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.direction} %{network.transport} from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} due to %{network.protocol} %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_15",
@@ -198,7 +212,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -214,7 +229,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.direction} %{network.transport} src %{cisco.source_interface}:%{source.address}/%{source.port} %{} dst %{cisco.destination_interface}:%{destination.address}/%{destination.port} %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_17",
@@ -225,7 +241,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -241,7 +258,8 @@
                                     "mapping": {
                                         "message": "Dropping echo request from %{source.address} to PAT address %{destination.address}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_19",
@@ -253,7 +271,8 @@
                                         "network.transport": "icmp",
                                         "network.direction": "inbound"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -269,7 +288,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.direction} %{network.transport} src %{cisco.source_interface}:%{source.address} %{}dst %{cisco.destination_interface}:%{destination.address} %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_21",
@@ -280,7 +300,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -296,7 +317,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.transport} (no connection) from %{source.address}/%{source.port} to %{destination.address}/%{destination.port} flags %{} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_23",
@@ -307,7 +329,8 @@
                                     "add_field": {
                                         "event.category": "nat_translation"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -323,7 +346,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} IP spoof from (%{source.address}) to %{destination.address} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -339,7 +363,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} IP due to Land Attack from %{source.address} to %{destination.address}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -355,7 +380,8 @@
                                     "mapping": {
                                         "message": "%{network.transport} packet type %{cisco.icmp_type} %{event.outcome} by %{network.direction} list %{cisco.list_id} src %{source.address} dest %{destination.address}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -371,7 +397,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} IP teardrop fragment (size = %{}, offset = %{}) from %{source.address} to %{destination.address}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -387,7 +414,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.transport} reverse path check from %{source.address} to %{destination.address} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -403,7 +431,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.transport} connection spoof from %{source.address} to %{destination.address} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -423,7 +452,8 @@
                                             "%{WORD:event.outcome} %{WORD:network.transport} src %{WORD:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} dst %{WORD:cisco.destination.interface}:%{IPORHOST:destination.address}/%{INT:destination.port} by access-group \"%{DATA:cisco.list_id}\""
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_31",
@@ -434,7 +464,8 @@
                                     "add_field": {
                                         "event.category": "network_traffic"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -450,7 +481,8 @@
                                     "mapping": {
                                         "message": "%{} %{event.outcome} src %{source.address} dst %{destination.address} by access-group \"%{cisco.list_id}\"%{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -466,7 +498,8 @@
                                     "mapping": {
                                         "message": "access-list %{cisco.list_id} %{event.outcome} %{network.transport} %{cisco.source_interface}/%{source.address}(%{source.port}) -> %{cisco.destination_interface}/%{destination.address}(%{destination.port}) %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -482,7 +515,8 @@
                                     "mapping": {
                                         "message": "access-list %{cisco.list_id} %{event.outcome} %{network.transport} for user %{cisco.username} %{cisco.source_interface}/%{source.address} %{source.port} %{cisco.destination_interface}/%{destination.address} %{destination.port} %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -498,7 +532,8 @@
                                     "mapping": {
                                         "message": "access-list %{cisco.list_id} %{event.outcome} %{network.transport} for user %{cisco.username} %{cisco.source_interface}/%{source.address} %{source.port} %{cisco.destination_interface}/%{destination.address} %{destination.port} %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -516,7 +551,8 @@
                                             "AAA user accounting %{WORD:cisco.auth_outcome} : server =%{SPACE}%{IP:source.address} : user =%{SPACE}%{DATA:source.user.name}$"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_37",
@@ -527,7 +563,8 @@
                                     "add_field": {
                                         "event.category": "authentication"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_if_38",
@@ -545,7 +582,8 @@
                                                 "add_field": {
                                                     "event.action": "authentication_success"
                                                 }
-                                            }
+                                            },
+                                            "comments": []
                                         }
                                     ],
                                     "else_ifs": [],
@@ -560,7 +598,8 @@
                                                     "add_field": {
                                                         "event.action": "authentication_failure"
                                                     }
-                                                }
+                                                },
+                                                "comments": []
                                             }
                                         ]
                                     }
@@ -584,7 +623,8 @@
                                             "Built %{WORD:network.direction} %{WORD:network.transport} connection %{INT:cisco.connection_id} for %{WORD:cisco.source_interface}:%{IPORHOST:source.address}\\/%{INT:source.port} \\(%{DATA}\\) to %{WORD:cisco.destination_interface}:%{IPORHOST:destination.address}/%{INT:destination.port}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_42",
@@ -595,7 +635,8 @@
                                     "add_field": {
                                         "event.category": "nat_translation"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -613,7 +654,8 @@
                                             "%{DATA:cisco.event_error} for %{WORD:network.transport} from %{DATA:cisco.source_interface}:%{IP:source.address}\\/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}\\/%{INT:destination.port}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_44",
@@ -624,7 +666,8 @@
                                     "add_field": {
                                         "event.category": "error"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -642,7 +685,8 @@
                                             "Group = %{DATA:cisco.group}, Username = %{DATA:user.name}, IP = %{IP:cisco.client_vpn_ip}, %{DATA:cisco.client_vpn_action}\\. Session Type: %{DATA:cisco.session_type}, Duration: %{DATA:cisco.duration}, Bytes xmt: %{INT:cisco.vpn_transmit_byte_summary}, Bytes rcv: %{INT:cisco.vpn_receive_byte_summary}, Reason: %{DATA:cisco.client_vpn_outcome}$"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -658,7 +702,8 @@
                                     "mapping": {
                                         "message": "%{source.address} %{}ccessed URL %{destination.address}:%{url.original}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_47",
@@ -669,7 +714,8 @@
                                     "add_field": {
                                         "event.outcome": "allow"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -685,7 +731,8 @@
                                     "mapping": {
                                         "message": "Access %{event.outcome} URL %{url.original} SRC %{source.address} %{}EST %{destination.address} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -703,7 +750,8 @@
                                             "Built dynamic %{WORD:network.transport} translation from %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}/%{INT:destination.port}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_50",
@@ -714,7 +762,8 @@
                                     "add_field": {
                                         "event.category": "nat_translation"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -732,7 +781,8 @@
                                             "Teardown dynamic %{WORD:network.transport} translation from %{DATA:cisco.source_interface}:%{IPORHOST:source.address}/%{INT:source.port} to %{DATA:cisco.destination_interface}:%{IP:destination.address}/%{INT:destination.port}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_52",
@@ -743,7 +793,8 @@
                                     "add_field": {
                                         "event.category": "nat_translation"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -759,7 +810,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.transport} type=%{cisco.icmp_type}, code=%{cisco.icmp_code} from %{source.address} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -775,7 +827,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.transport} type=%{cisco.icmp_type}, from%{}addr %{source.address} on interface %{cisco.source_interface} to %{destination.address}: no matching session"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -791,7 +844,8 @@
                                     "mapping": {
                                         "message": "No matching connection for %{network.transport} error message: %{} on %{cisco.source_interface} interface.%{}riginal IP payload: %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -807,7 +861,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} %{network.transport} type=%{cisco.icmp_type} , code=%{cisco.icmp_code} from %{source.address} on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -823,7 +878,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} invalid %{network.transport} code %{cisco.icmp_code} , for %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -839,7 +895,8 @@
                                     "mapping": {
                                         "message": "%{event.outcome} MAC address %{source.mac}, possible spoof attempt on interface %{cisco.source_interface}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -855,7 +912,8 @@
                                     "mapping": {
                                         "message": "Dynamic filter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -871,7 +929,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_61",
@@ -882,7 +941,8 @@
                                     "add_field": {
                                         "server.domain": "[destination.domain]"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -898,7 +958,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -914,7 +975,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -930,7 +992,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_65",
@@ -941,7 +1004,8 @@
                                     "add_field": {
                                         "server.domain": "[source.domain]"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -957,7 +1021,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_67",
@@ -968,7 +1033,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -984,7 +1050,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1000,7 +1067,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} black%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1016,7 +1084,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_71",
@@ -1027,7 +1096,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1043,7 +1113,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_73",
@@ -1054,7 +1125,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1070,7 +1142,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1086,7 +1159,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} white%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{}"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1102,7 +1176,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_77",
@@ -1113,7 +1188,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1129,7 +1205,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_79",
@@ -1140,7 +1217,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1156,7 +1234,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}source %{} resolved from %{cisco.list_id} list: %{source.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_81",
@@ -1167,7 +1246,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1183,7 +1263,8 @@
                                     "mapping": {
                                         "message": "Dynamic %{}ilter %{event.outcome} grey%{}d %{network.transport} traffic from %{cisco.source_interface}:%{source.address}/%{source.port} (%{cisco.mapped_source_ip}/%{cisco.mapped_source_port}) to %{cisco.destination_interface}:%{destination.address}/%{destination.port} (%{cisco.mapped_destination_ip}/%{cisco.mapped_destination_port})%{}destination %{} resolved from %{cisco.list_id} list: %{destination.domain}, threat-level: %{cisco.threat_level}, category: %{cisco.threat_category}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_83",
@@ -1194,7 +1275,8 @@
                                     "add_field": {
                                         "server.domain": "server.domain"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1210,7 +1292,8 @@
                                     "mapping": {
                                         "message": "Intercepted DNS reply for domain %{source.domain} from %{cisco.source_interface}:%{source.address}/%{source.port} to %{cisco.destination_interface}:%{destination.address}/%{destination.port}, matched %{cisco.list_id}"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_85",
@@ -1221,7 +1304,8 @@
                                     "add_field": {
                                         "client.address": "client.address"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_86",
@@ -1232,7 +1316,8 @@
                                     "add_field": {
                                         "client.port": "client.port"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_87",
@@ -1243,7 +1328,8 @@
                                     "add_field": {
                                         "server.address": "server.address"
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_88",
@@ -1254,7 +1340,8 @@
                                     "add_field": {
                                         "server.port": "server.port"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1281,7 +1368,8 @@
                                             "Built %{WORD:network.direction} %{NOTSPACE:network.transport} connection for faddr (?:%{NOTCOLON:cisco.source_interface}:)?%{ECSDESTIPORHOST}/%{NUMBER} (?:%{NOTSPACE:cisco.destination_username} )?gaddr (?:%{NOTCOLON}:)?%{MAPPEDSRC}/%{NUMBER} laddr (?:%{NOTCOLON:cisco.source_interface}:)?%{ECSSOURCEIPORHOST}/%{NUMBER}(?: %{NOTSPACE:cisco.source_username})?%{GREEDYDATA}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_90",
@@ -1292,7 +1380,8 @@
                                     "add_field": {
                                         "event.category": "nat_translation"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1310,7 +1399,8 @@
                                             "%{DATA:cisco.event_error} from %{WORD:cisco.source_interface}:%{IPORHOST:source.address}\\/%{INT:source.port} to %{WORD:cisco.destination_interface}:%{IPORHOST:destination.address}\\/%{INT:destination.port}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_92",
@@ -1321,7 +1411,8 @@
                                     "add_field": {
                                         "event.category": "error"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1339,7 +1430,8 @@
                                             "%{GREEDYDATA:cisco.event_error}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             },
                             {
                                 "id": "filter_mutate_94",
@@ -1350,7 +1442,8 @@
                                     "add_field": {
                                         "event.category": "error"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1368,7 +1461,8 @@
                                             "Group \\<%{DATA:cisco.group} User \\<%{DATA:user.name}\\> IP \\<%{IP:cisco.client_vpn_ip}\\> WebVPN session %{WORD:cisco.client_vpn_session_outcome}\\: %{DATA:cisco.web_vpn_action}\\."
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1386,7 +1480,8 @@
                                             "Group \\<%{DATA:cisco.group} User \\<%{DATA:user.name}\\> IP \\<%{IP:cisco.client_vpn_ip}\\> %{GREEDYDATA:cisco.message}"
                                         ]
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -1404,7 +1499,8 @@
                                         "forced_failure"
                                     ]
                                 }
-                            }
+                            },
+                            "comments": []
                         }
                     ]
                 }
@@ -1423,7 +1519,8 @@
                         "plugin": "drop",
                         "config": {
                             "id": "filter_drop_1"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1448,7 +1545,8 @@
                                     "(?:%{IP:source.ip}|%{GREEDYDATA:source.domain})"
                                 ]
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1473,7 +1571,8 @@
                                     "(?:%{IP:destination.ip}|%{GREEDYDATA:destination.domain})"
                                 ]
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1498,7 +1597,8 @@
                                     "(?:%{IP:client.ip}|%{GREEDYDATA:client.domain})"
                                 ]
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1523,7 +1623,8 @@
                                     "(?:%{IP:server.ip}|%{GREEDYDATA:server.domain})"
                                 ]
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1542,7 +1643,8 @@
                     "network.direction",
                     "event.outcome"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_if_109",
@@ -1560,7 +1662,8 @@
                             "update": {
                                 "event.outcome": "allow"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -1576,7 +1679,8 @@
                                     "update": {
                                         "event.outcome": "allow"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1592,7 +1696,8 @@
                                     "update": {
                                         "event.outcome": "deny"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     },
@@ -1608,7 +1713,8 @@
                                     "update": {
                                         "event.outcome": "deny"
                                     }
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -1632,7 +1738,8 @@
                             "update": {
                                 "network.transport": "ipv6-icmp"
                             }
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -1670,7 +1777,8 @@
                     "ipv6-nonxt": "59",
                     "ipv6-opts": "60"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_mutate_117",
@@ -1682,7 +1790,8 @@
                     "ciscotag",
                     "timestamp"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_mutate_118",
@@ -1694,7 +1803,8 @@
                     "event.module": "cisco",
                     "event.dataset": "asa"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_translate_119",
@@ -1714,7 +1824,8 @@
                     "6": "informational",
                     "7": "debug"
                 }
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -1728,7 +1839,8 @@
                 "hosts": "https://homedc-90e54c.es.us-east-2.aws.elastic-cloud.com:443",
                 "index": "asa-1.2",
                 "pipeline": "asa"
-            }
+            },
+            "comments": []
         }
     ]
 }

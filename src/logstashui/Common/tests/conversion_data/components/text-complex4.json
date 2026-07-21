@@ -14,7 +14,8 @@
                     "[@metadata][source]": "generator",
                     "event.original": "%{message}"
                 }
-            }
+            },
+            "comments": []
         }
     ],
     "filter": [
@@ -38,7 +39,8 @@
                 "tag_on_failure": [
                     "_dissectfailure_ts_rest"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_date_3",
@@ -53,7 +55,8 @@
                 "tag_on_failure": [
                     "_dateparsefailure_ts"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_4",
@@ -78,7 +81,8 @@
                 "tag_on_failure": [
                     "_kvfailure_rest"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_6",
@@ -105,7 +109,8 @@
                     "^\"|\"$",
                     ""
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_8",
@@ -131,7 +136,8 @@
                 "lowercase": [
                     "level"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_10",
@@ -150,7 +156,8 @@
                 "add_field": {
                     "route_key": "%{[@metadata][source]}::%{[service]}::%{[http][request][method]}::%{[url][path]}"
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_12",
@@ -176,7 +183,8 @@
                             "add_tag": [
                                 "route_items"
                             ]
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [
@@ -192,7 +200,8 @@
                                     "add_tag": [
                                         "route_api_generic"
                                     ]
-                                }
+                                },
+                                "comments": []
                             }
                         ]
                     }
@@ -208,7 +217,8 @@
                                 "add_tag": [
                                     "route_other"
                                 ]
-                            }
+                            },
+                            "comments": []
                         }
                     ]
                 }
@@ -237,7 +247,8 @@
                             "id": "ua_parse",
                             "source": "[user_agent][original]",
                             "target": "[user_agent][parsed]"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -267,7 +278,8 @@
                             "id": "geoip_source",
                             "source": "[source][ip]",
                             "target": "[source][geo]"
-                        }
+                        },
+                        "comments": []
                     }
                 ],
                 "else_ifs": [],
@@ -294,7 +306,8 @@
                 ],
                 "method": "MURMUR3",
                 "target": "[@metadata][fp]"
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_comment_25",
@@ -315,7 +328,8 @@
                     "\\\\",
                     "/"
                 ]
-            }
+            },
+            "comments": []
         },
         {
             "id": "filter_prune_27",
@@ -338,7 +352,8 @@
                     "^msg$",
                     "^@metadata\\..*$"
                 ]
-            }
+            },
+            "comments": []
         }
     ],
     "output": [
@@ -352,7 +367,8 @@
                         "metadata": "true"
                     }
                 }
-            }
+            },
+            "comments": []
         },
         {
             "id": "output_file_29",
@@ -363,7 +379,8 @@
                 "codec": {
                     "json_lines": {}
                 }
-            }
+            },
+            "comments": []
         }
     ]
 }

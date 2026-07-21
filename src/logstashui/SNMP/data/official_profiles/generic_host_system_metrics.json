@@ -1,0 +1,68 @@
+{
+  "official_key": "generic_host_system_metrics",
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total.bytes",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct"
+      }
+    }
+  ]
+}

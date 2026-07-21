@@ -1,8 +1,14 @@
 # Logstash Version Compatibility
 
-## Recommended Version
+It's very frequently asked if we can support 7.x and 8.x versions of Logstash. In most cases, those versions will work. We DO NOT test against those versions. You may, see plugin options that don't exist in earlier versions, and that's something you'll want to look out for.
 
-**LogstashUI is optimized for Logstash 9.3** — this is the recommended version for the best experience and full feature compatibility.
+## Compatibility Matrix
+
+| LogstashUI Version | Logstash Version |
+|--------------------|------------------|
+| 0.4.x              | Logstash 9.3.x   |
+| 0.5.x              | Logstash 9.4.x   |
+
 
 ## Version Support
 
@@ -10,21 +16,16 @@
 
 LogstashUI's primary focus is compatibility with **Logstash version 9**. We strongly recommend upgrading to version 9 to take full advantage of all features and capabilities.
 
-- **Best supported version:** 9.3
+- **Best supported version:** the version listed for your LogstashUI release in the matrix above (9.4.x for LogstashUI 0.5.x)
 - Full feature support in the pipeline editor
 - All configuration options available
 - Optimal performance and stability
 
-### Logstash 8.x (Limited Support)
+## Logstash Agent Compatibility
 
-LogstashUI is compatible with Logstash version 8, but **requires the use of Logstash Agent**.
+Logstash Agent is versioned alongside LogstashUI. When updating LogstashUI, update any enrolled Logstash Agents at the same time — a newer LogstashUI managing an older agent (or vice versa) is not tested. See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for the differences between Centralized Pipeline Management and Logstash Agent deployment modes.
 
-**Important considerations for version 8:**
 
-- Requires Logstash Agent for proper integration
-- Limited feature set compared to version 9
-- Some configuration options in the pipeline editor may not be available
-- Not the primary development focus
 
 ## Upgrading to Version 9
 
