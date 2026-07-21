@@ -409,11 +409,55 @@
 
   </div><!-- /deviceWizardContent -->
 
-  <!-- Generate Template and Profiles Tab Content -->
+  <!-- Generate Template and Profiles Tab Content — launcher card -->
   <div id="generateTemplateContent" class="hidden">
-    {% include 'components/ai_generate_template_content.html' %}
+    <div class="bg-gray-900/50 rounded-lg border border-gray-700 p-8 flex flex-col items-center gap-4 text-center">
+      <svg class="w-10 h-10 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+      </svg>
+      <div>
+        <h2 class="text-lg font-semibold text-white mb-1">Generate Template and Profiles</h2>
+        <p class="text-sm text-gray-400 max-w-md">Paste SNMP walk output and let AI generate a custom device template and profiles for you.</p>
+      </div>
+      <button id="generateTemplateBtn" type="button"
+              class="btn border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+        </svg>
+        Open AI Template Generator
+      </button>
+    </div>
   </div>
 
+</div>
+
+<!-- AI Generate Template Modal -->
+<div id="aiGenerateTemplateModal" class="hidden fixed inset-0 z-[200] flex items-start justify-center bg-black/70 backdrop-blur-sm overflow-y-auto py-8 px-4">
+  <div class="relative w-full max-w-5xl bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col">
+
+    <!-- Modal header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+        </svg>
+        <h2 class="text-base font-semibold text-white">Generate Template and Profiles</h2>
+        <span class="text-xs text-gray-500 ml-1">— the generated template will be automatically selected for this device</span>
+      </div>
+      <button type="button" onclick="closeAiGenerateTemplateModal()"
+              class="text-gray-400 hover:text-white transition-colors p-1 rounded">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Modal body -->
+    <div class="p-6">
+      {% include 'components/ai_generate_template_content.html' %}
+    </div>
+
+  </div>
 </div>
 
 <!-- SNMP Test Modal (needed for Device Wizard walk step) -->

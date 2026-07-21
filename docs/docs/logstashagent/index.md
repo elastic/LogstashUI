@@ -204,11 +204,11 @@ sudo logstash-agent uninstall --yes
 
 This removes:
 - Binary: `/opt/logstash-agent/`
-- Symlink: `/usr/local/bin/logstash-agent`
+- Symlink: `/usr/local/bin/logstash-agent` (or `/usr/bin/logstash-agent` on RHEL)
 - Config: `/etc/logstash-agent/`
 - Systemd service: `/etc/systemd/system/logstash-agent.service`
 
-Agent state and logs are **preserved by default** at `/var/lib/logstash-agent/` and `/var/log/logstash-agent/`. To remove those as well, add the `--purge` flag:
+Agent state, logs, and the upgrade download cache are **preserved by default** at `/var/lib/logstash-agent/`, `/var/log/logstash-agent/`, and `/var/cache/logstash-agent/`. To remove those as well, add the `--purge` flag:
 
 ```bash
 sudo logstash-agent uninstall --purge --yes

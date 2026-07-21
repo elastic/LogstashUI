@@ -25,7 +25,8 @@
   }
 
   // ── Override openAiDeviceTemplateModal for the Onboarding page ────────────────
-  // On other pages this opens a modal; here we switch to Tab 3 inline instead.
+  // On other pages this opens a modal; here we open #aiGenerateTemplateModal so
+  // the user stays in the Device Wizard tab context.
 
   window.openAiDeviceTemplateModal = function (prefillWalkData) {
     // Close the SNMP test modal if it's open
@@ -36,9 +37,12 @@
       document.body.style.overflow = '';
     }
 
-    // Switch to the Generate Template & Profiles tab
-    const genTab = document.getElementById('generateTemplateTab');
-    if (genTab) genTab.click();
+    // Open the generate template overlay modal
+    const genModal = document.getElementById('aiGenerateTemplateModal');
+    if (genModal) {
+      genModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
 
     // Pre-fill walk text and nudge button state
     if (prefillWalkData) {
@@ -48,12 +52,14 @@
         walkInput.dispatchEvent(new Event('input'));
       }
     }
+  };
 
-    // Scroll the generate content into view
-    setTimeout(() => {
-      const genContent = document.getElementById('generateTemplateContent');
-      if (genContent) genContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+  window.closeAiGenerateTemplateModal = function () {
+    const genModal = document.getElementById('aiGenerateTemplateModal');
+    if (genModal) {
+      genModal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
   };
 
   // ── Wizard credential dropdown — exact copy of snmp_devices_modal.js pattern ──
@@ -586,8 +592,8 @@
   }
 
   function wizardBringYourOwnWalk() {
-    // Send the user to the Generate Template and Profiles tab.
-    document.getElementById('generateTemplateTab')?.click();
+    // Open the generate template modal (user brings their own walk data)
+    window.openAiDeviceTemplateModal();
   }
 
   // ── Open walk modal pre-filled ────────────────────────────────────────────────
@@ -632,15 +638,23 @@
 
     // Set the hook so the imported template auto-selects in the wizard picker
     window.onAITemplateImported = function ({ id, name }) {
-      // Show the manual picker with the newly imported template selected
-      _inMatchFlow = false;
-      _autoSelectTemplate('Manual', id, name);
-      document.getElementById('wizardManualPicker')?.classList.remove('hidden');
-      document.getElementById('wizardResultCard')?.classList.add('hidden');
+      // Close the generate template modal
+      if (typeof window.closeAiGenerateTemplateModal === 'function') {
+        window.closeAiGenerateTemplateModal();
+      }
 
-      // Switch back to wizard tab
-      const wizTab = document.getElementById('deviceWizardTab');
-      if (wizTab) wizTab.click();
+      // Hide all individual result state panels
+      ['wizardResultMatch', 'wizardResultNoMatch', 'wizardResultUnreachable'].forEach(sid =>
+        document.getElementById(sid)?.classList.add('hidden')
+      );
+
+      // Show the result container + manual picker with the new template selected
+      _inMatchFlow = false;
+      document.getElementById('wizardResultCard')?.classList.remove('hidden');
+      document.getElementById('wizardManualPicker')?.classList.remove('hidden');
+      _autoSelectTemplate('Manual', id, name);
+
+      showToast(`"${name}" imported and selected. Click Save Device to continue.`, 'success');
     };
   }
 

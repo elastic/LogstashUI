@@ -1905,3 +1905,253 @@ class TestGetDevicesAdditional:
         device = Device.objects.get(name='Hostname Only Device')
         assert device.hostname == 'myswitch.example.com'
         assert device.ip_address is None
+
+
+# ============================================================================
+# Unit tests for _build_trap_components helper
+# ============================================================================
+
+@pytest.mark.django_db
+class TestBuildTrapComponents:
+    """Direct unit tests for the _build_trap_components() internal helper"""
+
+    def test_v2c_trap_components_have_correct_structure(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_trap_components
+        network = Network.objects.create(
+            name='Trap V2c Network',
+            network_range='10.10.0.0/24',
+            connection=test_connection,
+            credential=test_credential_v2c,
+            traps_enabled=True,
+            credential_mode='PLAINTEXT',
+        )
+        result = _build_trap_components(network)
+        assert 'input' in result
+        assert 'filter' in result
+        assert 'output' in result
+        assert len(result['input']) == 1
+        assert result['input'][0]['plugin'] == 'snmptrap'
+        trap_cfg = result['input'][0]['config']
+        assert '2c' in trap_cfg.get('supported_versions', [])
+
+    def test_v1_trap_components_include_v1_version(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_trap_components
+        cred = Credential.objects.create(name='V1 Trap Cred', version='1', community='public')
+        network = Network.objects.create(
+            name='Trap V1 Network',
+            network_range='10.11.0.0/24',
+            connection=test_connection,
+            credential=cred,
+            traps_enabled=True,
+            credential_mode='PLAINTEXT',
+        )
+        result = _build_trap_components(network)
+        trap_cfg = result['input'][0]['config']
+        assert '1' in trap_cfg.get('supported_versions', [])
+
+    def test_v3_trap_components_include_security_fields(
+        self, test_connection, test_credential_v3
+    ):
+        from SNMP.snmp_crud import _build_trap_components
+        network = Network.objects.create(
+            name='Trap V3 Network',
+            network_range='10.12.0.0/24',
+            connection=test_connection,
+            credential=test_credential_v3,
+            traps_enabled=True,
+            credential_mode='PLAINTEXT',
+        )
+        result = _build_trap_components(network)
+        trap_cfg = result['input'][0]['config']
+        assert '3' in trap_cfg.get('supported_versions', [])
+        assert 'security_name' in trap_cfg
+
+    def test_keystore_mode_emits_keystore_references(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_trap_components
+        network = Network.objects.create(
+            name='Trap Keystore Network',
+            network_range='10.13.0.0/24',
+            connection=test_connection,
+            credential=test_credential_v2c,
+            traps_enabled=True,
+            credential_mode='KEYSTORE',
+        )
+        result = _build_trap_components(network)
+        trap_cfg = result['input'][0]['config']
+        # In KEYSTORE mode the community string should be a ${...} reference
+        community = trap_cfg.get('community', [])
+        assert community and community[0].startswith('${')
+
+    def test_plaintext_mode_emits_decrypted_community(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_trap_components
+        network = Network.objects.create(
+            name='Trap Plaintext Network',
+            network_range='10.14.0.0/24',
+            connection=test_connection,
+            credential=test_credential_v2c,
+            traps_enabled=True,
+            credential_mode='PLAINTEXT',
+        )
+        result = _build_trap_components(network)
+        trap_cfg = result['input'][0]['config']
+        community = trap_cfg.get('community', [])
+        assert community and not community[0].startswith('${')
+
+    def test_filter_adds_event_category_traps(self, test_connection, test_credential_v2c):
+        from SNMP.snmp_crud import _build_trap_components
+        network = Network.objects.create(
+            name='Trap Filter Check',
+            network_range='10.15.0.0/24',
+            connection=test_connection,
+            credential=test_credential_v2c,
+            traps_enabled=True,
+            credential_mode='PLAINTEXT',
+        )
+        result = _build_trap_components(network)
+        mutate_filter = next(
+            (f for f in result['filter'] if f.get('plugin') == 'mutate'), None
+        )
+        assert mutate_filter is not None
+        add_field = mutate_filter['config'].get('add_field', {})
+        assert add_field.get('[event][category]') == 'traps'
+
+
+# ============================================================================
+# Unit tests for _build_network_pipeline_configs helper
+# ============================================================================
+
+@pytest.mark.django_db
+class TestBuildNetworkPipelineConfigs:
+    """Direct unit tests for the _build_network_pipeline_configs() internal helper"""
+
+    def test_returns_empty_when_no_devices(self, test_connection, test_credential_v2c):
+        from SNMP.snmp_crud import _build_network_pipeline_configs
+        network = Network.objects.create(
+            name='Empty Network Configs',
+            network_range='10.20.0.0/24',
+            connection=test_connection,
+            traps_enabled=False,
+            discovery_enabled=False,
+        )
+        results = _build_network_pipeline_configs(network)
+        assert results == []
+
+    def test_returns_polling_pipeline_for_v2c_device(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_network_pipeline_configs
+        network = Network.objects.create(
+            name='Polling V2c Configs',
+            network_range='10.21.0.0/24',
+            connection=test_connection,
+            traps_enabled=False,
+            discovery_enabled=False,
+        )
+        Device.objects.create(
+            name='Config Test Device',
+            ip_address='10.21.0.10',
+            credential=test_credential_v2c,
+            network=network,
+        )
+        results = _build_network_pipeline_configs(network)
+        assert len(results) >= 1
+        pipeline_types = [r['pipeline_type'] for r in results]
+        assert 'polling' in pipeline_types
+
+    def test_trap_pipeline_included_when_enabled(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_network_pipeline_configs
+        network = Network.objects.create(
+            name='Trap Enabled Configs',
+            network_range='10.22.0.0/24',
+            connection=test_connection,
+            credential=test_credential_v2c,
+            traps_enabled=True,
+            discovery_enabled=False,
+            credential_mode='PLAINTEXT',
+        )
+        Device.objects.create(
+            name='Trap Config Device',
+            ip_address='10.22.0.10',
+            credential=test_credential_v2c,
+            network=network,
+        )
+        results = _build_network_pipeline_configs(network)
+        pipeline_types = [r['pipeline_type'] for r in results]
+        assert 'trap' in pipeline_types
+
+    def test_discovery_pipeline_included_when_enabled(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_network_pipeline_configs
+        network = Network.objects.create(
+            name='Discovery Enabled Configs',
+            network_range='10.23.0.0/24',
+            connection=test_connection,
+            discovery_credential=test_credential_v2c,
+            traps_enabled=False,
+            discovery_enabled=True,
+            credential_mode='PLAINTEXT',
+        )
+        Device.objects.create(
+            name='Discovery Config Device',
+            ip_address='10.23.0.10',
+            credential=test_credential_v2c,
+            network=network,
+        )
+        results = _build_network_pipeline_configs(network)
+        pipeline_types = [r['pipeline_type'] for r in results]
+        assert 'discovery' in pipeline_types
+
+    def test_pipeline_name_contains_network_name(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_network_pipeline_configs
+        network = Network.objects.create(
+            name='Name Check Network',
+            network_range='10.24.0.0/24',
+            connection=test_connection,
+            traps_enabled=False,
+            discovery_enabled=False,
+        )
+        Device.objects.create(
+            name='Name Check Device',
+            ip_address='10.24.0.10',
+            credential=test_credential_v2c,
+            network=network,
+        )
+        results = _build_network_pipeline_configs(network)
+        for r in results:
+            assert 'name_check_network' in r['pipeline_name']
+
+    def test_config_is_valid_logstash_syntax(
+        self, test_connection, test_credential_v2c
+    ):
+        from SNMP.snmp_crud import _build_network_pipeline_configs
+        network = Network.objects.create(
+            name='Syntax Check Network',
+            network_range='10.25.0.0/24',
+            connection=test_connection,
+            traps_enabled=False,
+            discovery_enabled=False,
+        )
+        Device.objects.create(
+            name='Syntax Device',
+            ip_address='10.25.0.10',
+            credential=test_credential_v2c,
+            network=network,
+        )
+        results = _build_network_pipeline_configs(network)
+        for r in results:
+            config = r['config']
+            assert 'input {' in config
+            assert 'output {' in config

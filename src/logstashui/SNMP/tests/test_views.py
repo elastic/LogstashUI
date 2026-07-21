@@ -404,6 +404,304 @@ class TestViewContextContent:
 
 
 # ============================================================================
+# Onboarding View Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestOnboardingView:
+    """Test the SNMP Onboarding page view"""
+
+    def test_onboarding_requires_authentication(self, client):
+        response = client.get('/SNMP/Onboarding/')
+        assert response.status_code == 302
+        assert '/Management/Login/' in response.url
+
+    def test_onboarding_accessible_to_admin(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+
+    def test_onboarding_accessible_to_readonly(self, readonly_client):
+        response = readonly_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+
+    def test_onboarding_has_all_required_context_keys(self, authenticated_client, test_network, test_credential, test_device):
+        response = authenticated_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+        for key in ('connections', 'credentials', 'networks', 'templates', 'devices', 'device_count', 'form'):
+            assert key in response.context, f"Missing context key: {key}"
+
+    def test_onboarding_device_count_matches_db(self, authenticated_client, test_device):
+        from SNMP.models import Device as _Device
+        response = authenticated_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+        assert response.context['device_count'] == _Device.objects.count()
+
+    def test_onboarding_networks_excludes_nothing(self, authenticated_client, test_network):
+        response = authenticated_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+        network_names = [n.name for n in response.context['networks']]
+        assert test_network.name in network_names
+
+    def test_onboarding_templates_excludes_default(self, authenticated_client):
+        from SNMP.models import DeviceTemplate
+        DeviceTemplate.objects.create(name='default', vendor='Generic', description='default template')
+        DeviceTemplate.objects.create(name='custom_tpl', vendor='Generic', description='custom')
+        response = authenticated_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+        template_names = [t.name for t in response.context['templates']]
+        assert 'default' not in template_names
+        assert 'custom_tpl' in template_names
+
+
+# ============================================================================
+# CheckDeviceType View Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestCheckDeviceTypeView:
+    """Test the CheckDeviceType view (lightweight SNMP probe)"""
+
+    def test_get_method_returns_405(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/CheckDeviceType/')
+        assert response.status_code == 405
+
+    def test_missing_host_returns_400(self, authenticated_client, test_credential):
+        data = json.dumps({'credential_id': test_credential.id})
+        response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 400
+        assert 'host is required' in response.json()['error']
+
+    def test_missing_credential_id_returns_400(self, authenticated_client):
+        data = json.dumps({'host': '192.168.1.1'})
+        response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 400
+        assert 'credential_id is required' in response.json()['error']
+
+    def test_nonexistent_credential_returns_404(self, authenticated_client):
+        data = json.dumps({'host': '192.168.1.1', 'credential_id': 99999})
+        response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 404
+        assert 'not found' in response.json()['error'].lower()
+
+    def test_invalid_json_body_returns_400(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/CheckDeviceType/', 'not valid json', content_type='application/json'
+        )
+        assert response.status_code == 400
+
+    def test_unreachable_host_returns_error_payload(self, authenticated_client, test_credential):
+        with patch('SNMP.views._snmp_get_sys_descr', return_value=None):
+            data = json.dumps({'host': '10.255.255.255', 'credential_id': test_credential.id})
+            response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is False
+        assert 'error' in rdata
+
+    def test_reachable_host_returns_sys_descr(self, authenticated_client, test_credential):
+        sys_descr = 'Linux router 5.10.0 #1 SMP x86_64'
+        with patch('SNMP.views._snmp_get_sys_descr', return_value=sys_descr):
+            data = json.dumps({'host': '192.168.1.1', 'credential_id': test_credential.id})
+            response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is True
+        assert rdata['sys_descr'] == sys_descr
+
+    def test_matched_template_returned_when_found(self, authenticated_client, test_credential):
+        from SNMP.models import DeviceTemplate, Profile as _Profile
+        profile = _Profile.objects.create(
+            name='linux_match_profile', vendor='Linux',
+            profile_data={'get': {}, 'walk': {}, 'table': {}}
+        )
+        tpl = DeviceTemplate.objects.create(
+            name='linux_match', vendor='Linux', matching_rules=['Linux']
+        )
+        tpl.profiles.add(profile)
+
+        with patch('SNMP.views._snmp_get_sys_descr', return_value='Linux router 5.10 SMP x86_64'), \
+             patch('SNMP.snmp_crud.suggest_device_template', return_value=[tpl.id]):
+            data = json.dumps({'host': '192.168.1.1', 'credential_id': test_credential.id})
+            response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is True
+        assert rdata['matched_template'] is not None
+        assert rdata['matched_template']['name'] == 'linux_match'
+
+    def test_no_match_returns_null_template(self, authenticated_client, test_credential):
+        with patch('SNMP.views._snmp_get_sys_descr', return_value='Unknown Device XR-9000'), \
+             patch('SNMP.snmp_crud.suggest_device_template', return_value=[]):
+            data = json.dumps({'host': '192.168.1.1', 'credential_id': test_credential.id})
+            response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is True
+        assert rdata['matched_template'] is None
+
+    def test_readonly_user_is_denied(self, readonly_client, test_credential):
+        data = json.dumps({'host': '192.168.1.1', 'credential_id': test_credential.id})
+        response = readonly_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 403
+
+    def test_custom_port_accepted(self, authenticated_client, test_credential):
+        with patch('SNMP.views._snmp_get_sys_descr', return_value='Device Description') as mock_fn:
+            data = json.dumps({'host': '10.0.0.1', 'port': 1161, 'credential_id': test_credential.id})
+            response = authenticated_client.post('/SNMP/CheckDeviceType/', data, content_type='application/json')
+        assert response.status_code == 200
+        args = mock_fn.call_args[0]
+        assert args[1] == 1161
+
+
+# ============================================================================
+# ImportAIGeneratedDefinitions View Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestImportAIGeneratedDefinitions:
+    """Test the ImportAIGeneratedDefinitions view"""
+
+    def test_get_method_returns_405(self, authenticated_client):
+        response = authenticated_client.get('/SNMP/ImportAIGeneratedDefinitions/')
+        assert response.status_code == 405
+
+    def test_invalid_json_body_returns_400(self, authenticated_client):
+        response = authenticated_client.post(
+            '/SNMP/ImportAIGeneratedDefinitions/', 'not json', content_type='application/json'
+        )
+        assert response.status_code == 400
+
+    def test_profiles_not_list_returns_400(self, authenticated_client):
+        data = json.dumps({'profiles': 'not a list', 'device_template': {'name': 'tpl', 'profiles': []}})
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 400
+        assert 'profiles' in response.json()['error']
+
+    def test_template_not_dict_returns_400(self, authenticated_client):
+        data = json.dumps({'profiles': [], 'device_template': 'not a dict'})
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 400
+
+    def test_template_missing_name_returns_400(self, authenticated_client):
+        data = json.dumps({'profiles': [], 'device_template': {'profiles': []}})
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 400
+        assert 'name' in response.json()['error']
+
+    def test_template_profiles_not_list_returns_400(self, authenticated_client):
+        data = json.dumps({'profiles': [], 'device_template': {'name': 'tpl', 'profiles': 'bad'}})
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 400
+
+    def test_profile_missing_name_returns_422(self, authenticated_client):
+        data = json.dumps({
+            'profiles': [{'get': {}, 'walk': {}}],
+            'device_template': {'name': 'My Template', 'profiles': []}
+        })
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 422
+        rdata = response.json()
+        assert rdata['success'] is False
+        assert len(rdata['errors']) > 0
+
+    def test_creates_new_profile_and_template(self, authenticated_client):
+        data = json.dumps({
+            'profiles': [
+                {
+                    'name': 'import_test_profile',
+                    'vendor': 'Cisco',
+                    'description': 'Test profile',
+                    'get': {'cpu.0': '1.3.6.1.4.1.9.9.109.1.1.1.1.7.1'},
+                    'walk': {},
+                    'table': {}
+                }
+            ],
+            'device_template': {
+                'name': 'import_test_template',
+                'vendor': 'Cisco',
+                'description': 'Test template',
+                'profiles': ['import_test_profile']
+            }
+        })
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is True
+        assert any(p['action'] == 'created' for p in rdata['profiles'])
+        assert rdata['template']['action'] == 'created'
+        assert Profile.objects.filter(name='import_test_profile').exists()
+
+    def test_updates_existing_user_profile(self, authenticated_client, test_profile):
+        data = json.dumps({
+            'profiles': [
+                {'name': 'custom_profile', 'vendor': 'Updated', 'get': {}, 'walk': {}, 'table': {}}
+            ],
+            'device_template': {
+                'name': 'update_import_tpl',
+                'profiles': ['custom_profile']
+            }
+        })
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert any(p['action'] == 'updated' for p in rdata['profiles'])
+
+    def test_skips_official_profile(self, authenticated_client):
+        Profile.objects.create(
+            name='official_cannot_overwrite',
+            vendor='Vendor',
+            official_key='vendor.official_cannot_overwrite',
+            profile_data={'get': {}, 'walk': {}, 'table': {}}
+        )
+        data = json.dumps({
+            'profiles': [{'name': 'official_cannot_overwrite', 'get': {}, 'walk': {}}],
+            'device_template': {'name': 'skip_official_tpl', 'profiles': ['official_cannot_overwrite']}
+        })
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert any(p['action'] == 'skipped' for p in rdata['profiles'])
+
+    def test_template_links_to_created_profiles(self, authenticated_client):
+        data = json.dumps({
+            'profiles': [
+                {'name': 'linked_prof_a', 'vendor': 'Generic', 'get': {}, 'walk': {}, 'table': {}},
+                {'name': 'linked_prof_b', 'vendor': 'Generic', 'get': {}, 'walk': {}, 'table': {}},
+            ],
+            'device_template': {
+                'name': 'linked_template',
+                'profiles': ['linked_prof_a', 'linked_prof_b']
+            }
+        })
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is True
+        from SNMP.models import DeviceTemplate
+        tpl = DeviceTemplate.objects.get(name='linked_template')
+        profile_names = set(tpl.profiles.values_list('name', flat=True))
+        assert 'linked_prof_a' in profile_names
+        assert 'linked_prof_b' in profile_names
+
+    def test_readonly_user_is_denied(self, readonly_client):
+        data = json.dumps({'profiles': [], 'device_template': {'name': 'tpl', 'profiles': []}})
+        response = readonly_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 403
+
+    def test_empty_profiles_list_creates_only_template(self, authenticated_client):
+        data = json.dumps({
+            'profiles': [],
+            'device_template': {'name': 'empty_profiles_tpl', 'profiles': []}
+        })
+        response = authenticated_client.post('/SNMP/ImportAIGeneratedDefinitions/', data, content_type='application/json')
+        assert response.status_code == 200
+        rdata = response.json()
+        assert rdata['success'] is True
+        assert rdata['profiles'] == []
+        assert rdata['template']['action'] == 'created'
+
+
+# ============================================================================
 # Overview Page
 # ============================================================================
 

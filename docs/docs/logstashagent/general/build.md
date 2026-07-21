@@ -66,7 +66,6 @@ docker run -p 9650:9650 -p 9449:9449 -p 9500:9500 \
 - Python 3.12+
 - Logstash 9.x installed locally
 - `uv` (recommended) or `pip`
-- Node.js 20+ & npm
 
 ### Install Dependencies
 
