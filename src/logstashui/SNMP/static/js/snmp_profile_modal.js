@@ -1194,6 +1194,9 @@ document.addEventListener('DOMContentLoaded', function() {
           if (typeof refreshProfilesData === 'function') {
             refreshProfilesData();
           }
+          if (typeof triggerUndeployedChangesCheck === 'function') {
+            triggerUndeployedChangesCheck();
+          }
         } else {
           showErrorInModal(data.message || 'Failed to save profile');
         }

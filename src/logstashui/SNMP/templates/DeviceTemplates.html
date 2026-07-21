@@ -779,6 +779,9 @@
         if (data.success) {
           showToast('Device template deleted successfully!', 'success');
           refreshDeviceTemplatesData();
+          if (typeof triggerUndeployedChangesCheck === 'function') {
+            triggerUndeployedChangesCheck();
+          }
         } else {
           showToast(data.message || 'Failed to delete template', 'error');
         }
@@ -838,6 +841,9 @@
         if (data.success) {
           showToast('Profile deleted successfully!', 'success');
           refreshProfilesData();
+          if (typeof triggerUndeployedChangesCheck === 'function') {
+            triggerUndeployedChangesCheck();
+          }
         } else {
           showToast(data.message || 'Failed to delete profile', 'error');
         }

@@ -1593,9 +1593,13 @@ def GetDeployDiff(request):
             # Get unique templates for this network
             templates = _get_unique_templates_for_network(devices)
             
-            # Skip networks with no devices (unless they have traps enabled)
+            # Skip networks that have nothing to generate a pipeline for
             has_devices = bool(devices.filter(credential__isnull=False).exists())
-            if not has_devices and not network.traps_enabled:
+            has_special_pipelines = (
+                (network.traps_enabled and network.credential)
+                or (network.discovery_enabled and network.discovery_credential)
+            )
+            if not has_devices and not has_special_pipelines:
                 continue
             
             # Generate a pipeline for each template

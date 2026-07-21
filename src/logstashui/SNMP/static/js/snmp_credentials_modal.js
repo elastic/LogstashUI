@@ -173,6 +173,9 @@ document.getElementById('credentialForm').addEventListener('submit', function (e
       if (typeof refreshCredentialsData === 'function') {
         refreshCredentialsData();
       }
+      if (typeof triggerUndeployedChangesCheck === 'function') {
+        triggerUndeployedChangesCheck();
+      }
     })
     .catch(error => {
       const errorContainer = document.getElementById('credentialErrorContainer');

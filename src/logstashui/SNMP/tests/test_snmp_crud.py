@@ -872,14 +872,24 @@ class TestEdgeCasesAndErrors:
 
     def test_network_cidr_validation(self, authenticated_client):
         """Test CIDR validation for networks"""
-        # Valid CIDR
+        # Valid CIDR within the /20 size limit
         response = authenticated_client.post('/SNMP/AddNetwork/', {
             'name': 'Valid CIDR',
-            'network_range': '10.0.0.0/8',
+            'network_range': '10.0.0.0/24',
         })
         assert response.status_code == 200
-        
-        # Invalid CIDR
+
+        # Networks larger than /20 are rejected (would OOM during discovery)
+        response = authenticated_client.post('/SNMP/AddNetwork/', {
+            'name': 'Too Large CIDR',
+            'network_range': '10.0.0.0/8',
+        })
+        assert response.status_code == 400
+        data = response.json()
+        assert not data['success']
+        assert 'too large' in data['message'].lower()
+
+        # Invalid CIDR is rejected by model validation
         response = authenticated_client.post('/SNMP/AddNetwork/', {
             'name': 'Invalid CIDR',
             'network_range': '999.999.999.999/99',

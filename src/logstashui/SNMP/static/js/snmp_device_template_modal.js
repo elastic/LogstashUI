@@ -650,6 +650,9 @@ document.addEventListener('DOMContentLoaded', function() {
           if (typeof refreshDeviceTemplatesData === 'function') {
             refreshDeviceTemplatesData();
           }
+          if (typeof triggerUndeployedChangesCheck === 'function') {
+            triggerUndeployedChangesCheck();
+          }
         })
         .catch(error => {
           console.error('Fetch error:', error);
