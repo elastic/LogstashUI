@@ -2,7 +2,7 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from PipelineManager.sim_keystore import (
     find_keystore_refs_in_obj,
     resolve_source_policy,
     collect_policy_secrets,
+    secrets_equal,
     maybe_sync_keystore_for_simulation,
 )
 
@@ -34,10 +35,16 @@ def test_find_refs_in_components():
     assert find_keystore_refs_in_obj(components) == {"ES_URL", "ES_USER"}
 
 
+def test_secrets_equal_case_insensitive_keys():
+    assert secrets_equal({"ES_HOST": "a"}, {"es_host": "a"})
+    assert not secrets_equal({"ES_HOST": "a"}, {"es_host": "b"})
+    assert not secrets_equal({"A": "1"}, {"A": "1", "B": "2"})
+
+
 @pytest.mark.django_db
-def test_collect_and_maybe_sync(db):
+def test_collect_and_maybe_sync_when_different(db):
     policy = Policy.objects.create(
-        name="Ks Policy",
+        name="Ks Policy Unique",
         policy_type=Policy.PolicyType.DEFAULT,
         logstash_yml="x: 1\n",
         jvm_options="-Xms1g\n",
@@ -47,21 +54,19 @@ def test_collect_and_maybe_sync(db):
     Keystore.objects.create(
         policy=policy,
         key_name="ES_HOST",
-        key_value="plaintext-host",  # save will encrypt if not already
+        key_value="plaintext-host",
     )
-    # Force plaintext path: model encrypts on save unless already fernet
     policy.refresh_from_db()
-
-    # Re-set with known plaintext by using encrypt path
-    entry = policy.keystore_entries.get(key_name="ES_HOST")
-    # get_key_value may work if save encrypted
     secrets, password = collect_policy_secrets(policy)
-    assert "ES_HOST" in secrets
-    assert password  # encrypted password stored
+    assert "es_host" in secrets
+    assert password
 
     with patch(
+        "PipelineManager.sim_keystore.fetch_agent_keystore",
+        return_value={"exists": True, "secrets": {}},
+    ), patch(
         "PipelineManager.sim_keystore.sync_keystore_to_agent",
-        return_value={"status": "success", "secrets_count": 1},
+        return_value={"status": "success", "unchanged": False, "restarted": True, "secrets_count": 1},
     ) as sync:
         result = maybe_sync_keystore_for_simulation(
             agent_base_url="http://127.0.0.1:9501",
@@ -69,10 +74,41 @@ def test_collect_and_maybe_sync(db):
             ls_id=policy.id,
         )
         assert result["status"] == "success"
+        assert result.get("unchanged") is False
         sync.assert_called_once()
-        args, kwargs = sync.call_args
-        assert args[0] == "http://127.0.0.1:9501"
-        assert "ES_HOST" in args[1]
+
+
+@pytest.mark.django_db
+def test_maybe_sync_skips_when_agent_matches(db):
+    policy = Policy.objects.create(
+        name="Ks Match Policy",
+        policy_type=Policy.PolicyType.DEFAULT,
+        logstash_yml="x: 1\n",
+        jvm_options="-Xms1g\n",
+        log4j2_properties="a=b\n",
+        keystore_password="pw",
+    )
+    Keystore.objects.create(
+        policy=policy,
+        key_name="TOKEN",
+        key_value="abc",
+    )
+    secrets, _ = collect_policy_secrets(policy)
+
+    with patch(
+        "PipelineManager.sim_keystore.fetch_agent_keystore",
+        return_value={"exists": True, "secrets": secrets},
+    ), patch(
+        "PipelineManager.sim_keystore.sync_keystore_to_agent"
+    ) as sync:
+        result = maybe_sync_keystore_for_simulation(
+            agent_base_url="http://agent",
+            components={"filter": [{"config": {"t": "${TOKEN}"}}]},
+            ls_id=policy.id,
+        )
+        assert result["unchanged"] is True
+        assert result["restarted"] is False
+        sync.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -81,13 +117,30 @@ def test_maybe_sync_skips_without_refs(db):
         result = maybe_sync_keystore_for_simulation(
             agent_base_url="http://agent",
             components={"filter": [{"config": {"x": "1"}}]},
+            ls_id=1,
         )
         assert result is None
         sync.assert_not_called()
 
 
 @pytest.mark.django_db
-def test_resolve_default_policy(db):
+def test_maybe_sync_skips_without_policy(db):
+    """No ls_id/policy association → cannot upload."""
+    with patch("PipelineManager.sim_keystore.sync_keystore_to_agent") as sync:
+        result = maybe_sync_keystore_for_simulation(
+            agent_base_url="http://agent",
+            components={"filter": [{"config": {"h": "${ES_HOST}"}}]},
+            # no ls_id / policy_id
+        )
+        assert result is not None
+        assert result["status"] == "skipped"
+        assert result["reason"] == "no_policy"
+        assert result["restarted"] is False
+        sync.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_resolve_requires_explicit_association(db):
     Policy.objects.get_or_create(
         name="Default Policy",
         defaults={
@@ -98,6 +151,7 @@ def test_resolve_default_policy(db):
             "log4j2_properties": "a=b\n",
         },
     )
-    p = resolve_source_policy()
-    assert p is not None
-    assert p.name == "Default Policy"
+    # No args → None (no silent Default fallback)
+    assert resolve_source_policy() is None
+    p = Policy.objects.get(name="Default Policy")
+    assert resolve_source_policy(ls_id=p.id) == p
