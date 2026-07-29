@@ -364,6 +364,96 @@
     font-weight: 600;
   }
 
+  /* Role color coding in the policy list */
+  .policy-switcher-item.role-default {
+    border-left: 3px solid #60a5fa;
+  }
+  .policy-switcher-item.role-default .policy-role-badge {
+    background: rgba(37, 99, 235, 0.25);
+    color: #93c5fd;
+    border: 1px solid rgba(96, 165, 250, 0.35);
+  }
+  .policy-switcher-item.role-simulate {
+    border-left: 3px solid #c084fc;
+  }
+  .policy-switcher-item.role-simulate .policy-role-badge {
+    background: rgba(147, 51, 234, 0.25);
+    color: #e9d5ff;
+    border: 1px solid rgba(192, 132, 252, 0.4);
+  }
+  .policy-switcher-item.role-embedded {
+    border-left: 3px solid #22d3ee;
+  }
+  .policy-switcher-item.role-embedded .policy-role-badge {
+    background: rgba(8, 145, 178, 0.3);
+    color: #a5f3fc;
+    border: 1px solid rgba(34, 211, 238, 0.4);
+  }
+
+  .policy-role-badge {
+    margin-left: auto;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+  }
+
+  .policy-switcher-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem 0.35rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .policy-filter-chip {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: #9ca3af;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .policy-filter-chip:hover {
+    color: #e5e7eb;
+    border-color: rgba(255,255,255,0.2);
+  }
+  .policy-filter-chip.active {
+    color: #f3f4f6;
+    border-color: rgba(167, 139, 250, 0.5);
+    background: rgba(139, 92, 246, 0.2);
+  }
+  .policy-filter-chip.active[data-filter="DEFAULT"] {
+    border-color: rgba(96, 165, 250, 0.55);
+    background: rgba(37, 99, 235, 0.25);
+    color: #bfdbfe;
+  }
+  .policy-filter-chip.active[data-filter="SIMULATE"] {
+    border-color: rgba(192, 132, 252, 0.55);
+    background: rgba(147, 51, 234, 0.25);
+    color: #e9d5ff;
+  }
+  .policy-filter-chip.active[data-filter="EMBEDDED"] {
+    border-color: rgba(34, 211, 238, 0.5);
+    background: rgba(8, 145, 178, 0.25);
+    color: #a5f3fc;
+  }
+
+  .policy-switcher-name.role-default { color: #93c5fd; }
+  .policy-switcher-name.role-simulate { color: #e9d5ff; }
+  .policy-switcher-name.role-embedded { color: #a5f3fc; }
+
+  .policy-switcher-empty {
+    padding: 0.75rem 0.875rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    text-align: center;
+  }
+
   .policy-switcher-check {
     width: 0.875rem;
     height: 0.875rem;
@@ -2030,31 +2120,97 @@
 <script>
 // Policy Switcher — visual layer over the hidden native #policySelect
 (function() {
+  // Active role filters: empty set or all selected = show everything
+  let roleFilter = new Set(['DEFAULT', 'SIMULATE', 'EMBEDDED']);
+
+  function roleClass(ptype) {
+    const t = (ptype || 'DEFAULT').toUpperCase();
+    if (t === 'SIMULATE') return 'role-simulate';
+    if (t === 'EMBEDDED') return 'role-embedded';
+    return 'role-default';
+  }
+
+  function updateLabel(sel) {
+    const label = document.getElementById('policySwitcherLabel');
+    if (!label || !sel) return;
+    if (sel.value === 'add_new') {
+      label.textContent = 'Select policy…';
+      label.className = 'policy-switcher-name';
+      return;
+    }
+    label.textContent = sel.dataset.policyName || sel.textContent;
+    label.className = 'policy-switcher-name ' + roleClass(sel.dataset.policyType);
+  }
+
   function rebuildMenu() {
     const select = document.getElementById('policySelect');
     const menu = document.getElementById('policySwitcherMenu');
-    const label = document.getElementById('policySwitcherLabel');
     if (!select || !menu) return;
 
-    // Update button label from current selection
     const sel = select.options[select.selectedIndex];
-    if (sel) {
-      label.textContent = sel.value === 'add_new' ? 'Select policy…' : (sel.dataset.policyName || sel.textContent);
+    updateLabel(sel);
+
+    menu.innerHTML = '';
+
+    // Role filter chips
+    const filters = document.createElement('div');
+    filters.className = 'policy-switcher-filters';
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Filter policies by role');
+    [
+      { key: 'DEFAULT', label: 'Default' },
+      { key: 'SIMULATE', label: 'Simulate' },
+      { key: 'EMBEDDED', label: 'Embedded' },
+    ].forEach(({ key, label }) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'policy-filter-chip' + (roleFilter.has(key) ? ' active' : '');
+      chip.dataset.filter = key;
+      chip.textContent = label;
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (roleFilter.has(key) && roleFilter.size > 1) {
+          roleFilter.delete(key);
+        } else if (roleFilter.has(key) && roleFilter.size === 1) {
+          // keep at least one? allow empty then show empty state
+          roleFilter.delete(key);
+        } else {
+          roleFilter.add(key);
+        }
+        // If user cleared all, re-enable all (toggle UX)
+        if (roleFilter.size === 0) {
+          roleFilter = new Set(['DEFAULT', 'SIMULATE', 'EMBEDDED']);
+        }
+        rebuildMenu();
+      });
+      filters.appendChild(chip);
+    });
+    menu.appendChild(filters);
+
+    const policies = Array.from(select.options).filter(o => o.value !== 'add_new');
+    const visible = policies.filter(o => {
+      const t = (o.dataset.policyType || 'DEFAULT').toUpperCase();
+      return roleFilter.has(t);
+    });
+
+    if (visible.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'policy-switcher-empty';
+      empty.textContent = 'No policies match this filter';
+      menu.appendChild(empty);
     }
 
-    // Rebuild menu items
-    menu.innerHTML = '';
-    const policies = Array.from(select.options).filter(o => o.value !== 'add_new');
-
-    policies.forEach(opt => {
+    visible.forEach(opt => {
       const isSelected = opt === sel;
+      const ptype = (opt.dataset.policyType || 'DEFAULT').toUpperCase();
       const item = document.createElement('div');
-      item.className = 'policy-switcher-item' + (isSelected ? ' selected' : '');
+      item.className = 'policy-switcher-item ' + roleClass(ptype) + (isSelected ? ' selected' : '');
       item.innerHTML = `
         <svg class="policy-switcher-check ${isSelected ? '' : 'invisible'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
         </svg>
-        <span>${opt.dataset.policyName || opt.textContent}</span>`;
+        <span>${opt.dataset.policyName || opt.textContent}</span>
+        <span class="policy-role-badge">${ptype}</span>`;
       item.addEventListener('click', () => {
         select.value = opt.value;
         select.dispatchEvent(new Event('change'));
@@ -2064,7 +2220,7 @@
     });
 
     // Divider + Add Policy action
-    if (policies.length > 0) {
+    if (policies.length > 0 || visible.length > 0) {
       const divider = document.createElement('div');
       divider.className = 'policy-switcher-divider';
       menu.appendChild(divider);
@@ -2114,15 +2270,12 @@
     }
   });
 
-  // Keep button label in sync whenever the hidden select changes
+  // Keep button label (and color) in sync whenever the hidden select changes
   const select = document.getElementById('policySelect');
   if (select) {
     select.addEventListener('change', function() {
-      const label = document.getElementById('policySwitcherLabel');
       const sel = this.options[this.selectedIndex];
-      if (label && sel && sel.value !== 'add_new') {
-        label.textContent = sel.dataset.policyName || sel.textContent;
-      }
+      updateLabel(sel);
     });
   }
 })();

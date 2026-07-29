@@ -1583,7 +1583,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('logstashSource')?.addEventListener('change', () => {
         toggleVersionFieldsVisibility();
-        markPolicyConfigChanged?.();
+        if (typeof detectChanges === 'function') detectChanges();
     });
     
     // Load policies on page load, auto-selecting a policy if policy_id is in the URL
@@ -2412,31 +2412,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // console.log('Added event listeners to config logs path field');
     }
     
-    // Also monitor settings path and binary path for changes
-    const settingsPathField = document.getElementById('settingsPath');
-    if (settingsPathField) {
-        settingsPathField.addEventListener('input', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-        settingsPathField.addEventListener('change', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-    }
-
-    const binaryPathField = document.getElementById('binaryPath');
-    if (binaryPathField) {
-        binaryPathField.addEventListener('input', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-        binaryPathField.addEventListener('change', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-        // console.log('Added event listeners to binary path field');
-    }
+    // Policy Config fields are wired in setupChangeDetection() via POLICY_CONFIG_FIELD_IDS
     
     // Initial check for notifications
     setTimeout(() => {
@@ -2946,6 +2922,20 @@ window.addEventListener('scroll', function() {
     });
 }, true);
 
+// Policy Config fields that participate in the purple unsaved-change tracker
+const POLICY_CONFIG_FIELD_IDS = [
+    'settingsPath',
+    'logsPath',
+    'binaryPath',
+    'dataPath',
+    'keystoreEnvFile',
+    'logstashSource',
+    'logstashVersion',
+    'logstashDownloadDir',
+    'agentApiPort',
+    'logstashApiPort',
+];
+
 // Store original content when policy loads
 function storeOriginalContent() {
     originalFileContents = {};
@@ -2956,10 +2946,10 @@ function storeOriginalContent() {
     originalFileContents['jvm.options'] = window.policyFileContents['jvm.options'] || '';
     originalFileContents['log4j2.properties'] = window.policyFileContents['log4j2.properties'] || '';
     
-    // Store original settings, logs, and binary paths
-    originalFileContents['settingsPath'] = document.getElementById('settingsPath')?.value || '';
-    originalFileContents['logsPath'] = document.getElementById('logsPath')?.value || '';
-    originalFileContents['binaryPath'] = document.getElementById('binaryPath')?.value || '';
+    // Store original Policy Config form fields (paths, simulate source, etc.)
+    POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+        originalFileContents[id] = document.getElementById(id)?.value ?? '';
+    });
     
     // Reset all visual indicators
     updateChangeIndicators();
@@ -3020,15 +3010,23 @@ function detectChanges() {
         }
     });
     
-    // Check settings path, logs path, and binary path changes
-    const currentSettingsPath = document.getElementById('settingsPath')?.value || '';
-    const currentLogsPath = document.getElementById('logsPath')?.value || '';
-    const currentBinaryPath = document.getElementById('binaryPath')?.value || '';
-    const originalSettingsPath = originalFileContents['settingsPath'] || '';
-    const originalLogsPath = originalFileContents['logsPath'] || '';
-    const originalBinaryPath = originalFileContents['binaryPath'] || '';
-
-    if (currentSettingsPath !== originalSettingsPath || currentLogsPath !== originalLogsPath || currentBinaryPath !== originalBinaryPath) {
+    // Check Policy Config field changes (paths, keystore env, simulate source, ports, …)
+    let configChanged = false;
+    POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        const current = el?.value ?? '';
+        const original = originalFileContents[id] ?? '';
+        const fieldChanged = current !== original;
+        if (el) {
+            if (fieldChanged) {
+                el.classList.add('field-modified');
+            } else {
+                el.classList.remove('field-modified');
+            }
+        }
+        if (fieldChanged) configChanged = true;
+    });
+    if (configChanged) {
         changedFiles.add('settings');
     }
     
@@ -3056,6 +3054,12 @@ function updateChangeIndicators() {
         policyConfigIndicator?.classList.remove('hidden');
     } else {
         policyConfigIndicator?.classList.add('hidden');
+        // Clear purple outlines when config is clean
+        if (typeof POLICY_CONFIG_FIELD_IDS !== 'undefined') {
+            POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+                document.getElementById(id)?.classList.remove('field-modified');
+            });
+        }
     }
     
     // Update tab indicators
@@ -3095,39 +3099,23 @@ function setupChangeDetection() {
         });
     });
     
-    // Monitor settings path and logs path changes
-    const settingsPath = document.getElementById('settingsPath');
-    const logsPath = document.getElementById('logsPath');
-    
-    if (settingsPath) {
-        // console.log('Added event listeners to settings path field');
-        settingsPath.addEventListener('input', () => {
-            // console.log('Settings path input event fired');
+    // Monitor all Policy Config fields (paths, simulate source, ports, …)
+    POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const handler = () => {
+            if (id === 'logsPath') checkConfigNotifications();
+            if (id === 'settingsPath' || id === 'binaryPath' || id === 'logsPath') {
+                checkPathPermissionNotifications();
+            }
+            if (id === 'logstashSource' && typeof toggleVersionFieldsVisibility === 'function') {
+                toggleVersionFieldsVisibility();
+            }
             detectChanges();
-        });
-        settingsPath.addEventListener('change', () => {
-            // console.log('Settings path change event fired');
-            detectChanges();
-        });
-    } else {
-        console.warn('Settings path field not found');
-    }
-    
-    if (logsPath) {
-        // console.log('Added event listeners to logs path field');
-        logsPath.addEventListener('input', () => {
-            // console.log('Logs path input event fired');
-            checkConfigNotifications();
-            detectChanges();
-        });
-        logsPath.addEventListener('change', () => {
-            // console.log('Logs path change event fired');
-            checkConfigNotifications();
-            detectChanges();
-        });
-    } else {
-        console.warn('Logs path field not found');
-    }
+        };
+        el.addEventListener('input', handler);
+        el.addEventListener('change', handler);
+    });
     
     // Monitor code editor changes
     if (window.policyEditor) {
