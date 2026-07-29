@@ -22,6 +22,7 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - `simulation.mode` in `logstashui.yml` remains for compose/legacy agent URL defaults and is documented as secondary to enrolled simulate agents.
 - Keystore sync before simulation requires a pipeline policy association (`ls_id`); secrets are only pushed when the target keystore differs from the source policy.
 - Labeled `simulation.mode: host` / `start_logstashui` native agent as a **legacy** local supervisor path; `sync_config.py` now writes `mode: embedded` + `simulation_mode: host` (no longer forces enrolled-style simulate vocabulary). Docs and nginx comments updated accordingly.
+- `.gitignore` excludes local runtime data, personal `logstashui.yml`, and agentic scratch (`docs/superpowers/`, `.grokignore`).
 
 ### Upgrade notes
 
