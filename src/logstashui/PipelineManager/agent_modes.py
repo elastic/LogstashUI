@@ -142,10 +142,93 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
     }
 
 
-def list_simulation_targets(active_only: bool = True):
+def ensure_embedded_connection() -> Connection | None:
+    """
+    Ensure a pseudo Connection exists for the system Embedded Policy so the
+    editor picker can list docker/local embedded agent without enrollment.
+
+    Host/port derived from settings.LOGSTASH_AGENT_URL when possible.
+    """
+    try:
+        from django.conf import settings
+        from urllib.parse import urlparse
+    except Exception:
+        return None
+
+    try:
+        policy = Policy.objects.filter(
+            policy_type=Policy.PolicyType.EMBEDDED, is_system=True
+        ).first()
+        if not policy:
+            policy = Policy.objects.filter(name="Embedded Policy").first()
+        if not policy:
+            return None
+
+        agent_url = getattr(settings, "LOGSTASH_AGENT_URL", None) or "http://127.0.0.1:9500"
+        parsed = urlparse(agent_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or EMBEDDED_AGENT_API_PORT
+
+        conn = Connection.objects.filter(
+            policy=policy,
+            connection_type=Connection.ConnectionType.AGENT,
+            agent_id="embedded-local",
+        ).first()
+        if conn:
+            changed = False
+            if conn.host != host:
+                conn.host = host
+                changed = True
+            if conn.agent_api_port != port:
+                conn.agent_api_port = port
+                changed = True
+            if conn.logstash_api_port != EMBEDDED_LOGSTASH_API_PORT:
+                conn.logstash_api_port = EMBEDDED_LOGSTASH_API_PORT
+                changed = True
+            if not conn.is_active:
+                conn.is_active = True
+                changed = True
+            if changed:
+                # Avoid full_clean requiring extra AGENT fields incorrectly
+                Connection.objects.filter(pk=conn.pk).update(
+                    host=conn.host,
+                    agent_api_port=conn.agent_api_port,
+                    logstash_api_port=conn.logstash_api_port,
+                    is_active=True,
+                )
+                conn.refresh_from_db()
+            return conn
+
+        # Create without triggering full_clean encryption issues when possible
+        conn = Connection(
+            name="embedded",
+            connection_type=Connection.ConnectionType.AGENT,
+            host=host,
+            agent_id="embedded-local",
+            is_active=True,
+            policy=policy,
+            agent_api_port=port,
+            logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
+        )
+        # full_clean requires host for AGENT — we have it
+        conn.save()
+        return conn
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Could not ensure embedded simulation connection: %s", exc
+        )
+        return None
+
+
+def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool = True):
     """
     Return list of dicts describing simulate-capable connections for the editor.
     """
+    if ensure_embedded:
+        ensure_embedded_connection()
+
     qs = Connection.objects.filter(
         connection_type=Connection.ConnectionType.AGENT,
         policy__policy_type__in=[
@@ -169,6 +252,17 @@ def list_simulation_targets(active_only: bool = True):
         if policy.policy_type == Policy.PolicyType.EMBEDDED:
             label = f"embedded · {version or 'docker'}"
             agent_port = conn.agent_api_port or EMBEDDED_AGENT_API_PORT
+            # Prefer settings URL (https://nginx:9500 etc.) for embedded
+            try:
+                from django.conf import settings
+
+                base_url = getattr(settings, "LOGSTASH_AGENT_URL", None)
+            except Exception:
+                base_url = None
+            if not base_url:
+                host = conn.host or "127.0.0.1"
+                base_url = f"http://{host}:{agent_port}"
+            host = conn.host or "127.0.0.1"
         else:
             n = conn.instance_id or "?"
             ver_label = version or "system"
@@ -176,10 +270,8 @@ def list_simulation_targets(active_only: bool = True):
             agent_port = conn.agent_api_port
             if agent_port is None and conn.instance_id:
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id
-
-        host = conn.host or "127.0.0.1"
-        # Prefer http for agent FastAPI (matches current host mode)
-        base_url = f"http://{host}:{agent_port}" if agent_port else None
+            host = conn.host or "127.0.0.1"
+            base_url = f"http://{host}:{agent_port}" if agent_port else None
 
         targets.append(
             {

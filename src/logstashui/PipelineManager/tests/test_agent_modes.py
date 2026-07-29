@@ -11,6 +11,7 @@ from django.test import Client
 
 from PipelineManager.agent_modes import (
     build_policy_config,
+    ensure_embedded_connection,
     list_simulation_targets,
     next_simulate_instance_id,
     simulate_paths,
@@ -200,11 +201,15 @@ def test_list_simulation_targets(db, system_policies):
         logstash_api_port=9560,
         is_active=True,
     )
-    targets = list_simulation_targets()
+    # ensure_embedded=False: only the two rows we created (no extra pseudo conn)
+    targets = list_simulation_targets(ensure_embedded=False)
     assert len(targets) == 2
     labels = {t['label'] for t in targets}
     assert any('simulate-1' in lb and '9.4.3' in lb for lb in labels)
     assert any('embedded' in lb for lb in labels)
+    # Default ensure_embedded also lists the docker pseudo-connection if missing
+    with_auto = list_simulation_targets(ensure_embedded=True)
+    assert len(with_auto) >= 2
 
 
 def test_cannot_delete_system_policy(admin_client, system_policies):
@@ -235,3 +240,41 @@ def test_clone_simulate_policy(admin_client, system_policies):
     assert clone.policy_type == Policy.PolicyType.SIMULATE
     assert clone.is_system is False
     assert clone.cloned_from_id == simulate.id
+
+
+def test_ensure_embedded_connection(system_policies):
+    conn = ensure_embedded_connection()
+    assert conn is not None
+    assert conn.agent_id == 'embedded-local'
+    assert conn.policy.policy_type == Policy.PolicyType.EMBEDDED
+    # idempotent
+    conn2 = ensure_embedded_connection()
+    assert conn2.id == conn.id
+
+
+def test_list_targets_includes_embedded(system_policies):
+    targets = list_simulation_targets(ensure_embedded=True)
+    assert any(t['policy_type'] == 'EMBEDDED' for t in targets)
+
+
+def test_get_simulation_targets_api(admin_client, system_policies):
+    resp = admin_client.get('/ConnectionManager/GetSimulationTargets/')
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['success'] is True
+    assert data['count'] >= 1
+    assert any(t['policy_type'] == 'EMBEDDED' for t in data['targets'])
+
+
+def test_select_simulation_target_api(admin_client, system_policies):
+    ensure_embedded_connection()
+    targets = list_simulation_targets()
+    cid = targets[0]['connection_id']
+    resp = admin_client.post(
+        '/ConnectionManager/SelectSimulationTarget/',
+        data=json.dumps({'connection_id': cid}),
+        content_type='application/json',
+    )
+    assert resp.status_code == 200
+    assert resp.json()['success'] is True
+    assert admin_client.session.get('sim_connection_id') == cid

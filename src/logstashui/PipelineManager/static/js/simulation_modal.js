@@ -613,6 +613,11 @@ formData.append('components', JSON.stringify(componentsData));
 formData.append('es_id', esId);
 formData.append('pipeline', pipelineName);
 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+if (typeof window.appendSimConnectionToFormData === 'function') {
+  window.appendSimConnectionToFormData(formData);
+} else if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+  formData.append('sim_connection_id', window.getSimConnectionId());
+}
 
 console.log('[FE->BE] Sending simulation request with components:', {
   filterCount: componentsData.filter?.length || 0,

@@ -55,10 +55,31 @@ def _parse_queue_max_bytes(queue_max_bytes_str):
 
 def PipelineEditor(request):
     from django.conf import settings
-    
+    from PipelineManager.agent_modes import list_simulation_targets
+
+    sim_targets = list_simulation_targets(ensure_embedded=True)
+    selected_sim = request.session.get("sim_connection_id")
+    if selected_sim is not None and not any(
+        t["connection_id"] == selected_sim for t in sim_targets
+    ):
+        selected_sim = None
+    if selected_sim is None and len(sim_targets) == 1:
+        selected_sim = sim_targets[0]["connection_id"]
+        request.session["sim_connection_id"] = selected_sim
+
+    # Preallocate on page load when any enrolled simulate agent exists (faster iter);
+    # embedded-only stays modal-triggered (slower container warmup).
+    has_simulate_agent = any(t.get("policy_type") == "SIMULATE" for t in sim_targets)
+    sim_prealloc_on_load = has_simulate_agent or (
+        settings.LOGSTASHUI_CONFIG.get("simulation", {}).get("mode") == "host"
+    )
+
     context = {
         "plugin_data": _load_plugin_data(),
-        "simulation_mode": settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
+        "simulation_mode": settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded'),
+        "sim_targets": sim_targets,
+        "selected_sim_connection_id": selected_sim,
+        "sim_prealloc_on_load": sim_prealloc_on_load,
     }
 
     if request.method == "GET":

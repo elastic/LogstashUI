@@ -21,6 +21,7 @@ urlpatterns = [
     path("GetSimulationNodeStatus/", simulation.GetSimulationNodeStatus, name="GetSimulationNodeStatus"),
     path("GetSimulationNodeHealth/", simulation.GetSimulationNodeHealth, name="GetSimulationNodeHealth"),
     path("GetSimulationTargets/", simulation.GetSimulationTargets, name="GetSimulationTargets"),
+    path("SelectSimulationTarget/", simulation.SelectSimulationTarget, name="SelectSimulationTarget"),
     path("ValidateLogstashConfig/", simulation.ValidateLogstashConfig, name="ValidateLogstashConfig"),
 
     path('TestConnectivity', manager_views.TestConnectivity, name='TestConnectivity'),

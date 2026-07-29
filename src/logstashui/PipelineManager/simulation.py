@@ -74,14 +74,59 @@ def GetSimulationTargets(request):
     """List simulate-capable agents for the pipeline editor dropdown."""
     if request.method != "GET":
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    targets = list_simulation_targets()
+    targets = list_simulation_targets(ensure_embedded=True)
     selected = request.session.get("sim_connection_id")
+    # Sticky selection may be stale; clear if not in list
+    if selected is not None and not any(t["connection_id"] == selected for t in targets):
+        selected = None
+        try:
+            del request.session["sim_connection_id"]
+        except KeyError:
+            pass
+    if selected is None and len(targets) == 1:
+        selected = targets[0]["connection_id"]
+        request.session["sim_connection_id"] = selected
     return JsonResponse(
         {
             "success": True,
             "targets": targets,
             "selected_connection_id": selected,
             "count": len(targets),
+        }
+    )
+
+
+@require_admin_role
+def SelectSimulationTarget(request):
+    """
+    Persist the user's chosen simulation agent in the session (sticky selection).
+    Body JSON: { "connection_id": <int> }
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        data = {}
+    connection_id = data.get("connection_id") or request.POST.get("connection_id")
+    if connection_id in (None, "", "null"):
+        return JsonResponse({"success": False, "error": "connection_id required"}, status=400)
+    target, err = resolve_simulation_target(connection_id, session=None)
+    if not target:
+        return JsonResponse({"success": False, "error": err or "not found"}, status=404)
+    request.session["sim_connection_id"] = target["connection_id"]
+    try:
+        ConnectionTable.objects.filter(pk=target["connection_id"]).update(
+            last_selected_at=datetime.now(dt_timezone.utc)
+        )
+    except Exception:
+        pass
+    return JsonResponse(
+        {
+            "success": True,
+            "selected_connection_id": target["connection_id"],
+            "label": target.get("label"),
+            "base_url": target.get("base_url"),
         }
     )
 
@@ -1014,7 +1059,18 @@ def GetSimulationNodeHealth(request):
         - queued_requests: Number of queued simulation requests
     """
     try:
-        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/health"
+        base, _, err = _sim_agent_url(request)
+        if not base:
+            base = settings.LOGSTASH_AGENT_URL
+        if not base:
+            return JsonResponse({
+                "healthy": False,
+                "restarting": False,
+                "restart_count": 0,
+                "queued_requests": 0,
+                "error": err or "No simulation agent available",
+            }, status=200)
+        logstash_agent_url = f"{base}/_logstash/health"
         
         try:
             response = requests.get(logstash_agent_url, timeout=3, verify=False)

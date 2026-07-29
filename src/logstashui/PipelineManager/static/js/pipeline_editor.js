@@ -60,13 +60,17 @@ function triggerPipelineWarmingAndChecking() {
 
     if (slotPreallocation && typeof htmx !== 'undefined') {
         // Use htmx.ajax to send the request with current components data
+        const warmValues = {
+            components: JSON.stringify(components),
+            log_text: ''
+        };
+        if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+            warmValues.sim_connection_id = window.getSimConnectionId();
+        }
         htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
             target: '#slotPreallocationResult',
             swap: 'innerHTML',
-            values: {
-                components: JSON.stringify(components),
-                log_text: ''
-            },
+            values: warmValues,
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
             }
