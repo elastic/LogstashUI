@@ -182,6 +182,30 @@ def SimulatePipeline(request):
                 f'<div class="text-red-400">Error: {sim_err or "No simulation agent available"}</div>'
             )
 
+        # Clone source-policy keystore onto the simulate agent when ${...} vars appear
+        try:
+            from PipelineManager.sim_keystore import maybe_sync_keystore_for_simulation
+
+            ls_id = request.POST.get('ls_id') or request.GET.get('ls_id')
+            policy_id = request.POST.get('policy_id') or request.GET.get('policy_id')
+            maybe_sync_keystore_for_simulation(
+                agent_base_url=logstash_agent_url,
+                components=components,
+                pipeline_text=request.POST.get('pipeline_text', '') or '',
+                ls_id=ls_id,
+                policy_id=policy_id,
+            )
+        except Exception as ks_err:
+            logger.error("Keystore sync before simulation failed: %s", ks_err, exc_info=True)
+            # Fail closed when refs exist would be safer; allow sim to continue so
+            # non-secret paths still work — surface error if components have refs
+            from PipelineManager.sim_keystore import find_keystore_refs_in_obj
+            if find_keystore_refs_in_obj(components):
+                return HttpResponse(
+                    f'<div class="text-red-400">Error: Failed to sync keystore to simulation agent: '
+                    f'{ks_err}</div>'
+                )
+
         # Callback URL for Ruby instrumentation posts (remote simulate agents need
         # a reachable LogstashUI URL; prefer agent-reported enroll URL later).
         simulation_mode = settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')

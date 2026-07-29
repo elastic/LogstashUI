@@ -612,6 +612,10 @@ formData.append('log_text', JSON.stringify(doc));
 formData.append('components', JSON.stringify(componentsData));
 formData.append('es_id', esId);
 formData.append('pipeline', pipelineName);
+const lsId = new URLSearchParams(window.location.search).get('ls_id');
+if (lsId) {
+  formData.append('ls_id', lsId);
+}
 formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 if (typeof window.appendSimConnectionToFormData === 'function') {
   window.appendSimConnectionToFormData(formData);

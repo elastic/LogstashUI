@@ -67,6 +67,10 @@ function triggerPipelineWarmingAndChecking() {
         if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
             warmValues.sim_connection_id = window.getSimConnectionId();
         }
+        const lsIdWarm = new URLSearchParams(window.location.search).get('ls_id');
+        if (lsIdWarm) {
+            warmValues.ls_id = lsIdWarm;
+        }
         htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
             target: '#slotPreallocationResult',
             swap: 'innerHTML',
