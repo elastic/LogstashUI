@@ -229,6 +229,7 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/Management/Logout/",
     "/static/",
     "/health/",
+    "/.well-known/logstashui/ca.crt",
     "/ConnectionManager/StreamSimulate/",
     "/ConnectionManager/StreamSimulate",
     "/ConnectionManager/Enroll/",

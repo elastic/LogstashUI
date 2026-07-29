@@ -7,6 +7,15 @@
 no_auth:
   enabled: false  # true | false
 
+# Agent / backend channel (may differ from the browser reverse-proxy URL)
+agent:
+  # Prefills --logstash-ui-url in generated enrollment commands
+  # Example: https://10.0.0.50:8443  or  https://logstashui-internal
+  ui_url: ""
+  # Embed product CA fingerprint in tokens so agents pin-and-fetch
+  # {ui_url}/.well-known/logstashui/ca.crt  (omit if UI uses only public CAs)
+  include_ca_fingerprint: true
+
 simulation:
   # Secondary to enrolled simulate agents (preferred) and the editor Sim target list.
   # embedded - Docker agent URL defaults (agent API 9500, LS API 9560)

@@ -416,28 +416,44 @@ def get_enrollment_tokens(request):
         # Get all enrollment tokens for this policy
         tokens = EnrollmentToken.objects.filter(policy=policy)
 
-        # Serialize tokens with encoded payload
-        tokens_data = []
-        for token in tokens:
-            # Create token payload (same as generate_enrollment_token)
-            token_payload = {
-                "enrollment_token": token.token
-            }
+        from Common.product_ca import (
+            build_enrollment_token_payload,
+            get_agent_ui_url_default,
+        )
 
-            # Encode as base64
-            json_string = json.dumps(token_payload)
+        # Serialize tokens with encoded payload (v2: optional CA fingerprint)
+        tokens_data = []
+        agent_ui_url = get_agent_ui_url_default()
+        for token in tokens:
+            token_payload = build_enrollment_token_payload(token.token)
+            json_string = json.dumps(token_payload, separators=(',', ':'))
             encoded_token = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+
+            # Generated install/enroll command uses global agent.ui_url when set
+            if agent_ui_url:
+                enroll_command = (
+                    f"sudo logstash-agent install --enroll={encoded_token} "
+                    f"--logstash-ui-url={agent_ui_url}"
+                )
+            else:
+                enroll_command = (
+                    f"sudo logstash-agent install --enroll={encoded_token} "
+                    f"--logstash-ui-url=<UI_URL>"
+                )
 
             tokens_data.append({
                 "id": token.id,
                 "name": token.name,
                 "raw_token": token.token,
-                "encoded_token": encoded_token
+                "encoded_token": encoded_token,
+                "enroll_command": enroll_command,
+                "agent_ui_url": agent_ui_url or "",
             })
 
         return JsonResponse({
             "success": True,
-            "tokens": tokens_data
+            "tokens": tokens_data,
+            "agent_ui_url": agent_ui_url or "",
         })
 
     except Exception as e:

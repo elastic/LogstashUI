@@ -2154,12 +2154,17 @@ async function loadEnrollmentTokens() {
             data.tokens.forEach(token => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-700';
+                // Prefer full install command (includes --logstash-ui-url from agent.ui_url)
+                const copyPayload = token.enroll_command || token.encoded_token;
+                const copyLabel = token.enroll_command ? 'Copy command' : 'Copy token';
+                const copyEscaped = escapeHtml(copyPayload).replace(/'/g, "\\'");
                 row.innerHTML = `
                     <td class="px-4 py-3 text-sm text-gray-300">
                         <span class="font-medium">${escapeHtml(token.name)}</span>
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-300">
-                        <span class="font-mono text-xs break-all">${token.encoded_token}</span>
+                        <span class="font-mono text-xs break-all" title="Enrollment token (v2 may include CA fingerprint)">${escapeHtml(token.encoded_token)}</span>
+                        ${token.enroll_command ? `<div class="mt-1 text-xs text-gray-500 font-mono break-all">${escapeHtml(token.enroll_command)}</div>` : ''}
                     </td>
                     <td class="px-4 py-3 text-sm text-right">
                         <div class="action-menu relative inline-block">
@@ -2168,13 +2173,13 @@ async function loadEnrollmentTokens() {
                                     <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                                 </svg>
                             </button>
-                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 bottom-full mb-1 z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 bottom-full mb-1 z-50 w-40 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
                                 <div class="px-1 py-1">
-                                    <a href="#" onclick="event.preventDefault(); copyTokenToClipboard('${escapeHtml(token.encoded_token)}'); toggleEnrollmentTokenMenu(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                                    <a href="#" onclick="event.preventDefault(); copyTokenToClipboard('${copyEscaped}'); toggleEnrollmentTokenMenu(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                         </svg>
-                                        Copy
+                                        ${copyLabel}
                                     </a>
                                     <a href="#" onclick="event.preventDefault(); deleteEnrollmentToken(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
