@@ -723,8 +723,71 @@ class TestGetConfigChangesEndpoint:
         data = response.json()
         assert data['success'] is True
         assert data['changes']['keystore_password'] is not False
+        assert data['changes']['keystore_password'] is not None
         # When password changes, all keystore entries are re-encrypted
         assert data['changes']['keystore'] is not False
+
+    def test_get_config_changes_keystore_password_clear(
+        self, client, test_agent_connection, test_api_key, test_policy
+    ):
+        """Policy has no password but agent still reports a hash → null clear signal."""
+        test_policy.keystore_password = ''
+        test_policy.save()
+        assert not test_policy.keystore_password_hash
+
+        response = client.post(
+            '/ConnectionManager/GetConfigChanges/',
+            data=json.dumps({
+                'connection_id': test_agent_connection.id,
+                'logstash_yml_hash': test_policy.logstash_yml_hash,
+                'jvm_options_hash': test_policy.jvm_options_hash,
+                'log4j2_properties_hash': test_policy.log4j2_properties_hash,
+                'settings_path': test_policy.settings_path,
+                'logs_path': test_policy.logs_path,
+                'binary_path': test_policy.binary_path,
+                'keystore_password_hash': 'agent-still-has-password-hash',
+                'keystore': {},
+                'pipelines': {}
+            }),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'ApiKey {test_api_key}'
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        # JSON null → Python None: instruct agent to clear_keystore_password
+        assert 'keystore_password' in data['changes']
+        assert data['changes']['keystore_password'] is None
+
+    def test_get_config_changes_keystore_password_already_cleared(
+        self, client, test_agent_connection, test_api_key, test_policy
+    ):
+        """Both policy and agent unauthenticated → no password change."""
+        test_policy.keystore_password = ''
+        test_policy.save()
+
+        response = client.post(
+            '/ConnectionManager/GetConfigChanges/',
+            data=json.dumps({
+                'connection_id': test_agent_connection.id,
+                'logstash_yml_hash': test_policy.logstash_yml_hash,
+                'jvm_options_hash': test_policy.jvm_options_hash,
+                'log4j2_properties_hash': test_policy.log4j2_properties_hash,
+                'settings_path': test_policy.settings_path,
+                'logs_path': test_policy.logs_path,
+                'binary_path': test_policy.binary_path,
+                'keystore_password_hash': '',
+                'keystore': {},
+                'pipelines': {}
+            }),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'ApiKey {test_api_key}'
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['changes']['keystore_password'] is False
 
     def test_get_config_changes_pipeline_new(self, client, test_agent_connection, test_api_key, test_policy, test_pipeline):
         """Test detection of new pipeline"""

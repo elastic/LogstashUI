@@ -553,21 +553,44 @@ def get_config_changes(request):
                     policy_key_data["value"],
                 )
 
-        if policy.keystore_password and (agent_keystore_password_hash != policy.keystore_password_hash):
-            plaintext_password = policy.get_keystore_password()
-            changes["keystore_password"] = _encrypt_for_agent(raw_api_key, plaintext_password)
-            forced_set = {
-                policy_key_name: _encrypt_for_agent(raw_api_key, policy_key_data["value"])
-                for policy_key_name, policy_key_data in policy_keystore.items()
-                if policy_key_name in user_key_names
-            }
-            if forced_set or keystore_changes.get("delete"):
-                changes["keystore"] = {"set": forced_set, "delete": keystore_changes.get("delete", [])}
+        # Keystore password protocol for the agent:
+        #   false  → no change
+        #   null   → clear (migrate to unauthenticated; policy has no password)
+        #   string → encrypted password to apply (set/rotate)
+        if policy.keystore_password:
+            if agent_keystore_password_hash != policy.keystore_password_hash:
+                plaintext_password = policy.get_keystore_password()
+                changes["keystore_password"] = _encrypt_for_agent(raw_api_key, plaintext_password)
+                forced_set = {
+                    policy_key_name: _encrypt_for_agent(raw_api_key, policy_key_data["value"])
+                    for policy_key_name, policy_key_data in policy_keystore.items()
+                    if policy_key_name in user_key_names
+                }
+                if forced_set or keystore_changes.get("delete"):
+                    changes["keystore"] = {
+                        "set": forced_set,
+                        "delete": keystore_changes.get("delete", []),
+                    }
+                else:
+                    changes["keystore"] = False
             else:
-                changes["keystore"] = False
+                changes["keystore_password"] = False
+                changes["keystore"] = (
+                    keystore_changes
+                    if (keystore_changes["set"] or keystore_changes["delete"])
+                    else False
+                )
         else:
-            changes["keystore_password"] = False
-            changes["keystore"] = keystore_changes if (keystore_changes["set"] or keystore_changes["delete"]) else False
+            # Policy wants unauthenticated keystore
+            if agent_keystore_password_hash:
+                changes["keystore_password"] = None
+            else:
+                changes["keystore_password"] = False
+            changes["keystore"] = (
+                keystore_changes
+                if (keystore_changes["set"] or keystore_changes["delete"])
+                else False
+            )
 
         agent_pipelines = data.get("pipelines", {})
         policy_pipelines_qs = policy.pipelines.all()

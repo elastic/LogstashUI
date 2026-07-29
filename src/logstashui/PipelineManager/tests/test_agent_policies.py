@@ -654,6 +654,26 @@ class TestSetKeystorePassword:
         assert data['success'] is False
         assert 'Password cannot be empty' in data['error']
 
+    def test_clear_keystore_password(self, authenticated_client, test_policy):
+        """clear=true removes policy password so agents migrate to unauth."""
+        assert test_policy.keystore_password
+        response = authenticated_client.post(
+            '/ConnectionManager/SetKeystorePassword/',
+            data=json.dumps({
+                'policy_id': test_policy.id,
+                'clear': True,
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert 'cleared' in data['message'].lower()
+        test_policy.refresh_from_db()
+        assert not test_policy.keystore_password
+        assert test_policy.keystore_password_hash == ''
+        assert test_policy.has_undeployed_changes is True
+
     def test_set_keystore_password_nonexistent_policy(self, authenticated_client):
         """Test setting password for non-existent policy"""
         response = authenticated_client.post(

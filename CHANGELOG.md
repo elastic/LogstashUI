@@ -14,6 +14,7 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - Added embedded **pseudo-connection** (no enroll) so Docker sim appears in the same picker as enrolled simulate agents.
 - Added pre-simulation **keystore clone** from the pipeline’s associated policy when `${…}` refs are present; **compare-and-skip** avoids write/restart when the simulate keystore already matches.
 - Added check-in / `GetConfigChanges` fields for **logstash_source / logstash_version / logstash_download_dir** (`logstash_runtime`) so agents can apply VERSION binary switches after policy deploy without re-enrollment.
+- Added keystore password **clear** on check-in: when the policy has no password but the agent still reports a hash, `GetConfigChanges` returns `keystore_password: null`; `SetKeystorePassword` accepts `clear: true`.
 - Added Phase D user docs for simulation targets, simulate agents, and upgrade notes.
 
 ### Changed
