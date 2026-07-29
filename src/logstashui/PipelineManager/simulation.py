@@ -26,6 +26,7 @@ import uuid
 import base64
 import time
 import re
+from Common.product_ca import agent_requests_verify
 
 logger = logging.getLogger(__name__)
 
@@ -213,16 +214,14 @@ def SimulatePipeline(request):
             # Enrolled simulate agent is typically not co-located in docker; use
             # public-ish UI base from request if available, else localhost.
             logstash_ui_url = request.build_absolute_uri('/').rstrip('/')
-            if logstash_ui_url.startswith('http://'):
-                # Prefer https for production-like setups when behind nginx
-                pass
         elif simulation_mode == 'host':
-            logstash_ui_url = "https://localhost"
+            logstash_ui_url = "https://localhost:8443"
         else:
             if settings.DEBUG:
-                logstash_ui_url = "http://host.docker.internal:8080"
+                logstash_ui_url = "https://host.docker.internal:8443"
             else:
-                logstash_ui_url = "https://nginx"
+                # Agent container reaches UI service on compose network
+                logstash_ui_url = "https://logstashui:8443"
 
         logger.debug("USING THIS URL: %s", logstash_ui_url)
         # Recursive function to instrument plugins, including nested conditionals
@@ -547,7 +546,7 @@ end
             response = requests.post(
                 f"{logstash_agent_url}/_logstash/slots/allocate",
                 json=slot_allocation_body,
-                verify=False,
+                verify=agent_requests_verify(),
                 timeout=30  # Increased timeout for slot eviction + allocation when slots are full
             )
 
@@ -640,7 +639,7 @@ end
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
-                    verify=False,
+                    verify=agent_requests_verify(),
                     timeout=10  # Timeout to allow logstashagent's 3 retries to complete (1s+2s+3s=6s)
                 )
                 
@@ -805,7 +804,7 @@ def CheckIfPipelineLoaded(request):
         logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/pipelines/status"
 
         try:
-            response = requests.get(logstash_agent_url, timeout=5, verify=False)
+            response = requests.get(logstash_agent_url, timeout=5, verify=agent_requests_verify())
             response.raise_for_status()
 
             data = response.json()
@@ -871,7 +870,7 @@ def GetRelatedLogs(request):
         # Get slot creation timestamp from logstashagent
         min_timestamp = None
         try:
-            slots_response = requests.get(f"{_sim_agent_url(request)[0]}/_logstash/slots", timeout=5, verify=False)
+            slots_response = requests.get(f"{_sim_agent_url(request)[0]}/_logstash/slots", timeout=5, verify=agent_requests_verify())
             slots_response.raise_for_status()
             slots_data = slots_response.json()
 
@@ -920,7 +919,7 @@ def GetRelatedLogs(request):
 
         try:
             logger.debug(f"Requesting logs from {logstash_agent_url} with params: {params}")
-            response = requests.get(logstash_agent_url, params=params, timeout=10, verify=False)
+            response = requests.get(logstash_agent_url, params=params, timeout=10, verify=agent_requests_verify())
             response.raise_for_status()
 
             data = response.json()
@@ -999,7 +998,7 @@ def UploadFile(request):
                 "filename": filename,
                 "content": encoded_content
             },
-            verify=False,
+            verify=agent_requests_verify(),
             timeout=10
         )
 
@@ -1041,7 +1040,7 @@ def GetSimulationNodeStatus(request):
             logstash_agent_url = settings.LOGSTASH_AGENT_URL
         
         try:
-            response = requests.get(logstash_agent_url, timeout=3, verify=False)
+            response = requests.get(logstash_agent_url, timeout=3, verify=agent_requests_verify())
             response.raise_for_status()
             
             agent_data = response.json()
@@ -1097,7 +1096,7 @@ def GetSimulationNodeHealth(request):
         logstash_agent_url = f"{base}/_logstash/health"
         
         try:
-            response = requests.get(logstash_agent_url, timeout=3, verify=False)
+            response = requests.get(logstash_agent_url, timeout=3, verify=agent_requests_verify())
             response.raise_for_status()
             
             health_data = response.json()
@@ -1190,7 +1189,7 @@ def ValidateLogstashConfig(request):
                     "pipeline_name": pipeline_name,
                     "config": logstash_config
                 },
-                verify=False,
+                verify=agent_requests_verify(),
                 timeout=30
             )
             response.raise_for_status()

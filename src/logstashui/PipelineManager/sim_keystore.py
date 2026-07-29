@@ -22,6 +22,7 @@ from typing import Any, Optional
 import requests
 
 from PipelineManager.models import Policy
+from Common.product_ca import agent_requests_verify
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ def fetch_agent_keystore(
     Returns dict with keys: exists, secrets, secrets_count, keys.
     """
     url = agent_base_url.rstrip("/") + "/_logstash/keystore"
-    resp = requests.get(url, timeout=timeout, verify=False)
+    resp = requests.get(url, timeout=timeout, verify=agent_requests_verify())
     if resp.status_code >= 400:
         raise RuntimeError(
             f"Failed to read agent keystore ({resp.status_code}): {resp.text[:300]}"
@@ -148,7 +149,7 @@ def sync_keystore_to_agent(
         url,
         bool(password),
     )
-    resp = requests.post(url, json=payload, timeout=timeout, verify=False)
+    resp = requests.post(url, json=payload, timeout=timeout, verify=agent_requests_verify())
     if resp.status_code >= 400:
         raise RuntimeError(
             f"Keystore sync failed ({resp.status_code}): {resp.text[:500]}"

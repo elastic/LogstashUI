@@ -28,12 +28,19 @@ cd LogstashUI/bin
 start_logstashui.bat         # Windows
 ```
 
-Then browse to `https://<your_server_ip_or_hostname>`.
+Then browse to `https://<your_server_ip_or_hostname>:8443`.
 
-This is **embedded mode** — the default `simulation.mode` — which brings up three containers: **LogstashUI** (the web app), **LogstashAgent** (pipeline simulation), and **Nginx** (HTTPS reverse proxy on port 443). The mode is controlled by `simulation.mode` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md); leave it as `embedded` for this option.
+This is **embedded mode** — the default `simulation.mode` — which brings up two containers: **LogstashUI** (gunicorn HTTPS on **8443**) and **LogstashAgent** (uvicorn HTTPS on **9500**). There is **no nginx**. The mode is controlled by `simulation.mode` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md); leave it as `embedded` for this option.
+
+**HTTPS / product CA:** On first start, LogstashUI writes a product CA and a UI server certificate under `data/tls/` (`ui-server.crt` / `ui-server.key`). Gunicorn presents that cert on port **8443** (ports under 1000 would need root). Agents:
+
+1. Bootstrap-fetch `https://…:8443/.well-known/logstashui/ca.crt` with **verify=False only for that GET**, then pin the CA (TOFU or enrollment-token fingerprint).
+2. Obtain a **product-CA-signed server cert** (CSR at enroll, re-issue on check-in, or compose `LOGSTASHUI_AGENT_CSR_SECRET`) and serve FastAPI over HTTPS on **9500**.
+
+Browsers warn on the product default leaf until you trust the product CA or upload a public/custom cert under **Management → Settings**. After changing the UI certificate, restart the UI container (`docker compose restart logstashui`).
 
 > [!NOTE]
-> If you run Docker Compose directly instead of using the scripts, the simulation agent is gated behind the `embedded` Compose profile: `cd docker && docker compose --profile embedded up -d`. A plain `docker compose up` starts only LogstashUI and Nginx.
+> If you run Docker Compose directly instead of using the scripts, the simulation agent is gated behind the `embedded` Compose profile: `cd docker && docker compose --profile embedded up -d`. A plain `docker compose up` starts only LogstashUI.
 
 ---
 

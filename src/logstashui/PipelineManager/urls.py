@@ -52,6 +52,7 @@ urlpatterns = [
     path("DeployPolicy/", agent_policies.deploy_policy, name="DeployPolicy"),
     path("Enroll/", agent_api.enroll, name="Enroll"),
     path("CheckIn/", agent_api.check_in, name="CheckIn"),
+    path("IssueServerCert/", agent_api.issue_server_cert, name="IssueServerCert"),
     path("GetConfigChanges/", agent_api.get_config_changes, name="GetConfigChanges"),
     
     path("GetKeystoreEntries/", agent_policies.get_keystore_entries, name="GetKeystoreEntries"),

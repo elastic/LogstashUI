@@ -19,6 +19,9 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - Added **Management → Settings** controls for **Agent callback URL** and **HTTPS certificate** (upload custom server cert/key/chain, preview SANs, revert to product-CA default). Custom certs are written under `data/tls/ui-server.*` for the TLS terminator; product CA for agents is unchanged.
 - Simulation node health API now surfaces agent **TLS pin** fields (`secure` / `tls`) for online+secure indicators when the embedded agent has bootstrapped the product CA.
 - Added Phase D user docs for simulation targets, simulate agents, and upgrade notes.
+- **Product-CA-signed agent server certificates**: agents generate a local key + CSR; UI signs at **enroll**, **check-in re-issue** (upgrade without re-enroll), or `POST ConnectionManager/IssueServerCert/` (API key or `LOGSTASHUI_AGENT_CSR_SECRET` for compose/embedded).
+- **Dual HTTPS, no nginx**: UI gunicorn TLS on **8443** (`data/tls/ui-server.*`); agent uvicorn TLS on **9500**. Compose no longer runs an nginx service. Agents pull CA from `/.well-known/logstashui/ca.crt` (HTTPS-only bootstrap GET uses verify=False only for that request).
+- UI→agent HTTP clients use product CA ∪ system trust (`agent_requests_verify()`).
 
 ### Changed
 

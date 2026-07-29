@@ -4,6 +4,11 @@
 
 name: LogstashUI
 
+# Dual HTTPS (no nginx):
+#   UI gunicorn  :8443  (product CA leaf or custom upload under data/tls/ui-server.*)
+#   Agent uvicorn :9500 (product-CA-signed agent leaf; CSR issue via enroll/check-in/secret)
+# Agents pull product CA from https://…:8443/.well-known/logstashui/ca.crt (verify=False only for that bootstrap GET).
+
 services:
   logstashui:
     image: codyjackson032/logstashui:latest
@@ -11,8 +16,8 @@ services:
     #build:
     #  context: ..
     #  dockerfile: docker/Dockerfile
-    expose:
-      - "8080"
+    ports:
+      - "8443:8443"
     volumes:
       - logstashui_data:/app/src/logstashui/data
       - ../src/logstashui/logstashui.yml:/app/src/logstashui/logstashui.yml:ro
@@ -23,15 +28,13 @@ services:
       # ALLOWED_HOSTS: Set to your domain(s) in production (comma-separated)
       # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com,192.168.1.100
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
-      # LOGSTASHUI_CONFIG: Path to configuration file for simulation mode detection
-      # Leave unset to use default config in settings.py
-      # - LOGSTASHUI_CONFIG=/app/src/logstashui/logstashui.yml
-      # LOGSTASH_AGENT_URL: Automatically set in settings.py based on simulation mode
-      # Host mode: http://host.docker.internal:9500 (native agent on host)
-      # Embedded mode + DEBUG=True: http://logstashagent:9500 (direct)
-      # Embedded mode + DEBUG=False: https://nginx:9500 (via nginx proxy)
-    # Enable host.docker.internal on Linux (automatic on Docker Desktop)
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://localhost:8443,https://127.0.0.1:8443}
+      # Shared with embedded agent so it can obtain a server cert without enroll
+      - LOGSTASHUI_AGENT_CSR_SECRET=${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}
+      # LOGSTASH_AGENT_URL: HTTPS direct to agent (no nginx)
+      # Host mode: https://host.docker.internal:9501
+      # Embedded: https://logstashagent:9500
+      - LOGSTASH_AGENT_URL=${LOGSTASH_AGENT_URL:-https://logstashagent:9500}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -43,79 +46,24 @@ services:
     profiles:
       - embedded  # Only start this container in embedded mode
     ports:
-      - "9650:9650"  # Logstash API
+      - "9650:9650"  # Logstash API (legacy image mapping; runtime often 9560)
+      - "9560:9560"  # Logstash API (embedded default)
       - "9449:9449"  # Logstash HTTP input (for sample events)
-    expose:
-      - "9500"  # FastAPI sidecar API (internal only, accessed via nginx)
-    # Optional: Mount config files for dynamic runtime config (read-only)
-    # volumes:
-    #   - ../logstashui.yml:/app/logstashui.yml:ro
-    #   - ../logstashui.example.yml:/app/logstashui.example.yml:ro
+      - "9500:9500"  # FastAPI agent API (HTTPS)
     environment:
-      # Override default LOGSTASH_URL (default: http://host.docker.internal:8080 for local dev)
-      # In docker-compose, use nginx for HTTPS routing (Logstash StreamSimulate callbacks)
-      - LOGSTASH_URL=https://nginx
-      - SIMULATION_MODE=true  # Enable file upload for simulation
-      # Agent→UI base for product CA bootstrap (pin-and-fetch). Internal HTTP is fine;
-      # bootstrap GET uses verify=False until CA is pinned, then trust product CA.
-      - LOGSTASH_UI_URL=http://logstashui:8080
-    # Enable host.docker.internal on Linux (automatic on Docker Desktop)
-    # Allows container to reach host machine when running Django locally
+      # UI base for product CA bootstrap + CSR issue (HTTPS only)
+      - LOGSTASH_UI_URL=https://logstashui:8443
+      # StreamSimulate / Logstash callbacks into UI HTTPS
+      - LOGSTASH_URL=https://logstashui:8443
+      - SIMULATION_MODE=true
+      - LOGSTASHUI_AGENT_CSR_SECRET=${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # No restart policy - only runs in embedded mode via profile
     networks:
       - logstashui_network
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "0.0.0.0:443:443"
-      - "80:80"
-      - "9500:9500"  # logstashagent API proxy (HTTPS)
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf.template:ro
-      # Optional: Mount config files if they exist
-      # - ../logstashui.yml:/etc/logstashui.yml:ro
-      # - ../logstashui.example.yml:/etc/logstashui.example.yml:ro
-      - nginx_certs:/etc/nginx/certs
-    depends_on:
-      - logstashui
-    restart: unless-stopped
-    networks:
-      - logstashui_network
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ ! -f /etc/nginx/certs/cert.pem ]; then
-          apk add --no-cache openssl &&
-          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout /etc/nginx/certs/key.pem \
-            -out /etc/nginx/certs/cert.pem \
-            -subj '/CN=localhost'
-        fi
-        apk add --no-cache py3-pip
-        pip3 install pyyaml --break-system-packages
-        # Check for logstashui.yml first, fallback to logstashui.example.yml
-        if [ -f /etc/logstashui.yml ]; then
-          CONFIG_FILE="/etc/logstashui.yml"
-        else
-          CONFIG_FILE="/etc/logstashui.example.yml"
-        fi
-        MODE=$$(python3 -c "import yaml; print(yaml.safe_load(open('$$CONFIG_FILE')).get('simulation', {}).get('mode', 'embedded'))")
-        if [ "$$MODE" = "host" ]; then
-          UPSTREAM="host.docker.internal:9501"
-        else
-          UPSTREAM="logstashagent:9500"
-        fi
-        sed "s/AGENT_UPSTREAM_PLACEHOLDER/$$UPSTREAM/g" /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
-        echo "Nginx configured for $$MODE mode, agent upstream $$UPSTREAM"
-        nginx -g 'daemon off;'
 
 volumes:
   logstashui_data:
-  nginx_certs:
 
 networks:
   logstashui_network:

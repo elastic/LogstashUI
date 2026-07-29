@@ -413,8 +413,8 @@ def SettingsTlsUpload(request):
         return JsonResponse({
             'success': True,
             'message': (
-                'Custom certificate installed. Point your TLS terminator at the paths shown, '
-                'then reload nginx (or your reverse proxy). Product CA for agents is unchanged.'
+                'Custom certificate installed. Restart the UI process/container so gunicorn reloads certs. '
+                'then restart the UI process/container. Product CA for agents is unchanged.'
             ),
             'tls_status': get_ui_tls_status(),
         })
@@ -437,7 +437,7 @@ def SettingsTlsRevert(request):
         logger.info(f"User '{request.user.username}' reverted UI certificate to product default")
         return JsonResponse({
             'success': True,
-            'message': 'Reverted to product default certificate. Reload your TLS terminator if needed.',
+            'message': 'Reverted to product default certificate. Restart the UI so gunicorn reloads certs.',
             'tls_status': status,
         })
     except Exception as e:

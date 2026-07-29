@@ -161,7 +161,10 @@
           Revert to product default
         </button>
         <p class="text-xs text-gray-500 mt-2">
-          Regenerates a product-CA-signed certificate (self-signed path for OOTB). Reload nginx after changing certs.
+          Regenerates a product-CA-signed certificate (self-signed path for OOTB).
+          After upload or revert, restart the UI so gunicorn reloads
+          <code class="text-gray-400">data/tls/ui-server.*</code>
+          (Docker: <code class="text-gray-400">docker compose restart logstashui</code>).
         </p>
       </div>
     </div>

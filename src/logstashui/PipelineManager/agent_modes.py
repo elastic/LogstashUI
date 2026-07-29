@@ -164,7 +164,7 @@ def ensure_embedded_connection() -> Connection | None:
         if not policy:
             return None
 
-        agent_url = getattr(settings, "LOGSTASH_AGENT_URL", None) or "http://127.0.0.1:9500"
+        agent_url = getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500"
         parsed = urlparse(agent_url)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or EMBEDDED_AGENT_API_PORT
@@ -252,7 +252,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
         if policy.policy_type == Policy.PolicyType.EMBEDDED:
             label = f"embedded · {version or 'docker'}"
             agent_port = conn.agent_api_port or EMBEDDED_AGENT_API_PORT
-            # Prefer settings URL (https://nginx:9500 etc.) for embedded
+            # Prefer settings URL (https://logstashagent:9500) for embedded
             try:
                 from django.conf import settings
 
@@ -261,7 +261,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
                 base_url = None
             if not base_url:
                 host = conn.host or "127.0.0.1"
-                base_url = f"http://{host}:{agent_port}"
+                base_url = f"https://{host}:{agent_port}"
             host = conn.host or "127.0.0.1"
         else:
             n = conn.instance_id or "?"
@@ -271,7 +271,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             if agent_port is None and conn.instance_id:
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id
             host = conn.host or "127.0.0.1"
-            base_url = f"http://{host}:{agent_port}" if agent_port else None
+            base_url = f"https://{host}:{agent_port}" if agent_port else None
 
         targets.append(
             {

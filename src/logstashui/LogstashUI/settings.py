@@ -300,26 +300,26 @@ else:
     X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # logstashagent Configuration
-# URL for the logstashagent API
+# URL for the logstashagent API (HTTPS direct; no nginx)
 # Can be overridden with LOGSTASH_AGENT_URL environment variable
-# 
+#
 # Routing based on simulation mode:
-# - Host mode: Direct to host.docker.internal:9501 (native agent on host)
-# - Embedded mode: Via nginx proxy to logstashagent:9500 (container)
+# - Host mode: https://host.docker.internal:9501 (native agent on host)
+# - Embedded mode: https://logstashagent:9500 (container FastAPI TLS)
 if DEBUG:
-    # Development: Direct HTTP connection (for local testing without containers)
+    # Development: local agent (HTTP unless you run agent with TLS)
     LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://127.0.0.1:9500')
 else:
-    # Production: Check simulation mode from config
     simulation_mode = LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
-    
+
     if simulation_mode == 'host':
-        # Host mode: Agent runs natively on host port 9501
-        # Use HTTP to host.docker.internal (no SSL for internal communication)
-        LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://host.docker.internal:9501')
+        LOGSTASH_AGENT_URL = os.environ.get(
+            'LOGSTASH_AGENT_URL', 'https://host.docker.internal:9501'
+        )
     else:
-        # Embedded mode: Agent runs in container, accessed via nginx proxy
-        LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'https://nginx:9500')
+        LOGSTASH_AGENT_URL = os.environ.get(
+            'LOGSTASH_AGENT_URL', 'https://logstashagent:9500'
+        )
 
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/

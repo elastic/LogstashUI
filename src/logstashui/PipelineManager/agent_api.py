@@ -28,6 +28,25 @@ from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
 logger = logging.getLogger(__name__)
 
 
+def _sign_csr_if_present(data: dict) -> dict | None:
+    """If request includes csr_pem, sign with product CA and return payload fragment."""
+    csr_pem = data.get("csr_pem") or data.get("certificate_signing_request")
+    if not csr_pem:
+        return None
+    try:
+        from Common.product_ca import sign_agent_csr
+
+        signed = sign_agent_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode("utf-8"))
+        return {
+            "server_certificate": signed["certificate_pem"],
+            "ca_certificate": signed["ca_pem"],
+            "certificate_fingerprint": signed["fingerprint_sha256"],
+        }
+    except Exception as exc:
+        logger.error("Failed to sign agent CSR: %s", exc, exc_info=True)
+        raise
+
+
 def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
     """
     Encrypt a plaintext value for transport to a specific agent.
@@ -291,15 +310,24 @@ def enroll(request):
                 + (f" instance_id={instance_id}" if instance_id else "")
             )
 
-            return JsonResponse(
-                {
-                    "success": True,
-                    "api_key": raw_api_key,
-                    "policy_id": policy.id,
-                    "connection_id": connection.id,
-                    "policy_config": policy_config,
-                }
-            )
+            response_body = {
+                "success": True,
+                "api_key": raw_api_key,
+                "policy_id": policy.id,
+                "connection_id": connection.id,
+                "policy_config": policy_config,
+            }
+            try:
+                cert_part = _sign_csr_if_present(data)
+                if cert_part:
+                    response_body.update(cert_part)
+            except Exception as exc:
+                return JsonResponse(
+                    {"success": False, "error": f"Failed to sign agent certificate: {exc}"},
+                    status=400,
+                )
+
+            return JsonResponse(response_body)
         except Exception as exc:
             logger.error(f"Error creating connection during enrollment: {exc}")
             return JsonResponse(
@@ -311,6 +339,74 @@ def enroll(request):
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as exc:
         logger.error(f"Error during enrollment: {exc}")
+        return JsonResponse({"success": False, "error": str(exc)}, status=500)
+
+
+@csrf_exempt
+def issue_server_cert(request):
+    """
+    Issue a product-CA-signed agent server certificate from a CSR.
+
+    Auth (one of):
+      - Authorization: ApiKey <key> + connection_id (enrolled agents)
+      - X-LogstashUI-Agent-Csr-Secret: matches LOGSTASHUI_AGENT_CSR_SECRET
+        (compose/embedded bootstrap without re-enroll)
+    """
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        csr_pem = data.get("csr_pem") or data.get("certificate_signing_request")
+        if not csr_pem:
+            return JsonResponse({"success": False, "error": "Missing csr_pem"}, status=400)
+
+        authorized = False
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("ApiKey "):
+            raw_api_key = auth_header[7:]
+            connection_id = data.get("connection_id")
+            if connection_id and raw_api_key:
+                try:
+                    connection = ConnectionTable.objects.get(id=connection_id)
+                    api_key_obj = connection.api_keys.first()
+                    if api_key_obj and api_key_obj.verify_api_key(raw_api_key):
+                        authorized = True
+                except ConnectionTable.DoesNotExist:
+                    pass
+
+        if not authorized:
+            import os
+
+            expected = (os.environ.get("LOGSTASHUI_AGENT_CSR_SECRET") or "").strip()
+            provided = (
+                request.headers.get("X-LogstashUI-Agent-Csr-Secret")
+                or data.get("agent_csr_secret")
+                or ""
+            ).strip()
+            if expected and provided and secrets.compare_digest(expected, provided):
+                authorized = True
+
+        if not authorized:
+            return JsonResponse({"success": False, "error": "Unauthorized"}, status=401)
+
+        from Common.product_ca import sign_agent_csr
+
+        signed = sign_agent_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode("utf-8"))
+        return JsonResponse(
+            {
+                "success": True,
+                "server_certificate": signed["certificate_pem"],
+                "ca_certificate": signed["ca_pem"],
+                "certificate_fingerprint": signed["fingerprint_sha256"],
+            }
+        )
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except ValueError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error(f"Error issuing server cert: {exc}", exc_info=True)
         return JsonResponse({"success": False, "error": str(exc)}, status=500)
 
 
@@ -415,6 +511,21 @@ def check_in(request):
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
         }
+
+        # Upgrade path: agent without server cert sends CSR; re-issue without re-enroll
+        try:
+            cert_part = _sign_csr_if_present(data)
+            if cert_part:
+                response_payload.update(cert_part)
+                logger.info(
+                    "Issued/re-issued agent server cert on check-in connection_id=%s",
+                    connection_id,
+                )
+        except Exception as exc:
+            return JsonResponse(
+                {"success": False, "error": f"Failed to sign agent certificate: {exc}"},
+                status=400,
+            )
 
         return JsonResponse(response_payload)
 

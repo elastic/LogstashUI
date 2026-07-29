@@ -266,10 +266,11 @@ ping 127.0.0.1 -n 6 >nul
 
 echo.
 echo ========================================
-echo Starting Docker containers (UI + Nginx only)
+echo Starting Docker containers (UI only; legacy host agent)
 echo ========================================
 echo Note: LogstashAgent container will NOT start (legacy native agent instead)
-echo Note: Native agent runs on port 9501; nginx proxies 9500 to host.docker.internal:9501
+echo Note: Native agent HTTPS on port 9501; UI LOGSTASH_AGENT_URL=https://host.docker.internal:9501
+echo Note: UI HTTPS on port 8443 (no nginx)
 echo.
 
 REM Ensure agent container is stopped for legacy host path
@@ -278,9 +279,9 @@ cd docker
 %DOCKER_COMPOSE% stop logstashagent 2>nul
 %DOCKER_COMPOSE% rm -f logstashagent 2>nul
 
-REM Start only logstashui and nginx in detached mode
-REM Nginx entrypoint maps legacy host mode to host.docker.internal:9501
-%DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
+REM Start only logstashui (HTTPS :8443)
+set LOGSTASH_AGENT_URL=https://host.docker.internal:9501
+%DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui
 cd ..
 goto END_MODE_SELECTION
 

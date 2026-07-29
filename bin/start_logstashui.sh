@@ -6,7 +6,7 @@
 # logstashui Startup Script
 # Detects simulation.mode from logstashui.yml / example and starts accordingly
 # - embedded: all containers including LogstashAgent
-# - host (LEGACY): native agent on :9501 + UI/nginx only — not enrolled simulate@N
+# - host (LEGACY): native agent on :9501 + UI only — not enrolled simulate@N
 # Preferred multi-instance sim: enroll a Simulate policy (see host_mode.md)
 #
 # Usage:
@@ -285,40 +285,45 @@ if [ "$MODE" == "host" ]; then
     fi
     echo ""
     
-    echo "Starting LogstashAgent on port 9501 (accessible remotely)"
-    cd "$PROJECT_ROOT/LogstashAgent"
-    # Start in background using nohup with uv run - bind to 0.0.0.0 for remote access
-    nohup uv run uvicorn logstashagent.main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
-    AGENT_PID=$!
-    echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
-    cd "$PROJECT_ROOT"
-    
-    echo "LogstashAgent started with PID: $AGENT_PID"
-    echo "Waiting 5 seconds for agent to initialize"
-    sleep 5
-    
-    echo ""
     echo "========================================"
-    echo "Starting Docker containers (UI + Nginx only)"
+    echo "Starting Docker UI first (HTTPS :8443), then legacy native agent"
     echo "========================================"
     echo "Note: LogstashAgent container will NOT start (legacy native agent instead)"
-    echo "Note: Native agent runs on port 9501; nginx proxies 9500 → host.docker.internal:9501"
+    echo "Note: Native agent HTTPS on port 9501; UI uses LOGSTASH_AGENT_URL=https://host.docker.internal:9501"
     echo ""
-    
+
     # Ensure agent container is stopped for legacy host path
     echo "Stopping any existing containers"
     cd "$PROJECT_ROOT/docker"
     $DOCKER_COMPOSE stop logstashagent 2>/dev/null || true
     $DOCKER_COMPOSE rm -f logstashagent 2>/dev/null || true
-    
-    # Start only logstashui and nginx in detached mode
-    # Nginx entrypoint maps legacy host mode → host.docker.internal:9501
+
+    export LOGSTASH_AGENT_URL="${LOGSTASH_AGENT_URL:-https://host.docker.internal:9501}"
+    export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
     if [ -n "$REBUILD_FLAG" ]; then
-        $DOCKER_COMPOSE up -d $REBUILD_FLAG logstashui nginx
+        $DOCKER_COMPOSE up -d $REBUILD_FLAG logstashui
     else
-        $DOCKER_COMPOSE up -d logstashui nginx
+        $DOCKER_COMPOSE up -d logstashui
     fi
     cd "$PROJECT_ROOT"
+
+    echo "Waiting 8 seconds for UI TLS material..."
+    sleep 8
+
+    echo "Starting LogstashAgent on port 9501 (HTTPS when cert issued)"
+    cd "$PROJECT_ROOT/LogstashAgent"
+    export LOGSTASH_UI_URL="${LOGSTASH_UI_URL:-https://localhost:8443}"
+    export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
+    # Host-mode legacy uses 9501 so it does not clash with container 9500
+    nohup env LOGSTASH_UI_URL="$LOGSTASH_UI_URL" \
+        LOGSTASHUI_AGENT_CSR_SECRET="$LOGSTASHUI_AGENT_CSR_SECRET" \
+        LOGSTASH_AGENT_PORT=9501 \
+        uv run python -m logstashagent.main --mode embedded \
+        > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
+    AGENT_PID=$!
+    echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
+    cd "$PROJECT_ROOT"
+    echo "LogstashAgent started with PID: $AGENT_PID"
     
 else
     echo "========================================"
@@ -364,5 +369,6 @@ echo ""
 echo "Containers are running in the background."
 echo "To stop LogstashUI, run: ./stop_logstashui.sh"
 echo ""
-echo "Access LogstashUI at: https://your_ip_or_hostname_here"
+echo "Access LogstashUI at: https://your_ip_or_hostname_here:8443"
+echo "(Product CA by default — browsers will warn until you trust it or upload a public cert in Settings.)"
 echo ""

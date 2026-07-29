@@ -18,7 +18,7 @@ import logging
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -189,7 +189,7 @@ def get_agent_ui_url_default() -> str:
 
 
 # ---------------------------------------------------------------------------
-# UI server certificate (what nginx / TLS terminator should present)
+# UI server certificate (what gunicorn presents on :8443)
 # ---------------------------------------------------------------------------
 
 UI_SERVER_CERT = "ui-server.crt"
@@ -292,6 +292,7 @@ def ensure_default_ui_server_cert(extra_dns: Optional[list] = None) -> Tuple[Pat
     ca_key = serialization.load_pem_private_key(ca_key_path().read_bytes(), password=None)
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    # localhost for browsers; logstashui for compose service name on :8443
     dns_names = ["localhost", "logstashui"]
     if extra_dns:
         for d in extra_dns:
@@ -500,13 +501,18 @@ def get_ui_tls_status() -> dict:
         "product_ca_fingerprint": get_ca_fingerprint(),
         "certificate": None,
         "has_custom": mode == "custom",
-        "nginx_hint": (
-            f"Point your TLS terminator at:\n"
-            f"  ssl_certificate     {ui_server_cert_path()};\n"
-            f"  ssl_certificate_key {ui_server_key_path()};\n"
-            f"Optional chain: {ui_server_chain_path()}"
+        "tls_hint": (
+            f"Gunicorn serves HTTPS with these files (default port 8443):\n"
+            f"  --certfile {ui_server_cert_path()}\n"
+            f"  --keyfile  {ui_server_key_path()}\n"
+            f"Optional chain (concatenate into certfile): {ui_server_chain_path()}\n"
+            f"After uploading or reverting a cert, restart the UI container/process.\n"
+            f"Agents pull the product CA from {WELL_KNOWN_CA_PATH} (no shared volume)."
         ),
+        # Back-compat key for templates that still reference nginx_hint
+        "nginx_hint": None,
     }
+    status["nginx_hint"] = status["tls_hint"]
     if ui_server_cert_path().is_file():
         try:
             leaf = x509.load_pem_x509_certificate(ui_server_cert_path().read_bytes())
@@ -514,4 +520,157 @@ def get_ui_tls_status() -> dict:
         except Exception as e:
             status["certificate_error"] = str(e)
     return status
+
+
+# ---------------------------------------------------------------------------
+# Agent server certificates (product-CA-signed leaves for agent HTTPS :9500)
+# ---------------------------------------------------------------------------
+
+
+def sign_agent_csr(
+    csr_pem: bytes,
+    *,
+    validity_days: int = 825,
+    extra_dns: Optional[list] = None,
+) -> dict:
+    """
+    Sign an agent certificate signing request with the product CA.
+
+    Returns dict with certificate_pem (str), ca_pem (str), fingerprint_sha256,
+    and subject/SAN info. Private key never leaves the agent.
+    """
+    if not csr_pem:
+        raise ValueError("CSR PEM is required")
+    if isinstance(csr_pem, str):
+        csr_pem = csr_pem.encode("utf-8")
+
+    ensure_product_ca()
+    try:
+        csr = x509.load_pem_x509_csr(csr_pem)
+    except Exception as e:
+        raise ValueError(f"Could not parse CSR PEM: {e}") from e
+
+    if not csr.is_signature_valid:
+        raise ValueError("CSR signature is invalid")
+
+    ca_cert = x509.load_pem_x509_certificate(ca_cert_path().read_bytes())
+    ca_key = serialization.load_pem_private_key(ca_key_path().read_bytes(), password=None)
+
+    # Collect SANs from CSR; fall back to CN
+    dns_names: list[str] = []
+    ip_addrs: list = []
+    try:
+        ext = csr.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        for name in ext.value:
+            if isinstance(name, x509.DNSName):
+                if name.value not in dns_names:
+                    dns_names.append(name.value)
+            elif isinstance(name, x509.IPAddress):
+                ip_addrs.append(name.value)
+    except x509.ExtensionNotFound:
+        pass
+
+    cn = ""
+    try:
+        cn = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+    except (IndexError, ValueError, AttributeError):
+        pass
+    if cn and cn not in dns_names:
+        dns_names.insert(0, cn)
+
+    if extra_dns:
+        for d in extra_dns:
+            if d and d not in dns_names:
+                dns_names.append(d)
+
+    if not dns_names and not ip_addrs:
+        raise ValueError("CSR must include a CN or SubjectAlternativeName")
+
+    import ipaddress
+
+    san_list = [x509.DNSName(n) for n in dns_names]
+    for ip in ip_addrs:
+        san_list.append(x509.IPAddress(ip))
+    # Always allow loopback for local sim tooling
+    for loop in ("127.0.0.1", "::1"):
+        try:
+            addr = ipaddress.ip_address(loop)
+            if addr not in ip_addrs:
+                san_list.append(x509.IPAddress(addr))
+        except ValueError:
+            pass
+
+    now = datetime.now(timezone.utc)
+    subject = csr.subject if list(csr.subject) else x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, dns_names[0] if dns_names else "logstash-agent"),
+    ])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(ca_cert.subject)
+        .public_key(csr.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5))
+        .not_valid_after(now + timedelta(days=validity_days))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                key_encipherment=True,
+                content_commitment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]),
+            critical=False,
+        )
+        .add_extension(x509.SubjectAlternativeName(san_list), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    info = _cert_info(cert)
+    logger.info(
+        "Signed agent server certificate CN=%s fingerprint=%s…",
+        info.get("subject_cn"),
+        info.get("fingerprint_sha256", "")[:16],
+    )
+    return {
+        "certificate_pem": cert_pem.decode("utf-8"),
+        "ca_pem": get_ca_pem().decode("utf-8"),
+        "fingerprint_sha256": info["fingerprint_sha256"],
+        "subject_cn": info.get("subject_cn"),
+        "sans": info.get("sans"),
+        "not_after": info.get("not_after"),
+    }
+
+
+def agent_requests_verify() -> Union[bool, str]:
+    """
+    Value for requests ``verify=`` when the UI calls agents over HTTPS.
+
+    Uses system CAs ∪ product CA so product-issued agent leaves verify, while
+    custom public agent certs still work if operators use them later.
+    """
+    try:
+        import certifi
+
+        system_pem = Path(certifi.where()).read_text(encoding="utf-8")
+    except Exception:
+        system_pem = ""
+    try:
+        ensure_product_ca()
+        product_pem = ca_cert_path().read_text(encoding="utf-8")
+    except Exception:
+        return True
+    combined = (system_pem.rstrip() + "\n" + product_pem).strip() + "\n"
+    bundle = tls_data_dir() / "ui-agent-ca-bundle.pem"
+    bundle.write_text(combined, encoding="utf-8")
+    return str(bundle)
 

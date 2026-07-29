@@ -87,6 +87,61 @@ def test_product_ca_endpoint(client, tmp_path, settings):
 
 
 @pytest.mark.django_db
+def test_default_ui_server_cert_includes_compose_sans(tmp_path, settings):
+    """Product default leaf must cover localhost and logstashui service name."""
+    from Common import product_ca
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "data").mkdir(exist_ok=True)
+
+    cert_path, key_path = product_ca.ensure_default_ui_server_cert()
+    assert cert_path.is_file()
+    assert key_path.is_file()
+    leaf = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    ext = leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    dns = {n.value for n in ext.value if isinstance(n, x509.DNSName)}
+    assert "localhost" in dns
+    assert "logstashui" in dns
+    assert product_ca.get_ui_server_mode() == "product"
+
+
+@pytest.mark.django_db
+def test_sign_agent_csr(tmp_path, settings):
+    from Common import product_ca
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.x509.oid import NameOID
+    from cryptography import x509
+    from datetime import datetime, timedelta, timezone
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "data").mkdir(exist_ok=True)
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    csr = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "agent1")]))
+        .add_extension(
+            x509.SubjectAlternativeName([
+                x509.DNSName("agent1"),
+                x509.DNSName("localhost"),
+            ]),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    signed = product_ca.sign_agent_csr(csr.public_bytes(serialization.Encoding.PEM))
+    assert "BEGIN CERTIFICATE" in signed["certificate_pem"]
+    assert "BEGIN CERTIFICATE" in signed["ca_pem"]
+    leaf = x509.load_pem_x509_certificate(signed["certificate_pem"].encode())
+    assert leaf.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value == "agent1"
+
+
+@pytest.mark.django_db
 def test_custom_ui_cert_and_revert(tmp_path, settings):
     from Common import product_ca
     from cryptography.hazmat.primitives.asymmetric import rsa

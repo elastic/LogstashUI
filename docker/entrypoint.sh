@@ -68,6 +68,25 @@ echo "Syncing SNMP official data..."
 python manage.py sync_snmp_official_data --cleanup || echo "Warning: SNMP sync encountered an error but continuing startup"
 echo ""
 
+# Product CA + UI server cert for nginx (written under data/tls/; agents pull CA via well-known)
+echo "Ensuring product CA and UI server certificate..."
+python - <<'PY'
+import os
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
+django.setup()
+from Common.product_ca import ensure_default_ui_server_cert, get_ca_fingerprint, ui_server_cert_path
+
+cert, key = ensure_default_ui_server_cert()
+print(f"UI server cert: {cert}")
+print(f"UI server key:  {key}")
+print(f"Product CA fingerprint: {get_ca_fingerprint()}")
+print(f"Agents fetch CA from /.well-known/logstashui/ca.crt (no shared volume)")
+assert ui_server_cert_path().is_file(), "ui-server.crt missing after ensure"
+PY
+echo ""
+
 # Display welcome message
 echo ""
 echo "=========================================="
@@ -75,17 +94,27 @@ echo "  Welcome to LogstashUI!"
 echo "=========================================="
 echo ""
 echo "To get started, please visit:"
-echo "  https://<your-server-ip-or-hostname>"
+echo "  https://<your-server-ip-or-hostname>:8443"
 echo ""
 echo "Replace <your-server-ip-or-hostname> with:"
 echo "  - localhost (if accessing locally)"
 echo "  - Your server's IP address"
 echo "  - Your server's hostname/domain"
 echo ""
+echo "UI serves HTTPS on :8443 using data/tls/ui-server.* (product CA by default)."
+echo "Agents pin the product CA from /.well-known/logstashui/ca.crt — not a shared volume."
+echo ""
 echo "=========================================="
 echo ""
 
+# Assemble fullchain for gunicorn --certfile (leaf + optional intermediates)
+TLS_DIR="/app/src/logstashui/data/tls"
+if [ -f "$TLS_DIR/ui-server.crt" ]; then
+  if [ -f "$TLS_DIR/ui-server.chain.crt" ]; then
+    cat "$TLS_DIR/ui-server.crt" "$TLS_DIR/ui-server.chain.crt" > "$TLS_DIR/gunicorn-fullchain.pem"
+  else
+    cp "$TLS_DIR/ui-server.crt" "$TLS_DIR/gunicorn-fullchain.pem"
+  fi
+fi
+
 exec "$@"
-# Start the application with suppressed startup messages
-# Redirect Django's startup output to /dev/null but keep error output
-#exec "$@" 2>&1 | grep -v "Starting development server" | grep -v "Quit the server" | grep -v "http://0.0.0.0:8080"

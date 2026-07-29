@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 import requests
 import logging
 import json
+from Common.product_ca import agent_requests_verify
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,7 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
                 response = requests.put(
                     logstash_agent_url,
                     json=pipeline_body,
-                    verify=False,  # --insecure equivalent
+                    verify=agent_requests_verify(),  # --insecure equivalent
                     timeout=10
                 )
                 response.raise_for_status()
