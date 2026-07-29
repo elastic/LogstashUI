@@ -67,6 +67,16 @@ Embedded Docker remains **9500 / 9560** and does not use these paths.
 3. Leave production agents on **Default** policies (no re-enroll required for those).
 4. Prefer the editor Sim target list over `simulation.mode: host` in `logstashui.yml`.
 
+## Legacy start script (`simulation.mode: host`)
+
+`bin/start_logstashui.sh` / `.bat` still accept **`simulation.mode: host`** for a **local** agent:
+
+- Starts native FastAPI agent on port **9501** (supervisor `Popen` of package Logstash)
+- `bin/sync_config.py` writes `mode: embedded` + `simulation_mode: host` (not enrolled `mode: simulate`)
+- Compose runs UI + nginx only; nginx proxies to `host.docker.internal:9501`
+
+This path is **legacy**. It is not the same as `lsagent-simulate@N` / isolated `/opt/LogstashAgent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
+
 ## Related
 
 - **[Simulation overview](/docs/docs/logstashui/configuration/simulation.md)**

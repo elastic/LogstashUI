@@ -79,7 +79,7 @@ If you have internet access and can use Docker and GitHub, the standard install 
 
 ## Quick Start - Embedded Mode
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](docs/docs/logstashui/configuration/host_mode.md). It's more performant.
+> For heavy simulation, prefer [enrolled simulate agents](docs/docs/logstashui/configuration/host_mode.md) (isolated `simulate-N` instances). `simulation.mode: host` in start scripts is a **legacy** local path.
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git

@@ -1,8 +1,9 @@
 @echo off
 REM LogstashUI Startup Script
-REM Detects mode from LogstashAgent/logstashagent.yml and starts accordingly
-REM - Host mode: Starts native Python agent on Windows, then containers (without agent container)
-REM - Embedded mode: Starts all containers including agent
+REM Detects simulation.mode from logstashui.yml / example and starts accordingly
+REM - embedded: all containers including LogstashAgent
+REM - host (LEGACY): native agent on :9501 + UI/nginx only - not enrolled simulate@N
+REM Preferred multi-instance sim: enroll a Simulate policy (see host_mode.md)
 REM
 REM Usage:
 REM   start_logstashui.bat          - Start with existing images
@@ -198,10 +199,13 @@ if /i "!MODE!"=="host" (
 
 :HOST_MODE
 echo ========================================
-echo HOST MODE DETECTED
+echo LEGACY HOST MODE DETECTED
 echo ========================================
-echo Starting LogstashAgent natively on Windows
-echo This allows the agent to control your host Logstash instance.
+echo Starting a native LogstashAgent (FastAPI + supervisor) on Windows.
+echo.
+echo NOTE: This is a LEGACY local sim path (simulation.mode: host).
+echo It is NOT an enrolled mode:simulate / lsagent-simulate@N instance.
+echo Prefer enrolling a Simulate policy agent for multi-instance sim.
 echo.
 
 REM Check if uv is available
@@ -264,18 +268,18 @@ echo.
 echo ========================================
 echo Starting Docker containers (UI + Nginx only)
 echo ========================================
-echo Note: LogstashAgent container will NOT start (running natively instead)
-echo Note: Native agent runs on port 9501, nginx proxies from 9500 to 9501
+echo Note: LogstashAgent container will NOT start (legacy native agent instead)
+echo Note: Native agent runs on port 9501; nginx proxies 9500 to host.docker.internal:9501
 echo.
 
-REM Ensure agent container is stopped in host mode
+REM Ensure agent container is stopped for legacy host path
 echo Stopping any existing containers
 cd docker
 %DOCKER_COMPOSE% stop logstashagent 2>nul
 %DOCKER_COMPOSE% rm -f logstashagent 2>nul
 
 REM Start only logstashui and nginx in detached mode
-REM Nginx will detect host mode and proxy to host.docker.internal:9501
+REM Nginx entrypoint maps legacy host mode to host.docker.internal:9501
 %DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
 cd ..
 goto END_MODE_SELECTION

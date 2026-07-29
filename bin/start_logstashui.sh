@@ -4,9 +4,10 @@
 #you may not use this file except in compliance with the Elastic License.
 
 # logstashui Startup Script
-# Detects mode from logstashui.example.yml and starts accordingly
-# - Host mode: Starts native Python agent on Linux, then containers (without agent container)
-# - Embedded mode: Starts all containers including agent
+# Detects simulation.mode from logstashui.yml / example and starts accordingly
+# - embedded: all containers including LogstashAgent
+# - host (LEGACY): native agent on :9501 + UI/nginx only — not enrolled simulate@N
+# Preferred multi-instance sim: enroll a Simulate policy (see host_mode.md)
 #
 # Usage:
 #   ./start_logstashui.sh          - Start with existing images
@@ -189,10 +190,15 @@ echo ""
 
 if [ "$MODE" == "host" ]; then
     echo "========================================"
-    echo "HOST MODE DETECTED"
+    echo "LEGACY HOST MODE DETECTED"
     echo "========================================"
-    echo "Starting LogstashAgent natively on Linux"
-    echo "This allows the agent to control your host Logstash instance."
+    echo "Starting a native LogstashAgent (FastAPI + supervisor) on Linux."
+    echo ""
+    echo "NOTE: This is a LEGACY local sim path (simulation.mode: host)."
+    echo "It is NOT an enrolled mode:simulate / lsagent-simulate@N instance."
+    echo "Prefer enrolling a Simulate policy agent for multi-instance sim:"
+    echo "  sudo logstash-agent install --enroll <TOKEN> --logstash-ui-url <URL>"
+    echo "  sudo systemctl enable --now lsagent-simulate@N"
     echo ""
     
     # Check if uv is available
@@ -295,18 +301,18 @@ if [ "$MODE" == "host" ]; then
     echo "========================================"
     echo "Starting Docker containers (UI + Nginx only)"
     echo "========================================"
-    echo "Note: LogstashAgent container will NOT start (running natively instead)"
-    echo "Note: Native agent runs on port 9501, nginx proxies from 9500 to 9501"
+    echo "Note: LogstashAgent container will NOT start (legacy native agent instead)"
+    echo "Note: Native agent runs on port 9501; nginx proxies 9500 → host.docker.internal:9501"
     echo ""
     
-    # Ensure agent container is stopped in host mode
+    # Ensure agent container is stopped for legacy host path
     echo "Stopping any existing containers"
     cd "$PROJECT_ROOT/docker"
     $DOCKER_COMPOSE stop logstashagent 2>/dev/null || true
     $DOCKER_COMPOSE rm -f logstashagent 2>/dev/null || true
     
     # Start only logstashui and nginx in detached mode
-    # Nginx will detect host mode and proxy to host.docker.internal:9501
+    # Nginx entrypoint maps legacy host mode → host.docker.internal:9501
     if [ -n "$REBUILD_FLAG" ]; then
         $DOCKER_COMPOSE up -d $REBUILD_FLAG logstashui nginx
     else

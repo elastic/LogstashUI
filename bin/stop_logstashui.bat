@@ -61,9 +61,9 @@ echo.
 
 if /i "!MODE!"=="host" (
     echo ========================================
-    echo HOST MODE SHUTDOWN
+    echo LEGACY HOST MODE SHUTDOWN
     echo ========================================
-    echo Stopping native LogstashAgent process
+    echo Stopping native LogstashAgent process (legacy local sim path)
     
     REM Kill Python processes listening on port 9501 (uvicorn)
     for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9501 ^| findstr LISTENING') do (

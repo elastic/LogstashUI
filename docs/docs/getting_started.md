@@ -18,10 +18,11 @@ If you choose to run LogstashUI with fewer resources, it will likely work fine, 
 #### For Embedded mode (See Quick Start)
 - [Docker](https://www.docker.com/get-started/)
 
-#### For [Host mode](/docs/docs/logstashui/configuration/host_mode.md) (If you have a simulation-heavy use case)
-- [Docker](https://www.docker.com/get-started/)
-- [Python 3.12+](https://www.python.org/downloads/)
-- [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)
+#### For [enrolled simulate agents](/docs/docs/logstashui/configuration/host_mode.md) (simulation-heavy use)
+- [Docker](https://www.docker.com/get-started/) (for LogstashUI itself)
+- [Python 3.12+](https://www.python.org/downloads/) / LogstashAgent package on the agent host
+- [Logstash 8.x/9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash) (SYSTEM or VERSION download)
+- Prefer a **Simulate** policy enrollment over legacy `simulation.mode: host`
 
 ### For Local Development
 **Required:**
@@ -35,7 +36,7 @@ If you choose to run LogstashUI with fewer resources, it will likely work fine, 
 
 ## Quick Start
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](/docs/docs/logstashui/configuration/host_mode.md). It's more performant.
+> For heavy simulation, prefer [enrolled simulate agents](/docs/docs/logstashui/configuration/host_mode.md). `simulation.mode: host` in the start scripts is a **legacy** local path.
 
 ### Download LogstashUI
 ```bash

@@ -37,15 +37,13 @@ This is **embedded mode** — the default `simulation.mode` — which brings up 
 
 ---
 
-## Option 2: Host-backed Simulation
+## Option 2: Host-backed Simulation (prefer enrolled Simulate agents)
 
-Use this when you want LogstashUI to run normally, but pipeline simulation should execute against a host-installed Logstash instance. Recommended for frequent or heavy simulation workloads — it's more reliable than the embedded container.
+For frequent or heavy simulation, enroll one or more **Simulate** policy agents (`lsagent-simulate@N` / isolated `simulate-N` paths). Select them in the pipeline editor **Sim target** control.
 
-**Requirements:** [Docker](https://www.docker.com/get-started/), [Python 3.12+](https://www.python.org/downloads/), [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash) (a dedicated instance that is not running production pipelines)
+**Preferred:** [Simulate agents setup](/docs/docs/logstashui/configuration/host_mode.md)
 
-This uses the **same startup script as Option 1** — the difference is one setting. Set `simulation.mode: host` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md) (see [Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)) before running it. The script then runs the simulation agent natively on the host (port 9501) and starts only the LogstashUI and Nginx containers; Nginx proxies simulation traffic to the native agent.
-
-**📖 Full setup guide: [Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)**
+**Legacy alternative:** Set `simulation.mode: host` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md) and run the same startup script as Option 1. That path starts a **native FastAPI agent on port 9501** (supervisor, not enrolled `mode: simulate`) and only the UI/nginx containers. Prefer enrolled Simulate agents for multi-instance or production-quality sim.
 
 ---
 

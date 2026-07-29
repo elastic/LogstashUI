@@ -56,9 +56,9 @@ echo ""
 
 if [ "$MODE" == "host" ]; then
     echo "========================================"
-    echo "HOST MODE SHUTDOWN"
+    echo "LEGACY HOST MODE SHUTDOWN"
     echo "========================================"
-    echo "Stopping native LogstashAgent process"
+    echo "Stopping native LogstashAgent process (legacy local sim path)"
     
     # Kill process using PID file if it exists
     if [ -f "logstashagent.pid" ]; then

@@ -83,24 +83,19 @@ logstash_agent:
 
 **Settings:**
 
-- **`mode`** - Agent operation mode
-  - `simulation` - Agent manages Logstash for pipeline simulation
+- **`mode`** - Local agent role for tooling (`embedded` | `simulate` | `default`).  
+  Enrolled simulate agents get role/paths from **policy enrollment**. Legacy start scripts rewrite this to `embedded` + supervisor `simulation_mode: host`.
 
-- **`logstash_binary`** - Path to the Logstash executable
+- **`logstash_binary`** - Path to the Logstash executable (SYSTEM package paths for local supervisor only)
   - Linux (default): `/usr/share/logstash/bin/logstash`
   - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat`
 
-- **`logstash_settings`** - Path to Logstash configuration directory
-  - Linux (default): `/etc/logstash`
-  - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\config`
+- **`logstash_settings`** / **`logstash_log_path`** - Package paths for the legacy local agent only  
+  Enrolled simulate instances use `/opt/LogstashAgent/simulate-N/` instead.
 
-- **`logstash_log_path`** - Path to Logstash log directory
-  - Linux (default): `/var/log/logstash`
-  - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\logs`
+> **IMPORTANT:** Prefer **enrolled Simulate** agents. The legacy `simulation.mode: host` start path lets the local agent manage package Logstash via supervisor; do not point it at production pipelines.
 
-> **IMPORTANT:** When using host mode, Logstash is fully managed by LogstashAgent. Logstash should not be started manually, and your configuration files will be modified.
-
-📖 **Learn more:** [Host Mode Setup Guide](/docs/docs/logstashui/configuration/host_mode.md)
+📖 **Learn more:** [Simulate agents](/docs/docs/logstashui/configuration/host_mode.md)
 
 ---
 
@@ -115,47 +110,47 @@ no_auth:
   enabled: false  # true | false
 
 simulation:
-  mode: embedded  # embedded | host
+  mode: embedded  # embedded | host (host = legacy local start path)
 
   logstash_agent:
-    mode: simulation
-    
+    mode: embedded
+
     logstash_binary: /usr/share/logstash/bin/logstash
     logstash_settings: /etc/logstash
     logstash_log_path: /var/log/logstash
 ```
 
-### Linux (Host Mode)
+### Linux (Legacy host start path)
 
 ```yaml
 no_auth:
   enabled: false
 
 simulation:
-  mode: host  # Change to 'host' for better performance
-
-  logstash_agent:
-    mode: simulation
-    
-    # Linux paths (adjust if Logstash is installed in a custom location)
-    logstash_binary: /usr/share/logstash/bin/logstash
-    logstash_settings: /etc/logstash
-    logstash_log_path: /var/log/logstash
-```
-
-### Windows (Host Mode)
-
-```yaml
-no_auth:
-  enabled: false
-
-simulation:
+  # LEGACY: native agent on :9501 for start_logstashui.sh
+  # Prefer enrolling a Simulate policy agent instead.
   mode: host
 
   logstash_agent:
-    mode: simulation
-    
-    # Windows paths - adjust to match your Logstash installation
+    mode: embedded  # rewritten by sync_config to embedded + simulation_mode: host
+
+    logstash_binary: /usr/share/logstash/bin/logstash
+    logstash_settings: /etc/logstash
+    logstash_log_path: /var/log/logstash
+```
+
+### Windows (Legacy host start path)
+
+```yaml
+no_auth:
+  enabled: false
+
+simulation:
+  mode: host  # legacy local start path only
+
+  logstash_agent:
+    mode: embedded
+
     logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
     logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
     logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs
@@ -165,6 +160,6 @@ simulation:
 
 ## Related Documentation
 
-- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - Detailed simulation modes and settings
-- **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - Complete guide to setting up host mode for high-performance simulations
+- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - Simulation targets and settings
+- **[Simulate agents (formerly host mode)](/docs/docs/logstashui/configuration/host_mode.md)** - Enrolled multi-instance sim
 - **[Getting Started](/docs/docs/getting_started.md)** - Quick start guide for LogstashUI
