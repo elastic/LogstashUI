@@ -17,6 +17,7 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - Added keystore password **clear** on check-in: when the policy has no password but the agent still reports a hash, `GetConfigChanges` returns `keystore_password: null`; `SetKeystorePassword` accepts `clear: true`.
 - Added **product CA** (auto-generated under `data/tls/`), public endpoint `/.well-known/logstashui/ca.crt`, and enrollment token **v2** optional `fingerprint` (SHA-256 of CA DER). Global `agent.ui_url` prefills `--logstash-ui-url` in generated enroll commands (`agent.include_ca_fingerprint`, default true).
 - Added **Management → Settings** controls for **Agent callback URL** and **HTTPS certificate** (upload custom server cert/key/chain, preview SANs, revert to product-CA default). Custom certs are written under `data/tls/ui-server.*` for the TLS terminator; product CA for agents is unchanged.
+- Simulation node health API now surfaces agent **TLS pin** fields (`secure` / `tls`) for online+secure indicators when the embedded agent has bootstrapped the product CA.
 - Added Phase D user docs for simulation targets, simulate agents, and upgrade notes.
 
 ### Changed

@@ -1101,12 +1101,17 @@ def GetSimulationNodeHealth(request):
             response.raise_for_status()
             
             health_data = response.json()
+            tls = health_data.get("tls") or {}
             
             return JsonResponse({
                 "healthy": health_data.get("healthy", False),
                 "restarting": health_data.get("restarting", False),
                 "restart_count": health_data.get("restart_count", 0),
-                "queued_requests": health_data.get("queued_requests", 0)
+                "queued_requests": health_data.get("queued_requests", 0),
+                # Agent→UI product CA pin (secure) and bootstrap status
+                "tls": tls,
+                "secure": bool(tls.get("secure") or tls.get("ca_pinned")),
+                "online": bool(health_data.get("healthy", False)),
             }, status=200)
             
         except requests.exceptions.RequestException as e:
@@ -1116,6 +1121,8 @@ def GetSimulationNodeHealth(request):
                 "restarting": False,
                 "restart_count": 0,
                 "queued_requests": 0,
+                "online": False,
+                "secure": False,
                 "error": str(e)
             }, status=200)
     

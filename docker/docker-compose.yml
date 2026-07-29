@@ -53,9 +53,12 @@ services:
     #   - ../logstashui.example.yml:/app/logstashui.example.yml:ro
     environment:
       # Override default LOGSTASH_URL (default: http://host.docker.internal:8080 for local dev)
-      # In docker-compose, use nginx for HTTPS routing
+      # In docker-compose, use nginx for HTTPS routing (Logstash StreamSimulate callbacks)
       - LOGSTASH_URL=https://nginx
       - SIMULATION_MODE=true  # Enable file upload for simulation
+      # Agent→UI base for product CA bootstrap (pin-and-fetch). Internal HTTP is fine;
+      # bootstrap GET uses verify=False until CA is pinned, then trust product CA.
+      - LOGSTASH_UI_URL=http://logstashui:8080
     # Enable host.docker.internal on Linux (automatic on Docker Desktop)
     # Allows container to reach host machine when running Django locally
     extra_hosts:
