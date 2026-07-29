@@ -14,8 +14,9 @@
 
 ## Prerequisites
 
+- **LogstashUI 0.5.1+** and **LogstashAgent 0.5.1+** (paired releases for agent roles / simulate units)
 - Linux host (systemd) for install templates
-- Root for `logstash-agent install --enroll …`
+- Root for `logstash-agent install --enroll …` (or non-root enroll + `sudo logstash-agent setup-simulate`)
 - Logstash binary available either:
   - **SYSTEM** — package or tarball already on the host, or
   - **VERSION** — agent downloads from Elastic artifacts into `/opt/LogstashAgent/logstash-versions/`

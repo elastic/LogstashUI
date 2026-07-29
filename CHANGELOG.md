@@ -1,5 +1,7 @@
 ## [0.5.1] - Agent roles (default / simulate / embedded) and multi-target simulation - 07/29/2026
 
+Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version for upgrade prompts is **0.5.1**.
+
 ### Added
 
 - Added policy **types**: `DEFAULT`, `SIMULATE`, and `EMBEDDED` (system seeds: Default Policy, Simulate Policy, Embedded Policy).
