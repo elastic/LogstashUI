@@ -406,6 +406,11 @@ def check_in(request):
             "settings_path": policy.settings_path,
             "logs_path": policy.logs_path,
             "binary_path": policy.binary_path,
+            # Desired Logstash runtime (agent applies VERSION download when these change)
+            "logstash_source": getattr(policy, "logstash_source", None) or "SYSTEM",
+            "logstash_version": getattr(policy, "logstash_version", None) or "",
+            "logstash_download_dir": getattr(policy, "logstash_download_dir", None)
+            or "/opt/LogstashAgent/logstash-versions",
             "restart": should_restart,
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
@@ -460,6 +465,9 @@ def get_config_changes(request):
         agent_logs_path = data.get("logs_path", "")
         agent_binary_path = data.get("binary_path", "")
         agent_keystore_password_hash = data.get("keystore_password_hash", "")
+        agent_logstash_source = (data.get("logstash_source") or "SYSTEM").upper()
+        agent_logstash_version = data.get("logstash_version") or ""
+        agent_logstash_download_dir = data.get("logstash_download_dir") or ""
 
         if not connection.policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
@@ -475,6 +483,33 @@ def get_config_changes(request):
         changes["settings_path"] = policy.settings_path if agent_settings_path != policy.settings_path else False
         changes["logs_path"] = policy.logs_path if agent_logs_path != policy.logs_path else False
         changes["binary_path"] = policy.binary_path if agent_binary_path != policy.binary_path else False
+
+        # Desired Logstash runtime for simulate VERSION/SYSTEM switches
+        policy_source = (getattr(policy, "logstash_source", None) or "SYSTEM").upper()
+        policy_version = getattr(policy, "logstash_version", None) or ""
+        policy_download_dir = (
+            getattr(policy, "logstash_download_dir", None)
+            or "/opt/LogstashAgent/logstash-versions"
+        )
+        runtime_changed = (
+            agent_logstash_source != policy_source
+            or (policy_source == "VERSION" and agent_logstash_version != policy_version)
+            or (
+                policy_source == "VERSION"
+                and (agent_logstash_download_dir or policy_download_dir)
+                and agent_logstash_download_dir != policy_download_dir
+            )
+            or (policy_source == "SYSTEM" and agent_binary_path != policy.binary_path)
+        )
+        if runtime_changed:
+            changes["logstash_runtime"] = {
+                "source": policy_source,
+                "version": policy_version,
+                "download_dir": policy_download_dir,
+                "binary_path": policy.binary_path,
+            }
+        else:
+            changes["logstash_runtime"] = False
 
         agent_keystore = data.get("keystore", {})
         policy_keystore_entries = policy.keystore_entries.all()
@@ -591,6 +626,7 @@ def get_config_changes(request):
                 f"settings_path={'CHANGED' if changes.get('settings_path') else 'unchanged'}",
                 f"logs_path={'CHANGED' if changes.get('logs_path') else 'unchanged'}",
                 f"binary_path={'CHANGED' if changes.get('binary_path') else 'unchanged'}",
+                f"logstash_runtime={'CHANGED' if changes.get('logstash_runtime') else 'unchanged'}",
             ]
         )
         keystore_summary = (

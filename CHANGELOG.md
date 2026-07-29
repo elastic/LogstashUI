@@ -9,6 +9,7 @@
 - Added `GetSimulationTargets` / `SelectSimulationTarget` APIs and sim routing via selected agent URL.
 - Added embedded **pseudo-connection** (no enroll) so Docker sim appears in the same picker.
 - Added pre-simulation **keystore clone** from the pipeline’s associated policy when `${…}` refs are present; skips write/restart when the simulate keystore already matches.
+- Added check-in / GetConfigChanges fields for **logstash_source / version / download_dir** so agents can apply VERSION binary switches after policy deploy without re-enrollment.
 
 ### Changed
 
