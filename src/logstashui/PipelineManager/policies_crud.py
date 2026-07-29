@@ -27,7 +27,10 @@ def get_policies(request):
                 filter=Q(connections__connection_type='AGENT', connections__is_active=True)
             )
         ).values(
-            'id', 'name', 'settings_path', 'logs_path', 'binary_path',
+            'id', 'name', 'policy_type', 'is_system', 'cloned_from_id',
+            'settings_path', 'logs_path', 'binary_path', 'data_path',
+            'agent_api_port', 'logstash_api_port', 'keystore_env_file',
+            'logstash_source', 'logstash_version', 'logstash_download_dir',
             'logstash_yml', 'jvm_options', 'log4j2_properties',
             'current_revision_number', 'last_deployed_at',
             'connection_count', 'created_at', 'updated_at'
@@ -133,28 +136,70 @@ def update_policy(request):
         if not policy_name:
             return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
 
-        # Don't allow updating Default policy
-        if policy_name.lower() == 'default policy':
-            return JsonResponse({"success": False, "error": "Cannot update Default Policy"}, status=403)
-
         try:
             policy = Policy.objects.get(name=policy_name)
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": f"Policy '{policy_name}' not found"}, status=404)
 
-        # Update fields if provided
-        if 'settings_path' in data:
-            policy.settings_path = data['settings_path']
-        if 'logs_path' in data:
-            policy.logs_path = data['logs_path']
-        if 'binary_path' in data:
-            policy.binary_path = data['binary_path']
-        if 'logstash_yml' in data:
-            policy.logstash_yml = data['logstash_yml']
-        if 'jvm_options' in data:
-            policy.jvm_options = data['jvm_options']
-        if 'log4j2_properties' in data:
-            policy.log4j2_properties = data['log4j2_properties']
+        if policy.policy_type == Policy.PolicyType.EMBEDDED:
+            return JsonResponse(
+                {"success": False, "error": "Cannot update Embedded Policy (immutable)"},
+                status=403,
+            )
+
+        # System Default: allow path/config edits (production). Name/type locked by not exposing them.
+        # System Simulate: allow jvm_options + logstash binary source/version; block path scheme.
+        # User simulate clones / default user policies: broader edits.
+        is_system_simulate = (
+            policy.is_system and policy.policy_type == Policy.PolicyType.SIMULATE
+        )
+        is_system_default = (
+            policy.is_system and policy.policy_type == Policy.PolicyType.DEFAULT
+        )
+
+        if is_system_simulate:
+            # Allowlisted fields for system Simulate Policy
+            if 'jvm_options' in data:
+                policy.jvm_options = data['jvm_options']
+            if 'logstash_source' in data:
+                policy.logstash_source = data['logstash_source']
+            if 'logstash_version' in data:
+                policy.logstash_version = data['logstash_version']
+            if 'logstash_download_dir' in data:
+                policy.logstash_download_dir = data['logstash_download_dir']
+            if 'binary_path' in data:
+                policy.binary_path = data['binary_path']
+            if 'logstash_yml' in data:
+                policy.logstash_yml = data['logstash_yml']
+            if 'log4j2_properties' in data:
+                policy.log4j2_properties = data['log4j2_properties']
+            # Intentionally ignore settings_path / logs_path / data_path / ports structural changes
+        else:
+            if 'settings_path' in data and not is_system_default:
+                # system default may still edit production paths
+                policy.settings_path = data['settings_path']
+            elif 'settings_path' in data:
+                policy.settings_path = data['settings_path']
+            if 'logs_path' in data:
+                policy.logs_path = data['logs_path']
+            if 'binary_path' in data:
+                policy.binary_path = data['binary_path']
+            if 'data_path' in data:
+                policy.data_path = data['data_path']
+            if 'keystore_env_file' in data:
+                policy.keystore_env_file = data['keystore_env_file']
+            if 'logstash_source' in data:
+                policy.logstash_source = data['logstash_source']
+            if 'logstash_version' in data:
+                policy.logstash_version = data['logstash_version']
+            if 'logstash_download_dir' in data:
+                policy.logstash_download_dir = data['logstash_download_dir']
+            if 'logstash_yml' in data:
+                policy.logstash_yml = data['logstash_yml']
+            if 'jvm_options' in data:
+                policy.jvm_options = data['jvm_options']
+            if 'log4j2_properties' in data:
+                policy.log4j2_properties = data['log4j2_properties']
 
         policy.save()
 
@@ -188,14 +233,19 @@ def delete_policy(request):
         if not policy_name:
             return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
 
-        # Don't allow deleting Default policy
-        if policy_name.lower() == 'default policy':
-            return JsonResponse({"success": False, "error": "Cannot delete Default Policy"}, status=403)
-
         try:
             policy = Policy.objects.get(name=policy_name)
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": f"Policy '{policy_name}' not found"}, status=404)
+
+        if policy.is_system:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Cannot delete system policy '{policy_name}'",
+                },
+                status=403,
+            )
 
         # Check if policy is in use
         connections_count = policy.connections.count()
@@ -251,12 +301,33 @@ def clone_policy(request):
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": f"Source policy not found"}, status=404)
 
+        if source_policy.policy_type == Policy.PolicyType.EMBEDDED:
+            return JsonResponse(
+                {"success": False, "error": "Cannot clone Embedded Policy"},
+                status=403,
+            )
+
+        # Cloned simulate policies stay SIMULATE; default clones stay DEFAULT
+        cloned_type = source_policy.policy_type
+        if cloned_type not in (Policy.PolicyType.DEFAULT, Policy.PolicyType.SIMULATE):
+            cloned_type = Policy.PolicyType.DEFAULT
+
         # Create new policy with same configuration as source
         new_policy = Policy.objects.create(
             name=new_policy_name,
+            policy_type=cloned_type,
+            is_system=False,
+            cloned_from=source_policy,
             settings_path=source_policy.settings_path,
             logs_path=source_policy.logs_path,
             binary_path=source_policy.binary_path,
+            data_path=source_policy.data_path,
+            agent_api_port=source_policy.agent_api_port,
+            logstash_api_port=source_policy.logstash_api_port,
+            keystore_env_file=source_policy.keystore_env_file,
+            logstash_source=source_policy.logstash_source,
+            logstash_version=source_policy.logstash_version,
+            logstash_download_dir=source_policy.logstash_download_dir,
             logstash_yml=source_policy.logstash_yml,
             jvm_options=source_policy.jvm_options,
             log4j2_properties=source_policy.log4j2_properties,

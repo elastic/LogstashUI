@@ -15,7 +15,12 @@ import secrets
 
 from cryptography.fernet import Fernet
 
-from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken
+from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken, Policy
+from .agent_modes import (
+    build_policy_config,
+    next_simulate_instance_id,
+    simulate_ports,
+)
 
 from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
 
@@ -230,6 +235,16 @@ def enroll(request):
         except EnrollmentToken.DoesNotExist:
             return JsonResponse({"success": False, "error": "Invalid enrollment token"}, status=401)
 
+        policy = enrollment_token_obj.policy
+        if policy.policy_type == Policy.PolicyType.EMBEDDED:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "Cannot enroll against the Embedded policy; it is reserved for the Docker sim node",
+                },
+                status=400,
+            )
+
         try:
             existing_connection = ConnectionTable.objects.filter(agent_id=agent_id).first()
             if existing_connection:
@@ -241,38 +256,48 @@ def enroll(request):
             logger.warning(f"Error checking for existing agent_id: {exc}")
 
         try:
+            instance_id = None
+            agent_api_port = None
+            logstash_api_port = None
+            if policy.policy_type == Policy.PolicyType.SIMULATE:
+                instance_id = next_simulate_instance_id()
+                agent_api_port, logstash_api_port = simulate_ports(instance_id)
+
+            conn_name = (
+                f"{host}-simulate-{instance_id}"
+                if policy.policy_type == Policy.PolicyType.SIMULATE
+                else host
+            )
             connection = ConnectionTable.objects.create(
-                name=host,
+                name=conn_name,
                 connection_type="AGENT",
                 host=host,
                 agent_id=agent_id,
                 is_active=True,
-                policy=enrollment_token_obj.policy,
+                policy=policy,
+                instance_id=instance_id,
+                agent_api_port=agent_api_port,
+                logstash_api_port=logstash_api_port,
             )
 
             raw_api_key = secrets.token_urlsafe(32)
             ApiKey.objects.create(connection=connection, api_key=raw_api_key)
 
+            policy_config = build_policy_config(policy, instance_id=instance_id)
+
             logger.info(
                 f"Agent enrolled successfully with host '{host}', agent_id '{agent_id}', "
-                f"and policy '{enrollment_token_obj.policy.name}'"
+                f"policy '{policy.name}' type={policy.policy_type}"
+                + (f" instance_id={instance_id}" if instance_id else "")
             )
 
-            policy = enrollment_token_obj.policy
             return JsonResponse(
                 {
                     "success": True,
                     "api_key": raw_api_key,
                     "policy_id": policy.id,
                     "connection_id": connection.id,
-                    "policy_config": {
-                        "settings_path": policy.settings_path,
-                        "logs_path": policy.logs_path,
-                        "binary_path": policy.binary_path,
-                        "logstash_yml": policy.logstash_yml,
-                        "jvm_options": policy.jvm_options,
-                        "log4j2_properties": policy.log4j2_properties,
-                    },
+                    "policy_config": policy_config,
                 }
             )
         except Exception as exc:
@@ -333,6 +358,22 @@ def check_in(request):
         if status_blob:
             connection.status_blob = status_blob
             logger.debug(f"Updated status_blob: {status_blob}")
+            # Surface resolved Logstash version for sim target dropdown
+            resolved = status_blob.get("logstash_version_resolved") or status_blob.get(
+                "logstash_version"
+            )
+            if resolved:
+                connection.logstash_version_resolved = str(resolved)[:64]
+            if status_blob.get("agent_api_port") is not None:
+                try:
+                    connection.agent_api_port = int(status_blob["agent_api_port"])
+                except (TypeError, ValueError):
+                    pass
+            if status_blob.get("logstash_api_port") is not None:
+                try:
+                    connection.logstash_api_port = int(status_blob["logstash_api_port"])
+                except (TypeError, ValueError):
+                    pass
 
         should_restart = connection.restart_on_next_checkin
         if should_restart:

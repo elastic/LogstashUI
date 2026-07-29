@@ -11,6 +11,9 @@ from django.conf import settings
 from Common import logstash_config_parse
 
 from Common.decorators import require_admin_role
+from PipelineManager.agent_modes import list_simulation_targets, resolve_simulation_target
+from datetime import datetime, timezone as dt_timezone
+from PipelineManager.models import Connection as ConnectionTable
 
 from collections import deque
 from threading import Lock
@@ -29,6 +32,58 @@ logger = logging.getLogger(__name__)
 # Global storage for simulation results (in-memory for now)
 simulation_results = deque(maxlen=1000)
 simulation_lock = Lock()
+
+
+def _sim_agent_url(request):
+    """
+    Resolve LogstashAgent base URL for simulation traffic.
+
+    Prefer explicit connection_id (POST/GET); else sticky session / single target;
+    fall back to settings.LOGSTASH_AGENT_URL when no enrolled sim agents exist
+    (legacy embedded static URL).
+    """
+    connection_id = (
+        request.POST.get("sim_connection_id")
+        or request.GET.get("sim_connection_id")
+        or request.POST.get("connection_id")
+    )
+    # Avoid colliding with other connection_id uses if body is JSON later
+    if connection_id in (None, "", "null", "undefined"):
+        connection_id = None
+
+    target, err = resolve_simulation_target(connection_id, session=request.session)
+    if target and target.get("base_url"):
+        request.session["sim_connection_id"] = target["connection_id"]
+        try:
+            ConnectionTable.objects.filter(pk=target["connection_id"]).update(
+                last_selected_at=datetime.now(dt_timezone.utc)
+            )
+        except Exception:
+            pass
+        return target["base_url"], target, None
+
+    # Fallback: historical static setting (embedded docker / host.docker.internal)
+    fallback = getattr(settings, "LOGSTASH_AGENT_URL", None)
+    if fallback:
+        return fallback, None, None
+    return None, None, err or "No simulation agent URL available"
+
+
+@require_admin_role
+def GetSimulationTargets(request):
+    """List simulate-capable agents for the pipeline editor dropdown."""
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    targets = list_simulation_targets()
+    selected = request.session.get("sim_connection_id")
+    return JsonResponse(
+        {
+            "success": True,
+            "targets": targets,
+            "selected_connection_id": selected,
+            "count": len(targets),
+        }
+    )
 
 
 @require_admin_role
@@ -76,18 +131,25 @@ def SimulatePipeline(request):
             logger.info(f"[FE->BE] Starting simulation with run_id: {run_id} - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
 
         # Get logstashagent URL early so we can use it in instrumentation
-        logstash_agent_url = settings.LOGSTASH_AGENT_URL
+        logstash_agent_url, sim_target, sim_err = _sim_agent_url(request)
+        if not logstash_agent_url:
+            return HttpResponse(
+                f'<div class="text-red-400">Error: {sim_err or "No simulation agent available"}</div>'
+            )
 
-        # Determine LOGSTASH_URL for Ruby code based on simulation mode
-        # Host mode: Logstash runs natively on host, use https://localhost
-        # Embedded mode: Logstash runs in container, use host.docker.internal
+        # Callback URL for Ruby instrumentation posts (remote simulate agents need
+        # a reachable LogstashUI URL; prefer agent-reported enroll URL later).
         simulation_mode = settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
-        
-        if simulation_mode == 'host':
-            # Host mode: Logstash runs natively on host, access Django via nginx on localhost:443
+        if sim_target and sim_target.get('policy_type') == 'SIMULATE':
+            # Enrolled simulate agent is typically not co-located in docker; use
+            # public-ish UI base from request if available, else localhost.
+            logstash_ui_url = request.build_absolute_uri('/').rstrip('/')
+            if logstash_ui_url.startswith('http://'):
+                # Prefer https for production-like setups when behind nginx
+                pass
+        elif simulation_mode == 'host':
             logstash_ui_url = "https://localhost"
         else:
-            # Embedded mode: Logstash runs in container
             if settings.DEBUG:
                 logstash_ui_url = "http://host.docker.internal:8080"
             else:
@@ -489,7 +551,7 @@ end
         if log_text:
             # Send the user's log input via logstashagent's simulate endpoint
             # This proxies the request to the local Logstash HTTP input on port 9449
-            simulation_input_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/simulate"
+            simulation_input_url = f"{_sim_agent_url(request)[0]}/_logstash/simulate"
             try:
                 # Parse log_text as JSON if it looks like JSON, otherwise send as message field
                 try:
@@ -671,7 +733,7 @@ def CheckIfPipelineLoaded(request):
             }, status=400)
 
         # Call logstashagent to check pipeline status
-        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipelines/status"
+        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/pipelines/status"
 
         try:
             response = requests.get(logstash_agent_url, timeout=5, verify=False)
@@ -740,7 +802,7 @@ def GetRelatedLogs(request):
         # Get slot creation timestamp from logstashagent
         min_timestamp = None
         try:
-            slots_response = requests.get(f"{settings.LOGSTASH_AGENT_URL}/_logstash/slots", timeout=5, verify=False)
+            slots_response = requests.get(f"{_sim_agent_url(request)[0]}/_logstash/slots", timeout=5, verify=False)
             slots_response.raise_for_status()
             slots_data = slots_response.json()
 
@@ -774,7 +836,7 @@ def GetRelatedLogs(request):
             logger.warning(f"Using fallback: filtering logs from last 30 seconds (min_timestamp: {min_timestamp})")
 
         # Call logstashagent to get pipeline logs
-        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/pipeline/{pipeline_id}/logs"
+        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/pipeline/{pipeline_id}/logs"
         params = {
             "max_entries": min(max_entries, 500),
             "min_level": min_level
@@ -860,7 +922,7 @@ def UploadFile(request):
         logger.info(f"Encoded content length: {len(encoded_content)} characters")
 
         # Send to logstashagent
-        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/write-file"
+        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/write-file"
 
         response = requests.post(
             logstash_agent_url,
@@ -905,7 +967,9 @@ def GetSimulationNodeStatus(request):
         - agent_info: Additional info from agent (if available)
     """
     try:
-        logstash_agent_url = settings.LOGSTASH_AGENT_URL
+        logstash_agent_url, _, _ = _sim_agent_url(request)
+        if not logstash_agent_url:
+            logstash_agent_url = settings.LOGSTASH_AGENT_URL
         
         try:
             response = requests.get(logstash_agent_url, timeout=3, verify=False)
@@ -950,7 +1014,7 @@ def GetSimulationNodeHealth(request):
         - queued_requests: Number of queued simulation requests
     """
     try:
-        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/health"
+        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/health"
         
         try:
             response = requests.get(logstash_agent_url, timeout=3, verify=False)
@@ -1030,7 +1094,7 @@ def ValidateLogstashConfig(request):
         logstash_config = converter.components_to_logstash_config()
         
         # Send to logstashagent for validation
-        logstash_agent_url = f"{settings.LOGSTASH_AGENT_URL}/_logstash/validate"
+        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/validate"
         
         try:
             response = requests.post(

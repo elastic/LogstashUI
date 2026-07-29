@@ -13,11 +13,42 @@ from Common import logstash_config_parse
 class Policy(models.Model):
     """
     Represents a Logstash Agent policy configuration.
+
+    policy_type distinguishes production (DEFAULT), enrolled simulation
+    (SIMULATE), and the immutable Docker embedded sim (EMBEDDED).
     """
+
+    class PolicyType(models.TextChoices):
+        DEFAULT = 'DEFAULT', 'Default'
+        SIMULATE = 'SIMULATE', 'Simulate'
+        EMBEDDED = 'EMBEDDED', 'Embedded'
+
+    class LogstashSource(models.TextChoices):
+        SYSTEM = 'SYSTEM', 'System Logstash'
+        VERSION = 'VERSION', 'Pinned version (download)'
+
     name = models.CharField(
         max_length=100,
         unique=True,
         help_text="Policy name"
+    )
+    policy_type = models.CharField(
+        max_length=20,
+        choices=PolicyType.choices,
+        default=PolicyType.DEFAULT,
+        help_text="Agent role this policy targets"
+    )
+    is_system = models.BooleanField(
+        default=False,
+        help_text="System-seeded policy (restricted delete / structural edit)"
+    )
+    cloned_from = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='clones',
+        help_text="Source policy if this was cloned"
     )
     settings_path = models.CharField(
         max_length=255,
@@ -33,6 +64,44 @@ class Policy(models.Model):
         max_length=255,
         default="/usr/share/logstash/bin",
         help_text="Path to Logstash binary directory"
+    )
+    data_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Path to Logstash data directory (optional; simulate derives from instance)"
+    )
+    agent_api_port = models.PositiveIntegerField(
+        default=9500,
+        help_text="Default LogstashAgent FastAPI port (simulate/embedded; live ports may be assigned at enroll)"
+    )
+    logstash_api_port = models.PositiveIntegerField(
+        default=9560,
+        help_text="Default Logstash HTTP API port (embedded 9560; simulate uses 9560+N at enroll)"
+    )
+    keystore_env_file = models.CharField(
+        max_length=512,
+        blank=True,
+        default="/etc/default/logstash",
+        help_text="Env file path where LOGSTASH_KEYSTORE_PASS is written for systemd"
+    )
+    logstash_source = models.CharField(
+        max_length=20,
+        choices=LogstashSource.choices,
+        default=LogstashSource.SYSTEM,
+        help_text="Where the simulate agent obtains the Logstash binary"
+    )
+    logstash_version = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Pinned Logstash version when logstash_source=VERSION (e.g. 9.4.3)"
+    )
+    logstash_download_dir = models.CharField(
+        max_length=512,
+        blank=True,
+        default="/opt/LogstashAgent/logstash-versions",
+        help_text="Directory for auto-downloaded Logstash versions"
     )
     logstash_yml = models.TextField(
         help_text="Content of logstash.yml configuration file"
@@ -129,6 +198,10 @@ class Policy(models.Model):
     def get_keystore_password(self):
         """Get decrypted keystore password"""
         return decrypt_credential(self.keystore_password) if self.keystore_password else None
+
+    @property
+    def is_simulate_capable(self):
+        return self.policy_type in (self.PolicyType.SIMULATE, self.PolicyType.EMBEDDED)
 
     def __str__(self):
         return self.name
@@ -243,6 +316,34 @@ class Connection(models.Model):
         blank=True,
         null=True,
         help_text="Desired LogstashAgent version for this connection (triggers upgrade on next check-in)"
+    )
+
+    # Simulate-instance fields (null for default / non-sim agents)
+    instance_id = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        help_text="Simulate instance number N (paths under /opt/LogstashAgent/simulate-N)"
+    )
+    agent_api_port = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        help_text="Agent FastAPI port for this connection (embedded 9500; simulate 9500+N)"
+    )
+    logstash_api_port = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        help_text="Logstash HTTP API port for this connection (embedded 9560; simulate 9560+N)"
+    )
+    logstash_version_resolved = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Logstash version reported by the agent (for sim target dropdown)"
+    )
+    last_selected_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Last time this connection was selected as a sim target (sticky UX only)"
     )
 
     class Meta:
