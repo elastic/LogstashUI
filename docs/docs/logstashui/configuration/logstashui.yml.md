@@ -43,38 +43,39 @@ no_auth:
 
 ### `simulation`
 
-Controls pipeline simulation behavior. See the [full simulation documentation](/docs/docs/logstashui/configuration/simulation.md) for detailed information.
+Helpers for pipeline simulation URL defaults and legacy local agents.  
+**Preferred model:** enroll **Simulate** agents and pick them in the editor (**Sim target**).  
+See [Simulation](/docs/docs/logstashui/configuration/simulation.md).
 
 ```yaml
 simulation:
-  mode: embedded  # embedded | host
+  mode: embedded  # embedded | host (legacy URL defaults)
 ```
 
 **Options:**
-- `embedded` - Runs Logstash in a local container (slower, easier setup)
-- `host` - Runs Logstash natively on the host machine (faster, requires Logstash installation)
+- `embedded` - Docker-oriented agent URL defaults (agent **9500**, Logstash API **9560**)
+- `host` - Legacy host-agent URL defaults; prefer an enrolled **simulate** agent instead
 
-**Quick Comparison:**
+| Approach | Reliability | Notes |
+|----------|-------------|--------|
+| **Simulate agent (enrolled)** | High | Isolated `simulate-N` paths; multi-version |
+| **Embedded (Docker)** | Lower for large pipelines | No enroll; pseudo-connection in picker |
+| **`simulation.mode: host` (legacy)** | Variable | Superseded by simulate enrollment |
 
-| Feature | Embedded Mode | Host Mode |
-|---------|---------------|-----------|
-| **Performance** | Error prone with large pipelines | Highly reliable |
-| **Setup** | Simple - no dependencies | Requires Logstash installation |
-| **Best For** | Quick start, occasional simulations | Heavy simulation workloads |
-
-📖 **Learn more:** [Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)
+📖 **Learn more:** [Simulation](/docs/docs/logstashui/configuration/simulation.md) · [Simulate agents](/docs/docs/logstashui/configuration/host_mode.md)
 
 ---
 
 ### `logstash_agent`
 
-Configures the Logstash agent used for pipeline simulation. This section is only relevant when using `simulation.mode: host`.
+Optional block for a **local** agent process started with LogstashUI tooling.  
+Enrolled simulate agents receive paths and ports from **policy enrollment**, not only this file.
 
 ```yaml
 logstash_agent:
-  mode: simulation
-  
-  # Logstash installation paths
+  mode: embedded  # embedded | simulate | default (agent maps legacy simulation/*)
+
+  # SYSTEM paths when not using isolated simulate-N layout
   logstash_binary: /usr/share/logstash/bin/logstash
   logstash_settings: /etc/logstash
   logstash_log_path: /var/log/logstash

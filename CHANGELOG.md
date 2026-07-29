@@ -1,3 +1,27 @@
+## [Unreleased] - Agent roles and multi-target pipeline simulation
+
+### Added
+
+- Added policy **types**: `DEFAULT`, `SIMULATE`, and `EMBEDDED` (system seeds: Default Policy, Simulate Policy, Embedded Policy).
+- Added simulate enrollment: global instance id `N`, ports **agent `9500+N`**, **Logstash API `9560+N`**, paths under `/opt/LogstashAgent/simulate-N/`.
+- Added cloneable Simulate policies (version source, JVM, Logstash binary source SYSTEM vs VERSION).
+- Added pipeline editor **Sim target** dropdown (instance + Logstash version); sticky session + localStorage selection.
+- Added `GetSimulationTargets` / `SelectSimulationTarget` APIs and sim routing via selected agent URL.
+- Added embedded **pseudo-connection** (no enroll) so Docker sim appears in the same picker.
+- Added pre-simulation **keystore clone** from the pipeline’s associated policy when `${…}` refs are present; skips write/restart when the simulate keystore already matches.
+
+### Changed
+
+- Simulation no longer depends solely on a single static `LOGSTASH_AGENT_URL` from `simulation.mode: host|embedded`; targets are enrolled simulate agents and/or embedded.
+- `simulation.mode` in `logstashui.yml` remains for compose/legacy agent URL defaults and is documented as secondary to enrolled simulate agents.
+
+### Upgrade notes
+
+- Run migrations (`0023`/`0024` or equivalent) to add policy/connection fields and seed system policies.
+- **Existing production agents keep working without re-enrollment** after UI + agent upgrade.
+- For high-quality simulation, enroll one or more **Simulate** agents; use the editor Sim target control to pick versioned instances.
+- Pipelines with keystore variables must be opened with a policy association (`ls_id`) so secrets can be synced.
+
 ## [0.5.0] - NMS release - 07/21/2026
 
 ### Added

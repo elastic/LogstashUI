@@ -1,33 +1,34 @@
 # Configuration
 
-LogstashAgent configuration for simulation mode and host management.
+LogstashAgent configuration for **default** (production), **simulate**, and **embedded** roles.
 
 ---
 
 ## Configuration Files
 
-### Controller / Host Mode — `/etc/logstash-agent/logstash-agent.yml`
+### Installed agent — `/etc/logstash-agent/logstash-agent.yml`
 
-When LogstashAgent is installed as a system service (via `logstash-agent install`), its configuration is written to:
+When LogstashAgent is installed as a system service (`logstash-agent install`), configuration is written to:
 
 ```
 /etc/logstash-agent/logstash-agent.yml
 ```
 
-This file is managed by the installer. The key settings you may need to adjust are `logstash_binary`, `logstash_settings`, and `logstash_log_path` if Logstash is installed in a non-standard location. After editing, run `sudo logstash-agent configure` to re-apply permissions, then restart the service.
+- **default** role: production paths + `mode: default`
+- **simulate** role: `mode: simulate`, `instance_id`, ports, simulate-N paths
+
+Adjust SYSTEM paths if Logstash is nonstandard; for default agents run `sudo logstash-agent configure` after installing Logstash late, then restart the service.
+
+Simulate instances also use `/opt/LogstashAgent/simulate-N/` and units `lsagent-simulate@N` / `ls-simulate@N`.
 
 ---
 
-### **[logstashagent.yml](/docs/docs/logstashagent/configuration/logstashagent.yml.md)** — Simulation Mode Only
-
-> **Note:** This file only applies when LogstashAgent is running in simulation mode. It is unused when running as an installed agent to control Logstash instances.
-
-The configuration file for LogstashAgent when used for pipeline simulation.
+### **[logstashagent.yml](/docs/docs/logstashagent/configuration/logstashagent.yml.md)** — Modes and paths
 
 **Key settings:**
-- Agent mode (`simulation` vs `host`)
-- Simulation mode (`embedded` vs `host`)
-- Logstash installation paths
+- `mode`: `default` | `simulate` | `embedded` (legacy values mapped)
+- Paths, API ports, VERSION download settings
+- Keystore sync endpoints for simulation
 
 **📖 [View full logstashagent.yml documentation →](/docs/docs/logstashagent/configuration/logstashagent.yml.md)**
 
