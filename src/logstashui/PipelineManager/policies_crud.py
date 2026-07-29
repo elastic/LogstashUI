@@ -175,10 +175,7 @@ def update_policy(request):
                 policy.log4j2_properties = data['log4j2_properties']
             # Intentionally ignore settings_path / logs_path / data_path / ports structural changes
         else:
-            if 'settings_path' in data and not is_system_default:
-                # system default may still edit production paths
-                policy.settings_path = data['settings_path']
-            elif 'settings_path' in data:
+            if 'settings_path' in data:
                 policy.settings_path = data['settings_path']
             if 'logs_path' in data:
                 policy.logs_path = data['logs_path']
@@ -194,6 +191,16 @@ def update_policy(request):
                 policy.logstash_version = data['logstash_version']
             if 'logstash_download_dir' in data:
                 policy.logstash_download_dir = data['logstash_download_dir']
+            if 'agent_api_port' in data and data['agent_api_port'] is not None:
+                try:
+                    policy.agent_api_port = int(data['agent_api_port'])
+                except (TypeError, ValueError):
+                    pass
+            if 'logstash_api_port' in data and data['logstash_api_port'] is not None:
+                try:
+                    policy.logstash_api_port = int(data['logstash_api_port'])
+                except (TypeError, ValueError):
+                    pass
             if 'logstash_yml' in data:
                 policy.logstash_yml = data['logstash_yml']
             if 'jvm_options' in data:
