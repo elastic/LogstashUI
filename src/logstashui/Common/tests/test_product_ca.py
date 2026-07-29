@@ -84,3 +84,69 @@ def test_product_ca_endpoint(client, tmp_path, settings):
     resp = client.get("/.well-known/logstashui/ca.crt")
     assert resp.status_code == 200
     assert b"BEGIN CERTIFICATE" in resp.content
+
+
+@pytest.mark.django_db
+def test_custom_ui_cert_and_revert(tmp_path, settings):
+    from Common import product_ca
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.x509.oid import NameOID
+    from datetime import datetime, timedelta, timezone
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "data").mkdir(exist_ok=True)
+
+    # Self-signed standalone cert (simulates public/custom CA leaf)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "custom.example")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(days=30))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName("custom.example")]),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    key_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    info = product_ca.save_custom_ui_certificate(cert_pem, key_pem)
+    assert info["mode"] == "custom"
+    assert info["subject_cn"] == "custom.example"
+    assert product_ca.get_ui_server_mode() == "custom"
+
+    status = product_ca.revert_ui_certificate_to_product_default()
+    assert status["mode"] == "product"
+    assert product_ca.ui_server_cert_path().is_file()
+
+
+@pytest.mark.django_db
+def test_settings_saves_agent_ui_url(admin_client):
+    from Management.models import Settings
+
+    # Ensure admin has profile role admin (signal creates admin by default)
+    resp = admin_client.post(
+        "/Management/Settings/",
+        {"experimental_mode": "on", "agent_ui_url": "https://10.0.0.5:8443"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    s = Settings.get_settings()
+    assert s.agent_ui_url == "https://10.0.0.5:8443"
+    assert s.experimental_mode is True

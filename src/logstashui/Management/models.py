@@ -31,7 +31,17 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 class Settings(models.Model):
     experimental_mode = models.BooleanField(default=False)
-    
+    agent_ui_url = models.CharField(
+        max_length=512,
+        blank=True,
+        default="",
+        help_text=(
+            "Base URL agents use to reach LogstashUI (backend channel). "
+            "Prefills --logstash-ui-url in generated enroll commands. "
+            "May differ from the browser reverse-proxy URL."
+        ),
+    )
+
     class Meta:
         db_table = 'settings'
         verbose_name = 'Settings'

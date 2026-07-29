@@ -16,4 +16,6 @@ urlpatterns = [
     path("Logs/filter", views.LogsFilter, name="LogsFilter"),
     path("Logs/download", views.LogsDownload, name="LogsDownload"),
     path("Settings/", views.SettingsView, name="Settings"),
+    path("Settings/Tls/", views.SettingsTlsUpload, name="SettingsTlsUpload"),
+    path("Settings/Tls/Revert/", views.SettingsTlsRevert, name="SettingsTlsRevert"),
 ]

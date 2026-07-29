@@ -340,17 +340,22 @@ def LogsDownload(request):
 @require_admin_role
 def SettingsView(request):
     app_settings = Settings.get_settings()
-    
+
     if request.method == 'POST':
         try:
             experimental_mode = request.POST.get('experimental_mode') == 'on'
-            
+            agent_ui_url = (request.POST.get('agent_ui_url') or '').strip()
+
             app_settings = Settings.get_settings()
             app_settings.experimental_mode = experimental_mode
+            app_settings.agent_ui_url = agent_ui_url
             app_settings.save()
-            
-            logger.info(f"User '{request.user.username}' updated experimental mode to {experimental_mode}")
-            
+
+            logger.info(
+                f"User '{request.user.username}' updated settings "
+                f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r})"
+            )
+
             return JsonResponse({
                 'success': True,
                 'message': 'Settings saved successfully'
@@ -361,7 +366,80 @@ def SettingsView(request):
                 'success': False,
                 'message': f'Error: {str(e)}. Please run migrations first.'
             })
-    
+
+    from Common.product_ca import get_ui_tls_status
+
+    try:
+        tls_status = get_ui_tls_status()
+    except Exception as e:
+        logger.error(f"Error loading TLS status: {e}", exc_info=True)
+        tls_status = {
+            'mode': 'unknown',
+            'certificate': None,
+            'paths': {},
+            'nginx_hint': '',
+            'error': str(e),
+        }
+
     return render(request, 'management_settings.html', {
-        'app_settings': app_settings
+        'app_settings': app_settings,
+        'tls_status': tls_status,
     })
+
+
+@require_admin_role
+def SettingsTlsUpload(request):
+    """Upload a custom UI server certificate (replaces product default leaf only)."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    try:
+        from Common.product_ca import save_custom_ui_certificate, get_ui_tls_status
+
+        cert_file = request.FILES.get('certificate')
+        key_file = request.FILES.get('private_key')
+        chain_file = request.FILES.get('chain')
+        if not cert_file or not key_file:
+            return JsonResponse({
+                'success': False,
+                'message': 'Certificate and private key files are required',
+            }, status=400)
+
+        cert_pem = cert_file.read()
+        key_pem = key_file.read()
+        chain_pem = chain_file.read() if chain_file else None
+
+        save_custom_ui_certificate(cert_pem, key_pem, chain_pem)
+        logger.info(f"User '{request.user.username}' uploaded custom UI server certificate")
+        return JsonResponse({
+            'success': True,
+            'message': (
+                'Custom certificate installed. Point your TLS terminator at the paths shown, '
+                'then reload nginx (or your reverse proxy). Product CA for agents is unchanged.'
+            ),
+            'tls_status': get_ui_tls_status(),
+        })
+    except ValueError as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=400)
+    except Exception as e:
+        logger.error(f"Error uploading TLS certificate: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'message': f'Error: {e}'}, status=500)
+
+
+@require_admin_role
+def SettingsTlsRevert(request):
+    """Revert UI server cert to product-CA-signed default."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    try:
+        from Common.product_ca import revert_ui_certificate_to_product_default
+
+        status = revert_ui_certificate_to_product_default()
+        logger.info(f"User '{request.user.username}' reverted UI certificate to product default")
+        return JsonResponse({
+            'success': True,
+            'message': 'Reverted to product default certificate. Reload your TLS terminator if needed.',
+            'tls_status': status,
+        })
+    except Exception as e:
+        logger.error(f"Error reverting TLS certificate: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'message': f'Error: {e}'}, status=500)
