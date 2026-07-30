@@ -1002,13 +1002,14 @@ sudo systemctl enable logstash
       } else if (pt === 'MANAGED') {
         day2 = `# After install the managed agent unit is already enabled and started
 # (instance number N is shown in install output / UI connection).
-# Temporary units (until logstash-agent@ / logstash-managed@ ship):
-#   sudo systemctl status lsagent-simulate@N
-#   sudo systemctl stop lsagent-simulate@N
-#   sudo systemctl start lsagent-simulate@N
-#   sudo journalctl -u lsagent-simulate@N -f
+# Day-2 operations (replace N):
+#   sudo systemctl status logstash-agent@N
+#   sudo systemctl stop logstash-agent@N
+#   sudo systemctl start logstash-agent@N
+#   sudo journalctl -u logstash-agent@N -f
+#   # or: sudo logstash-agent-ctl status logstash-agent@N
 # Managed Logstash tree under /opt/logstash-agent/managed-N/:
-#   sudo systemctl status ls-simulate@N`;
+#   sudo systemctl status logstash-managed@N`;
       }
 
       commands += `# Install LogstashAgent

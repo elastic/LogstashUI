@@ -249,10 +249,8 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
             "logstash_download_dir": download_dir or f"{AGENT_OPT_ROOT}/logstash-versions",
-            # Temporary: reuse ls-simulate@ / lsagent-simulate@ until
-            # logstash-managed@ / logstash-agent@ multi-instance templates ship.
-            "logstash_unit": f"ls-simulate@{instance_id}",
-            "agent_unit": f"lsagent-simulate@{instance_id}",
+            "logstash_unit": f"logstash-managed@{instance_id}",
+            "agent_unit": f"logstash-agent@{instance_id}",
             "path_root": paths["path_root"],
             "logstash_yml": yml,
             "jvm_options": policy.jvm_options,

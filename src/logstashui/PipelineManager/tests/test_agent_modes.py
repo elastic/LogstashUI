@@ -180,6 +180,8 @@ def test_build_policy_config_managed(system_policies):
     assert cfg['logstash_api_port'] == 9701
     assert cfg['settings_path'] == '/opt/logstash-agent/managed-1/settings'
     assert cfg['path_root'] == '/opt/logstash-agent/managed-1'
+    assert cfg['logstash_unit'] == 'logstash-managed@1'
+    assert cfg['agent_unit'] == 'logstash-agent@1'
     assert 'api.http.port: 9701' in cfg['logstash_yml']
 
 
