@@ -1,6 +1,9 @@
 # Simulate agents (formerly “Host Mode”)
 
 > **Renamed concept:** What older docs called **host mode** is now an enrolled **simulate** LogstashAgent with isolated paths. You should not point simulation at your production Logstash under `/etc/logstash`.
+>
+> For **Packaged**, **Managed**, ports, coexistence, and VERSION CLI, see  
+> **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)**.
 
 ## Why simulate agents?
 
@@ -10,11 +13,11 @@
 | **Setup** | Compose only | Install LogstashAgent + enroll |
 | **Isolation** | Container | `/opt/logstash-agent/simulate-N/` |
 | **Multi-version** | Single image | Pin VERSION per policy / instance |
-| **Coexist with prod agent** | N/A | Yes, on the same host |
+| **Coexist with prod agent** | N/A | Yes — same host as Packaged / Managed |
 
 ## Prerequisites
 
-- **LogstashUI 0.5.1+** and **LogstashAgent 0.5.1+** (paired releases for agent roles / simulate units)
+- **LogstashUI** and **LogstashAgent** paired on the agent-modes branch/release (simulate units, VERSION apply)
 - Linux host (systemd) for install templates
 - Root for `logstash-agent install --enroll …` (or non-root enroll + `sudo logstash-agent setup-simulate`)
 - Logstash binary available either:
@@ -25,8 +28,9 @@
 ## Install a simulate agent
 
 1. In LogstashUI **Agent Policies**, open **Simulate Policy** (or a clone).
-2. Copy an enrollment token.
-3. On the agent host:
+2. Optionally set **Source = VERSION** and a pin (e.g. `9.4.3`) — applied on check-in / install materialize.
+3. Copy an enrollment token.
+4. On the agent host:
 
 ```bash
 sudo logstash-agent install \
@@ -34,14 +38,15 @@ sudo logstash-agent install \
   --logstash-ui-url 'https://your-logstashui.example'
 ```
 
-4. Start the instance (N is assigned at enroll; see install output):
-
-```bash
-sudo systemctl enable --now lsagent-simulate@N
-# Logstash unit is managed by the agent: ls-simulate@N
-```
+Install enables and starts `lsagent-simulate@N` (N is assigned at enroll; see install output). Logstash unit `ls-simulate@N` is enabled; the agent restarts it when ready.
 
 5. In the pipeline editor, select the target under **Sim target**.
+
+```bash
+# Day-2
+sudo systemctl status lsagent-simulate@N
+logstash-agent list-instances
+```
 
 ## Paths and ports
 
@@ -53,7 +58,8 @@ For instance **N**:
 | Config | `/opt/logstash-agent/simulate-N/config` |
 | Logs | `/opt/logstash-agent/simulate-N/logs` |
 | Data | `/opt/logstash-agent/simulate-N/data` |
-| Env (incl. keystore pass) | `/opt/logstash-agent/simulate-N/env` |
+| Env (incl. keystore pass + `LOGSTASH_BINARY`) | `/opt/logstash-agent/simulate-N/env` |
+| Agent config / state | `…/logstash-agent.yml`, `…/state/` (isolated from packaged) |
 | Agent FastAPI | **9500 + N** |
 | Logstash HTTP API | **9560 + N** |
 | Agent unit | `lsagent-simulate@N` |
@@ -61,13 +67,14 @@ For instance **N**:
 
 Embedded Docker remains **9500 / 9560** and does not use these paths.
 
+Managed multi-instance production trees use **9600+N / 9700+N** and `logstash-agent@N` / `logstash-managed@N` — see the [roles guide](/docs/docs/logstashagent/general/roles.md).
+
 ## Upgrade from old “host mode”
 
 1. Stop any local agent that was managing production `/etc/logstash` for UI sim only.
 2. Enroll a **Simulate** policy agent as above.
-3. Leave production agents on **Default** policies (no re-enroll required for those).
+3. Leave production agents on **Packaged** policies (legacy **Default** maps to Packaged; no re-enroll required for those).
 4. Prefer the editor Sim target list over `simulation.mode: host` in `logstashui.yml`.
-
 ## Legacy start script (`simulation.mode: host`)
 
 `bin/start_logstashui.sh` / `.bat` still accept **`simulation.mode: host`** for a **local** agent:

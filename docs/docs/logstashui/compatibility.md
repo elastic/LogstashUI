@@ -27,10 +27,11 @@ Logstash Agent is versioned alongside LogstashUI. When updating LogstashUI, upda
 
 | LogstashUI | Preferred LogstashAgent |
 |------------|-------------------------|
-| 0.5.1      | 0.5.1 (agent roles, simulate units, VERSION apply, keystore sync) |
+| 0.5.1+     | 0.5.1+ (Packaged/Managed/Simulate roles, multi-instance units, install registry, VERSION CLI, host coexistence) |
 | 0.5.0      | 0.5.0 |
 
-See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for the differences between Centralized Pipeline Management and Logstash Agent deployment modes.
+See **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)** for current agent layout.  
+See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for Centralized Pipeline Management vs agent deployment.
 
 
 

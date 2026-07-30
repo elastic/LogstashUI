@@ -47,6 +47,19 @@ Enroll and run dedicated simulate instances (`lsagent-simulate@N` / `ls-simulate
 
 ---
 
+### **[Agent roles, ports, coexistence, VERSION](/docs/docs/logstashagent/general/roles.md)**
+
+Operator reference for all agent roles on a host:
+
+- Packaged / Managed / Simulate / Embedded
+- Port map, path layout, install registry
+- Host coexistence and day-2 commands
+- VERSION download CLI
+
+**📖 [View roles guide →](/docs/docs/logstashagent/general/roles.md)**
+
+---
+
 ## Quick Links
 
 - **[Getting Started](/docs/docs/getting_started.md)** - Initial setup and first steps
