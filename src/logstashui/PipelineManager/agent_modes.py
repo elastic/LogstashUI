@@ -142,15 +142,53 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
     }
 
 
+def embedded_agent_base_url() -> str:
+    """URL the UI uses to reach the docker/local embedded agent FastAPI."""
+    try:
+        from django.conf import settings
+
+        return (getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500").rstrip(
+            "/"
+        )
+    except Exception:
+        return "https://127.0.0.1:9500"
+
+
+def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
+    """
+    Live probe of the embedded agent (no enrollment/check-in).
+
+    Embedded agents never POST CheckIn, so Connection.last_check_in stays empty
+    unless we touch it after a successful probe.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    url = embedded_agent_base_url()
+    try:
+        import requests
+        from Common.product_ca import agent_requests_verify
+
+        resp = requests.get(url + "/", timeout=timeout, verify=agent_requests_verify())
+        if resp.status_code < 400:
+            return True
+        logger.debug("Embedded agent probe %s -> %s", url, resp.status_code)
+        return False
+    except Exception as exc:
+        logger.debug("Embedded agent probe failed (%s): %s", url, exc)
+        return False
+
+
 def ensure_embedded_connection() -> Connection | None:
     """
     Ensure a pseudo Connection exists for the system Embedded Policy so the
     editor picker can list docker/local embedded agent without enrollment.
 
     Host/port derived from settings.LOGSTASH_AGENT_URL when possible.
+    Probes the agent and updates last_check_in so Connection Manager shows online.
     """
     try:
-        from django.conf import settings
+        from datetime import datetime, timezone
         from urllib.parse import urlparse
     except Exception:
         return None
@@ -164,33 +202,46 @@ def ensure_embedded_connection() -> Connection | None:
         if not policy:
             return None
 
-        agent_url = getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500"
+        agent_url = embedded_agent_base_url()
         parsed = urlparse(agent_url)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or EMBEDDED_AGENT_API_PORT
+        online = probe_embedded_agent_online()
+        now = datetime.now(timezone.utc)
 
         conn = Connection.objects.filter(
             policy=policy,
             connection_type=Connection.ConnectionType.AGENT,
             agent_id="embedded-local",
         ).first()
+        update_fields = {
+            "name": "embedded",
+            "host": host,
+            "agent_api_port": port,
+            "logstash_api_port": EMBEDDED_LOGSTASH_API_PORT,
+            "is_active": True,
+            "policy": policy,
+        }
+        if online:
+            # Synthetic check-in so list/SSE treat embedded like a live agent
+            update_fields["last_check_in"] = now
+            update_fields["status_blob"] = {
+                "embedded": True,
+                "mode": "embedded",
+                "agent_url": agent_url,
+                "probed_at": now.isoformat(),
+                "online": True,
+            }
+        else:
+            # Keep sticky row; do not wipe last_check_in on transient probe fail
+            # if we never had success — leave as-is
+            pass
+
         if conn:
-            # Sticky pseudo-connection: always re-bind host/ports from current
-            # LOGSTASH_AGENT_URL so a recreated compose agent re-attaches without
-            # re-enrollment. Clear stale status so health is re-probed.
-            Connection.objects.filter(pk=conn.pk).update(
-                name="embedded",
-                host=host,
-                agent_api_port=port,
-                logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
-                is_active=True,
-                policy=policy,
-                status_blob={},
-            )
+            Connection.objects.filter(pk=conn.pk).update(**update_fields)
             conn.refresh_from_db()
             return conn
 
-        # Create without triggering full_clean encryption issues when possible
         conn = Connection(
             name="embedded",
             connection_type=Connection.ConnectionType.AGENT,
@@ -200,9 +251,9 @@ def ensure_embedded_connection() -> Connection | None:
             policy=policy,
             agent_api_port=port,
             logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
-            status_blob={},
+            last_check_in=now if online else None,
+            status_blob=update_fields.get("status_blob") or {"embedded": True, "online": online},
         )
-        # full_clean requires host for AGENT — we have it
         conn.save()
         return conn
     except Exception as exc:
@@ -212,6 +263,23 @@ def ensure_embedded_connection() -> Connection | None:
             "Could not ensure embedded simulation connection: %s", exc
         )
         return None
+
+
+def is_embedded_connection(conn) -> bool:
+    """True for the docker/local pseudo agent (dict or model)."""
+    if conn is None:
+        return False
+    if isinstance(conn, dict):
+        if conn.get("agent_id") == "embedded-local":
+            return True
+        pt = conn.get("policy__policy_type") or conn.get("policy_type")
+        return pt == Policy.PolicyType.EMBEDDED or pt == "EMBEDDED"
+    if getattr(conn, "agent_id", None) == "embedded-local":
+        return True
+    policy = getattr(conn, "policy", None)
+    if policy is not None and getattr(policy, "policy_type", None) == Policy.PolicyType.EMBEDDED:
+        return True
+    return False
 
 
 def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool = True):

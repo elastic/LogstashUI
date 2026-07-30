@@ -518,7 +518,8 @@ sudo systemctl start logstash-agent</code></pre>
   // Load policies from server and populate dropdown
   async function loadAgentPolicies() {
     try {
-      const response = await fetch('/ConnectionManager/GetPolicies/', {
+      // for_enroll=1 excludes Embedded (compose/auto; not token-enrolled)
+      const response = await fetch('/ConnectionManager/GetPolicies/?for_enroll=1', {
         method: 'GET',
         headers: {
           'X-CSRFToken': getCsrfToken()
@@ -555,6 +556,8 @@ sudo systemctl start logstash-agent</code></pre>
           // Select first policy if available and load enrollment tokens
           if (data.policies.length > 0) {
             agentPolicySelect.value = data.policies[0].name.toLowerCase();
+            syncInstallLogstashVisibility();
+            syncEmbeddedEnrollUi();
             
             // Load enrollment tokens for the selected policy
             // Always load tokens even if agent fields are hidden - they'll be ready when user switches to Agent type
@@ -641,6 +644,7 @@ sudo systemctl start logstash-agent</code></pre>
         const selectedOption = this.options[this.selectedIndex];
         const policyId = selectedOption.dataset.policyId;
         syncInstallLogstashVisibility();
+        syncEmbeddedEnrollUi();
         
         if (policyId) {
           await loadEnrollmentTokens(policyId);
@@ -829,15 +833,21 @@ sudo systemctl start logstash-agent</code></pre>
     });
   }
   
-  /** Whether "Install Logstash" belongs in the enroll snippet for the selected policy. */
-  function shouldOfferInstallLogstash() {
+  function selectedAgentPolicyMeta() {
     const agentPolicySelect = document.getElementById('agentPolicy');
     if (!agentPolicySelect || agentPolicySelect.selectedIndex < 0) {
-      return true; // default / unknown → show (DEFAULT-like)
+      return { policyType: 'DEFAULT', logstashSource: 'SYSTEM' };
     }
     const opt = agentPolicySelect.options[agentPolicySelect.selectedIndex];
-    const policyType = (opt.dataset.policyType || 'DEFAULT').toUpperCase();
-    const logstashSource = (opt.dataset.logstashSource || 'SYSTEM').toUpperCase();
+    return {
+      policyType: (opt.dataset.policyType || 'DEFAULT').toUpperCase(),
+      logstashSource: (opt.dataset.logstashSource || 'SYSTEM').toUpperCase(),
+    };
+  }
+
+  /** Whether "Install Logstash" belongs in the enroll snippet for the selected policy. */
+  function shouldOfferInstallLogstash() {
+    const { policyType, logstashSource } = selectedAgentPolicyMeta();
     if (policyType === 'EMBEDDED') {
       return false;
     }
@@ -845,6 +855,24 @@ sudo systemctl start logstash-agent</code></pre>
       return false;
     }
     return true;
+  }
+
+  /** Embedded is never enrolled via this modal (filtered from dropdown); keep helpers defensive. */
+  function syncEmbeddedEnrollUi() {
+    const { policyType } = selectedAgentPolicyMeta();
+    const isEmbedded = policyType === 'EMBEDDED';
+    const enrollmentTokenSection = document.getElementById('enrollmentTokenSection');
+    const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+    if (enrollmentTokenSection) {
+      if (isEmbedded) {
+        enrollmentTokenSection.classList.add('hidden');
+      } else {
+        enrollmentTokenSection.classList.remove('hidden');
+      }
+    }
+    if (linuxCommandsSection && isEmbedded) {
+      linuxCommandsSection.classList.add('hidden');
+    }
   }
 
   function syncInstallLogstashVisibility() {

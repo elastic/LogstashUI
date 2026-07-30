@@ -24,7 +24,8 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - UI→agent HTTP clients use product CA ∪ system trust (`agent_requests_verify()`).
 - Product **UI leaf re-issues** when desired SANs change (callback URL, `LOGSTASHUI_TLS_SANS`, host hostname/IPs). Docker Compose / `start_logstashui.sh` inject **Docker host hostname and all non-loopback host IPs** into the UI container so remote clients can verify `https://<host-ip>:8443`.
 - Connections modal: hide **Install Logstash** for **Embedded** policies and for **Simulate + VERSION** binary source (agent-managed download).
-- Sticky embedded sim connection (`agent_id=embedded-local`) rebinds host/ports from `LOGSTASH_AGENT_URL` and clears stale status when compose recreates the agent.
+- Sticky embedded sim connection (`agent_id=embedded-local`) rebinds host/ports from `LOGSTASH_AGENT_URL` and probes the agent to set `last_check_in` (embedded never enrolls/check-ins).
+- **Add Logstash Agent** policy list excludes **Embedded** (`GetPolicies/?for_enroll=1`); Embedded is compose/auto only—no enrollment token or Linux install snippet.
 
 ### Changed
 

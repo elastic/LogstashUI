@@ -21,12 +21,17 @@ def get_policies(request):
     """
     try:
         from django.db.models import Count, Q
-        policies = list(Policy.objects.annotate(
+        qs = Policy.objects.annotate(
             connection_count=Count(
                 'connections',
                 filter=Q(connections__connection_type='AGENT', connections__is_active=True)
             )
-        ).values(
+        )
+        # Connection "Add Logstash Agent" enroll flow — Embedded is docker/auto, not enrollable
+        if request.GET.get('for_enroll') in ('1', 'true', 'yes'):
+            qs = qs.exclude(policy_type=Policy.PolicyType.EMBEDDED)
+
+        policies = list(qs.values(
             'id', 'name', 'policy_type', 'is_system', 'cloned_from_id',
             'settings_path', 'logs_path', 'binary_path', 'data_path',
             'agent_api_port', 'logstash_api_port', 'keystore_env_file',
