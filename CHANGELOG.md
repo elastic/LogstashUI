@@ -27,8 +27,6 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - Sticky embedded sim connection (`agent_id=embedded-local`) rebinds host/ports from `LOGSTASH_AGENT_URL` and probes the agent to set `last_check_in` (embedded never enrolls/check-ins).
 - **Add Logstash Agent** policy list excludes **Embedded** (`GetPolicies/?for_enroll=1`); Embedded is compose/auto only—no enrollment token or Linux install snippet.
 - Enroll Linux snippet: install only (no trailing `systemctl enable/start`); day-2 status/stop/start shown as comments, policy-aware for Simulate units.
-- Migration **0025** rewrites Policy path fields from `/opt/LogstashAgent` → `/opt/logstash-agent`; enroll payloads always normalize that legacy prefix.
-
 ### Changed
 
 - Simulation no longer depends solely on a single static `LOGSTASH_AGENT_URL` from `simulation.mode: host|embedded`; primary targets are enrolled simulate agents and/or embedded.
