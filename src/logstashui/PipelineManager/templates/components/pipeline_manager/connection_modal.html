@@ -983,33 +983,40 @@ sudo systemctl enable logstash
       // Distro Logstash is enabled only (never bounced) for Packaged/live hosts.
       const { policyType, logstashSource } = selectedAgentPolicyMeta();
       const pt = policyType === 'DEFAULT' ? 'PACKAGED' : policyType;
-      let day2 = `# After install the agent service is already running.
-# Day-2 operations:
+      let day2 = `# After install the packaged agent service is already running.
+# Day-2 (packaged only — does not stop managed/simulate instances):
 #   sudo systemctl status logstash-agent
 #   sudo systemctl stop logstash-agent
 #   sudo systemctl start logstash-agent
-#   sudo journalctl -u logstash-agent -f`;
+#   sudo journalctl -u logstash-agent -f
+# Host map (all roles): logstash-agent list-instances
+# State: /var/lib/logstash-agent   Config: /etc/logstash-agent/logstash-agent.yml`;
       if (pt === 'SIMULATE') {
-        day2 = `# After install the simulate agent unit is already enabled and started
+        day2 = `# After install the simulate agent unit is enabled and started
 # (instance number N is shown in install output / UI connection).
-# Day-2 operations (replace N):
+# Coexists with packaged logstash-agent.service on the same host.
+# Day-2 (this instance only — replace N):
 #   sudo systemctl status lsagent-simulate@N
 #   sudo systemctl stop lsagent-simulate@N
 #   sudo systemctl start lsagent-simulate@N
 #   sudo journalctl -u lsagent-simulate@N -f
-# Logstash sim instance (enabled at install; restarted by agent when ready):
-#   sudo systemctl status ls-simulate@N`;
+#   sudo systemctl status ls-simulate@N
+# State/config: /opt/logstash-agent/simulate-N/{state,logstash-agent.yml}
+# Host map: logstash-agent list-instances`;
       } else if (pt === 'MANAGED') {
-        day2 = `# After install the managed agent unit is already enabled and started
+        day2 = `# After install the managed agent unit is enabled and started
 # (instance number N is shown in install output / UI connection).
-# Day-2 operations (replace N):
+# Coexists with packaged logstash-agent.service on the same host.
+# Day-2 (this instance only — replace N):
 #   sudo systemctl status logstash-agent@N
 #   sudo systemctl stop logstash-agent@N
 #   sudo systemctl start logstash-agent@N
 #   sudo journalctl -u logstash-agent@N -f
 #   # or: sudo logstash-agent-ctl status logstash-agent@N
-# Managed Logstash tree under /opt/logstash-agent/managed-N/:
-#   sudo systemctl status logstash-managed@N`;
+#   sudo systemctl status logstash-managed@N
+# State/config: /opt/logstash-agent/managed-N/{state,logstash-agent.yml}
+# Host map: logstash-agent list-instances
+# Drop only this instance: sudo logstash-agent uninstall --instance managed-N`;
       }
 
       commands += `# Install LogstashAgent
