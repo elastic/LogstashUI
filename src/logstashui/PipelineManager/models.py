@@ -14,14 +14,21 @@ class Policy(models.Model):
     """
     Represents a Logstash Agent policy configuration.
 
-    policy_type distinguishes production (DEFAULT), enrolled simulation
-    (SIMULATE), and the immutable Docker embedded sim (EMBEDDED).
+    policy_type:
+      PACKAGED — distro Logstash (system unit ``logstash``); one system seed
+      MANAGED  — agent-owned isolated Logstash tree(s); multi-instance
+      SIMULATE — simulation agents with isolated paths
+      EMBEDDED — Docker compose sim (no enroll)
+      DEFAULT  — legacy alias for PACKAGED (pre-release DB rows)
     """
 
     class PolicyType(models.TextChoices):
-        DEFAULT = 'DEFAULT', 'Default'
+        PACKAGED = 'PACKAGED', 'Packaged'
+        MANAGED = 'MANAGED', 'Managed'
         SIMULATE = 'SIMULATE', 'Simulate'
         EMBEDDED = 'EMBEDDED', 'Embedded'
+        # Legacy; prefer PACKAGED. Kept so unmigrated rows still validate.
+        DEFAULT = 'DEFAULT', 'Default (legacy)'
 
     class LogstashSource(models.TextChoices):
         SYSTEM = 'SYSTEM', 'System Logstash'
@@ -35,7 +42,7 @@ class Policy(models.Model):
     policy_type = models.CharField(
         max_length=20,
         choices=PolicyType.choices,
-        default=PolicyType.DEFAULT,
+        default=PolicyType.PACKAGED,
         help_text="Agent role this policy targets"
     )
     is_system = models.BooleanField(

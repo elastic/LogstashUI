@@ -18,7 +18,10 @@ from cryptography.fernet import Fernet
 from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken, Policy
 from .agent_modes import (
     build_policy_config,
+    managed_ports,
+    next_managed_instance_id,
     next_simulate_instance_id,
+    normalize_policy_type,
     simulate_ports,
 )
 
@@ -278,15 +281,20 @@ def enroll(request):
             instance_id = None
             agent_api_port = None
             logstash_api_port = None
-            if policy.policy_type == Policy.PolicyType.SIMULATE:
+            ptype = normalize_policy_type(policy.policy_type)
+            if ptype == Policy.PolicyType.SIMULATE:
                 instance_id = next_simulate_instance_id()
                 agent_api_port, logstash_api_port = simulate_ports(instance_id)
+            elif ptype == Policy.PolicyType.MANAGED:
+                instance_id = next_managed_instance_id()
+                agent_api_port, logstash_api_port = managed_ports(instance_id)
 
-            conn_name = (
-                f"{host}-simulate-{instance_id}"
-                if policy.policy_type == Policy.PolicyType.SIMULATE
-                else host
-            )
+            if ptype == Policy.PolicyType.SIMULATE:
+                conn_name = f"{host}-simulate-{instance_id}"
+            elif ptype == Policy.PolicyType.MANAGED:
+                conn_name = f"{host}-managed-{instance_id}"
+            else:
+                conn_name = host
             connection = ConnectionTable.objects.create(
                 name=conn_name,
                 connection_type="AGENT",

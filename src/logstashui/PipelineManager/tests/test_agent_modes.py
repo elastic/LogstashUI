@@ -13,7 +13,11 @@ from PipelineManager.agent_modes import (
     build_policy_config,
     ensure_embedded_connection,
     list_simulation_targets,
+    managed_paths,
+    managed_ports,
+    next_managed_instance_id,
     next_simulate_instance_id,
+    normalize_policy_type,
     simulate_paths,
     simulate_ports,
 )
@@ -38,13 +42,32 @@ def system_policies(db):
         keystore_env_file='/etc/default/logstash',
         is_system=True,
     )
-    default, _ = Policy.objects.get_or_create(
-        name='Default Policy',
-        defaults={**defaults, 'policy_type': Policy.PolicyType.DEFAULT},
+    packaged, _ = Policy.objects.get_or_create(
+        name='Packaged Policy',
+        defaults={**defaults, 'policy_type': Policy.PolicyType.PACKAGED},
     )
-    default.policy_type = Policy.PolicyType.DEFAULT
-    default.is_system = True
-    default.save()
+    packaged.policy_type = Policy.PolicyType.PACKAGED
+    packaged.is_system = True
+    packaged.save()
+
+    managed, _ = Policy.objects.get_or_create(
+        name='Managed Policy',
+        defaults={
+            **defaults,
+            'policy_type': Policy.PolicyType.MANAGED,
+            'settings_path': '/opt/logstash-agent/managed-{instance_id}/settings',
+            'logs_path': '/opt/logstash-agent/managed-{instance_id}/logs',
+            'data_path': '/opt/logstash-agent/managed-{instance_id}/data',
+            'keystore_env_file': '/opt/logstash-agent/managed-{instance_id}/env',
+            'agent_api_port': 9600,
+            'logstash_api_port': 9700,
+            'logstash_yml': 'api.http.port: 9700\n',
+            'logstash_source': Policy.LogstashSource.SYSTEM,
+        },
+    )
+    managed.policy_type = Policy.PolicyType.MANAGED
+    managed.is_system = True
+    managed.save()
 
     simulate, _ = Policy.objects.get_or_create(
         name='Simulate Policy',
@@ -75,12 +98,24 @@ def system_policies(db):
     embedded.agent_api_port = 9500
     embedded.logstash_api_port = 9560
     embedded.save()
-    return default, simulate, embedded
+    return packaged, managed, simulate, embedded
+
+
+def test_normalize_policy_type_legacy_default():
+    assert normalize_policy_type('DEFAULT') == Policy.PolicyType.PACKAGED
+    assert normalize_policy_type('default') == Policy.PolicyType.PACKAGED
+    assert normalize_policy_type(None) == Policy.PolicyType.PACKAGED
+    assert normalize_policy_type('MANAGED') == Policy.PolicyType.MANAGED
 
 
 def test_simulate_ports_formula():
     assert simulate_ports(1) == (9501, 9561)
     assert simulate_ports(2) == (9502, 9562)
+
+
+def test_managed_ports_formula():
+    assert managed_ports(1) == (9601, 9701)
+    assert managed_ports(2) == (9602, 9702)
 
 
 def test_simulate_paths():
@@ -89,8 +124,14 @@ def test_simulate_paths():
     assert p['keystore_env_file'] == '/opt/logstash-agent/simulate-1/env'
 
 
+def test_managed_paths():
+    p = managed_paths(1)
+    assert p['settings_path'] == '/opt/logstash-agent/managed-1/settings'
+    assert p['deployment_id'] == 'managed-1'
+
+
 def test_next_instance_id_skips_used(db, system_policies):
-    _, simulate, _ = system_policies
+    _, _, simulate, _ = system_policies
     Connection.objects.create(
         name='a',
         connection_type='AGENT',
@@ -104,8 +145,23 @@ def test_next_instance_id_skips_used(db, system_policies):
     assert next_simulate_instance_id() == 2
 
 
+def test_next_managed_instance_id_skips_used(db, system_policies):
+    _, managed, _, _ = system_policies
+    Connection.objects.create(
+        name='m',
+        connection_type='AGENT',
+        host='h1',
+        agent_id='id-m1',
+        policy=managed,
+        instance_id=1,
+        agent_api_port=9601,
+        logstash_api_port=9701,
+    )
+    assert next_managed_instance_id() == 2
+
+
 def test_build_policy_config_simulate(system_policies):
-    _, simulate, _ = system_policies
+    _, _, simulate, _ = system_policies
     cfg = build_policy_config(simulate, instance_id=1)
     assert cfg['policy_type'] == 'SIMULATE'
     assert cfg['instance_id'] == 1
@@ -115,8 +171,29 @@ def test_build_policy_config_simulate(system_policies):
     assert cfg['logstash_unit'] == 'ls-simulate@1'
 
 
+def test_build_policy_config_managed(system_policies):
+    _, managed, _, _ = system_policies
+    cfg = build_policy_config(managed, instance_id=1)
+    assert cfg['policy_type'] == 'MANAGED'
+    assert cfg['instance_id'] == 1
+    assert cfg['agent_api_port'] == 9601
+    assert cfg['logstash_api_port'] == 9701
+    assert cfg['settings_path'] == '/opt/logstash-agent/managed-1/settings'
+    assert cfg['path_root'] == '/opt/logstash-agent/managed-1'
+    assert 'api.http.port: 9701' in cfg['logstash_yml']
+
+
+def test_build_policy_config_packaged(system_policies):
+    packaged, _, _, _ = system_policies
+    cfg = build_policy_config(packaged)
+    assert cfg['policy_type'] == 'PACKAGED'
+    assert cfg['logstash_unit'] == 'logstash'
+    assert cfg['agent_unit'] == 'logstash-agent'
+    assert 'instance_id' not in cfg
+
+
 def test_enroll_simulate_allocates_instance(db, system_policies):
-    _, simulate, _ = system_policies
+    _, _, simulate, _ = system_policies
     token, _ = EnrollmentToken.objects.get_or_create(
         policy=simulate,
         name='default',
@@ -149,8 +226,45 @@ def test_enroll_simulate_allocates_instance(db, system_policies):
     assert conn.agent_api_port == 9501
 
 
+def test_enroll_managed_allocates_instance(db, system_policies):
+    _, managed, _, _ = system_policies
+    token, _ = EnrollmentToken.objects.get_or_create(
+        policy=managed,
+        name='default',
+        defaults={'token': 'managed-token-abc'},
+    )
+    token.token = 'managed-token-abc'
+    token.save()
+    payload = base64.b64encode(
+        json.dumps({'enrollment_token': token.token}).encode()
+    ).decode()
+    client = Client()
+    resp = client.post(
+        '/ConnectionManager/Enroll/',
+        data=json.dumps(
+            {
+                'enrollment_token': payload,
+                'host': 'managedhost.example',
+                'agent_id': 'agent-managed-1',
+            }
+        ),
+        content_type='application/json',
+    )
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body['success'] is True
+    assert body['policy_config']['policy_type'] == 'MANAGED'
+    assert body['policy_config']['instance_id'] == 1
+    assert body['policy_config']['agent_api_port'] == 9601
+    assert body['policy_config']['logstash_api_port'] == 9701
+    assert body['policy_config']['path_root'] == '/opt/logstash-agent/managed-1'
+    conn = Connection.objects.get(agent_id='agent-managed-1')
+    assert conn.instance_id == 1
+    assert conn.name == 'managedhost.example-managed-1'
+
+
 def test_enroll_embedded_rejected(db, system_policies):
-    _, _, embedded = system_policies
+    _, _, _, embedded = system_policies
     token, _ = EnrollmentToken.objects.get_or_create(
         policy=embedded,
         name='default',
@@ -178,7 +292,7 @@ def test_enroll_embedded_rejected(db, system_policies):
 
 
 def test_list_simulation_targets(db, system_policies):
-    _, simulate, embedded = system_policies
+    _, _, simulate, embedded = system_policies
     Connection.objects.create(
         name='sim1',
         connection_type='AGENT',
@@ -222,7 +336,7 @@ def test_cannot_delete_system_policy(admin_client, system_policies):
 
 
 def test_clone_simulate_policy(admin_client, system_policies):
-    _, simulate, _ = system_policies
+    _, _, simulate, _ = system_policies
     resp = admin_client.post(
         '/ConnectionManager/ClonePolicy/',
         data=json.dumps(
@@ -240,6 +354,26 @@ def test_clone_simulate_policy(admin_client, system_policies):
     assert clone.policy_type == Policy.PolicyType.SIMULATE
     assert clone.is_system is False
     assert clone.cloned_from_id == simulate.id
+
+
+def test_clone_packaged_becomes_managed(admin_client, system_policies):
+    packaged, _, _, _ = system_policies
+    resp = admin_client.post(
+        '/ConnectionManager/ClonePolicy/',
+        data=json.dumps(
+            {
+                'source_policy_id': packaged.id,
+                'new_policy_name': 'My Managed Clone',
+            }
+        ),
+        content_type='application/json',
+    )
+    assert resp.status_code == 200, resp.content
+    clone = Policy.objects.get(name='My Managed Clone')
+    assert clone.policy_type == Policy.PolicyType.MANAGED
+    assert clone.is_system is False
+    assert clone.cloned_from_id == packaged.id
+    assert 'managed-{instance_id}' in (clone.settings_path or '')
 
 
 def test_ensure_embedded_connection(system_policies, settings, monkeypatch):

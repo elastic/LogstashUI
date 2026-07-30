@@ -427,10 +427,16 @@
     border-color: rgba(167, 139, 250, 0.5);
     background: rgba(139, 92, 246, 0.2);
   }
+  .policy-filter-chip.active[data-filter="PACKAGED"],
   .policy-filter-chip.active[data-filter="DEFAULT"] {
     border-color: rgba(96, 165, 250, 0.55);
     background: rgba(37, 99, 235, 0.25);
     color: #bfdbfe;
+  }
+  .policy-filter-chip.active[data-filter="MANAGED"] {
+    border-color: rgba(251, 191, 36, 0.55);
+    background: rgba(180, 83, 9, 0.3);
+    color: #fde68a;
   }
   .policy-filter-chip.active[data-filter="SIMULATE"] {
     border-color: rgba(192, 132, 252, 0.55);
@@ -443,7 +449,9 @@
     color: #a5f3fc;
   }
 
-  .policy-switcher-name.role-default { color: #93c5fd; }
+  .policy-switcher-name.role-default,
+  .policy-switcher-name.role-packaged { color: #93c5fd; }
+  .policy-switcher-name.role-managed { color: #fde68a; }
   .policy-switcher-name.role-simulate { color: #e9d5ff; }
   .policy-switcher-name.role-embedded { color: #a5f3fc; }
 
@@ -2121,12 +2129,15 @@
 // Policy Switcher — visual layer over the hidden native #policySelect
 (function() {
   // Active role filters: empty set or all selected = show everything
-  let roleFilter = new Set(['DEFAULT', 'SIMULATE', 'EMBEDDED']);
+  let roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE', 'EMBEDDED']);
 
   function roleClass(ptype) {
-    const t = (ptype || 'DEFAULT').toUpperCase();
+    let t = (ptype || 'PACKAGED').toUpperCase();
+    if (t === 'DEFAULT') t = 'PACKAGED';
     if (t === 'SIMULATE') return 'role-simulate';
     if (t === 'EMBEDDED') return 'role-embedded';
+    if (t === 'MANAGED') return 'role-managed';
+    if (t === 'PACKAGED') return 'role-packaged';
     return 'role-default';
   }
 
@@ -2158,7 +2169,8 @@
     filters.setAttribute('role', 'group');
     filters.setAttribute('aria-label', 'Filter policies by role');
     [
-      { key: 'DEFAULT', label: 'Default' },
+      { key: 'PACKAGED', label: 'Packaged' },
+      { key: 'MANAGED', label: 'Managed' },
       { key: 'SIMULATE', label: 'Simulate' },
       { key: 'EMBEDDED', label: 'Embedded' },
     ].forEach(({ key, label }) => {
@@ -2179,7 +2191,7 @@
         }
         // If user cleared all, re-enable all (toggle UX)
         if (roleFilter.size === 0) {
-          roleFilter = new Set(['DEFAULT', 'SIMULATE', 'EMBEDDED']);
+          roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE', 'EMBEDDED']);
         }
         rebuildMenu();
       });
@@ -2189,7 +2201,8 @@
 
     const policies = Array.from(select.options).filter(o => o.value !== 'add_new');
     const visible = policies.filter(o => {
-      const t = (o.dataset.policyType || 'DEFAULT').toUpperCase();
+      let t = (o.dataset.policyType || 'PACKAGED').toUpperCase();
+      if (t === 'DEFAULT') t = 'PACKAGED';
       return roleFilter.has(t);
     });
 

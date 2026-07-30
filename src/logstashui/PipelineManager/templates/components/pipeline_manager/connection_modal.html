@@ -848,10 +848,12 @@ sudo systemctl start logstash-agent</code></pre>
   /** Whether "Install Logstash" belongs in the enroll snippet for the selected policy. */
   function shouldOfferInstallLogstash() {
     const { policyType, logstashSource } = selectedAgentPolicyMeta();
-    if (policyType === 'EMBEDDED') {
+    const pt = policyType === 'DEFAULT' ? 'PACKAGED' : policyType;
+    if (pt === 'EMBEDDED') {
       return false;
     }
-    if (policyType === 'SIMULATE' && logstashSource === 'VERSION') {
+    // VERSION source downloads Logstash; OS package install is not used
+    if ((pt === 'SIMULATE' || pt === 'MANAGED') && logstashSource === 'VERSION') {
       return false;
     }
     return true;
@@ -980,13 +982,14 @@ sudo systemctl enable logstash
       // Install is a full deploy: agent unit is enabled+started by install.
       // Distro Logstash is enabled only (never bounced) for Packaged/live hosts.
       const { policyType, logstashSource } = selectedAgentPolicyMeta();
+      const pt = policyType === 'DEFAULT' ? 'PACKAGED' : policyType;
       let day2 = `# After install the agent service is already running.
 # Day-2 operations:
 #   sudo systemctl status logstash-agent
 #   sudo systemctl stop logstash-agent
 #   sudo systemctl start logstash-agent
 #   sudo journalctl -u logstash-agent -f`;
-      if (policyType === 'SIMULATE') {
+      if (pt === 'SIMULATE') {
         day2 = `# After install the simulate agent unit is already enabled and started
 # (instance number N is shown in install output / UI connection).
 # Day-2 operations (replace N):
@@ -995,6 +998,16 @@ sudo systemctl enable logstash
 #   sudo systemctl start lsagent-simulate@N
 #   sudo journalctl -u lsagent-simulate@N -f
 # Logstash sim instance (enabled at install; restarted by agent when ready):
+#   sudo systemctl status ls-simulate@N`;
+      } else if (pt === 'MANAGED') {
+        day2 = `# After install the managed agent unit is already enabled and started
+# (instance number N is shown in install output / UI connection).
+# Temporary units (until logstash-agent@ / logstash-managed@ ship):
+#   sudo systemctl status lsagent-simulate@N
+#   sudo systemctl stop lsagent-simulate@N
+#   sudo systemctl start lsagent-simulate@N
+#   sudo journalctl -u lsagent-simulate@N -f
+# Managed Logstash tree under /opt/logstash-agent/managed-N/:
 #   sudo systemctl status ls-simulate@N`;
       }
 

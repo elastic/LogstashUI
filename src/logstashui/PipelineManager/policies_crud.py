@@ -152,18 +152,19 @@ def update_policy(request):
                 status=403,
             )
 
-        # System Default: allow path/config edits (production). Name/type locked by not exposing them.
-        # System Simulate: allow jvm_options + logstash binary source/version; block path scheme.
-        # User simulate clones / default user policies: broader edits.
+        # System Packaged/Default: allow path/config edits (production). Name/type locked by not exposing them.
+        # System Simulate/Managed: allow jvm/binary/source; block path scheme (instance formula at enroll).
+        # User clones: broader edits.
         is_system_simulate = (
             policy.is_system and policy.policy_type == Policy.PolicyType.SIMULATE
         )
-        is_system_default = (
-            policy.is_system and policy.policy_type == Policy.PolicyType.DEFAULT
+        is_system_managed = (
+            policy.is_system and policy.policy_type == Policy.PolicyType.MANAGED
         )
+        is_system_path_locked = is_system_simulate or is_system_managed
 
-        if is_system_simulate:
-            # Allowlisted fields for system Simulate Policy
+        if is_system_path_locked:
+            # Allowlisted fields for system Simulate / Managed policies
             if 'jvm_options' in data:
                 policy.jvm_options = data['jvm_options']
             if 'logstash_source' in data:
@@ -319,10 +320,21 @@ def clone_policy(request):
                 status=403,
             )
 
-        # Cloned simulate policies stay SIMULATE; default clones stay DEFAULT
-        cloned_type = source_policy.policy_type
-        if cloned_type not in (Policy.PolicyType.DEFAULT, Policy.PolicyType.SIMULATE):
-            cloned_type = Policy.PolicyType.DEFAULT
+        from PipelineManager.agent_modes import apply_managed_path_bundle, normalize_policy_type
+
+        source_type = normalize_policy_type(source_policy.policy_type)
+        # Clone matrix:
+        #   PACKAGED/DEFAULT → MANAGED (auto managed-{instance_id} path scheme)
+        #   MANAGED → MANAGED
+        #   SIMULATE → SIMULATE
+        if source_type in (Policy.PolicyType.PACKAGED, Policy.PolicyType.DEFAULT, "DEFAULT"):
+            cloned_type = Policy.PolicyType.MANAGED
+        elif source_type == Policy.PolicyType.MANAGED:
+            cloned_type = Policy.PolicyType.MANAGED
+        elif source_type == Policy.PolicyType.SIMULATE:
+            cloned_type = Policy.PolicyType.SIMULATE
+        else:
+            cloned_type = Policy.PolicyType.MANAGED
 
         # Create new policy with same configuration as source
         new_policy = Policy.objects.create(
@@ -346,6 +358,15 @@ def clone_policy(request):
             keystore_password=source_policy.keystore_password,
             keystore_password_hash=source_policy.keystore_password_hash
         )
+
+        # Packaged → Managed: rewrite path scheme to managed-{instance_id} templates
+        if cloned_type == Policy.PolicyType.MANAGED and source_type in (
+            Policy.PolicyType.PACKAGED,
+            Policy.PolicyType.DEFAULT,
+            "DEFAULT",
+        ):
+            apply_managed_path_bundle(new_policy)
+            new_policy.save()
 
         # Generate default enrollment token for new policy (same as add_policy)
         enrollment_token = secrets.token_urlsafe(32)

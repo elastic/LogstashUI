@@ -2,22 +2,26 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""Helpers for default / simulate / embedded agent roles."""
+"""Helpers for packaged / managed / simulate / embedded agent roles."""
 
 from __future__ import annotations
 
-from django.db.models import Max
+from django.db.models import Max, Q
 
 from PipelineManager.models import Connection, Policy
 
-# Port scheme (plan): embedded fixed; simulate-N = base + N
+# Port scheme: embedded fixed; simulate-N = base + N; managed-N separate band
 EMBEDDED_AGENT_API_PORT = 9500
 EMBEDDED_LOGSTASH_API_PORT = 9560
 SIMULATE_AGENT_API_BASE = 9500
 SIMULATE_LOGSTASH_API_BASE = 9560
-SIMULATE_ROOT = "/opt/logstash-agent"
-# Legacy path (pre-rename); rewrite on read so enroll never re-creates /opt/LogstashAgent
-_LEGACY_SIMULATE_ROOT = "/opt/LogstashAgent"
+MANAGED_AGENT_API_BASE = 9600
+MANAGED_LOGSTASH_API_BASE = 9700
+AGENT_OPT_ROOT = "/opt/logstash-agent"
+SIMULATE_ROOT = AGENT_OPT_ROOT
+MANAGED_ROOT = AGENT_OPT_ROOT
+# Legacy path (pre-rename); rewrite on read
+_LEGACY_OPT_ROOT = "/opt/LogstashAgent"
 
 
 def normalize_agent_opt_path(path: str | None) -> str:
@@ -25,9 +29,17 @@ def normalize_agent_opt_path(path: str | None) -> str:
     if not path:
         return ""
     p = str(path)
-    if p.startswith(_LEGACY_SIMULATE_ROOT):
-        return SIMULATE_ROOT + p[len(_LEGACY_SIMULATE_ROOT) :]
-    return p.replace(_LEGACY_SIMULATE_ROOT, SIMULATE_ROOT)
+    if p.startswith(_LEGACY_OPT_ROOT):
+        return AGENT_OPT_ROOT + p[len(_LEGACY_OPT_ROOT) :]
+    return p.replace(_LEGACY_OPT_ROOT, AGENT_OPT_ROOT)
+
+
+def normalize_policy_type(policy_type: str | None) -> str:
+    """Map legacy DEFAULT → PACKAGED; uppercase."""
+    pt = (policy_type or Policy.PolicyType.PACKAGED).upper()
+    if pt == "DEFAULT":
+        return Policy.PolicyType.PACKAGED
+    return pt
 
 
 def next_simulate_instance_id() -> int:
@@ -36,8 +48,25 @@ def next_simulate_instance_id() -> int:
         Connection.objects.filter(
             connection_type=Connection.ConnectionType.AGENT,
             instance_id__isnull=False,
+            policy__policy_type=Policy.PolicyType.SIMULATE,
         ).values_list("instance_id", flat=True)
     )
+    n = 1
+    while n in used:
+        n += 1
+    return n
+
+
+def next_managed_instance_id() -> int:
+    """Allocate next free managed instance id (1-based), separate from simulate."""
+    used = set(
+        Connection.objects.filter(
+            connection_type=Connection.ConnectionType.AGENT,
+            instance_id__isnull=False,
+            policy__policy_type=Policy.PolicyType.MANAGED,
+        ).values_list("instance_id", flat=True)
+    )
+    # Also scan path-like agent_ids if any
     n = 1
     while n in used:
         n += 1
@@ -53,6 +82,20 @@ def simulate_paths(instance_id: int) -> dict:
         "data_path": f"{root}/data",
         "keystore_env_file": f"{root}/env",
         "path_root": root,
+        "deployment_id": f"simulate-{instance_id}",
+    }
+
+
+def managed_paths(instance_id: int) -> dict:
+    root = f"{MANAGED_ROOT}/managed-{instance_id}"
+    return {
+        "settings_path": f"{root}/settings",
+        "config_path": f"{root}/config",
+        "logs_path": f"{root}/logs",
+        "data_path": f"{root}/data",
+        "keystore_env_file": f"{root}/env",
+        "path_root": root,
+        "deployment_id": f"managed-{instance_id}",
     }
 
 
@@ -61,6 +104,43 @@ def simulate_ports(instance_id: int) -> tuple[int, int]:
         SIMULATE_AGENT_API_BASE + instance_id,
         SIMULATE_LOGSTASH_API_BASE + instance_id,
     )
+
+
+def managed_ports(instance_id: int) -> tuple[int, int]:
+    return (
+        MANAGED_AGENT_API_BASE + instance_id,
+        MANAGED_LOGSTASH_API_BASE + instance_id,
+    )
+
+
+def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) -> None:
+    """
+    Write managed path scheme onto a Policy (used when cloning Packaged → Managed).
+
+    When instance_id is None, stores template placeholders (enroll allocates N).
+    When set, stores concrete managed-N paths (tests / display).
+    """
+    if instance_id is None:
+        root = f"{MANAGED_ROOT}/managed-{{instance_id}}"
+        policy.settings_path = f"{root}/settings"
+        policy.logs_path = f"{root}/logs"
+        policy.data_path = f"{root}/data"
+        policy.keystore_env_file = f"{root}/env"
+        policy.agent_api_port = MANAGED_AGENT_API_BASE
+        policy.logstash_api_port = MANAGED_LOGSTASH_API_BASE
+    else:
+        paths = managed_paths(instance_id)
+        agent_port, ls_port = managed_ports(instance_id)
+        policy.settings_path = paths["settings_path"]
+        policy.logs_path = paths["logs_path"]
+        policy.data_path = paths["data_path"]
+        policy.keystore_env_file = paths["keystore_env_file"]
+        policy.agent_api_port = agent_port
+        policy.logstash_api_port = ls_port
+    if not policy.logstash_download_dir or "LogstashAgent" in (policy.logstash_download_dir or ""):
+        policy.logstash_download_dir = f"{AGENT_OPT_ROOT}/logstash-versions"
+    if not policy.binary_path:
+        policy.binary_path = "/usr/share/logstash/bin"
 
 
 def materialize_simulate_logstash_yml(template: str, logstash_api_port: int) -> str:
@@ -85,11 +165,14 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
     """
     Build enrollment / apply policy_config payload.
 
-    For SIMULATE, instance_id is required and paths/ports are instance-specific.
+    For SIMULATE and MANAGED, instance_id is required and paths/ports are instance-specific.
     """
-    if policy.policy_type == Policy.PolicyType.EMBEDDED:
+    ptype = normalize_policy_type(policy.policy_type)
+
+    if ptype == Policy.PolicyType.EMBEDDED:
         return {
-            "policy_type": policy.policy_type,
+            "policy_type": Policy.PolicyType.EMBEDDED,
+            "deployment_id": "embedded",
             "settings_path": policy.settings_path,
             "logs_path": policy.logs_path,
             "binary_path": policy.binary_path,
@@ -100,7 +183,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
             "logstash_download_dir": normalize_agent_opt_path(
-                policy.logstash_download_dir or f"{SIMULATE_ROOT}/logstash-versions"
+                policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
             ),
             "logstash_yml": materialize_simulate_logstash_yml(
                 policy.logstash_yml, EMBEDDED_LOGSTASH_API_PORT
@@ -109,21 +192,21 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "log4j2_properties": policy.log4j2_properties,
         }
 
-    if policy.policy_type == Policy.PolicyType.SIMULATE:
+    if ptype == Policy.PolicyType.SIMULATE:
         if not instance_id:
             raise ValueError("instance_id required for SIMULATE policy_config")
         paths = simulate_paths(instance_id)
         agent_port, ls_port = simulate_ports(instance_id)
         yml = materialize_simulate_logstash_yml(policy.logstash_yml, ls_port)
-        # Always use code-derived path roots (never stale DB /opt/LogstashAgent templates)
         download_dir = normalize_agent_opt_path(
-            policy.logstash_download_dir or f"{SIMULATE_ROOT}/logstash-versions"
+            policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
         )
         if not download_dir:
-            download_dir = f"{SIMULATE_ROOT}/logstash-versions"
+            download_dir = f"{AGENT_OPT_ROOT}/logstash-versions"
         return {
-            "policy_type": policy.policy_type,
+            "policy_type": Policy.PolicyType.SIMULATE,
             "instance_id": instance_id,
+            "deployment_id": paths["deployment_id"],
             "settings_path": paths["settings_path"],
             "config_path": paths["config_path"],
             "logs_path": paths["logs_path"],
@@ -142,19 +225,56 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "log4j2_properties": policy.log4j2_properties,
         }
 
-    # DEFAULT / PACKAGED
+    if ptype == Policy.PolicyType.MANAGED:
+        if not instance_id:
+            raise ValueError("instance_id required for MANAGED policy_config")
+        paths = managed_paths(instance_id)
+        agent_port, ls_port = managed_ports(instance_id)
+        yml = materialize_simulate_logstash_yml(policy.logstash_yml, ls_port)
+        download_dir = normalize_agent_opt_path(
+            policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
+        )
+        return {
+            "policy_type": Policy.PolicyType.MANAGED,
+            "instance_id": instance_id,
+            "deployment_id": paths["deployment_id"],
+            "settings_path": paths["settings_path"],
+            "config_path": paths["config_path"],
+            "logs_path": paths["logs_path"],
+            "data_path": paths["data_path"],
+            "binary_path": policy.binary_path or "/usr/share/logstash/bin",
+            "agent_api_port": agent_port,
+            "logstash_api_port": ls_port,
+            "keystore_env_file": paths["keystore_env_file"],
+            "logstash_source": policy.logstash_source,
+            "logstash_version": policy.logstash_version or "",
+            "logstash_download_dir": download_dir or f"{AGENT_OPT_ROOT}/logstash-versions",
+            # Temporary: reuse ls-simulate@ / lsagent-simulate@ until
+            # logstash-managed@ / logstash-agent@ multi-instance templates ship.
+            "logstash_unit": f"ls-simulate@{instance_id}",
+            "agent_unit": f"lsagent-simulate@{instance_id}",
+            "path_root": paths["path_root"],
+            "logstash_yml": yml,
+            "jvm_options": policy.jvm_options,
+            "log4j2_properties": policy.log4j2_properties,
+        }
+
+    # PACKAGED (and legacy DEFAULT)
     return {
-        "policy_type": policy.policy_type,
+        "policy_type": Policy.PolicyType.PACKAGED,
+        "deployment_id": "package",
         "settings_path": policy.settings_path,
         "logs_path": policy.logs_path,
         "binary_path": policy.binary_path,
         "data_path": policy.data_path or "",
         "agent_api_port": policy.agent_api_port,
-        "logstash_api_port": policy.logstash_api_port,
+        "logstash_api_port": policy.logstash_api_port or 9600,
         "keystore_env_file": policy.keystore_env_file or "/etc/default/logstash",
-        "logstash_source": policy.logstash_source,
+        "logstash_source": policy.logstash_source or "SYSTEM",
         "logstash_version": policy.logstash_version or "",
         "logstash_download_dir": normalize_agent_opt_path(policy.logstash_download_dir or ""),
+        "logstash_unit": "logstash",
+        "agent_unit": "logstash-agent",
         "logstash_yml": policy.logstash_yml,
         "jvm_options": policy.jvm_options,
         "log4j2_properties": policy.log4j2_properties,
