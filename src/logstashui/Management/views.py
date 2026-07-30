@@ -347,6 +347,7 @@ def SettingsView(request):
             agent_ui_url = (request.POST.get('agent_ui_url') or '').strip()
 
             app_settings = Settings.get_settings()
+            previous_url = (app_settings.agent_ui_url or "").strip()
             app_settings.experimental_mode = experimental_mode
             app_settings.agent_ui_url = agent_ui_url
             app_settings.save()
@@ -356,9 +357,23 @@ def SettingsView(request):
                 f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r})"
             )
 
+            cert_note = ""
+            if agent_ui_url != previous_url:
+                try:
+                    from Common.product_ca import ensure_default_ui_server_cert, get_ui_server_mode
+
+                    if get_ui_server_mode() == "product":
+                        ensure_default_ui_server_cert()  # re-issues when SANs change
+                        cert_note = (
+                            " Product UI certificate was re-checked for new callback URL SANs; "
+                            "restart the UI container so gunicorn reloads the leaf if it changed."
+                        )
+                except Exception as e:
+                    logger.warning("Could not re-issue UI cert after agent_ui_url change: %s", e)
+
             return JsonResponse({
                 'success': True,
-                'message': 'Settings saved successfully'
+                'message': 'Settings saved successfully' + cert_note,
             })
         except Exception as e:
             logger.error(f"Error saving settings: {e}")

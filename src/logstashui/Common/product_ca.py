@@ -14,11 +14,14 @@ Product CA for LogstashUI.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
+import os
+import socket
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Iterable, List, Optional, Set, Tuple, Union
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -271,17 +274,213 @@ def _cert_info(cert: x509.Certificate) -> dict:
     }
 
 
-def ensure_default_ui_server_cert(extra_dns: Optional[list] = None) -> Tuple[Path, Path]:
+def _parse_san_token(token: str) -> Tuple[Optional[str], Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]]:
+    """Return (dns_name, ip_address) for a token; one side set."""
+    t = (token or "").strip()
+    if not t:
+        return None, None
+    # Strip optional DNS:/IP: prefixes
+    lower = t.lower()
+    if lower.startswith("dns:"):
+        t = t[4:].strip()
+        return t or None, None
+    if lower.startswith("ip:"):
+        t = t[3:].strip()
+    try:
+        return None, ipaddress.ip_address(t)
+    except ValueError:
+        # hostname / FQDN
+        return t, None
+
+
+def _add_san_token(
+    token: str,
+    dns_names: List[str],
+    ip_addrs: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]],
+) -> None:
+    dns, ip = _parse_san_token(token)
+    if ip is not None:
+        if ip not in ip_addrs:
+            ip_addrs.append(ip)
+        return
+    if dns and dns not in dns_names:
+        dns_names.append(dns)
+
+
+def _split_csv(value: str) -> List[str]:
+    if not value:
+        return []
+    return [p.strip() for p in value.replace(";", ",").split(",") if p.strip()]
+
+
+def collect_desired_ui_sans(
+    extra_dns: Optional[Iterable[str]] = None,
+) -> Tuple[List[str], List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]]:
     """
-    Ensure a product-CA-signed UI server leaf exists (OOTB self-signed path).
+    Build desired DNS names and IPs for the product UI server leaf.
+
+    Sources (merged):
+      - Always: localhost, logstashui, 127.0.0.1, ::1
+      - LOGSTASHUI_HOST_HOSTNAME / LOGSTASHUI_HOST_IPS (compose injects Docker host)
+      - LOGSTASHUI_TLS_SANS (comma/semicolon list of DNS names and/or IPs)
+      - agent.ui_url / Settings agent callback URL host (DNS or IP)
+      - logstashui.yml tls.sans if present
+      - extra_dns argument
+      - Best-effort local non-loopback interface addresses (container or host)
+    """
+    dns_names: List[str] = ["localhost", "logstashui"]
+    ip_addrs: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = [
+        ipaddress.IPv4Address("127.0.0.1"),
+        ipaddress.IPv6Address("::1"),
+    ]
+
+    for token in (
+        os.environ.get("LOGSTASHUI_HOST_HOSTNAME") or "",
+        *( _split_csv(os.environ.get("LOGSTASHUI_HOST_IPS") or "") ),
+        *( _split_csv(os.environ.get("LOGSTASHUI_TLS_SANS") or "") ),
+    ):
+        _add_san_token(token, dns_names, ip_addrs)
+
+    if extra_dns:
+        for token in extra_dns:
+            _add_san_token(str(token), dns_names, ip_addrs)
+
+    try:
+        from urllib.parse import urlparse
+
+        agent_url = get_agent_ui_url_default()
+        if agent_url:
+            host = urlparse(agent_url).hostname
+            if host:
+                _add_san_token(host, dns_names, ip_addrs)
+    except Exception:
+        pass
+
+    try:
+        cfg = getattr(settings, "LOGSTASHUI_CONFIG", {}) or {}
+        tls_cfg = cfg.get("tls") or {}
+        for token in tls_cfg.get("sans") or []:
+            _add_san_token(str(token), dns_names, ip_addrs)
+    except Exception:
+        pass
+
+    # Local interfaces (host when not containerized; container bridge IPs when in Docker —
+    # host LAN IPs should be injected via LOGSTASHUI_HOST_IPS).
+    try:
+        hostname = socket.gethostname()
+        if hostname:
+            _add_san_token(hostname, dns_names, ip_addrs)
+        try:
+            fqdn = socket.getfqdn()
+            if fqdn and fqdn != hostname:
+                _add_san_token(fqdn, dns_names, ip_addrs)
+        except Exception:
+            pass
+        # getaddrinfo for hostname may yield interface IPs
+        try:
+            for info in socket.getaddrinfo(hostname, None):
+                addr = info[4][0]
+                if addr:
+                    _add_san_token(addr, dns_names, ip_addrs)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # Enumerate local IPv4s via UDP socket trick + optional netifaces-free approach
+    try:
+        # Connect UDP doesn't send packets; reveals preferred outbound IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            if local_ip:
+                _add_san_token(local_ip, dns_names, ip_addrs)
+        finally:
+            s.close()
+    except Exception:
+        pass
+
+    return dns_names, ip_addrs
+
+
+def desired_ui_san_keyset(
+    extra_dns: Optional[Iterable[str]] = None,
+) -> Set[str]:
+    """Normalized set like {'dns:localhost', 'ip:10.0.0.5'} for comparison."""
+    dns_names, ip_addrs = collect_desired_ui_sans(extra_dns)
+    keys: Set[str] = {f"dns:{n.lower()}" for n in dns_names}
+    for ip in ip_addrs:
+        keys.add(f"ip:{ip.compressed}")
+    return keys
+
+
+def leaf_san_keyset(cert: x509.Certificate) -> Set[str]:
+    keys: Set[str] = set()
+    try:
+        ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        for name in ext.value:
+            if isinstance(name, x509.DNSName):
+                keys.add(f"dns:{name.value.lower()}")
+            elif isinstance(name, x509.IPAddress):
+                keys.add(f"ip:{name.value.compressed}")
+    except x509.ExtensionNotFound:
+        pass
+    return keys
+
+
+def product_ui_cert_needs_reissue(extra_dns: Optional[Iterable[str]] = None) -> bool:
+    """
+    True if product leaf is missing, unreadable, or SANs don't cover the desired set.
+
+    Custom uploaded certs are never auto-reissued here.
+    """
+    if get_ui_server_mode() == "custom":
+        return False
+    if not ui_server_cert_path().is_file() or not ui_server_key_path().is_file():
+        return True
+    try:
+        leaf = x509.load_pem_x509_certificate(ui_server_cert_path().read_bytes())
+    except Exception:
+        return True
+    # Must be signed by current product CA
+    try:
+        ca = x509.load_pem_x509_certificate(get_ca_pem())
+        if leaf.issuer != ca.subject:
+            return True
+    except Exception:
+        return True
+    desired = desired_ui_san_keyset(extra_dns)
+    actual = leaf_san_keyset(leaf)
+    missing = desired - actual
+    if missing:
+        logger.info(
+            "Product UI cert missing SANs %s (have %s); will re-issue",
+            sorted(missing)[:20],
+            sorted(actual)[:20],
+        )
+        return True
+    return False
+
+
+def ensure_default_ui_server_cert(
+    extra_dns: Optional[list] = None,
+    *,
+    force: bool = False,
+) -> Tuple[Path, Path]:
+    """
+    Ensure a product-CA-signed UI server leaf exists (OOTB path).
 
     Does not overwrite custom uploads (mode=custom).
+    Re-issues when force=True or when desired SANs (host hostname/IPs, callback URL,
+    LOGSTASHUI_TLS_SANS, etc.) are not all present on the current leaf.
     """
     if get_ui_server_mode() == "custom" and ui_server_cert_path().is_file():
         return ui_server_cert_path(), ui_server_key_path()
 
     if (
-        get_ui_server_mode() == "product"
+        not force
+        and not product_ui_cert_needs_reissue(extra_dns)
         and ui_server_cert_path().is_file()
         and ui_server_key_path().is_file()
     ):
@@ -292,30 +491,11 @@ def ensure_default_ui_server_cert(extra_dns: Optional[list] = None) -> Tuple[Pat
     ca_key = serialization.load_pem_private_key(ca_key_path().read_bytes(), password=None)
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    # localhost for browsers; logstashui for compose service name on :8443
-    dns_names = ["localhost", "logstashui"]
-    if extra_dns:
-        for d in extra_dns:
-            if d and d not in dns_names:
-                dns_names.append(d)
-    # Also add agent.ui_url hostname if configured
-    try:
-        from urllib.parse import urlparse
+    dns_names, ip_addrs = collect_desired_ui_sans(extra_dns)
 
-        agent_url = get_agent_ui_url_default()
-        if agent_url:
-            host = urlparse(agent_url).hostname
-            if host and host not in dns_names:
-                dns_names.append(host)
-    except Exception:
-        pass
-
-    san_list = [x509.DNSName(n) for n in dns_names]
-    # localhost IPs
-    import ipaddress
-
-    san_list.append(x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")))
-    san_list.append(x509.IPAddress(ipaddress.IPv6Address("::1")))
+    san_list: List[x509.GeneralName] = [x509.DNSName(n) for n in dns_names]
+    for ip in ip_addrs:
+        san_list.append(x509.IPAddress(ip))
 
     now = datetime.now(timezone.utc)
     subject = x509.Name([
@@ -366,13 +546,16 @@ def ensure_default_ui_server_cert(extra_dns: Optional[list] = None) -> Tuple[Pat
     except OSError:
         pass
     _write_mode("product")
-    # Remove stale chain from previous custom upload
     if ui_server_chain_path().is_file():
         try:
             ui_server_chain_path().unlink()
         except OSError:
             pass
-    logger.info("Generated product-CA-signed UI server certificate")
+    logger.info(
+        "Generated product-CA-signed UI server certificate SANs dns=%s ips=%s",
+        dns_names,
+        [str(i) for i in ip_addrs],
+    )
     return ui_server_cert_path(), ui_server_key_path()
 
 

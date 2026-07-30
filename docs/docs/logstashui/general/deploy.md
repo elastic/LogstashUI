@@ -32,7 +32,7 @@ Then browse to `https://<your_server_ip_or_hostname>:8443`.
 
 This is **embedded mode** — the default `simulation.mode` — which brings up two containers: **LogstashUI** (gunicorn HTTPS on **8443**) and **LogstashAgent** (uvicorn HTTPS on **9500**). There is **no nginx**. The mode is controlled by `simulation.mode` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md); leave it as `embedded` for this option.
 
-**HTTPS / product CA:** On first start, LogstashUI writes a product CA and a UI server certificate under `data/tls/` (`ui-server.crt` / `ui-server.key`). Gunicorn presents that cert on port **8443** (ports under 1000 would need root). Agents:
+**HTTPS / product CA:** On first start, LogstashUI writes a product CA and a UI server certificate under `data/tls/` (`ui-server.crt` / `ui-server.key`). Gunicorn presents that cert on port **8443** (ports under 1000 would need root). The product leaf SANs include `localhost`, `logstashui`, the Docker **host hostname**, and **all non-loopback host IPs** (injected by `start_logstashui.sh` as `LOGSTASHUI_HOST_*` / `LOGSTASHUI_TLS_SANS`, because the container cannot see the host LAN addresses by itself). Changing the Agent callback URL or those env SANs **re-issues** the product leaf on next startup (or Settings save); restart the UI container so gunicorn reloads the file. Agents:
 
 1. Bootstrap-fetch `https://…:8443/.well-known/logstashui/ca.crt` with **verify=False only for that GET**, then pin the CA (TOFU or enrollment-token fingerprint).
 2. Obtain a **product-CA-signed server cert** (CSR at enroll, re-issue on check-in, or compose `LOGSTASHUI_AGENT_CSR_SECRET`) and serve FastAPI over HTTPS on **9500**.

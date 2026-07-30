@@ -22,6 +22,7 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - **Product-CA-signed agent server certificates**: agents generate a local key + CSR; UI signs at **enroll**, **check-in re-issue** (upgrade without re-enroll), or `POST ConnectionManager/IssueServerCert/` (API key or `LOGSTASHUI_AGENT_CSR_SECRET` for compose/embedded).
 - **Dual HTTPS, no nginx**: UI gunicorn TLS on **8443** (`data/tls/ui-server.*`); agent uvicorn TLS on **9500**. Compose no longer runs an nginx service. Agents pull CA from `/.well-known/logstashui/ca.crt` (HTTPS-only bootstrap GET uses verify=False only for that request).
 - UI→agent HTTP clients use product CA ∪ system trust (`agent_requests_verify()`).
+- Product **UI leaf re-issues** when desired SANs change (callback URL, `LOGSTASHUI_TLS_SANS`, host hostname/IPs). Docker Compose / `start_logstashui.sh` inject **Docker host hostname and all non-loopback host IPs** into the UI container so remote clients can verify `https://<host-ip>:8443`.
 
 ### Changed
 

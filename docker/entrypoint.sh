@@ -68,20 +68,34 @@ echo "Syncing SNMP official data..."
 python manage.py sync_snmp_official_data --cleanup || echo "Warning: SNMP sync encountered an error but continuing startup"
 echo ""
 
-# Product CA + UI server cert for nginx (written under data/tls/; agents pull CA via well-known)
+# Product CA + UI server cert (data/tls/; SANs from host hostname/IPs via env + callback URL)
 echo "Ensuring product CA and UI server certificate..."
+echo "  LOGSTASHUI_HOST_HOSTNAME=${LOGSTASHUI_HOST_HOSTNAME:-}"
+echo "  LOGSTASHUI_HOST_IPS=${LOGSTASHUI_HOST_IPS:-}"
+echo "  LOGSTASHUI_TLS_SANS=${LOGSTASHUI_TLS_SANS:-}"
 python - <<'PY'
 import os
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
 django.setup()
-from Common.product_ca import ensure_default_ui_server_cert, get_ca_fingerprint, ui_server_cert_path
+from Common.product_ca import (
+    collect_desired_ui_sans,
+    ensure_default_ui_server_cert,
+    get_ca_fingerprint,
+    get_ui_tls_status,
+    ui_server_cert_path,
+)
 
+dns, ips = collect_desired_ui_sans()
+print(f"Desired SANs dns={dns} ips={[str(i) for i in ips]}")
 cert, key = ensure_default_ui_server_cert()
 print(f"UI server cert: {cert}")
 print(f"UI server key:  {key}")
 print(f"Product CA fingerprint: {get_ca_fingerprint()}")
+status = get_ui_tls_status()
+leaf = (status.get("certificate") or {})
+print(f"Leaf SANs: {leaf.get('sans')}")
 print(f"Agents fetch CA from /.well-known/logstashui/ca.crt (no shared volume)")
 assert ui_server_cert_path().is_file(), "ui-server.crt missing after ensure"
 PY

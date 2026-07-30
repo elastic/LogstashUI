@@ -64,6 +64,74 @@ fi
 echo "Using Docker Compose command: $DOCKER_COMPOSE"
 echo ""
 
+# ---------------------------------------------------------------------------
+# Host identity for product UI TLS SANs (containers cannot see Docker host IPs)
+# ---------------------------------------------------------------------------
+collect_host_tls_env() {
+    # Hostname / FQDN of the machine running Docker
+    local hn
+    hn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")
+    export LOGSTASHUI_HOST_HOSTNAME="${LOGSTASHUI_HOST_HOSTNAME:-$hn}"
+
+    # Collect non-loopback IPv4 addresses from the host
+    local ips=""
+    if command -v ip >/dev/null 2>&1; then
+        ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | tr '\n' ',' | sed 's/,$//')
+    fi
+    if [ -z "$ips" ] && command -v ifconfig >/dev/null 2>&1; then
+        # macOS / BSD ifconfig
+        ips=$(ifconfig 2>/dev/null | awk '/inet / && $2 != "127.0.0.1" {print $2}' | tr '\n' ',' | sed 's/,$//')
+    fi
+    # Optional: IPv6 global (skip link-local fe80:)
+    local ips6=""
+    if command -v ip >/dev/null 2>&1; then
+        ips6=$(ip -6 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -v '^fe80' | tr '\n' ',' | sed 's/,$//')
+    fi
+    if [ -n "$ips6" ]; then
+        if [ -n "$ips" ]; then
+            ips="${ips},${ips6}"
+        else
+            ips="$ips6"
+        fi
+    fi
+    export LOGSTASHUI_HOST_IPS="${LOGSTASHUI_HOST_IPS:-$ips}"
+
+    # Merge into TLS_SANS if operator did not set it
+    if [ -z "${LOGSTASHUI_TLS_SANS:-}" ]; then
+        local merged=""
+        [ -n "$LOGSTASHUI_HOST_HOSTNAME" ] && merged="$LOGSTASHUI_HOST_HOSTNAME"
+        if [ -n "$LOGSTASHUI_HOST_IPS" ]; then
+            if [ -n "$merged" ]; then
+                merged="${merged},${LOGSTASHUI_HOST_IPS}"
+            else
+                merged="$LOGSTASHUI_HOST_IPS"
+            fi
+        fi
+        export LOGSTASHUI_TLS_SANS="$merged"
+    fi
+
+    # Expand CSRF trusted origins for each host IP (browsers hit https://IP:8443)
+    local origins="${CSRF_TRUSTED_ORIGINS:-https://localhost:8443,https://127.0.0.1:8443}"
+    if [ -n "$LOGSTASHUI_HOST_HOSTNAME" ]; then
+        origins="${origins},https://${LOGSTASHUI_HOST_HOSTNAME}:8443"
+    fi
+    if [ -n "$LOGSTASHUI_HOST_IPS" ]; then
+        local IFS=','
+        for ip in $LOGSTASHUI_HOST_IPS; do
+            [ -n "$ip" ] && origins="${origins},https://${ip}:8443"
+        done
+        unset IFS
+    fi
+    export CSRF_TRUSTED_ORIGINS="$origins"
+
+    echo "Host TLS SAN injection for UI product cert:"
+    echo "  LOGSTASHUI_HOST_HOSTNAME=$LOGSTASHUI_HOST_HOSTNAME"
+    echo "  LOGSTASHUI_HOST_IPS=$LOGSTASHUI_HOST_IPS"
+    echo "  LOGSTASHUI_TLS_SANS=$LOGSTASHUI_TLS_SANS"
+    echo ""
+}
+collect_host_tls_env
+
 # Parse command line arguments
 REBUILD_FLAG=""
 UPDATE_MODE=0

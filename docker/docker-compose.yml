@@ -35,6 +35,12 @@ services:
       # Host mode: https://host.docker.internal:9501
       # Embedded: https://logstashagent:9500
       - LOGSTASH_AGENT_URL=${LOGSTASH_AGENT_URL:-https://logstashagent:9500}
+      # Host identity for product UI cert SANs (set by start_logstashui.sh or manually).
+      # Containers cannot see the Docker host's LAN IPs without this injection.
+      - LOGSTASHUI_HOST_HOSTNAME=${LOGSTASHUI_HOST_HOSTNAME:-}
+      - LOGSTASHUI_HOST_IPS=${LOGSTASHUI_HOST_IPS:-}
+      # Optional extra SANs: comma-separated DNS names and/or IPs
+      - LOGSTASHUI_TLS_SANS=${LOGSTASHUI_TLS_SANS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

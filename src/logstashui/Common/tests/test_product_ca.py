@@ -87,7 +87,7 @@ def test_product_ca_endpoint(client, tmp_path, settings):
 
 
 @pytest.mark.django_db
-def test_default_ui_server_cert_includes_compose_sans(tmp_path, settings):
+def test_default_ui_server_cert_includes_compose_sans(tmp_path, settings, monkeypatch):
     """Product default leaf must cover localhost and logstashui service name."""
     from Common import product_ca
 
@@ -95,6 +95,9 @@ def test_default_ui_server_cert_includes_compose_sans(tmp_path, settings):
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
     (tmp_path / "data").mkdir(exist_ok=True)
+    monkeypatch.delenv("LOGSTASHUI_TLS_SANS", raising=False)
+    monkeypatch.delenv("LOGSTASHUI_HOST_HOSTNAME", raising=False)
+    monkeypatch.delenv("LOGSTASHUI_HOST_IPS", raising=False)
 
     cert_path, key_path = product_ca.ensure_default_ui_server_cert()
     assert cert_path.is_file()
@@ -105,6 +108,46 @@ def test_default_ui_server_cert_includes_compose_sans(tmp_path, settings):
     assert "localhost" in dns
     assert "logstashui" in dns
     assert product_ca.get_ui_server_mode() == "product"
+
+
+@pytest.mark.django_db
+def test_ui_cert_includes_host_ips_and_reissues_on_san_change(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+    import ipaddress
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.LOGSTASHUI_CONFIG = {}
+
+    monkeypatch.setenv("LOGSTASHUI_HOST_HOSTNAME", "docker-host.example")
+    monkeypatch.setenv("LOGSTASHUI_HOST_IPS", "10.20.30.40,10.20.30.41")
+    monkeypatch.delenv("LOGSTASHUI_TLS_SANS", raising=False)
+
+    product_ca.ensure_default_ui_server_cert()
+    leaf = x509.load_pem_x509_certificate(product_ca.ui_server_cert_path().read_bytes())
+    ext = leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    dns = {n.value for n in ext.value if isinstance(n, x509.DNSName)}
+    ips = {n.value for n in ext.value if isinstance(n, x509.IPAddress)}
+    assert "docker-host.example" in dns
+    assert ipaddress.IPv4Address("10.20.30.40") in ips
+    assert ipaddress.IPv4Address("10.20.30.41") in ips
+    fp1 = product_ca.fingerprint_sha256_der(leaf)
+
+    # New host IP → must re-issue
+    monkeypatch.setenv("LOGSTASHUI_HOST_IPS", "10.20.30.40,10.20.30.41,10.20.30.99")
+    assert product_ca.product_ui_cert_needs_reissue() is True
+    product_ca.ensure_default_ui_server_cert()
+    leaf2 = x509.load_pem_x509_certificate(product_ca.ui_server_cert_path().read_bytes())
+    ips2 = {
+        n.value
+        for n in leaf2.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+        if isinstance(n, x509.IPAddress)
+    }
+    assert ipaddress.IPv4Address("10.20.30.99") in ips2
+    fp2 = product_ca.fingerprint_sha256_der(leaf2)
+    assert fp1 != fp2
 
 
 @pytest.mark.django_db
