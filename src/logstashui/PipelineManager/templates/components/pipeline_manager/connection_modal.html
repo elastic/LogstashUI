@@ -977,13 +977,33 @@ sudo systemctl enable logstash
         }
       }
       
-      // Add LogstashAgent installation commands
+      // Install is a full deploy: agent unit is enabled+started by install.
+      // Distro Logstash is enabled only (never bounced) for Packaged/live hosts.
+      const { policyType, logstashSource } = selectedAgentPolicyMeta();
+      let day2 = `# After install the agent service is already running.
+# Day-2 operations:
+#   sudo systemctl status logstash-agent
+#   sudo systemctl stop logstash-agent
+#   sudo systemctl start logstash-agent
+#   sudo journalctl -u logstash-agent -f`;
+      if (policyType === 'SIMULATE') {
+        day2 = `# After install the simulate agent unit is already enabled and started
+# (instance number N is shown in install output / UI connection).
+# Day-2 operations (replace N):
+#   sudo systemctl status lsagent-simulate@N
+#   sudo systemctl stop lsagent-simulate@N
+#   sudo systemctl start lsagent-simulate@N
+#   sudo journalctl -u lsagent-simulate@N -f
+# Logstash sim instance (enabled at install; restarted by agent when ready):
+#   sudo systemctl status ls-simulate@N`;
+      }
+
       commands += `# Install LogstashAgent
 curl -LO https://github.com/elastic/LogstashAgent/releases/download/v{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
 tar -xzf logstash-agent-linux-amd64.tar.gz
 sudo ./logstash-agent/logstash-agent install --enroll ${encodedToken} --logstash-ui-url ${currentUrl} --yes
-sudo systemctl enable logstash-agent
-sudo systemctl start logstash-agent`;
+
+${day2}`;
       
       // Update the commands
       linuxCommandsElement.innerHTML = `<code>${commands}</code>`;
