@@ -100,7 +100,7 @@ class Policy(models.Model):
     logstash_download_dir = models.CharField(
         max_length=512,
         blank=True,
-        default="/opt/LogstashAgent/logstash-versions",
+        default="/opt/logstash-agent/logstash-versions",
         help_text="Directory for auto-downloaded Logstash versions"
     )
     logstash_yml = models.TextField(
@@ -322,7 +322,7 @@ class Connection(models.Model):
     instance_id = models.PositiveIntegerField(
         blank=True,
         null=True,
-        help_text="Simulate instance number N (paths under /opt/LogstashAgent/simulate-N)"
+        help_text="Simulate instance number N (paths under /opt/logstash-agent/simulate-N)"
     )
     agent_api_port = models.PositiveIntegerField(
         blank=True,

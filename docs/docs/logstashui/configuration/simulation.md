@@ -24,7 +24,7 @@ sudo logstash-agent install \
 ```
 
 3. Enrollment allocates instance **N** and returns:
-   - Paths: `/opt/LogstashAgent/simulate-N/{settings,config,logs,data}`
+   - Paths: `/opt/logstash-agent/simulate-N/{settings,config,logs,data}`
    - Agent API port: **9500 + N**
    - Logstash API port: **9560 + N**
    - Units: `lsagent-simulate@N`, `ls-simulate@N`
@@ -41,7 +41,7 @@ You can run **default** and **simulate** agents on the same host; simulate never
 
 #### Multi-version testing
 
-Clone the Simulate Policy, set `logstash_source=VERSION` and a version (e.g. `9.4.3`). The agent downloads that release into `/opt/LogstashAgent/logstash-versions/` when materializing. Pick the instance in the editor to compare pipeline behavior across releases.
+Clone the Simulate Policy, set `logstash_source=VERSION` and a version (e.g. `9.4.3`). The agent downloads that release into `/opt/logstash-agent/logstash-versions/` when materializing. Pick the instance in the editor to compare pipeline behavior across releases.
 
 #### Keystore variables
 

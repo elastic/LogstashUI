@@ -5,7 +5,7 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 ### Added
 
 - Added policy **types**: `DEFAULT`, `SIMULATE`, and `EMBEDDED` (system seeds: Default Policy, Simulate Policy, Embedded Policy).
-- Added simulate enrollment payload: global instance id `N`, ports **agent `9500+N`**, **Logstash API `9560+N`**, paths under `/opt/LogstashAgent/simulate-N/`, unit names, and Logstash binary source metadata.
+- Added simulate enrollment payload: global instance id `N`, ports **agent `9500+N`**, **Logstash API `9560+N`**, paths under `/opt/logstash-agent/simulate-N/`, unit names, and Logstash binary source metadata.
 - Added cloneable Simulate policies (version source, JVM options, Logstash binary source **SYSTEM** vs **VERSION**).
 - Added policy create/edit UI fields for agent role, path bundle, binary source / version, and related simulate settings.
 - Added policy list **role color filtering** so Default / Simulate / Embedded policies are easy to scan.
@@ -23,6 +23,8 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - **Dual HTTPS, no nginx**: UI gunicorn TLS on **8443** (`data/tls/ui-server.*`); agent uvicorn TLS on **9500**. Compose no longer runs an nginx service. Agents pull CA from `/.well-known/logstashui/ca.crt` (HTTPS-only bootstrap GET uses verify=False only for that request).
 - UI→agent HTTP clients use product CA ∪ system trust (`agent_requests_verify()`).
 - Product **UI leaf re-issues** when desired SANs change (callback URL, `LOGSTASHUI_TLS_SANS`, host hostname/IPs). Docker Compose / `start_logstashui.sh` inject **Docker host hostname and all non-loopback host IPs** into the UI container so remote clients can verify `https://<host-ip>:8443`.
+- Connections modal: hide **Install Logstash** for **Embedded** policies and for **Simulate + VERSION** binary source (agent-managed download).
+- Sticky embedded sim connection (`agent_id=embedded-local`) rebinds host/ports from `LOGSTASH_AGENT_URL` and clears stale status when compose recreates the agent.
 
 ### Changed
 
@@ -30,6 +32,7 @@ Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version
 - `simulation.mode` in `logstashui.yml` remains for compose/legacy agent URL defaults and is documented as secondary to enrolled simulate agents.
 - Keystore sync before simulation requires a pipeline policy association (`ls_id`); secrets are only pushed when the target keystore differs from the source policy.
 - Labeled `simulation.mode: host` / `start_logstashui` native agent as a **legacy** local supervisor path; `sync_config.py` now writes `mode: embedded` + `simulation_mode: host` (no longer forces enrolled-style simulate vocabulary). Docs and nginx comments updated accordingly.
+- Simulate instance paths use **`/opt/logstash-agent/simulate-N/`** (and `logstash-versions` under the same root), not `/opt/LogstashAgent/…`.
 - `.gitignore` excludes local runtime data, personal `logstashui.yml`, and agentic scratch (`docs/superpowers/`, `.grokignore`).
 
 ### Upgrade notes

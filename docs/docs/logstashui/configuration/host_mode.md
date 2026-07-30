@@ -8,7 +8,7 @@
 |---------|-------------------|---------------------------|
 | **Reliability** | Weaker for large pipelines | Strong — native JVM/Logstash |
 | **Setup** | Compose only | Install LogstashAgent + enroll |
-| **Isolation** | Container | `/opt/LogstashAgent/simulate-N/` |
+| **Isolation** | Container | `/opt/logstash-agent/simulate-N/` |
 | **Multi-version** | Single image | Pin VERSION per policy / instance |
 | **Coexist with prod agent** | N/A | Yes, on the same host |
 
@@ -19,7 +19,7 @@
 - Root for `logstash-agent install --enroll …` (or non-root enroll + `sudo logstash-agent setup-simulate`)
 - Logstash binary available either:
   - **SYSTEM** — package or tarball already on the host, or
-  - **VERSION** — agent downloads from Elastic artifacts into `/opt/LogstashAgent/logstash-versions/`
+  - **VERSION** — agent downloads from Elastic artifacts into `/opt/logstash-agent/logstash-versions/`
 - Reachable LogstashUI URL from the agent host
 
 ## Install a simulate agent
@@ -49,11 +49,11 @@ For instance **N**:
 
 | Item | Location / value |
 |------|------------------|
-| Settings | `/opt/LogstashAgent/simulate-N/settings` |
-| Config | `/opt/LogstashAgent/simulate-N/config` |
-| Logs | `/opt/LogstashAgent/simulate-N/logs` |
-| Data | `/opt/LogstashAgent/simulate-N/data` |
-| Env (incl. keystore pass) | `/opt/LogstashAgent/simulate-N/env` |
+| Settings | `/opt/logstash-agent/simulate-N/settings` |
+| Config | `/opt/logstash-agent/simulate-N/config` |
+| Logs | `/opt/logstash-agent/simulate-N/logs` |
+| Data | `/opt/logstash-agent/simulate-N/data` |
+| Env (incl. keystore pass) | `/opt/logstash-agent/simulate-N/env` |
 | Agent FastAPI | **9500 + N** |
 | Logstash HTTP API | **9560 + N** |
 | Agent unit | `lsagent-simulate@N` |
@@ -76,7 +76,7 @@ Embedded Docker remains **9500 / 9560** and does not use these paths.
 - `bin/sync_config.py` writes `mode: embedded` + `simulation_mode: host` (not enrolled `mode: simulate`)
 - Compose runs UI + nginx only; nginx proxies to `host.docker.internal:9501`
 
-This path is **legacy**. It is not the same as `lsagent-simulate@N` / isolated `/opt/LogstashAgent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
+This path is **legacy**. It is not the same as `lsagent-simulate@N` / isolated `/opt/logstash-agent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
 
 ## Related
 

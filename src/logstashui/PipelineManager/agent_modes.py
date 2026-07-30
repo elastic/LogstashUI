@@ -15,7 +15,7 @@ EMBEDDED_AGENT_API_PORT = 9500
 EMBEDDED_LOGSTASH_API_PORT = 9560
 SIMULATE_AGENT_API_BASE = 9500
 SIMULATE_LOGSTASH_API_BASE = 9560
-SIMULATE_ROOT = "/opt/LogstashAgent"
+SIMULATE_ROOT = "/opt/logstash-agent"
 
 
 def next_simulate_instance_id() -> int:
@@ -175,28 +175,19 @@ def ensure_embedded_connection() -> Connection | None:
             agent_id="embedded-local",
         ).first()
         if conn:
-            changed = False
-            if conn.host != host:
-                conn.host = host
-                changed = True
-            if conn.agent_api_port != port:
-                conn.agent_api_port = port
-                changed = True
-            if conn.logstash_api_port != EMBEDDED_LOGSTASH_API_PORT:
-                conn.logstash_api_port = EMBEDDED_LOGSTASH_API_PORT
-                changed = True
-            if not conn.is_active:
-                conn.is_active = True
-                changed = True
-            if changed:
-                # Avoid full_clean requiring extra AGENT fields incorrectly
-                Connection.objects.filter(pk=conn.pk).update(
-                    host=conn.host,
-                    agent_api_port=conn.agent_api_port,
-                    logstash_api_port=conn.logstash_api_port,
-                    is_active=True,
-                )
-                conn.refresh_from_db()
+            # Sticky pseudo-connection: always re-bind host/ports from current
+            # LOGSTASH_AGENT_URL so a recreated compose agent re-attaches without
+            # re-enrollment. Clear stale status so health is re-probed.
+            Connection.objects.filter(pk=conn.pk).update(
+                name="embedded",
+                host=host,
+                agent_api_port=port,
+                logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
+                is_active=True,
+                policy=policy,
+                status_blob={},
+            )
+            conn.refresh_from_db()
             return conn
 
         # Create without triggering full_clean encryption issues when possible
@@ -209,6 +200,7 @@ def ensure_embedded_connection() -> Connection | None:
             policy=policy,
             agent_api_port=port,
             logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
+            status_blob={},
         )
         # full_clean requires host for AGENT — we have it
         conn.save()

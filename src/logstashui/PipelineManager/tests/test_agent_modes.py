@@ -85,8 +85,8 @@ def test_simulate_ports_formula():
 
 def test_simulate_paths():
     p = simulate_paths(1)
-    assert p['settings_path'] == '/opt/LogstashAgent/simulate-1/settings'
-    assert p['keystore_env_file'] == '/opt/LogstashAgent/simulate-1/env'
+    assert p['settings_path'] == '/opt/logstash-agent/simulate-1/settings'
+    assert p['keystore_env_file'] == '/opt/logstash-agent/simulate-1/env'
 
 
 def test_next_instance_id_skips_used(db, system_policies):
@@ -242,14 +242,24 @@ def test_clone_simulate_policy(admin_client, system_policies):
     assert clone.cloned_from_id == simulate.id
 
 
-def test_ensure_embedded_connection(system_policies):
+def test_ensure_embedded_connection(system_policies, settings):
+    settings.LOGSTASH_AGENT_URL = 'https://logstashagent:9500'
     conn = ensure_embedded_connection()
     assert conn is not None
     assert conn.agent_id == 'embedded-local'
     assert conn.policy.policy_type == Policy.PolicyType.EMBEDDED
-    # idempotent
+    assert conn.host == 'logstashagent'
+    assert conn.agent_api_port == 9500
+    # sticky: same row, host rebound, status cleared on re-ensure
+    Connection.objects.filter(pk=conn.pk).update(
+        host='stale-host',
+        status_blob={'online': False, 'stale': True},
+    )
+    settings.LOGSTASH_AGENT_URL = 'https://logstashagent:9500'
     conn2 = ensure_embedded_connection()
     assert conn2.id == conn.id
+    assert conn2.host == 'logstashagent'
+    assert conn2.status_blob in ({}, None) or conn2.status_blob == {}
 
 
 def test_list_targets_includes_embedded(system_policies):

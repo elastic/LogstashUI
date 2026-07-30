@@ -254,12 +254,13 @@
                 <div id="linuxCommandsSection" class="mb-4 hidden">
                   <label class="form-label mb-2 block">Linux</label>
                   
-                  <!-- Install Logstash Checkbox -->
-                  <div class="mb-3">
+                  <!-- Install Logstash Checkbox (DEFAULT / SIMULATE+SYSTEM only; hidden for EMBEDDED and SIMULATE+VERSION) -->
+                  <div id="installLogstashRow" class="mb-3">
                     <label class="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" id="installLogstashCheckbox" class="checkbox checkbox-sm">
                       <span class="text-sm text-gray-300">Install Logstash</span>
                     </label>
+                    <p id="installLogstashHint" class="hidden text-xs text-gray-500 mt-1 ml-6"></p>
                   </div>
                   
                   <!-- Package Manager Selection (shown when Install Logstash is checked) -->
@@ -544,6 +545,8 @@ sudo systemctl start logstash-agent</code></pre>
             option.value = policy.name.toLowerCase();
             option.textContent = policy.name;
             option.dataset.policyId = policy.id;
+            option.dataset.policyType = policy.policy_type || 'DEFAULT';
+            option.dataset.logstashSource = policy.logstash_source || 'SYSTEM';
             
             // Insert before "+ Add Agent Policy" option
             agentPolicySelect.insertBefore(option, addNewOption);
@@ -637,9 +640,18 @@ sudo systemctl start logstash-agent</code></pre>
         // Load enrollment tokens for selected policy
         const selectedOption = this.options[this.selectedIndex];
         const policyId = selectedOption.dataset.policyId;
+        syncInstallLogstashVisibility();
         
         if (policyId) {
           await loadEnrollmentTokens(policyId);
+        }
+        // Refresh command snippet if a token is already selected
+        const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+        if (enrollmentTokenSelect && enrollmentTokenSelect.selectedIndex >= 0) {
+          const tok = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+          if (tok && tok.dataset.encodedToken) {
+            updateLinuxCommands(tok.dataset.encodedToken);
+          }
         }
       } else {
         // Clear enrollment token dropdown and hide Linux commands when no policy is selected
@@ -817,6 +829,60 @@ sudo systemctl start logstash-agent</code></pre>
     });
   }
   
+  /** Whether "Install Logstash" belongs in the enroll snippet for the selected policy. */
+  function shouldOfferInstallLogstash() {
+    const agentPolicySelect = document.getElementById('agentPolicy');
+    if (!agentPolicySelect || agentPolicySelect.selectedIndex < 0) {
+      return true; // default / unknown → show (DEFAULT-like)
+    }
+    const opt = agentPolicySelect.options[agentPolicySelect.selectedIndex];
+    const policyType = (opt.dataset.policyType || 'DEFAULT').toUpperCase();
+    const logstashSource = (opt.dataset.logstashSource || 'SYSTEM').toUpperCase();
+    if (policyType === 'EMBEDDED') {
+      return false;
+    }
+    if (policyType === 'SIMULATE' && logstashSource === 'VERSION') {
+      return false;
+    }
+    return true;
+  }
+
+  function syncInstallLogstashVisibility() {
+    const row = document.getElementById('installLogstashRow');
+    const checkbox = document.getElementById('installLogstashCheckbox');
+    const pkgSection = document.getElementById('packageManagerSection');
+    const hint = document.getElementById('installLogstashHint');
+    const offer = shouldOfferInstallLogstash();
+    if (row) {
+      if (offer) {
+        row.classList.remove('hidden');
+      } else {
+        row.classList.add('hidden');
+        if (checkbox) checkbox.checked = false;
+        if (pkgSection) pkgSection.classList.add('hidden');
+      }
+    }
+    if (hint) {
+      if (!offer) {
+        const agentPolicySelect = document.getElementById('agentPolicy');
+        const opt = agentPolicySelect && agentPolicySelect.options[agentPolicySelect.selectedIndex];
+        const policyType = (opt && opt.dataset.policyType || '').toUpperCase();
+        const logstashSource = (opt && opt.dataset.logstashSource || '').toUpperCase();
+        if (policyType === 'EMBEDDED') {
+          hint.textContent = 'Embedded agents use the container Logstash; package install is not used.';
+        } else if (policyType === 'SIMULATE' && logstashSource === 'VERSION') {
+          hint.textContent = 'This Simulate policy uses a VERSION Logstash binary (agent download), not the OS package.';
+        } else {
+          hint.textContent = '';
+        }
+        // Keep hint only if we show something when row is hidden — optional, leave hidden with row
+        hint.classList.add('hidden');
+      } else {
+        hint.classList.add('hidden');
+      }
+    }
+  }
+
   // Function to update Linux commands with enrollment token
   function updateLinuxCommands(encodedToken) {
     const linuxCommandsElement = document.getElementById('linuxCommands');
@@ -824,6 +890,8 @@ sudo systemctl start logstash-agent</code></pre>
     const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
     const packageManagerRadio = document.querySelector('input[name="package_manager"]:checked');
     const customUrlInput = document.getElementById('customLogstashUIUrl');
+
+    syncInstallLogstashVisibility();
     
     if (linuxCommandsElement) {
       // Get the URL to use - custom input takes precedence over browser URL
@@ -846,8 +914,12 @@ sudo systemctl start logstash-agent</code></pre>
       // Build the commands
       let commands = '';
       
-      // Add Logstash installation commands if checkbox is checked
-      if (installLogstashCheckbox && installLogstashCheckbox.checked) {
+      // Add Logstash installation commands if checkbox is checked and policy allows it
+      if (
+        shouldOfferInstallLogstash() &&
+        installLogstashCheckbox &&
+        installLogstashCheckbox.checked
+      ) {
         const packageManager = packageManagerRadio ? packageManagerRadio.value : 'apt';
         
         if (packageManager === 'apt') {

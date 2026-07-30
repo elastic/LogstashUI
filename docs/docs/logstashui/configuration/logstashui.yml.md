@@ -91,7 +91,7 @@ logstash_agent:
   - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat`
 
 - **`logstash_settings`** / **`logstash_log_path`** - Package paths for the legacy local agent only  
-  Enrolled simulate instances use `/opt/LogstashAgent/simulate-N/` instead.
+  Enrolled simulate instances use `/opt/logstash-agent/simulate-N/` instead.
 
 > **IMPORTANT:** Prefer **enrolled Simulate** agents. The legacy `simulation.mode: host` start path lets the local agent manage package Logstash via supervisor; do not point it at production pipelines.
 

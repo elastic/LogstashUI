@@ -19,7 +19,7 @@ When LogstashAgent is installed as a system service (`logstash-agent install`), 
 
 Adjust SYSTEM paths if Logstash is nonstandard; for default agents run `sudo logstash-agent configure` after installing Logstash late, then restart the service.
 
-Simulate instances also use `/opt/LogstashAgent/simulate-N/` and units `lsagent-simulate@N` / `ls-simulate@N`.
+Simulate instances also use `/opt/logstash-agent/simulate-N/` and units `lsagent-simulate@N` / `ls-simulate@N`.
 
 ---
 

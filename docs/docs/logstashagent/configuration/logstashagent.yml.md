@@ -46,11 +46,11 @@ mode: simulate
 instance_id: 1
 port: 9501                 # agent FastAPI = 9500 + N
 logstash_api_port: 9561    # 9560 + N
-logstash_settings: /opt/LogstashAgent/simulate-1/settings
-logstash_log_path: /opt/LogstashAgent/simulate-1/logs
+logstash_settings: /opt/logstash-agent/simulate-1/settings
+logstash_log_path: /opt/logstash-agent/simulate-1/logs
 logstash_source: SYSTEM    # or VERSION
 logstash_version: "9.4.3"  # when VERSION
-logstash_download_dir: /opt/LogstashAgent/logstash-versions
+logstash_download_dir: /opt/logstash-agent/logstash-versions
 ```
 
 ## FastAPI (simulate / embedded)

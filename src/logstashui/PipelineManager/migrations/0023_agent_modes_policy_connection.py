@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='connection',
             name='instance_id',
-            field=models.PositiveIntegerField(blank=True, help_text='Simulate instance number N (paths under /opt/LogstashAgent/simulate-N)', null=True),
+            field=models.PositiveIntegerField(blank=True, help_text='Simulate instance number N (paths under /opt/logstash-agent/simulate-N)', null=True),
         ),
         migrations.AddField(
             model_name='connection',
@@ -69,7 +69,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='policy',
             name='logstash_download_dir',
-            field=models.CharField(blank=True, default='/opt/LogstashAgent/logstash-versions', help_text='Directory for auto-downloaded Logstash versions', max_length=512),
+            field=models.CharField(blank=True, default='/opt/logstash-agent/logstash-versions', help_text='Directory for auto-downloaded Logstash versions', max_length=512),
         ),
         migrations.AddField(
             model_name='policy',

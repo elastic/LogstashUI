@@ -1649,7 +1649,7 @@ async function loadPolicyData(policyValue) {
                 const versionEl = document.getElementById('logstashVersion');
                 if (versionEl) versionEl.value = policy.logstash_version || '';
                 const downloadEl = document.getElementById('logstashDownloadDir');
-                if (downloadEl) downloadEl.value = policy.logstash_download_dir || '/opt/LogstashAgent/logstash-versions';
+                if (downloadEl) downloadEl.value = policy.logstash_download_dir || '/opt/logstash-agent/logstash-versions';
                 const agentPortEl = document.getElementById('agentApiPort');
                 if (agentPortEl) agentPortEl.value = policy.agent_api_port ?? 9500;
                 const lsPortEl = document.getElementById('logstashApiPort');

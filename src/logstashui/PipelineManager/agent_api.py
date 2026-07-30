@@ -506,7 +506,7 @@ def check_in(request):
             "logstash_source": getattr(policy, "logstash_source", None) or "SYSTEM",
             "logstash_version": getattr(policy, "logstash_version", None) or "",
             "logstash_download_dir": getattr(policy, "logstash_download_dir", None)
-            or "/opt/LogstashAgent/logstash-versions",
+            or "/opt/logstash-agent/logstash-versions",
             "restart": should_restart,
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
@@ -600,7 +600,7 @@ def get_config_changes(request):
         policy_version = getattr(policy, "logstash_version", None) or ""
         policy_download_dir = (
             getattr(policy, "logstash_download_dir", None)
-            or "/opt/LogstashAgent/logstash-versions"
+            or "/opt/logstash-agent/logstash-versions"
         )
         runtime_changed = (
             agent_logstash_source != policy_source
