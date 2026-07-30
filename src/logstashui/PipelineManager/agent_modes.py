@@ -16,6 +16,18 @@ EMBEDDED_LOGSTASH_API_PORT = 9560
 SIMULATE_AGENT_API_BASE = 9500
 SIMULATE_LOGSTASH_API_BASE = 9560
 SIMULATE_ROOT = "/opt/logstash-agent"
+# Legacy path (pre-rename); rewrite on read so enroll never re-creates /opt/LogstashAgent
+_LEGACY_SIMULATE_ROOT = "/opt/LogstashAgent"
+
+
+def normalize_agent_opt_path(path: str | None) -> str:
+    """Map /opt/LogstashAgent/... → /opt/logstash-agent/... (and leave other paths alone)."""
+    if not path:
+        return ""
+    p = str(path)
+    if p.startswith(_LEGACY_SIMULATE_ROOT):
+        return SIMULATE_ROOT + p[len(_LEGACY_SIMULATE_ROOT) :]
+    return p.replace(_LEGACY_SIMULATE_ROOT, SIMULATE_ROOT)
 
 
 def next_simulate_instance_id() -> int:
@@ -87,7 +99,9 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "keystore_env_file": policy.keystore_env_file or "",
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
-            "logstash_download_dir": policy.logstash_download_dir or "",
+            "logstash_download_dir": normalize_agent_opt_path(
+                policy.logstash_download_dir or f"{SIMULATE_ROOT}/logstash-versions"
+            ),
             "logstash_yml": materialize_simulate_logstash_yml(
                 policy.logstash_yml, EMBEDDED_LOGSTASH_API_PORT
             ),
@@ -101,6 +115,12 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         paths = simulate_paths(instance_id)
         agent_port, ls_port = simulate_ports(instance_id)
         yml = materialize_simulate_logstash_yml(policy.logstash_yml, ls_port)
+        # Always use code-derived path roots (never stale DB /opt/LogstashAgent templates)
+        download_dir = normalize_agent_opt_path(
+            policy.logstash_download_dir or f"{SIMULATE_ROOT}/logstash-versions"
+        )
+        if not download_dir:
+            download_dir = f"{SIMULATE_ROOT}/logstash-versions"
         return {
             "policy_type": policy.policy_type,
             "instance_id": instance_id,
@@ -108,14 +128,13 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "config_path": paths["config_path"],
             "logs_path": paths["logs_path"],
             "data_path": paths["data_path"],
-            "binary_path": policy.binary_path,
+            "binary_path": normalize_agent_opt_path(policy.binary_path) or policy.binary_path,
             "agent_api_port": agent_port,
             "logstash_api_port": ls_port,
             "keystore_env_file": paths["keystore_env_file"],
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
-            "logstash_download_dir": policy.logstash_download_dir
-            or f"{SIMULATE_ROOT}/logstash-versions",
+            "logstash_download_dir": download_dir,
             "logstash_unit": f"ls-simulate@{instance_id}",
             "agent_unit": f"lsagent-simulate@{instance_id}",
             "logstash_yml": yml,
@@ -123,7 +142,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "log4j2_properties": policy.log4j2_properties,
         }
 
-    # DEFAULT
+    # DEFAULT / PACKAGED
     return {
         "policy_type": policy.policy_type,
         "settings_path": policy.settings_path,
@@ -135,7 +154,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         "keystore_env_file": policy.keystore_env_file or "/etc/default/logstash",
         "logstash_source": policy.logstash_source,
         "logstash_version": policy.logstash_version or "",
-        "logstash_download_dir": policy.logstash_download_dir or "",
+        "logstash_download_dir": normalize_agent_opt_path(policy.logstash_download_dir or ""),
         "logstash_yml": policy.logstash_yml,
         "jvm_options": policy.jvm_options,
         "log4j2_properties": policy.log4j2_properties,

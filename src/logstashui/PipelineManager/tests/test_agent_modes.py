@@ -264,6 +264,34 @@ def test_ensure_embedded_connection(system_policies, settings, monkeypatch):
     assert conn2.last_check_in is not None
 
 
+def test_normalize_agent_opt_path():
+    from PipelineManager.agent_modes import normalize_agent_opt_path, SIMULATE_ROOT
+
+    assert normalize_agent_opt_path("/opt/LogstashAgent/simulate-1/settings") == (
+        f"{SIMULATE_ROOT}/simulate-1/settings"
+    )
+    assert normalize_agent_opt_path("/opt/logstash-agent/logstash-versions") == (
+        f"{SIMULATE_ROOT}/logstash-versions"
+    )
+    assert normalize_agent_opt_path("/usr/share/logstash") == "/usr/share/logstash"
+
+
+def test_build_policy_config_rewrites_legacy_download_dir(system_policies):
+    from PipelineManager.agent_modes import build_policy_config
+    from PipelineManager.models import Policy
+
+    sim = Policy.objects.filter(policy_type=Policy.PolicyType.SIMULATE).first()
+    assert sim is not None
+    # Stale DB value from pre-rename seed
+    Policy.objects.filter(pk=sim.pk).update(
+        logstash_download_dir="/opt/LogstashAgent/logstash-versions"
+    )
+    sim.refresh_from_db()
+    cfg = build_policy_config(sim, instance_id=1)
+    assert cfg["logstash_download_dir"] == "/opt/logstash-agent/logstash-versions"
+    assert cfg["settings_path"].startswith("/opt/logstash-agent/simulate-1")
+
+
 def test_list_targets_includes_embedded(system_policies):
     targets = list_simulation_targets(ensure_embedded=True)
     assert any(t['policy_type'] == 'EMBEDDED' for t in targets)
