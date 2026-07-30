@@ -231,6 +231,29 @@ Allowed units include:
 
 ---
 
+## E2E smoke
+
+From the LogstashUI repo (sibling `LogstashAgent` checkout expected):
+
+```bash
+# Agent offline suite (no docker)
+./bin/smoke_agent_modes.sh --offline
+
+# HTTPS health + Django enroll smoke + agent offline
+./bin/smoke_agent_modes.sh
+
+# Rebuild UI/agent smoke images (applies migrations including PACKAGED/MANAGED), then smoke
+./bin/smoke_agent_modes.sh --rebuild
+```
+
+What it checks:
+
+| Phase | Coverage |
+|-------|----------|
+| Offline pytest | Coexistence configs, registry, materialize managed/simulate, VERSION prune, unit templates |
+| HTTPS | UI product CA `:8443`, embedded agent `:9500` |
+| Django | System policies, `build_policy_config`, enroll PACKAGED/MANAGED/SIMULATE, reject EMBEDDED, VERSION fields |
+
 ## Related docs
 
 - [logstashagent.yml](/docs/docs/logstashagent/configuration/logstashagent.yml.md) — file schema
