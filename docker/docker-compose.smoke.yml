@@ -1,0 +1,18 @@
+# Local smoke override: build from source instead of Docker Hub images.
+# Usage (from docker/):
+#   docker compose -f docker-compose.yml -f docker-compose.smoke.yml --profile embedded up -d --build
+
+services:
+  logstashui:
+    image: logstashui:smoke
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    pull_policy: never
+
+  logstashagent:
+    image: logstash-agent:smoke
+    build:
+      context: ../../LogstashAgent
+      dockerfile: docker/Dockerfile
+    pull_policy: never
