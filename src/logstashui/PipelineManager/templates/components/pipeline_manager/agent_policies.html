@@ -721,9 +721,9 @@
         </div>
       </div>
 
-      <!-- Simulate-oriented fields -->
+      <!-- Simulate / Managed binary source fields -->
       <div id="simulatePolicyFields" class="hidden border border-purple-500/30 rounded-lg p-3 space-y-3 bg-purple-950/20">
-        <div class="text-sm font-medium text-purple-300">Logstash binary source (simulate)</div>
+        <div class="text-sm font-medium text-purple-300">Logstash binary source (simulate / managed)</div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-300 mb-1">Source:</label>
@@ -741,6 +741,17 @@
             <input type="text" id="logstashDownloadDir" value="/opt/logstash-agent/logstash-versions" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
           </div>
         </div>
+        <p id="versionLifecycleHint" class="hidden text-xs text-cyan-200/90 bg-cyan-950/30 border border-cyan-500/25 rounded px-2 py-1.5">
+          <strong class="text-cyan-100">VERSION lifecycle:</strong>
+          Save this policy — enrolled agents download the pin on the next check-in
+          (no separate Deploy needed for binary-only changes), write
+          <code class="text-cyan-100">LOGSTASH_BINARY</code> into the instance env,
+          and restart Logstash when the binary path changes.
+          Host cache: <code class="text-cyan-100">/opt/logstash-agent/logstash-versions</code>
+          (<code class="text-cyan-100">logstash-agent list-versions</code> /
+          <code class="text-cyan-100">ensure-version</code> /
+          <code class="text-cyan-100">prune-versions</code>).
+        </p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-300 mb-1">Default agent API port:</label>

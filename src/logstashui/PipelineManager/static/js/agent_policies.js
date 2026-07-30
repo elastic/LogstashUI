@@ -1592,6 +1592,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const dl = document.getElementById('logstashDownloadDir');
         if (ver && !ver.disabled) ver.placeholder = showVersion ? 'e.g. 9.4.3' : '(only when source is VERSION)';
         if (dl && !dl.disabled) { /* keep value */ }
+        const hint = document.getElementById('versionLifecycleHint');
+        if (hint) {
+            hint.classList.toggle('hidden', !showVersion);
+        }
     }
 
     window.applyPolicyFieldEditability = applyPolicyFieldEditability;

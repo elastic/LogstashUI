@@ -603,13 +603,17 @@ def get_config_changes(request):
         changes["logs_path"] = policy.logs_path if agent_logs_path != policy.logs_path else False
         changes["binary_path"] = policy.binary_path if agent_binary_path != policy.binary_path else False
 
-        # Desired Logstash runtime for simulate VERSION/SYSTEM switches
+        # Desired Logstash runtime for simulate/managed VERSION/SYSTEM switches
         policy_source = (getattr(policy, "logstash_source", None) or "SYSTEM").upper()
         policy_version = getattr(policy, "logstash_version", None) or ""
         policy_download_dir = (
             getattr(policy, "logstash_download_dir", None)
             or "/opt/logstash-agent/logstash-versions"
         )
+        if policy_download_dir.startswith("/opt/LogstashAgent"):
+            policy_download_dir = "/opt/logstash-agent" + policy_download_dir[
+                len("/opt/LogstashAgent") :
+            ]
         runtime_changed = (
             agent_logstash_source != policy_source
             or (policy_source == "VERSION" and agent_logstash_version != policy_version)
