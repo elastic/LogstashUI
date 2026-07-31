@@ -1,3 +1,32 @@
+## [0.5.2] - Packaged / Managed roles, host coexistence, dual HTTPS polish - 07/30/2026
+
+Package version is **0.5.2** (`pyproject.toml`). Preferred LogstashAgent version for upgrade prompts is **0.5.2**.
+
+### Added
+
+- Added policy types **PACKAGED** and **MANAGED** (DEFAULT is a legacy alias of PACKAGED). System seeds: **Packaged Policy**, **Managed Policy**, plus existing Simulate / Embedded.
+- Migration **0025** renames Default → Packaged where free, seeds Managed Policy, and rewrites `DEFAULT` rows to `PACKAGED`.
+- Clone **Packaged → Managed** applies `managed-{instance_id}` path templates automatically.
+- Managed enroll allocates instance **N**, ports **agent `9600+N`** / **Logstash `9700+N`**, paths under `/opt/logstash-agent/managed-N/`, units `logstash-agent@N` / `logstash-managed@N`.
+- Policy UI: Packaged / Managed filter chips, badges, banners; VERSION lifecycle hint (check-in apply, no Deploy required for binary-only pin changes).
+- Connection enroll snippet: policy-aware day-2 units for Packaged / Managed / Simulate; coexistence notes; `list-instances` / `uninstall --instance`.
+- Operator guide: **[Agent roles, ports, coexistence, and VERSION](docs/docs/logstashagent/general/roles.md)**.
+- E2E smoke: `bin/smoke_agent_modes.sh` (HTTPS health, Django enroll smoke, sibling agent offline pytest). Rebuild with `--rebuild` for latest migrations/images.
+
+### Changed
+
+- Role filter vocabulary is Packaged / Managed / Simulate / Embedded (Default chip maps to Packaged).
+- Enroll Linux snippet remains install-only (no trailing enable/start); day-2 ops are comments.
+- Dual HTTPS docs and deploy notes: UI **:8443**, agent **:9500**, no nginx; host SAN injection for product UI cert.
+
+### Upgrade notes
+
+- Pair with **LogstashAgent 0.5.2** (or later on `feat/agent-modes`) for Managed units, install registry, VERSION CLI, and coexistence.
+- Run migrations through **`0025_packaged_managed_policy_types`** (or rebuild compose so entrypoint migrates).
+- Existing **DEFAULT** policies normalize to **PACKAGED**; re-enroll is **not** required for production agents already on the system.
+- For multi-instance production trees, use **Managed Policy** (or clone Packaged → Managed). For pipeline sim, keep **Simulate** enrollments.
+- Host with both Packaged and multi-instance agents: see roles guide — state/config are isolated per role.
+
 ## [0.5.1] - Agent roles (default / simulate / embedded) and multi-target simulation - 07/29/2026
 
 Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version for upgrade prompts is **0.5.1**.

@@ -2,7 +2,7 @@
 
 LogstashAgent and LogstashUI use **policy types** and matching **agent modes** so one Linux host can run production Logstash and one or more isolated multi-instance agents without sharing state or config.
 
-> **Paired releases:** Prefer matching LogstashUI and LogstashAgent minor versions (see [Compatibility](/docs/docs/logstashui/compatibility.md)).
+> **Paired releases:** LogstashUI **0.5.2** ↔ LogstashAgent **0.5.2** (see [Compatibility](/docs/docs/logstashui/compatibility.md) and [CHANGELOG](https://github.com/elastic/LogstashUI/blob/main/CHANGELOG.md)).
 
 ---
 
