@@ -27,8 +27,7 @@ Logstash Agent is versioned alongside LogstashUI. When updating LogstashUI, upda
 
 | LogstashUI | Preferred LogstashAgent |
 |------------|-------------------------|
-| 0.5.2      | 0.5.2 (Packaged/Managed/Simulate, multi-instance units, install registry, VERSION CLI, host coexistence, dual HTTPS) |
-| 0.5.1      | 0.5.1 (simulate roles, VERSION apply, keystore sync) |
+| 0.5.1      | 0.5.1 (Packaged/Managed/Simulate, multi-instance, install registry, VERSION, dual HTTPS, NMS) |
 | 0.5.0      | 0.5.0 |
 
 See **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)** for current agent layout.  

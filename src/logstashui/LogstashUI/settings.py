@@ -64,7 +64,7 @@ def _get_version():
         return "0.0.0+unknown"
 
 __VERSION__ = _get_version()
-__PREFERRED_LS_AGENT_VERSION__ = "0.5.2"
+__PREFERRED_LS_AGENT_VERSION__ = "0.5.1"
 
 # Application definition
 
