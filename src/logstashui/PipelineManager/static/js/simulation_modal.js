@@ -592,16 +592,37 @@ if (typeof closeSimulationModal === 'function') {
 }
 
 // Prefer warm slot from page-load prealloc when available (skip a full re-allocate).
-// Slot must belong to the *currently selected* sim agent — host slot ≠ embedded slot.
+// Slot must belong to the *currently selected* sim agent — embedded slot-1 ≠ simulate-N slot-1.
+const currentSimConn =
+  (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+  null;
 let sessionSlotId =
   typeof window.getWarmSessionSlotForCurrentTarget === 'function'
     ? window.getWarmSessionSlotForCurrentTarget()
-    : window.simulationSessionSlotId ||
-      window.currentSlotId ||
-      (typeof currentSlotId !== 'undefined' ? currentSlotId : null) ||
-      null;
+    : null;
 
-// If target-switch warm is still running, join it — do NOT start a second cold allocate
+// Belt-and-suspenders: if anything still points at another agent's slot, drop it.
+if (
+  sessionSlotId &&
+  currentSimConn &&
+  window.simulationSessionConnectionId &&
+  String(window.simulationSessionConnectionId) !== String(currentSimConn)
+) {
+  console.warn(
+    '[FE->BE] Dropping cross-node session slot',
+    sessionSlotId,
+    'from',
+    window.simulationSessionConnectionId,
+    '→ current',
+    currentSimConn
+  );
+  if (typeof window.clearSimulationSessionSlot === 'function') {
+    window.clearSimulationSessionSlot('cross-node reject on Run');
+  }
+  sessionSlotId = null;
+}
+
+// If target-switch warm is still running on *this* agent, join it.
 if (
   !sessionSlotId &&
   typeof window.isSlotWarmInFlightForCurrentTarget === 'function' &&
@@ -612,10 +633,14 @@ if (
   if (typeof window.setPipelineSlotChip === 'function') {
     window.setPipelineSlotChip('warming', {
       title: 'Waiting for slot allocate already in progress…',
+      warmLabel: 'Warming…',
     });
   }
   try {
-    sessionSlotId = await window.warmSlotForCurrentTarget({ showWarming: true });
+    sessionSlotId = await window.warmSlotForCurrentTarget({
+      showWarming: true,
+      connectionId: currentSimConn,
+    });
   } catch (e) {
     console.error('[FE->BE] join in-flight warm failed', e);
     sessionSlotId = null;
@@ -627,16 +652,19 @@ if (sessionSlotId) {
     '[FE->BE] Using pre-warmed session slot',
     sessionSlotId,
     'on connection',
-    window.simulationSessionConnectionId || window.getSimConnectionId?.(),
+    window.simulationSessionConnectionId || currentSimConn,
     '(skip allocate on Run)'
   );
 }
 
 if (!sessionSlotId) {
-  // No warm and nothing in flight — allocate now (single path via warmSlot when available)
+  // No warm on *this* node — allocate now (never reuse another node's slot id).
   if (typeof window.setPipelineSlotChip === 'function') {
     window.setPipelineSlotChip('warming', {
-      title: 'Preparing simulation slot…',
+      title: currentSimConn
+        ? `Preparing simulation slot on agent ${currentSimConn}…`
+        : 'Preparing simulation slot…',
+      warmLabel: 'Preparing…',
     });
   } else {
     const statusContainer = document.getElementById('pipelineLoadStatus');
@@ -649,7 +677,12 @@ if (!sessionSlotId) {
   }
   try {
     if (typeof window.warmSlotForCurrentTarget === 'function') {
-      sessionSlotId = await window.warmSlotForCurrentTarget({ showWarming: true });
+      sessionSlotId = await window.warmSlotForCurrentTarget({
+        showWarming: true,
+        forceNew: true,
+        preferCache: false,
+        connectionId: currentSimConn,
+      });
     } else {
       sessionSlotId = await allocateSessionSlot(window.simulationComponents);
     }
@@ -666,9 +699,11 @@ if (!sessionSlotId) {
 }
 
 if (typeof window.rememberSimulationSessionSlot === 'function') {
-  window.rememberSimulationSessionSlot(sessionSlotId);
+  window.rememberSimulationSessionSlot(sessionSlotId, currentSimConn);
 } else {
   window.simulationSessionSlotId = sessionSlotId;
+  window.simulationSessionConnectionId =
+    currentSimConn != null ? String(currentSimConn) : null;
   if (typeof currentSlotId !== 'undefined') {
     currentSlotId = sessionSlotId;
   }
@@ -802,41 +837,58 @@ try {
   // Extract data from response - look for initSimulationResults() call or setAttribute() calls
   // Try to match initSimulationResults('run_id') first
   let runIdMatch = html.match(/initSimulationResults\(['"]([^'"]+)['"]\)/);
-  // Also try setAttribute for data-run-id
+  // Also try setAttribute / data-run-id (incl. forward-timeout shell)
   if (!runIdMatch) {
     runIdMatch = html.match(/setAttribute\(['"]data-run-id['"],\s*['"]([^'"]+)['"]\)/);
   }
-  
-  // Extract slot_id from setAttribute call
-  const slotIdMatch = html.match(/setAttribute\(['"]data-slot-id['"],\s*['"]([^'"]+)['"]\)/);
-  
+  if (!runIdMatch) {
+    runIdMatch = html.match(/data-run-id=["']([^"']+)["']/);
+  }
+
+  // Extract slot_id from setAttribute / data-slot-id
+  let slotIdMatch = html.match(/setAttribute\(['"]data-slot-id['"],\s*['"]([^'"]+)['"]\)/);
+  if (!slotIdMatch) {
+    slotIdMatch = html.match(/data-slot-id=["']([^"']+)["']/);
+  }
+
   // Extract filter count from text content
   const filterCountMatch = html.match(/(\d+)\s+filters/);
-  
+  const forwardSlow =
+    /data-sim-forward-error|forward timed out|Read timed out|Error sending simulation/i.test(
+      html
+    );
+
   if (runIdMatch) {
     const runId = runIdMatch[1];
-    const slotId = slotIdMatch ? slotIdMatch[1] : null;
+    const respSlotId = slotIdMatch ? slotIdMatch[1] : slotId;
     const filterCount = filterCountMatch ? filterCountMatch[1] : '0';
 
     // Store run_id BEFORE doing anything else
     window.simulationRunIds[index] = runId;
-    
+
+    if (forwardSlow) {
+      // Slot is fine; agent/Logstash was slow to accept. Keep Ready and poll.
+      console.warn(
+        '[FE->BE] Simulation forward was slow/timed out; still polling run_id',
+        runId
+      );
+      if (typeof showToast === 'function') {
+        showToast(
+          `Document ${index + 1}: agent was slow to accept — waiting for results…`,
+          'info'
+        );
+      }
+    }
+
     // Update status chip to show pipeline is ready (for first document only)
-    if (index === 0 && slotId) {
-      const statusContainer = document.getElementById('pipelineLoadStatus');
-      const statusIcon = document.getElementById('pipelineStatusIcon');
-      const statusMessage = document.getElementById('pipelineStatusMessage');
-      
-      if (statusContainer && statusIcon && statusMessage) {
-        statusContainer.className = 'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-green-600 bg-green-900/30 max-w-[11rem]';
-        statusContainer.title = slotId ? `Simulation ready (slot ${slotId})` : 'Simulation ready';
-        statusIcon.outerHTML = `
-          <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-          </svg>
-        `;
-        statusMessage.className = 'text-xs font-medium text-green-300 truncate';
-        statusMessage.textContent = 'Ready';
+    if (index === 0 && respSlotId) {
+      if (typeof window.setPipelineSlotChip === 'function') {
+        window.setPipelineSlotChip('ready', {
+          slotId: respSlotId,
+          title: `Simulation ready (slot ${respSlotId})`,
+        });
+      } else if (typeof window.rememberSimulationSessionSlot === 'function') {
+        window.rememberSimulationSessionSlot(respSlotId);
       }
     }
 
@@ -845,7 +897,7 @@ try {
       // Check if Text Mode is selected in the modal
       const viewModeRadio = document.querySelector('input[name="viewMode"]:checked');
       const isTextMode = viewModeRadio && viewModeRadio.value === 'text';
-      
+
       if (isTextMode) {
         // Text Mode: Don't create overlay, keep modal open and show results in modal
         if (typeof initSimulationResults === 'function') {
@@ -853,8 +905,8 @@ try {
         }
       } else {
         // Overlay Mode: Close the modal and create overlay
-        createSimulationOverlay(runId, slotId, filterCount);
-        
+        createSimulationOverlay(runId, respSlotId, filterCount);
+
         // Initialize the simulation results polling
         if (typeof initSimulationResults === 'function') {
           initSimulationResults(runId);
@@ -870,13 +922,25 @@ try {
     return runId;
   } else {
     console.error('No run_id found in response for document', index);
-    console.error('Response content:', html);
+    console.error('Response content:', html.slice(0, 800));
     const n = index + 1;
-    const hint = html.includes('Error allocating')
-      ? `Document ${n}: slot allocate failed`
-      : `Document ${n}: simulation failed (no run_id in response)`;
+    let hint = `Document ${n}: simulation failed (no run_id in response)`;
+    if (html.includes('Error allocating')) {
+      hint = `Document ${n}: slot allocate failed`;
+    } else if (/timed out|Timeout|Error sending simulation/i.test(html)) {
+      hint = `Document ${n}: simulation timed out talking to agent`;
+    } else {
+      const errMatch = html.match(/Error[^<:]*:\s*([^<]+)/i);
+      if (errMatch) {
+        hint = `Document ${n}: ${errMatch[1].trim().slice(0, 120)}`;
+      }
+    }
     showToast(hint, 'error');
-    setPipelineSlotStatusFailed(hint);
+    // Only paint Failed when allocate itself failed. A document-send problem
+    // should not mark a valid warm slot as dead (user can Retry docs).
+    if (html.includes('Error allocating') || !slotId) {
+      setPipelineSlotStatusFailed(hint);
+    }
     return null;
   }
 } catch (error) {
@@ -884,13 +948,22 @@ try {
   const n = index + 1;
   const hint = `Document ${n}: ${error.message || 'request failed'}`;
   showToast(hint, 'error');
-  setPipelineSlotStatusFailed(hint);
+  // Network abort/timeout after slot warm — keep slot Ready if we have one
+  if (!slotId) {
+    setPipelineSlotStatusFailed(hint);
+  }
   return null;
 }
 }
 
-/** Compact status chip: failed allocation / sim (clears stuck Allocating…) */
+/** Compact status chip: failed allocation / sim (clickable retry via setPipelineSlotChip) */
 function setPipelineSlotStatusFailed(detail) {
+  if (typeof window.setPipelineSlotChip === 'function') {
+    window.setPipelineSlotChip('failed', {
+      title: detail || 'Simulation failed',
+    });
+    return;
+  }
   const statusContainer = document.getElementById('pipelineLoadStatus');
   let statusIcon = document.getElementById('pipelineStatusIcon');
   const statusMessage = document.getElementById('pipelineStatusMessage');

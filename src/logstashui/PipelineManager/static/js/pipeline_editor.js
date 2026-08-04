@@ -33,7 +33,8 @@ window.__slotWarmConn = null;
 window.__slotWarmAbort = null;
 
 /**
- * Session slot is scoped to a sim agent (connection id). Host slot 1 ≠ embedded slot 1.
+ * Session slot is scoped to a sim agent (connection id).
+ * embedded slot-1 is NOT simulate-1 slot-1 — never cross nodes.
  */
 window.clearSimulationSessionSlot = function clearSimulationSessionSlot(reason) {
     if (reason) {
@@ -47,17 +48,47 @@ window.clearSimulationSessionSlot = function clearSimulationSessionSlot(reason) 
     }
 };
 
-window.rememberSimulationSessionSlot = function rememberSimulationSessionSlot(slotId) {
+/**
+ * Drop warm-cache entry(ies). Pass a connection id, or omit to clear all.
+ * Used on target switch so we never Ready-chip a foreign node's slot name.
+ */
+window.invalidateSlotWarmCache = function invalidateSlotWarmCache(connectionId) {
+    if (!window.__slotWarmCache) {
+        window.__slotWarmCache = {};
+        return;
+    }
+    if (connectionId == null || connectionId === '') {
+        window.__slotWarmCache = {};
+        console.log('[Slot Warm] cache cleared (all)');
+        return;
+    }
+    const key = String(connectionId);
+    if (window.__slotWarmCache[key]) {
+        delete window.__slotWarmCache[key];
+        console.log('[Slot Warm] cache invalidated for connection', key);
+    }
+};
+
+window.rememberSimulationSessionSlot = function rememberSimulationSessionSlot(slotId, connectionId) {
     if (!slotId) return;
     const conn =
-        (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
-        null;
+        connectionId != null && connectionId !== ''
+            ? String(connectionId)
+            : (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+              null;
     window.simulationSessionSlotId = String(slotId);
     window.simulationSessionConnectionId = conn != null ? String(conn) : null;
+    window.__lastSimWarmConnection = window.simulationSessionConnectionId;
     window.currentSlotId = String(slotId);
     if (typeof currentSlotId !== 'undefined') {
         currentSlotId = String(slotId);
     }
+    console.log(
+        '[Slot Session] remember slot',
+        slotId,
+        'on connection',
+        window.simulationSessionConnectionId
+    );
 };
 
 /** Warm slot only if it belongs to the currently selected sim agent. */
@@ -66,29 +97,46 @@ window.getWarmSessionSlotForCurrentTarget = function getWarmSessionSlotForCurren
         (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
         null;
     const slotConn = window.simulationSessionConnectionId;
-    if (conn && slotConn && String(conn) !== String(slotConn)) {
-        console.warn(
-            '[Slot Session] ignoring warm slot for connection',
-            slotConn,
-            '(current target',
-            conn,
-            ')'
-        );
-        return null;
-    }
-    // If we never recorded which agent was warmed, treat as unusable when a
-    // target is selected (avoids host→embedded slot bleed after older builds).
-    if (conn && !slotConn && (window.simulationSessionSlotId || window.currentSlotId)) {
-        console.warn('[Slot Session] warm slot missing connection id; clearing');
-        window.clearSimulationSessionSlot('missing connection scope');
-        return null;
-    }
-    return (
+    const slotId =
         window.simulationSessionSlotId ||
         window.currentSlotId ||
         (typeof currentSlotId !== 'undefined' ? currentSlotId : null) ||
-        null
-    );
+        null;
+
+    if (!slotId) {
+        return null;
+    }
+
+    // Hard rule: a slot id without a recorded connection is unusable when any
+    // target is selected (legacy bleed embedded ↔ simulate-N).
+    if (conn && !slotConn) {
+        console.warn(
+            '[Slot Session] rejecting slot',
+            slotId,
+            '— missing connection scope (will re-allocate on current target',
+            conn,
+            ')'
+        );
+        window.clearSimulationSessionSlot('missing connection scope');
+        return null;
+    }
+
+    if (conn && slotConn && String(conn) !== String(slotConn)) {
+        console.warn(
+            '[Slot Session] rejecting slot',
+            slotId,
+            'from connection',
+            slotConn,
+            '— current target is',
+            conn,
+            '(cross-node reuse forbidden)'
+        );
+        // Do not clear the foreign slot's identity from cache of the other
+        // connection; just refuse to use it here.
+        return null;
+    }
+
+    return String(slotId);
 };
 
 /** True when a warm allocate is in flight for the current sim target. */
@@ -99,6 +147,213 @@ window.isSlotWarmInFlightForCurrentTarget = function isSlotWarmInFlightForCurren
         '';
     return String(window.__slotWarmConn || '') === String(conn || '');
 };
+
+// Cold-allocate UX: elapsed timer + one “still preparing” toast
+let _slotWarmElapsedTimer = null;
+let _slotWarmToastTimer = null;
+let _slotWarmStartedAt = 0;
+let _slotWarmSlowToastShown = false;
+const SLOT_WARM_SLOW_TOAST_MS = 10000;
+const SLOT_WARM_COLD_HINT =
+    'First load of a pipeline config on an agent can take up to ~1–2 minutes (Logstash create + verify).';
+
+function _stopSlotWarmElapsedUi() {
+    if (_slotWarmElapsedTimer) {
+        clearInterval(_slotWarmElapsedTimer);
+        _slotWarmElapsedTimer = null;
+    }
+    if (_slotWarmToastTimer) {
+        clearTimeout(_slotWarmToastTimer);
+        _slotWarmToastTimer = null;
+    }
+    _slotWarmStartedAt = 0;
+    _slotWarmSlowToastShown = false;
+}
+
+function _formatWarmElapsed(seconds) {
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}m ${s}s`;
+}
+
+function _paintWarmElapsedLabel() {
+    const statusMessage = document.getElementById('pipelineStatusMessage');
+    const statusContainer = document.getElementById('pipelineLoadStatus');
+    if (!statusMessage || !_slotWarmStartedAt) return;
+    // Only update while chip is still in a warming-like state
+    const text = statusMessage.textContent || '';
+    if (
+        !text.startsWith('Warming') &&
+        !text.startsWith('Retrying') &&
+        !text.startsWith('Preparing') &&
+        text !== 'Running…'
+    ) {
+        return;
+    }
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - _slotWarmStartedAt) / 1000));
+    const base = text.startsWith('Retrying')
+        ? 'Retrying…'
+        : text.startsWith('Preparing')
+          ? 'Preparing…'
+          : 'Warming…';
+    statusMessage.textContent = `${base} ${_formatWarmElapsed(elapsedSec)}`;
+    if (statusContainer) {
+        const baseTitle =
+            statusContainer.dataset.warmBaseTitle ||
+            'Allocating simulation slot on selected agent…';
+        statusContainer.title = `${baseTitle} (${_formatWarmElapsed(elapsedSec)} elapsed). ${SLOT_WARM_COLD_HINT}`;
+    }
+}
+
+function _startSlotWarmElapsedUi(baseTitle) {
+    const wasRunning = !!_slotWarmElapsedTimer;
+    if (!_slotWarmStartedAt) {
+        _slotWarmStartedAt = Date.now();
+    }
+    const statusContainer = document.getElementById('pipelineLoadStatus');
+    if (statusContainer) {
+        statusContainer.dataset.warmBaseTitle =
+            baseTitle ||
+            'Allocating simulation slot on selected agent…';
+    }
+    // Immediate label with 0s so user sees timer right away
+    _paintWarmElapsedLabel();
+    if (!wasRunning) {
+        _slotWarmElapsedTimer = setInterval(_paintWarmElapsedLabel, 1000);
+    }
+    // One toast if still warming after 10s (avoid spam on retries)
+    if (!_slotWarmSlowToastShown && !_slotWarmToastTimer) {
+        _slotWarmToastTimer = setTimeout(() => {
+            _slotWarmToastTimer = null;
+            if (!_slotWarmStartedAt) return;
+            const msgEl = document.getElementById('pipelineStatusMessage');
+            const t = (msgEl && msgEl.textContent) || '';
+            if (
+                !t.startsWith('Warming') &&
+                !t.startsWith('Retrying') &&
+                !t.startsWith('Preparing')
+            ) {
+                return;
+            }
+            _slotWarmSlowToastShown = true;
+            const elapsedSec = Math.max(
+                0,
+                Math.floor((Date.now() - _slotWarmStartedAt) / 1000)
+            );
+            if (typeof showToast === 'function') {
+                showToast(
+                    `Still preparing simulation slot (${_formatWarmElapsed(elapsedSec)}). ${SLOT_WARM_COLD_HINT}`,
+                    'info'
+                );
+            }
+        }, SLOT_WARM_SLOW_TOAST_MS);
+    }
+}
+
+/**
+ * Enable/disable click-to-retry on the slot status chip (Failed state only).
+ */
+function _setSlotChipRetryable(statusContainer, enabled, errorTitle) {
+    if (!statusContainer) return;
+    if (enabled) {
+        statusContainer.dataset.slotChipRetry = '1';
+        statusContainer.setAttribute('role', 'button');
+        statusContainer.setAttribute('tabindex', '0');
+        statusContainer.setAttribute('aria-label', 'Slot allocate failed. Activate to retry.');
+        statusContainer.classList.add(
+            'cursor-pointer',
+            'hover:bg-red-900/40',
+            'hover:border-red-400',
+            'focus:outline-none',
+            'focus:ring-1',
+            'focus:ring-red-400'
+        );
+        const base = errorTitle || 'Simulation slot allocate failed';
+        statusContainer.title = `${base} — Click to retry`;
+    } else {
+        statusContainer.dataset.slotChipRetry = '0';
+        statusContainer.removeAttribute('role');
+        statusContainer.removeAttribute('tabindex');
+        statusContainer.removeAttribute('aria-label');
+        statusContainer.classList.remove(
+            'cursor-pointer',
+            'hover:bg-red-900/40',
+            'hover:border-red-400',
+            'focus:outline-none',
+            'focus:ring-1',
+            'focus:ring-red-400'
+        );
+    }
+}
+
+/**
+ * Re-run slot allocate for the currently selected sim agent (Failed chip click).
+ */
+window.retryFailedSlotWarm = function retryFailedSlotWarm() {
+    const chip = document.getElementById('pipelineLoadStatus');
+    if (chip && chip.dataset.slotChipRetry === '1') {
+        // Prevent double-fire while we transition to Warming
+        _setSlotChipRetryable(chip, false);
+    }
+    console.log('[Slot Warm] user retry from Failed chip');
+    if (typeof window.clearSimulationSessionSlot === 'function') {
+        window.clearSimulationSessionSlot('user retry');
+    }
+    // Drop stale hover cache for current target so we don't short-circuit on a bad slot
+    try {
+        const conn =
+            (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+            null;
+        if (conn && window.__slotWarmCache) {
+            delete window.__slotWarmCache[String(conn)];
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    if (typeof window.warmSlotForCurrentTarget === 'function') {
+        window
+            .warmSlotForCurrentTarget({
+                showWarming: true,
+                forceNew: true,
+                maxAttempts: 2,
+                warmLabel: 'Retrying…',
+            })
+            .catch((e) => {
+                console.error('[Slot Warm] retry failed', e);
+            });
+        return;
+    }
+    if (typeof window.triggerPipelineWarmingAndChecking === 'function') {
+        window.triggerPipelineWarmingAndChecking({
+            force: true,
+            fromPageLoad: true,
+            useFetch: true,
+        });
+    }
+};
+
+// Bind once: click / keyboard activate Failed chip → retry allocate
+if (!window.__slotChipRetryBound) {
+    window.__slotChipRetryBound = true;
+    document.addEventListener('click', function (e) {
+        const chip = e.target && e.target.closest && e.target.closest('#pipelineLoadStatus');
+        if (!chip || chip.dataset.slotChipRetry !== '1') return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.retryFailedSlotWarm();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const chip = document.getElementById('pipelineLoadStatus');
+        if (!chip || chip.dataset.slotChipRetry !== '1') return;
+        if (document.activeElement !== chip) return;
+        e.preventDefault();
+        window.retryFailedSlotWarm();
+    });
+}
 
 /**
  * Compact slot chip states: unallocated | warming | ready | failed
@@ -115,11 +370,17 @@ window.setPipelineSlotChip = function setPipelineSlotChip(state, detail) {
 
     const slotId = detail && detail.slotId != null ? detail.slotId : null;
     const title = (detail && detail.title) || '';
+    // Allow "warming" sub-labels (Retrying / Preparing) while keeping elapsed timer
+    const warmLabel = (detail && detail.warmLabel) || 'Warming…';
 
     if (state === 'warming') {
+        _setSlotChipRetryable(statusContainer, false);
         statusContainer.className =
-            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-blue-600/40 bg-blue-900/20 max-w-[11rem]';
-        statusContainer.title = title || 'Allocating simulation slot on selected agent…';
+            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-blue-600/40 bg-blue-900/20 max-w-[14rem]';
+        const baseTitle =
+            title ||
+            'Allocating simulation slot on selected agent…';
+        statusContainer.title = `${baseTitle} ${SLOT_WARM_COLD_HINT}`;
         if (statusIcon) {
             statusIcon.outerHTML = `
                 <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-blue-300 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -128,11 +389,19 @@ window.setPipelineSlotChip = function setPipelineSlotChip(state, detail) {
                 </svg>`;
         }
         statusMessage.className = 'text-xs font-medium text-blue-200 truncate';
-        statusMessage.textContent = 'Warming…';
+        statusMessage.textContent = warmLabel;
+        _startSlotWarmElapsedUi(baseTitle);
         return;
     }
 
+    // Leaving warming: stop elapsed UI
+    _stopSlotWarmElapsedUi();
+    if (statusContainer.dataset.warmBaseTitle) {
+        delete statusContainer.dataset.warmBaseTitle;
+    }
+
     if (state === 'ready') {
+        _setSlotChipRetryable(statusContainer, false);
         statusContainer.className =
             'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-green-600 bg-green-900/30 max-w-[11rem]';
         statusContainer.title =
@@ -150,20 +419,25 @@ window.setPipelineSlotChip = function setPipelineSlotChip(state, detail) {
 
     if (state === 'failed') {
         statusContainer.className =
-            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-red-600/50 bg-red-900/20 max-w-[11rem]';
-        statusContainer.title = title || 'Simulation slot allocate failed';
+            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-red-600/50 bg-red-900/20 max-w-[12rem]';
         if (statusIcon) {
             statusIcon.outerHTML = `
                 <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>`;
         }
         statusMessage.className = 'text-xs font-medium text-red-300 truncate';
-        statusMessage.textContent = 'Failed';
+        statusMessage.textContent = 'Failed · Retry';
+        _setSlotChipRetryable(
+            statusContainer,
+            true,
+            title || 'Simulation slot allocate failed'
+        );
         return;
     }
 
     // default: unallocated
+    _setSlotChipRetryable(statusContainer, false);
     statusContainer.className =
         'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]';
     statusContainer.title = title || 'Simulation slot not allocated yet';
@@ -178,10 +452,17 @@ window.setPipelineSlotChip = function setPipelineSlotChip(state, detail) {
 };
 
 /**
- * One allocate attempt (shared by warmSlotForCurrentTarget + retry).
+ * One allocate attempt (shared by warmSlotForCurrentTarget + background hover warm).
+ * @param {string|null} connAtStart
+ * @param {AbortController} controller
+ * @param {number|null|undefined} generation - if set, abort when __slotWarmGeneration advances;
+ *   pass null for background warms that must not be cancelled by main-path generation bumps.
  * @returns {Promise<{ok:boolean, slotId?:string, error?:string, aborted?:boolean, html?:string}>}
  */
 async function _slotAllocateOnce(connAtStart, controller, generation) {
+    const isStale = () =>
+        generation != null && generation !== window.__slotWarmGeneration;
+
     const formData = new FormData();
     formData.append('components', JSON.stringify(components));
     formData.append('log_text', '');
@@ -213,7 +494,7 @@ async function _slotAllocateOnce(connAtStart, controller, generation) {
         });
         clearTimeout(timer);
         const html = await response.text();
-        if (generation !== window.__slotWarmGeneration) {
+        if (isStale()) {
             return { ok: false, aborted: true };
         }
         const errFailed = /data-pipeline-failed="true"/.test(html);
@@ -243,10 +524,127 @@ async function _slotAllocateOnce(connAtStart, controller, generation) {
     }
 }
 
+// Background (hover) warms: per-connection, silent, do not steal the Ready chip
+// unless the user has since selected that connection.
+window.__bgWarmJobs = window.__bgWarmJobs || {}; // connId -> { promise, abort }
+window.__slotWarmCache = window.__slotWarmCache || {}; // connId -> { slotId, at }
+const SLOT_WARM_CACHE_TTL_MS = 15 * 60 * 1000;
+
+function _cacheWarmSlot(connKey, slotId) {
+    if (!connKey || !slotId) return;
+    window.__slotWarmCache[connKey] = { slotId: String(slotId), at: Date.now() };
+}
+
+function _getCachedWarmSlot(connKey) {
+    const entry = window.__slotWarmCache && window.__slotWarmCache[connKey];
+    if (!entry || !entry.slotId) return null;
+    if (Date.now() - (entry.at || 0) > SLOT_WARM_CACHE_TTL_MS) {
+        delete window.__slotWarmCache[connKey];
+        return null;
+    }
+    return entry.slotId;
+}
+
+// Ensure cache helpers exist even if this file loads before first warm
+window.__slotWarmCache = window.__slotWarmCache || {};
+
+/**
+ * Silently warm a specific agent (for hover prewarm). Does not change selection
+ * or the chip unless that agent is already the selected target when it finishes.
+ *
+ * @param {string|number} connectionId
+ * @param {object} [opts]
+ * @returns {Promise<string|null>}
+ */
+window.warmSlotForConnection = async function warmSlotForConnection(connectionId, opts) {
+    const options = opts || {};
+    const connKey = String(connectionId || '');
+    if (!connKey) return null;
+
+    const hasFilters = components && components.filter && components.filter.length > 0;
+    if (!hasFilters) return null;
+
+    // Join main-path warm for this connection
+    if (window.__slotWarmPromise && window.__slotWarmConn === connKey) {
+        return window.__slotWarmPromise;
+    }
+    // Join existing background job
+    if (window.__bgWarmJobs[connKey] && window.__bgWarmJobs[connKey].promise) {
+        return window.__bgWarmJobs[connKey].promise;
+    }
+    // Fresh enough cache — nothing to do
+    if (_getCachedWarmSlot(connKey) && !options.force) {
+        console.log('[Slot Warm] hover cache hit for connection', connKey);
+        return _getCachedWarmSlot(connKey);
+    }
+
+    const ac = new AbortController();
+    const run = (async function () {
+        console.log('[Slot Warm] background prewarm connection', connKey);
+        try {
+            const result = await _slotAllocateOnce(connKey, ac, null /* no gen gate */);
+            if (result.aborted) return null;
+            if (result.ok && result.slotId) {
+                _cacheWarmSlot(connKey, result.slotId);
+                // If user selected this agent while we were warming, adopt the slot
+                const selected =
+                    (typeof window.getSimConnectionId === 'function' &&
+                        window.getSimConnectionId()) ||
+                    null;
+                if (String(selected || '') === connKey) {
+                    if (typeof window.rememberSimulationSessionSlot === 'function') {
+                        window.rememberSimulationSessionSlot(result.slotId, connKey);
+                    }
+                    if (typeof window.setPipelineSlotChip === 'function') {
+                        window.setPipelineSlotChip('ready', {
+                            slotId: result.slotId,
+                            title: `Simulation ready (slot ${result.slotId})`,
+                        });
+                    }
+                    const resultEl = document.getElementById('slotPreallocationResult');
+                    if (resultEl && result.html) {
+                        resultEl.innerHTML = result.html;
+                    }
+                }
+                return result.slotId;
+            }
+            console.warn('[Slot Warm] background prewarm failed', connKey, result.error);
+            return null;
+        } finally {
+            if (window.__bgWarmJobs[connKey] && window.__bgWarmJobs[connKey].promise === run) {
+                delete window.__bgWarmJobs[connKey];
+            }
+        }
+    })();
+
+    window.__bgWarmJobs[connKey] = { promise: run, abort: ac };
+    return run;
+};
+
+/**
+ * Cancel a background hover warm (e.g. user left the dropdown).
+ */
+window.cancelBackgroundSlotWarm = function cancelBackgroundSlotWarm(connectionId) {
+    const connKey = connectionId != null ? String(connectionId) : null;
+    const jobs = window.__bgWarmJobs || {};
+    const keys = connKey ? [connKey] : Object.keys(jobs);
+    keys.forEach((k) => {
+        const job = jobs[k];
+        if (job && job.abort) {
+            try {
+                job.abort.abort();
+            } catch (_) {
+                /* ignore */
+            }
+        }
+        delete jobs[k];
+    });
+};
+
 /**
  * Allocate (or re-allocate) a slot on the *currently selected* sim agent via fetch.
  * Concurrent callers for the same target share one in-flight promise (target switch
- * + Run must not start two cold allocates).
+ * + Run must not start two cold allocates). Joins hover prewarm when available.
  *
  * @returns {Promise<string|null>} slot id or null
  */
@@ -256,8 +654,10 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
     const forceNew = !!options.forceNew;
     const maxAttempts = options.maxAttempts != null ? options.maxAttempts : 2;
     const connAtStart =
-        (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
-        null;
+        options.connectionId != null
+            ? String(options.connectionId)
+            : (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+              null;
     const connKey = String(connAtStart || '');
 
     const hasFilters = components && components.filter && components.filter.length > 0;
@@ -265,6 +665,58 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
         const statusBanner = document.getElementById('pipelineStatusBanner');
         if (statusBanner) statusBanner.style.display = 'none';
         return null;
+    }
+
+    // Prefer completed hover cache only when caller allows it (NOT after a
+    // hard target switch — that must allocate on the new node).
+    if ((!forceNew || options.preferCache) && options.preferCache !== false) {
+        const cached = _getCachedWarmSlot(connKey);
+        if (cached && !window.__slotWarmPromise) {
+            console.log('[Slot Warm] adopting hover cache for', connKey, 'slot', cached);
+            if (typeof window.rememberSimulationSessionSlot === 'function') {
+                window.rememberSimulationSessionSlot(cached, connKey);
+            }
+            if (showWarming && typeof window.setPipelineSlotChip === 'function') {
+                window.setPipelineSlotChip('ready', {
+                    slotId: cached,
+                    title: `Simulation ready (slot ${cached})`,
+                });
+            }
+            // Refresh agent last_accessed / confirm pipeline (silent pure-reuse)
+            window
+                .warmSlotForConnection(connKey, { force: true })
+                .catch(() => {});
+            return cached;
+        }
+    }
+
+    // Join background hover warm for this connection only when it is for the
+    // same connection we are warming (never a foreign node’s job).
+    if (window.__bgWarmJobs && window.__bgWarmJobs[connKey] && window.__bgWarmJobs[connKey].promise) {
+        console.log('[Slot Warm] joining hover prewarm for connection', connKey);
+        if (showWarming && typeof window.setPipelineSlotChip === 'function') {
+            window.setPipelineSlotChip('warming', {
+                title: 'Allocating slot on this agent…',
+                warmLabel: 'Warming…',
+            });
+        }
+        try {
+            const slotId = await window.__bgWarmJobs[connKey].promise;
+            if (slotId) {
+                if (typeof window.rememberSimulationSessionSlot === 'function') {
+                    window.rememberSimulationSessionSlot(slotId, connKey);
+                }
+                if (showWarming && typeof window.setPipelineSlotChip === 'function') {
+                    window.setPipelineSlotChip('ready', {
+                        slotId,
+                        title: `Simulation ready (slot ${slotId})`,
+                    });
+                }
+                return slotId;
+            }
+        } catch (e) {
+            console.warn('[Slot Warm] hover prewarm join failed, falling through', e);
+        }
     }
 
     // Coalesce: wait for existing warm on the same agent instead of stacking allocates
@@ -277,6 +729,7 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
         if (showWarming && typeof window.setPipelineSlotChip === 'function') {
             window.setPipelineSlotChip('warming', {
                 title: 'Slot allocate already in progress on this agent…',
+                warmLabel: 'Warming…',
             });
         }
         return window.__slotWarmPromise;
@@ -293,6 +746,11 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
         window.__slotWarmAbort = null;
     }
 
+    // New warm generation: reset elapsed clock for a clean "Warming… 0s"
+    if (forceNew) {
+        _stopSlotWarmElapsedUi();
+    }
+
     const generation = ++window.__slotWarmGeneration;
     const controller = new AbortController();
     window.__slotWarmAbort = controller;
@@ -302,8 +760,9 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
         if (showWarming && typeof window.setPipelineSlotChip === 'function') {
             window.setPipelineSlotChip('warming', {
                 title: connAtStart
-                    ? `Allocating slot on agent ${connAtStart}… (cold start can take up to ~2 min)`
-                    : 'Allocating simulation slot… (cold start can take up to ~2 min)',
+                    ? `Allocating slot on agent ${connAtStart}…`
+                    : 'Allocating simulation slot…',
+                warmLabel: options.warmLabel || 'Warming…',
             });
         }
 
@@ -324,6 +783,7 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
                 if (typeof window.setPipelineSlotChip === 'function') {
                     window.setPipelineSlotChip('warming', {
                         title: `Retrying slot allocate (attempt ${attempt}/${maxAttempts})…`,
+                        warmLabel: 'Retrying…',
                     });
                 }
                 await new Promise((r) => setTimeout(r, 1500));
@@ -349,8 +809,9 @@ window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) 
                 if (resultEl && result.html) {
                     resultEl.innerHTML = result.html;
                 }
+                _cacheWarmSlot(connKey, result.slotId);
                 if (typeof window.rememberSimulationSessionSlot === 'function') {
-                    window.rememberSimulationSessionSlot(result.slotId);
+                    window.rememberSimulationSessionSlot(result.slotId, connKey);
                 }
                 if (typeof window.setPipelineSlotChip === 'function') {
                     window.setPipelineSlotChip('ready', {

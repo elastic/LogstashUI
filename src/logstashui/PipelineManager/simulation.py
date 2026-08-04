@@ -26,6 +26,7 @@ import uuid
 import base64
 import time
 import re
+from html import escape as _html_escape
 from Common.product_ca import agent_requests_verify
 
 logger = logging.getLogger(__name__)
@@ -538,9 +539,11 @@ end
 
         # Session slot: multi-document runs allocate once on the client, then pass
         # slot_id for every document so we never re-allocate mid-session.
-        # IMPORTANT: slots are per-agent. A warm slot on host simulate is not valid
-        # on embedded (and vice versa). Verify the slot exists on *this* agent before
-        # skipping allocate.
+        #
+        # CRITICAL: slots are per-agent / per-node. embedded "slot 1" is NOT
+        # simulate-1 "slot 1". Never skip allocate unless *this* agent both has
+        # the slot in its table AND has the named pipeline loaded (bus address).
+        # Otherwise simulate-start send_to storms ("address was unavailable").
         session_slot_raw = (
             request.POST.get("slot_id")
             or request.POST.get("session_slot_id")
@@ -549,14 +552,21 @@ end
         slot_id = None
         reused = False
         use_session_slot = False
+        agent_label = (
+            (sim_target or {}).get("label")
+            or (sim_target or {}).get("connection_id")
+            or logstash_agent_url
+        )
 
         if session_slot_raw and log_text:
             try:
                 candidate = int(session_slot_raw)
                 if candidate < 1:
                     raise ValueError("slot_id must be >= 1")
-                # Confirm this agent actually has the slot (guards host→embedded bleed)
+                pipeline_name = f"slot{candidate}-filter1"
                 slots_data = {}
+                has_slot = False
+                pipeline_loaded = False
                 try:
                     slots_resp = requests.get(
                         f"{logstash_agent_url}/_logstash/slots",
@@ -571,25 +581,74 @@ end
                     )
                 except Exception as probe_err:
                     logger.warning(
-                        "Could not verify session slot %s on agent: %s — will re-allocate",
+                        "Could not verify session slot %s on agent %s: %s — will re-allocate",
                         candidate,
+                        agent_label,
                         probe_err,
                     )
                     has_slot = False
 
+                # Slot table membership alone is not enough (table can lag deleted
+                # pipelines, or a foreign node’s slot id can collide numerically).
                 if has_slot:
+                    try:
+                        status_resp = requests.get(
+                            f"{logstash_agent_url}/_logstash/pipelines/status",
+                            verify=agent_requests_verify(),
+                            timeout=5,
+                        )
+                        if status_resp.ok:
+                            status_body = status_resp.json() or {}
+                            # Agent returns various shapes; accept common ones.
+                            running = (
+                                status_body.get("pipelines")
+                                or status_body.get("running_pipelines")
+                                or status_body.get("pipeline_ids")
+                                or []
+                            )
+                            if isinstance(running, dict):
+                                pipeline_loaded = pipeline_name in running
+                            elif isinstance(running, list):
+                                pipeline_loaded = pipeline_name in running
+                            else:
+                                pipeline_loaded = False
+                        else:
+                            # Fallback: treat missing status as not loaded
+                            pipeline_loaded = False
+                            logger.warning(
+                                "pipelines/status HTTP %s on agent %s for session slot check",
+                                status_resp.status_code,
+                                agent_label,
+                            )
+                    except Exception as pipe_err:
+                        logger.warning(
+                            "Could not verify pipeline %s on agent %s: %s — will re-allocate",
+                            pipeline_name,
+                            agent_label,
+                            pipe_err,
+                        )
+                        pipeline_loaded = False
+
+                if has_slot and pipeline_loaded:
                     slot_id = candidate
                     reused = True
                     use_session_slot = True
                     logger.info(
-                        "[BE->AGENT] Using session slot %s (skip allocate; document input only)",
+                        "[BE->AGENT] Using session slot %s on agent %s "
+                        "(pipeline %s loaded; skip allocate; document input only)",
                         slot_id,
+                        agent_label,
+                        pipeline_name,
                     )
                 else:
                     logger.warning(
-                        "[BE->AGENT] Session slot %s not present on agent (available=%s); "
-                        "re-allocating on this target",
+                        "[BE->AGENT] Session slot %s not usable on agent %s "
+                        "(in_table=%s pipeline_loaded=%s available_slots=%s); "
+                        "re-allocating on this target (cross-node slot ids must not be reused)",
                         candidate,
+                        agent_label,
+                        has_slot,
+                        pipeline_loaded,
                         list(slots_data.keys()) if isinstance(slots_data, dict) else slots_data,
                     )
             except (TypeError, ValueError) as e:
@@ -622,8 +681,9 @@ end
 
                 # Try to extract slot_id from response before checking status
                 # This way we have it even if verification fails
+                response_data = {}
                 try:
-                    response_data = response.json()
+                    response_data = response.json() or {}
                     slot_id = response_data.get('slot_id')
                     reused = response_data.get('reused', False)
                 except Exception:
@@ -632,7 +692,16 @@ end
                 # Now check if the request was successful
                 response.raise_for_status()
 
-                logger.info(f"Allocated slot {slot_id} (reused: {reused})")
+                agent_timings = response_data.get("timings_ms")
+                if agent_timings:
+                    logger.info(
+                        "Allocated slot %s (reused: %s) agent timings_ms=%s",
+                        slot_id,
+                        reused,
+                        agent_timings,
+                    )
+                else:
+                    logger.info(f"Allocated slot {slot_id} (reused: {reused})")
 
             except requests.exceptions.RequestException as e:
                 logger.error(f"Failed to allocate slot: {e}")
@@ -686,8 +755,6 @@ end
                     human = str(agent_detail)
                 else:
                     human = str(e)
-                # Escape for HTML
-                from html import escape as _html_escape
                 human_esc = _html_escape(human[:300])
                 error_html = (
                     f'<div class="text-red-400"{slot_id_attr}{failed_attr}>'
@@ -721,27 +788,75 @@ end
                 # Add run_id for tracking this specific simulation run
                 log_data["run_id"] = run_id
 
-                # Send simulation to logstashagent
-                # logstashagent handles retries (3x with 1s, 2s, 3s timeouts)
-                # If all retries fail, logstashagent triggers restart and queues the request
+                # Send simulation to logstashagent.
+                # Agent may wait up to ~20s for pipeline-bus readiness then retry
+                # forward to Logstash (1s+2s+3s). UI must not time out before that,
+                # or the browser sees no run_id and paints Failed.
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
                     verify=agent_requests_verify(),
-                    timeout=10  # Timeout to allow logstashagent's 3 retries to complete (1s+2s+3s=6s)
+                    timeout=45,
                 )
-                
+
                 # Check if request was queued (202 status)
                 if response.status_code == 202:
-                    logger.warning(f"Simulation request queued - Logstash is restarting")
-                    return HttpResponse(f'<div class="text-yellow-400">Simulation queued - Logstash is restarting. Results will appear when ready.</div>')
-                
+                    logger.warning(
+                        "Simulation request queued - Logstash is restarting (run_id=%s)",
+                        run_id,
+                    )
+                    # Still return run_id shell so FE can poll StreamSimulate
+                    template = get_template(
+                        'components/pipeline_editor/simulation_results.html'
+                    )
+                    result_html = template.render(
+                        {
+                            'filter_count': total_plugin_count,
+                            'slot_id': slot_id,
+                            'reused': reused,
+                            'run_id': run_id,
+                            'queued': True,
+                        },
+                        request,
+                    )
+                    return HttpResponse(result_html)
+
                 response.raise_for_status()
                 logger.info(f"Sent simulation input to pipeline '{pipeline_name}'")
-                
+
             except requests.exceptions.RequestException as e:
-                logger.error(f"Failed to send simulation input: {e}")
-                return HttpResponse(f'<div class="text-red-400">Error sending simulation input: {str(e)}</div>')
+                # Forward failed/timed out — but agent may still deliver the event
+                # (or already accepted it) after our client timeout. Always return
+                # the run_id shell so the UI can poll instead of "no run_id".
+                logger.error(
+                    "Failed to send simulation input (run_id=%s slot=%s): %s",
+                    run_id,
+                    slot_id,
+                    e,
+                )
+                template = get_template(
+                    'components/pipeline_editor/simulation_results.html'
+                )
+                result_html = template.render(
+                    {
+                        'filter_count': total_plugin_count,
+                        'slot_id': slot_id,
+                        'reused': reused,
+                        'run_id': run_id,
+                        'forward_error': str(e),
+                    },
+                    request,
+                )
+                # Prefix a visible error marker the FE can parse, then the
+                # normal results bootstrap (initSimulationResults(run_id)).
+                return HttpResponse(
+                    f'<div class="text-yellow-400" data-sim-forward-error="true" '
+                    f'data-run-id="{run_id}" data-slot-id="{slot_id}">'
+                    f'Warning: simulation forward timed out or failed '
+                    f'({_html_escape(str(e)[:200])}); polling for results…'
+                    f'</div>'
+                    + result_html
+                )
 
         # If no log_text was provided, this was just a slot allocation - return simple success message
         if not log_text:

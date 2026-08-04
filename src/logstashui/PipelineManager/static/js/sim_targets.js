@@ -181,13 +181,71 @@
     }
   }
 
+  /**
+   * Pre-warm non-selected agents when the user opens/hovers the Target control.
+   * Native <option> hover is unreliable across browsers; warming siblings on
+   * control hover/focus covers the common embedded ↔ simulate-N flip.
+   */
+  function bindHoverPrewarm(select, wrap) {
+    if (!select || !wrap || select.dataset.hoverPrewarm === '1') return;
+    select.dataset.hoverPrewarm = '1';
+
+    let hoverTimer = null;
+    const HOVER_DELAY_MS = 300;
+
+    function otherConnectionIds() {
+      const selected = String(select.value || '');
+      return Array.from(select.options)
+        .map((o) => String(o.value || ''))
+        .filter((v) => v && v !== selected)
+        .slice(0, 3); // cap concurrent prewarms
+    }
+
+    function schedulePrewarm() {
+      if (select.disabled || select.options.length < 2) return;
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => {
+        hoverTimer = null;
+        if (typeof window.warmSlotForConnection !== 'function') return;
+        const others = otherConnectionIds();
+        if (!others.length) return;
+        console.log('[sim targets] hover/focus prewarm for', others);
+        others.forEach((id) => {
+          window.warmSlotForConnection(id, { silent: true }).catch((e) => {
+            console.warn('[sim targets] hover prewarm failed', id, e);
+          });
+        });
+      }, HOVER_DELAY_MS);
+    }
+
+    function cancelSchedule() {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+      // Leave in-flight prewarms running so a quick re-open still benefits.
+    }
+
+    wrap.addEventListener('mouseenter', schedulePrewarm);
+    wrap.addEventListener('mouseleave', cancelSchedule);
+    select.addEventListener('focus', schedulePrewarm);
+    select.addEventListener('blur', cancelSchedule);
+    // Opening the list is a strong signal user may switch
+    select.addEventListener('mousedown', schedulePrewarm);
+  }
+
   function bindSelect() {
     const select = document.getElementById('simTargetSelect');
+    const wrap = document.getElementById('simTargetSelectWrap');
     if (!select || select.dataset.bound === '1') return;
     select.dataset.bound = '1';
     // Debounce rapid dropdown flips so we only warm the final selection
     let targetChangeTimer = null;
     let targetChangeSeq = 0;
+
+    if (wrap) {
+      bindHoverPrewarm(select, wrap);
+    }
 
     select.addEventListener('change', async () => {
       syncSelectTitle(select);
@@ -221,9 +279,20 @@
         /* ignore */
       }
 
-      // Slots are per-agent. Clear immediately so Run cannot reuse the other agent.
+      // Slots are per-agent / per-node. Never carry slot-N from the previous
+      // target (embedded slot-1 is not simulate-1 slot-1). Clear immediately
+      // so Run cannot reuse a foreign slot name and cause bus storms.
+      const previousConn =
+        (window.simulationSessionConnectionId != null &&
+          String(window.simulationSessionConnectionId)) ||
+        (window.__lastSimWarmConnection != null &&
+          String(window.__lastSimWarmConnection)) ||
+        null;
       if (typeof window.clearSimulationSessionSlot === 'function') {
-        window.clearSimulationSessionSlot('sim target changed');
+        window.clearSimulationSessionSlot(
+          `sim target changed → ${selectedValue}` +
+            (previousConn ? ` (was ${previousConn})` : '')
+        );
       } else {
         window.simulationSessionSlotId = null;
         window.simulationSessionConnectionId = null;
@@ -232,14 +301,33 @@
           currentSlotId = null;
         }
       }
+      // Drop any in-memory warm cache for the *previous* agent so we never
+      // paint Ready with a slot id that only existed on another node.
+      if (
+        previousConn &&
+        previousConn !== String(selectedValue || '') &&
+        typeof window.invalidateSlotWarmCache === 'function'
+      ) {
+        window.invalidateSlotWarmCache(previousConn);
+      }
+      // Also do not adopt a stale cache entry for the new target without a
+      // real allocate on this node (preferCache: false below).
+      if (typeof window.invalidateSlotWarmCache === 'function') {
+        window.invalidateSlotWarmCache(selectedValue);
+      }
+      window.__lastSimWarmConnection = String(selectedValue || '');
 
       if (typeof window.setPipelineSlotChip === 'function') {
         window.setPipelineSlotChip('warming', {
-          title: 'Switching simulation agent…',
+          title: 'Switching simulation agent — allocating a fresh slot on this node…',
+          warmLabel: 'Warming…',
         });
       }
 
-      // Debounce warm: rapid embedded↔simulate flips only allocate for the last pick
+      // Debounce warm: rapid embedded↔simulate flips only allocate for the last pick.
+      // On an explicit target switch we always allocate on the new node (no cache
+      // adopt). Hover prewarm may still be in-flight — we join that job if it is
+      // for this connection, but we never reuse a slot id from another agent.
       if (targetChangeTimer) {
         clearTimeout(targetChangeTimer);
       }
@@ -251,7 +339,15 @@
         }
         if (typeof window.warmSlotForCurrentTarget === 'function') {
           window
-            .warmSlotForCurrentTarget({ showWarming: true, forceNew: true, maxAttempts: 2 })
+            .warmSlotForCurrentTarget({
+              showWarming: true,
+              forceNew: true,
+              // Never adopt a cached slot id after a node switch — always hit
+              // allocate on *this* agent so pipelines exist for slot-N there.
+              preferCache: false,
+              connectionId: selectedValue,
+              maxAttempts: 2,
+            })
             .catch((e) => {
               console.error('[sim targets] re-warm after target change failed', e);
             });
