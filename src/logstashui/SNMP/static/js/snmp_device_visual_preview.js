@@ -155,10 +155,10 @@ function renderDevicePreview(deviceId, device, visualizations) {
 
     // Render CPU chart
     const cpuChartCanvas = contentDiv.querySelector('.metric-cpu-chart');
-    if (metrics.CPU && metrics.Time && metrics.CPU.length > 0) {
+    if (metrics.CPU && metrics.CPUTime && metrics.CPU.length > 0) {
       renderMetricChart(
         cpuChartCanvas,
-        metrics.Time,
+        metrics.CPUTime,
         metrics.CPU,
         'CPU Usage (%)',
         'rgba(59, 130, 246, 1)', // Blue
@@ -167,24 +167,29 @@ function renderDevicePreview(deviceId, device, visualizations) {
     } else if (cpuChartCanvas) {
       // Show message when CPU data is not available
       const chartContainer = cpuChartCanvas.parentElement;
-      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">Could not find system.cpu.total.norm.pct</div>';
+      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">No CPU usage data collected for this device</div>';
     }
 
     // Render Memory chart
     const memoryChartCanvas = contentDiv.querySelector('.metric-memory-chart');
-    if (metrics.Memory && metrics.Time && metrics.Memory.length > 0) {
+    if (metrics.Memory && metrics.MemoryTime && metrics.Memory.length > 0) {
+      // hrStorageRam counts reclaimable cache/buffers, so it reads higher than the
+      // normalizer-derived field. Label it rather than passing it off as the same.
+      const memoryLabel = metrics.MemorySource === 'hrStorageRam'
+        ? 'Memory Usage (%) — incl. cache/buffers'
+        : 'Memory Usage (%)';
       renderMetricChart(
         memoryChartCanvas,
-        metrics.Time,
+        metrics.MemoryTime,
         metrics.Memory,
-        'Memory Usage (%)',
+        memoryLabel,
         'rgba(16, 185, 129, 1)', // Green
         'rgba(16, 185, 129, 0.1)'
       );
     } else if (memoryChartCanvas) {
       // Show message when Memory data is not available
       const chartContainer = memoryChartCanvas.parentElement;
-      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">Could not find system.memory.actual.used.pct</div>';
+      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">No memory usage data collected for this device</div>';
     }
   }
 

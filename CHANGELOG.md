@@ -213,8 +213,9 @@
 - Fixed missing RBAC protection across SNMP administrative operations.
 - Fixed installation-asset actions, loading indicators, and cleanup behavior in AI template and profile generation.
 - Fixed various SNMP CRUD, rendering, deployment, and code-quality issues discovered during final release testing.
-
-
+- Fixed the device CPU chart rendering empty whenever a device reported no memory percentage; CPU and memory are now collected independently instead of from a single document.
+- Fixed devices with no derived `system.memory.actual.used.pct` showing no memory chart, by falling back to the `hrStorageRam` row of `hrStorageTable`, selected by storage type and lowest `hrStorageIndex` so physical memory is used rather than a cache or buffers row. That figure includes reclaimable cache, so the chart is labelled accordingly and the response reports its source.
+- Fixed interfaces on OpenConfig-shaped documents always rendering as grey "Unknown" with zeroed traffic counters, by flattening `interface.state` and `interface.state.counters` onto the interface object the UI reads, preferring already-normalized values.
 
 ## [0.4.3] - AI Foundation, Simulation Improvements, and SNMP Fixes - 06/07/2026
 

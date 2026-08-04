@@ -3141,6 +3141,11 @@ def GetAllProfiles(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+# hrStorageRam — the HOST-RESOURCES-MIB storage type identifying a physical
+# memory row, as carried in system.filesystem.type.
+HR_STORAGE_RAM_OID = "1.3.6.1.2.1.25.2.1.2"
+
+
 def _device_host_filter(device):
     """Return an ES filter matching a device by its SNMP poll address.
 
@@ -3519,18 +3524,47 @@ def _get_device_interfaces(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_if_doc']['hits']['hits']:
-            visualization_data['interfaces'].append(doc['_source']['interface'])
+            visualization_data['interfaces'].append(
+                _flatten_interface(doc['_source']['interface'])
+            )
 
     return visualization_data
 
 
+def _flatten_interface(interface):
+    """Flatten an OpenConfig-shaped interface doc to what the frontend reads.
+
+    SNMP-polled interfaces arrive flat (``interface.oper_status``), but
+    OpenConfig/gNMI-shaped ones nest the same values under ``state``, with the
+    traffic counters nested one level deeper again under ``state.counters``.
+    The UI reads every one of these off the interface object directly
+    (``iface.oper_status``, ``iface.in_octets``), so lift both levels.
+
+    Existing top-level keys win: the SNMP pipeline's translate normalizers have
+    already decoded those (2 -> "DOWN"), whereas a raw ``state`` value may still
+    be the undecoded integer, which the UI would render as "Unknown".
+    """
+    iface = dict(interface)
+    state = iface.pop('state', None)
+    if not state:
+        return iface
+
+    flattened = dict(state)
+    # Counters sit at state.counters.* but are read as iface.in_octets etc.
+    counters = flattened.pop('counters', None)
+    if isinstance(counters, dict):
+        flattened.update(counters)
+
+    flattened.update(iface)
+    return flattened
+
+
 def _get_device_metrics(device, es_connection):
-    results = es_connection.search(
+    cpu_results = es_connection.search(
         size=1000,
         index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query={
-
             "bool": {
                 "filter": [
                     {
@@ -3554,25 +3588,117 @@ def _get_device_metrics(device, es_connection):
     visualization_data = {
         "Uptime": 0,
         "CPU": [],
+        "CPUTime": [],
         "Memory": [],
-        "Time": []
+        "MemoryTime": [],
+        "MemorySource": None
     }
 
-    for result in results['hits']['hits']:
+    for result in cpu_results['hits']['hits']:
         try:
             cpu = result['_source']['system']['cpu']['total']['norm']['pct']
-            memory = result['_source']['system']['memory']['actual']['used']['pct']
-            timestamp = result['_source']['@timestamp']
-
             visualization_data['CPU'].append(cpu)
-            visualization_data['Memory'].append(memory)
-            visualization_data['Time'].append(timestamp)
+            visualization_data['CPUTime'].append(result['_source']['@timestamp'])
         except (KeyError, TypeError):
-            # Skip documents that don't have the required CPU/Memory fields
+            # Skip documents that don't have the required CPU field
             continue
 
+    # Memory is normally the canonical system.memory.actual.used.pct, derived by a
+    # profile normalizer, and it rides the same metrics doc as CPU.
+    for result in cpu_results['hits']['hits']:
+        try:
+            memory = result['_source']['system']['memory']['actual']['used']['pct']
+            visualization_data['Memory'].append(memory)
+            visualization_data['MemoryTime'].append(result['_source']['@timestamp'])
+        except (KeyError, TypeError):
+            # Skip documents that don't have the required memory field
+            continue
+
+    if visualization_data['Memory']:
+        visualization_data['MemorySource'] = 'system.memory.actual.used.pct'
+    else:
+        # Profiles built only on HOST-RESOURCES-MIB derive no memory percentage.
+        # There, RAM is reported as a row of the same storage table as filesystem
+        # mounts, so fall back to it. Note hrStorageUsed counts reclaimable cache
+        # and buffers, so this reads higher than the normalizer-derived field —
+        # MemorySource lets the UI label which quantity is being shown.
+        # A device typically exposes several hrStorageRam rows (physical, buffers,
+        # cache, unavailable) that all report the SAME total, so bucket per poll and
+        # take the lowest hrStorageIndex — physical memory is the first RAM entry
+        # ("RAM" on EOS, "Physical memory" on net-snmp, both index 1). Aggregating
+        # rather than paging avoids a size cap that would silently truncate the
+        # series once multiplied by the number of RAM rows.
+        memory_results = es_connection.search(
+            size=0,
+            index="metrics-snmp*",
+            query={
+                "bool": {
+                    "filter": [
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "gte": "now-6h"
+                                }
+                            }
+                        },
+                        _device_host_filter(device),
+                        {
+                            "term": {
+                                "event.category": "system.filesystem"
+                            }
+                        },
+                        # Select RAM rows by hrStorageType, not by the free-text
+                        # description, which is agent- and locale-specific. Matched
+                        # against both the bare field and its .keyword subfield
+                        # because the mapping differs between the shipped index
+                        # template (keyword) and ES dynamic defaults (text+keyword).
+                        {
+                            "bool": {
+                                "should": [
+                                    {"term": {"system.filesystem.type": HR_STORAGE_RAM_OID}},
+                                    {"term": {"system.filesystem.type.keyword": HR_STORAGE_RAM_OID}}
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        }
+                    ]
+                }
+            },
+            aggregations={
+                "by_poll": {
+                    "terms": {
+                        "field": "@timestamp",
+                        "size": 1000,
+                        "order": {"_key": "desc"}
+                    },
+                    "aggregations": {
+                        "physical": {
+                            "top_hits": {
+                                "size": 1,
+                                "sort": [{"system.filesystem.index": {"order": "asc"}}],
+                                "_source": ["@timestamp", "system.filesystem.used.pct"]
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        buckets = memory_results.get('aggregations', {}).get('by_poll', {}).get('buckets', [])
+        for bucket in buckets:
+            for doc in bucket['physical']['hits']['hits']:
+                try:
+                    pct = doc['_source']['system']['filesystem']['used']['pct']
+                except (KeyError, TypeError):
+                    continue
+                visualization_data['Memory'].append(pct)
+                visualization_data['MemoryTime'].append(doc['_source']['@timestamp'])
+
+        if visualization_data['Memory']:
+            visualization_data['MemorySource'] = 'hrStorageRam'
+
     try:
-        visualization_data['Uptime'] = results['hits']['hits'][0]['_source']['host']['uptime']
+        visualization_data['Uptime'] = cpu_results['hits']['hits'][0]['_source']['host']['uptime']
     except (KeyError, TypeError, IndexError):
         visualization_data['Uptime'] = 0
 
