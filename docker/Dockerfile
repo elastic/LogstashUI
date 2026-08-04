@@ -50,6 +50,7 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && chown appuser:appuser /entrypoint.sh
 
 USER appuser
-EXPOSE 8080
+EXPOSE 8443
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn","LogstashUI.wsgi:application","--bind","0.0.0.0:8080","--workers","2","--worker-class","gevent","--worker-connections","1000","--timeout","60","--access-logfile","-","--error-logfile","-"]
+# TLS material under data/tls/ui-server.* (generated in entrypoint). Default public port 8443 (no root).
+CMD ["gunicorn","LogstashUI.wsgi:application","--bind","0.0.0.0:8443","--certfile","/app/src/logstashui/data/tls/gunicorn-fullchain.pem","--keyfile","/app/src/logstashui/data/tls/ui-server.key","--workers","2","--worker-class","gevent","--worker-connections","1000","--timeout","60","--access-logfile","-","--error-logfile","-"]

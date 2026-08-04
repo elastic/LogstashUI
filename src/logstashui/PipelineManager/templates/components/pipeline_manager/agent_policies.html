@@ -364,6 +364,104 @@
     font-weight: 600;
   }
 
+  /* Role color coding in the policy list */
+  .policy-switcher-item.role-default {
+    border-left: 3px solid #60a5fa;
+  }
+  .policy-switcher-item.role-default .policy-role-badge {
+    background: rgba(37, 99, 235, 0.25);
+    color: #93c5fd;
+    border: 1px solid rgba(96, 165, 250, 0.35);
+  }
+  .policy-switcher-item.role-simulate {
+    border-left: 3px solid #c084fc;
+  }
+  .policy-switcher-item.role-simulate .policy-role-badge {
+    background: rgba(147, 51, 234, 0.25);
+    color: #e9d5ff;
+    border: 1px solid rgba(192, 132, 252, 0.4);
+  }
+  .policy-switcher-item.role-embedded {
+    border-left: 3px solid #22d3ee;
+  }
+  .policy-switcher-item.role-embedded .policy-role-badge {
+    background: rgba(8, 145, 178, 0.3);
+    color: #a5f3fc;
+    border: 1px solid rgba(34, 211, 238, 0.4);
+  }
+
+  .policy-role-badge {
+    margin-left: auto;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+  }
+
+  .policy-switcher-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem 0.35rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .policy-filter-chip {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: #9ca3af;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .policy-filter-chip:hover {
+    color: #e5e7eb;
+    border-color: rgba(255,255,255,0.2);
+  }
+  .policy-filter-chip.active {
+    color: #f3f4f6;
+    border-color: rgba(167, 139, 250, 0.5);
+    background: rgba(139, 92, 246, 0.2);
+  }
+  .policy-filter-chip.active[data-filter="PACKAGED"],
+  .policy-filter-chip.active[data-filter="DEFAULT"] {
+    border-color: rgba(96, 165, 250, 0.55);
+    background: rgba(37, 99, 235, 0.25);
+    color: #bfdbfe;
+  }
+  .policy-filter-chip.active[data-filter="MANAGED"] {
+    border-color: rgba(251, 191, 36, 0.55);
+    background: rgba(180, 83, 9, 0.3);
+    color: #fde68a;
+  }
+  .policy-filter-chip.active[data-filter="SIMULATE"] {
+    border-color: rgba(192, 132, 252, 0.55);
+    background: rgba(147, 51, 234, 0.25);
+    color: #e9d5ff;
+  }
+  .policy-filter-chip.active[data-filter="EMBEDDED"] {
+    border-color: rgba(34, 211, 238, 0.5);
+    background: rgba(8, 145, 178, 0.25);
+    color: #a5f3fc;
+  }
+
+  .policy-switcher-name.role-default,
+  .policy-switcher-name.role-packaged { color: #93c5fd; }
+  .policy-switcher-name.role-managed { color: #fde68a; }
+  .policy-switcher-name.role-simulate { color: #e9d5ff; }
+  .policy-switcher-name.role-embedded { color: #a5f3fc; }
+
+  .policy-switcher-empty {
+    padding: 0.75rem 0.875rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    text-align: center;
+  }
+
   .policy-switcher-check {
     width: 0.875rem;
     height: 0.875rem;
@@ -567,7 +665,17 @@
       </button>
     </div>
     <div id="globalConfigContent" class="mt-3 space-y-3">
-      <div class="grid grid-cols-3 gap-4">
+      <!-- Role / type (read-only) -->
+      <div class="flex flex-wrap items-center gap-3 text-sm">
+        <div class="flex items-center gap-2">
+          <span class="text-gray-400">Role:</span>
+          <span id="policyTypeBadge" class="px-2 py-0.5 rounded text-xs font-semibold bg-gray-700 text-gray-200">DEFAULT</span>
+          <span id="policySystemBadge" class="hidden px-2 py-0.5 rounded text-xs font-semibold bg-blue-900/50 text-blue-300 border border-blue-500/40">System</span>
+        </div>
+        <p id="policyTypeHelp" class="text-xs text-gray-500">Production agents use Default policies. Simulation uses Simulate (or a clone).</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1">Settings Path:</label>
           <input type="text" id="settingsPath" value="/etc/logstash/" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
@@ -599,6 +707,66 @@
           </div>
         </div>
       </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Data Path <span class="text-gray-500 font-normal">(optional)</span>:</label>
+          <input type="text" id="dataPath" value="" placeholder="e.g. /var/lib/logstash" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          <p class="mt-1 text-xs text-gray-500">Simulate instances use <code class="text-gray-400">/opt/logstash-agent/simulate-N/data</code> at enroll.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Keystore env file:</label>
+          <input type="text" id="keystoreEnvFile" value="/etc/default/logstash" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          <p class="mt-1 text-xs text-gray-500">Where <code class="text-gray-400">LOGSTASH_KEYSTORE_PASS</code> is written for systemd.</p>
+        </div>
+      </div>
+
+      <!-- Simulate / Managed binary source fields -->
+      <div id="simulatePolicyFields" class="hidden border border-purple-500/30 rounded-lg p-3 space-y-3 bg-purple-950/20">
+        <div class="text-sm font-medium text-purple-300">Logstash binary source (simulate / managed)</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Source:</label>
+            <select id="logstashSource" class="select select-bordered select-sm w-full bg-gray-700 text-white border-gray-600">
+              <option value="SYSTEM">SYSTEM — host install / binary path</option>
+              <option value="VERSION">VERSION — download pinned release</option>
+            </select>
+          </div>
+          <div id="logstashVersionWrap">
+            <label class="block text-sm font-medium text-gray-300 mb-1">Version:</label>
+            <input type="text" id="logstashVersion" value="" placeholder="e.g. 9.4.3" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          </div>
+          <div id="logstashDownloadDirWrap">
+            <label class="block text-sm font-medium text-gray-300 mb-1">Download directory:</label>
+            <input type="text" id="logstashDownloadDir" value="/opt/logstash-agent/logstash-versions" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
+          </div>
+        </div>
+        <p id="versionLifecycleHint" class="hidden text-xs text-cyan-200/90 bg-cyan-950/30 border border-cyan-500/25 rounded px-2 py-1.5">
+          <strong class="text-cyan-100">VERSION lifecycle:</strong>
+          Save this policy — enrolled agents download the pin on the next check-in
+          (no separate Deploy needed for binary-only changes), write
+          <code class="text-cyan-100">LOGSTASH_BINARY</code> into the instance env,
+          and restart Logstash when the binary path changes.
+          Host cache: <code class="text-cyan-100">/opt/logstash-agent/logstash-versions</code>
+          (<code class="text-cyan-100">logstash-agent list-versions</code> /
+          <code class="text-cyan-100">ensure-version</code> /
+          <code class="text-cyan-100">prune-versions</code>).
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Default agent API port:</label>
+            <input type="number" id="agentApiPort" value="9500" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600" title="Live ports are 9500+N at enroll">
+            <p class="mt-1 text-xs text-gray-500">Enroll assigns <strong class="text-gray-400">9500+N</strong> per instance.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Default Logstash API port:</label>
+            <input type="number" id="logstashApiPort" value="9560" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600" title="Live ports are 9560+N at enroll">
+            <p class="mt-1 text-xs text-gray-500">Enroll assigns <strong class="text-gray-400">9560+N</strong> per instance.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="policyLockBanner" class="hidden text-xs text-amber-300 bg-amber-900/20 border border-amber-500/30 rounded px-3 py-2"></div>
     </div>
   </div>
 
@@ -1971,31 +2139,102 @@
 <script>
 // Policy Switcher — visual layer over the hidden native #policySelect
 (function() {
+  // Active role filters: empty set or all selected = show everything
+  let roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE', 'EMBEDDED']);
+
+  function roleClass(ptype) {
+    let t = (ptype || 'PACKAGED').toUpperCase();
+    if (t === 'DEFAULT') t = 'PACKAGED';
+    if (t === 'SIMULATE') return 'role-simulate';
+    if (t === 'EMBEDDED') return 'role-embedded';
+    if (t === 'MANAGED') return 'role-managed';
+    if (t === 'PACKAGED') return 'role-packaged';
+    return 'role-default';
+  }
+
+  function updateLabel(sel) {
+    const label = document.getElementById('policySwitcherLabel');
+    if (!label || !sel) return;
+    if (sel.value === 'add_new') {
+      label.textContent = 'Select policy…';
+      label.className = 'policy-switcher-name';
+      return;
+    }
+    label.textContent = sel.dataset.policyName || sel.textContent;
+    label.className = 'policy-switcher-name ' + roleClass(sel.dataset.policyType);
+  }
+
   function rebuildMenu() {
     const select = document.getElementById('policySelect');
     const menu = document.getElementById('policySwitcherMenu');
-    const label = document.getElementById('policySwitcherLabel');
     if (!select || !menu) return;
 
-    // Update button label from current selection
     const sel = select.options[select.selectedIndex];
-    if (sel) {
-      label.textContent = sel.value === 'add_new' ? 'Select policy…' : (sel.dataset.policyName || sel.textContent);
+    updateLabel(sel);
+
+    menu.innerHTML = '';
+
+    // Role filter chips
+    const filters = document.createElement('div');
+    filters.className = 'policy-switcher-filters';
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Filter policies by role');
+    [
+      { key: 'PACKAGED', label: 'Packaged' },
+      { key: 'MANAGED', label: 'Managed' },
+      { key: 'SIMULATE', label: 'Simulate' },
+      { key: 'EMBEDDED', label: 'Embedded' },
+    ].forEach(({ key, label }) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'policy-filter-chip' + (roleFilter.has(key) ? ' active' : '');
+      chip.dataset.filter = key;
+      chip.textContent = label;
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (roleFilter.has(key) && roleFilter.size > 1) {
+          roleFilter.delete(key);
+        } else if (roleFilter.has(key) && roleFilter.size === 1) {
+          // keep at least one? allow empty then show empty state
+          roleFilter.delete(key);
+        } else {
+          roleFilter.add(key);
+        }
+        // If user cleared all, re-enable all (toggle UX)
+        if (roleFilter.size === 0) {
+          roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE', 'EMBEDDED']);
+        }
+        rebuildMenu();
+      });
+      filters.appendChild(chip);
+    });
+    menu.appendChild(filters);
+
+    const policies = Array.from(select.options).filter(o => o.value !== 'add_new');
+    const visible = policies.filter(o => {
+      let t = (o.dataset.policyType || 'PACKAGED').toUpperCase();
+      if (t === 'DEFAULT') t = 'PACKAGED';
+      return roleFilter.has(t);
+    });
+
+    if (visible.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'policy-switcher-empty';
+      empty.textContent = 'No policies match this filter';
+      menu.appendChild(empty);
     }
 
-    // Rebuild menu items
-    menu.innerHTML = '';
-    const policies = Array.from(select.options).filter(o => o.value !== 'add_new');
-
-    policies.forEach(opt => {
+    visible.forEach(opt => {
       const isSelected = opt === sel;
+      const ptype = (opt.dataset.policyType || 'DEFAULT').toUpperCase();
       const item = document.createElement('div');
-      item.className = 'policy-switcher-item' + (isSelected ? ' selected' : '');
+      item.className = 'policy-switcher-item ' + roleClass(ptype) + (isSelected ? ' selected' : '');
       item.innerHTML = `
         <svg class="policy-switcher-check ${isSelected ? '' : 'invisible'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
         </svg>
-        <span>${opt.dataset.policyName || opt.textContent}</span>`;
+        <span>${opt.dataset.policyName || opt.textContent}</span>
+        <span class="policy-role-badge">${ptype}</span>`;
       item.addEventListener('click', () => {
         select.value = opt.value;
         select.dispatchEvent(new Event('change'));
@@ -2005,7 +2244,7 @@
     });
 
     // Divider + Add Policy action
-    if (policies.length > 0) {
+    if (policies.length > 0 || visible.length > 0) {
       const divider = document.createElement('div');
       divider.className = 'policy-switcher-divider';
       menu.appendChild(divider);
@@ -2055,15 +2294,12 @@
     }
   });
 
-  // Keep button label in sync whenever the hidden select changes
+  // Keep button label (and color) in sync whenever the hidden select changes
   const select = document.getElementById('policySelect');
   if (select) {
     select.addEventListener('change', function() {
-      const label = document.getElementById('policySwitcherLabel');
       const sel = this.options[this.selectedIndex];
-      if (label && sel && sel.value !== 'add_new') {
-        label.textContent = sel.dataset.policyName || sel.textContent;
-      }
+      updateLabel(sel);
     });
   }
 })();

@@ -8,40 +8,34 @@
 
 {% block content %}
 <script>
-  // Configure HTMX to include CSRF token in all requests
   document.body.addEventListener('htmx:configRequest', (event) => {
     event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
   });
 </script>
-<div class="p-6">
+<div class="p-6 max-w-5xl">
   <div class="mb-6">
     <h1 class="text-2xl font-bold text-white">Settings</h1>
-    <p class="text-gray-400">Configure application settings</p>
+    <p class="text-gray-400">Configure application settings, agent callback URL, and HTTPS certificates</p>
   </div>
 
   <form method="post" id="settings-form" class="space-y-6">
     {% csrf_token %}
-    
-    <!-- Settings List -->
+
     <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
       <div class="divide-y divide-gray-700">
-        <!-- Experimental Mode Setting -->
+        <!-- Experimental Mode -->
         <div class="flex items-start justify-between p-6">
           <div class="flex-1 pr-8">
-            <div class="flex items-center gap-2 mb-2">
-              <h3 class="text-lg font-semibold text-white">Experimental Mode</h3>
-            </div>
+            <h3 class="text-lg font-semibold text-white mb-2">Experimental Mode</h3>
             <p class="text-sm text-gray-400 mb-2">
-              Enable access to experimental features that are under active development. 
+              Enable access to experimental features that are under active development.
               These features may be unstable and are subject to change.
             </p>
-            <div class="text-xs text-gray-500 font-mono">
-              Default: false
-            </div>
+            <div class="text-xs text-gray-500 font-mono">Default: false</div>
           </div>
           <div class="flex items-center">
             <label class="swap swap-flip text-2xl">
-              <input type="checkbox" name="experimental_mode" id="experimental_mode" 
+              <input type="checkbox" name="experimental_mode" id="experimental_mode"
                      {% if app_settings.experimental_mode %}checked{% endif %}
                      onchange="markAsModified()">
               <div class="swap-on">
@@ -57,35 +51,139 @@
             </label>
           </div>
         </div>
+
+        <!-- Agent callback URL -->
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-white mb-2">Agent callback URL</h3>
+          <p class="text-sm text-gray-400 mb-3">
+            Base URL that <strong class="text-gray-300">agents</strong> use to reach LogstashUI (backend channel).
+            Prefills <code class="text-gray-300">--logstash-ui-url</code> in generated enrollment commands.
+            May differ from the browser reverse-proxy URL; they can also be the same.
+          </p>
+          <input type="url" name="agent_ui_url" id="agent_ui_url"
+                 value="{{ app_settings.agent_ui_url|default:'' }}"
+                 placeholder="https://10.0.0.50:8443 or https://logstashui-internal"
+                 oninput="markAsModified()"
+                 class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-gray-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="text-xs text-gray-500 mt-2">
+            Product CA for agents is published at
+            <code class="text-gray-400">{% if app_settings.agent_ui_url %}{{ app_settings.agent_ui_url }}{% else %}&lt;ui_url&gt;{% endif %}/.well-known/logstashui/ca.crt</code>
+          </p>
+        </div>
       </div>
     </div>
 
-    <!-- Save Button -->
     <div class="flex items-center justify-between bg-gray-800 rounded-lg p-6 shadow-xl">
       <div class="text-sm text-gray-400">
         <span id="unsaved-changes" class="hidden text-warning font-semibold">You have unsaved changes</span>
       </div>
       <button type="submit" id="save-button" class="btn btn-primary" disabled>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-        </svg>
         Save Changes
       </button>
     </div>
   </form>
+
+  <!-- HTTPS / TLS section (separate forms: upload / revert) -->
+  <div class="mt-10 space-y-4">
+    <div>
+      <h2 class="text-xl font-bold text-white">HTTPS certificate</h2>
+      <p class="text-sm text-gray-400 mt-1">
+        Certificate presented by LogstashUI to browsers and agents on the UI HTTPS listener.
+        This does <strong class="text-gray-300">not</strong> replace the product CA used for agent enrollment.
+      </p>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg shadow-xl p-6 space-y-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="text-sm text-gray-400">Current mode:</span>
+        {% if tls_status.mode == 'custom' %}
+        <span class="px-2 py-1 text-xs font-semibold rounded bg-blue-900/50 text-blue-300 border border-blue-700">Custom certificate</span>
+        {% else %}
+        <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">Product CA (default)</span>
+        {% endif %}
+      </div>
+
+      {% if tls_status.certificate %}
+      <div class="text-sm text-gray-300 space-y-1 font-mono bg-gray-900/60 rounded-md p-4 border border-gray-700">
+        <div><span class="text-gray-500">Subject CN:</span> {{ tls_status.certificate.subject_cn }}</div>
+        <div><span class="text-gray-500">Issuer:</span> {{ tls_status.certificate.issuer }}</div>
+        <div><span class="text-gray-500">Valid until:</span> {{ tls_status.certificate.not_after }}</div>
+        <div><span class="text-gray-500">SANs:</span>
+          {% if tls_status.certificate.sans %}
+            {{ tls_status.certificate.sans|join:", " }}
+          {% else %}
+            <span class="text-gray-500">(none)</span>
+          {% endif %}
+        </div>
+        <div class="text-xs text-gray-500 break-all"><span class="text-gray-500">Fingerprint:</span> {{ tls_status.certificate.fingerprint_sha256 }}</div>
+      </div>
+      {% elif tls_status.certificate_error %}
+      <p class="text-sm text-red-400">Could not parse certificate: {{ tls_status.certificate_error }}</p>
+      {% else %}
+      <p class="text-sm text-gray-400">No UI server certificate on disk yet (will be generated on demand).</p>
+      {% endif %}
+
+      <div class="text-xs text-gray-500 whitespace-pre-wrap font-mono bg-gray-900/40 p-3 rounded border border-gray-700">{{ tls_status.nginx_hint }}</div>
+      <p class="text-xs text-gray-500">
+        Product CA fingerprint (agents pin this via enrollment token):
+        <code class="text-gray-400">{{ tls_status.product_ca_fingerprint }}</code>
+      </p>
+
+      <form id="tls-upload-form" class="space-y-4 border-t border-gray-700 pt-4" enctype="multipart/form-data">
+        {% csrf_token %}
+        <h3 class="text-md font-semibold text-white">Use custom certificate</h3>
+        <p class="text-sm text-gray-400">
+          Upload a certificate from a recognized CA (e.g. Let’s Encrypt) or your corporate PKI.
+          Provide the leaf PEM and matching private key. Optional chain/intermediates PEM.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <label class="block text-sm text-gray-300">
+            Certificate (PEM)
+            <input type="file" name="certificate" accept=".pem,.crt,.cer,.cert" required
+                   class="mt-1 block w-full text-sm text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-gray-200">
+          </label>
+          <label class="block text-sm text-gray-300">
+            Private key (PEM)
+            <input type="file" name="private_key" accept=".pem,.key" required
+                   class="mt-1 block w-full text-sm text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-gray-200">
+          </label>
+          <label class="block text-sm text-gray-300">
+            Chain (optional)
+            <input type="file" name="chain" accept=".pem,.crt,.cer"
+                   class="mt-1 block w-full text-sm text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-gray-200">
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Upload &amp; install</button>
+      </form>
+
+      <div class="border-t border-gray-700 pt-4">
+        <button type="button" id="tls-revert-btn" class="btn btn-outline btn-sm text-amber-200 border-amber-700 hover:bg-amber-900/30">
+          Revert to product default
+        </button>
+        <p class="text-xs text-gray-500 mt-2">
+          Regenerates a product-CA-signed certificate (self-signed path for OOTB).
+          After upload or revert, restart the UI so gunicorn reloads
+          <code class="text-gray-400">data/tls/ui-server.*</code>
+          (Docker: <code class="text-gray-400">docker compose restart logstashui</code>).
+        </p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-    let originalExperimentalMode = {{ app_settings.experimental_mode|lower }};
-    
+    let originalExperimentalMode = {{ app_settings.experimental_mode|yesno:"true,false" }};
+    let originalAgentUiUrl = "{{ app_settings.agent_ui_url|default:''|escapejs }}";
+
     function markAsModified() {
         const currentExperimentalMode = document.getElementById('experimental_mode').checked;
-        const isModified = originalExperimentalMode !== currentExperimentalMode;
-        
-        // Update UI
+        const currentAgentUiUrl = document.getElementById('agent_ui_url').value.trim();
+        const isModified =
+            originalExperimentalMode !== currentExperimentalMode ||
+            originalAgentUiUrl !== currentAgentUiUrl;
+
         const saveButton = document.getElementById('save-button');
         const unsavedChanges = document.getElementById('unsaved-changes');
-        
         if (isModified) {
             saveButton.disabled = false;
             unsavedChanges.classList.remove('hidden');
@@ -94,46 +192,89 @@
             unsavedChanges.classList.add('hidden');
         }
     }
-    
-    // Handle form submission
+
     document.getElementById('settings-form').addEventListener('submit', function(e) {
         e.preventDefault();
-        
         const formData = new FormData(this);
         const saveButton = document.getElementById('save-button');
         const originalText = saveButton.innerHTML;
-        
-        // Show loading state
         saveButton.disabled = true;
         saveButton.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Saving...';
-        
+
         fetch(window.location.href, {
             method: 'POST',
             body: formData,
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             if (data.success) {
                 showToast(data.message || 'Settings saved successfully', 'success');
-                // Update original state and reload page to update nav
                 originalExperimentalMode = document.getElementById('experimental_mode').checked;
+                originalAgentUiUrl = document.getElementById('agent_ui_url').value.trim();
                 markAsModified();
-                // Reload page after 1 second to update navigation
-                setTimeout(() => window.location.reload(), 1000);
+                setTimeout(() => window.location.reload(), 800);
             } else {
                 showToast(data.message || 'Failed to save settings', 'error');
                 saveButton.innerHTML = originalText;
                 saveButton.disabled = false;
             }
         })
-        .catch(error => {
-            console.error('Error:', error);
+        .catch(err => {
+            console.error(err);
             showToast('An error occurred while saving settings', 'error');
             saveButton.innerHTML = originalText;
             saveButton.disabled = false;
+        });
+    });
+
+    document.getElementById('tls-upload-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/Management/Settings/Tls/', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(data.message || 'Upload failed', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Upload failed', 'error');
+        });
+    });
+
+    document.getElementById('tls-revert-btn').addEventListener('click', function() {
+        if (!confirm('Revert to the product default certificate? Custom cert files will be replaced.')) {
+            return;
+        }
+        fetch('/Management/Settings/Tls/Revert/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: '{}'
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(data.message || 'Revert failed', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Revert failed', 'error');
         });
     });
 </script>

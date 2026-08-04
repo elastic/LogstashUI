@@ -99,6 +99,124 @@ class TestSimulatePipeline:
         assert b'Connection refused' in response.content
 
     @patch('PipelineManager.simulation.requests.post')
+    @patch('PipelineManager.simulation.requests.get')
+    def test_session_slot_rejected_when_pipeline_not_on_this_agent(
+        self, mock_get, mock_post, authenticated_client
+    ):
+        """Cross-node: slot table entry without loaded pipeline must re-allocate.
+
+        embedded slot-1 is not simulate-1 slot-1; skipping allocate when the
+        named pipeline is missing causes AbstractPipelineBus storms.
+        """
+        components = {
+            "input": [],
+            "filter": [{"id": "filter_1", "plugin": "mutate", "config": {}}],
+            "output": [],
+        }
+
+        def _get(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.ok = True
+            resp.status_code = 200
+            resp.raise_for_status = MagicMock()
+            if url.rstrip("/").endswith("/_logstash/slots"):
+                # Table thinks slot 1 exists (stale / wrong node identity)
+                resp.json.return_value = {"1": {"pipeline_name": "x"}}
+            elif "pipelines/status" in url:
+                # But the bus has no slot1-filter1 on *this* agent
+                resp.json.return_value = {
+                    "running_pipelines": ["simulate-start", "simulate-end"],
+                    "count": 2,
+                    "states": {},
+                }
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        mock_get.side_effect = _get
+
+        alloc = MagicMock()
+        alloc.status_code = 200
+        alloc.raise_for_status = MagicMock()
+        alloc.json.return_value = {"slot_id": 2, "reused": False}
+        mock_post.return_value = alloc
+
+        response = authenticated_client.post(
+            "/ConnectionManager/SimulatePipeline/",
+            {
+                "components": json.dumps(components),
+                "log_text": '{"message": "test"}',
+                "slot_id": "1",  # foreign/stale session slot
+            },
+        )
+
+        assert response.status_code == 200
+        # Must have called allocate (not skipped for unusable session slot)
+        assert mock_post.called
+        alloc_urls = [
+            c.args[0] for c in mock_post.call_args_list if c.args
+        ]
+        assert any("/_logstash/slots/allocate" in u for u in alloc_urls)
+        content = response.content.decode("utf-8")
+        assert "slot" in content.lower()
+
+    @patch('PipelineManager.simulation.requests.post')
+    @patch('PipelineManager.simulation.requests.get')
+    def test_session_slot_accepted_when_pipeline_loaded_here(
+        self, mock_get, mock_post, authenticated_client
+    ):
+        """Same-node multi-doc: skip allocate only if pipeline is on this agent."""
+        components = {
+            "input": [],
+            "filter": [{"id": "filter_1", "plugin": "mutate", "config": {}}],
+            "output": [],
+        }
+
+        def _get(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.ok = True
+            resp.status_code = 200
+            resp.raise_for_status = MagicMock()
+            if url.rstrip("/").endswith("/_logstash/slots"):
+                resp.json.return_value = {"1": {"pipeline_name": "x"}}
+            elif "pipelines/status" in url:
+                resp.json.return_value = {
+                    "running_pipelines": [
+                        "simulate-start",
+                        "simulate-end",
+                        "slot1-filter1",
+                    ],
+                    "count": 3,
+                    "states": {"slot1-filter1": "idle"},
+                }
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        mock_get.side_effect = _get
+
+        response = authenticated_client.post(
+            "/ConnectionManager/SimulatePipeline/",
+            {
+                "components": json.dumps(components),
+                "log_text": '{"message": "test"}',
+                "slot_id": "1",
+            },
+        )
+
+        assert response.status_code == 200
+        # Allocate must not be called when session slot is live on this agent
+        # (simulate document POST may still call requests.post)
+        alloc_urls = [
+            c.args[0]
+            for c in mock_post.call_args_list
+            if c.args and isinstance(c.args[0], str)
+        ]
+        assert not any("/_logstash/slots/allocate" in u for u in alloc_urls)
+        # Document-path response is simulation_results (not allocate HTML)
+        assert b"data-pipeline-failed" not in response.content
+
+    @patch('PipelineManager.simulation.requests.post')
     def test_simulate_pipeline_no_filters(self, mock_post, authenticated_client):
         """Test SimulatePipeline with no filter plugins"""
         components = {

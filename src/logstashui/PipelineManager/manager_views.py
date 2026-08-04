@@ -75,7 +75,19 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    connections = list(ConnectionTable.objects.values("connection_type", "name", "host", "cloud_id", "cloud_url", "pk", "policy__name", "policy_id", "last_check_in", "status_blob", "desired_agent_version"))
+    # Refresh sticky embedded row (probe + last_check_in) before listing
+    try:
+        from PipelineManager.agent_modes import ensure_embedded_connection
+
+        ensure_embedded_connection()
+    except Exception:
+        pass
+
+    connections = list(ConnectionTable.objects.values(
+        "connection_type", "name", "host", "cloud_id", "cloud_url", "pk",
+        "policy__name", "policy_id", "policy__policy_type", "agent_id",
+        "last_check_in", "status_blob", "desired_agent_version",
+    ))
     
     # Add is_online flag based on last_check_in time (within 10 minutes)
     now = datetime.now(timezone.utc)
@@ -309,6 +321,16 @@ def get_agent_inspect(request, connection_id):
     except ConnectionTable.DoesNotExist:
         return HttpResponse('Agent not found', status=404)
 
+    # Embedded never check-ins; re-probe when inspecting
+    try:
+        from PipelineManager.agent_modes import ensure_embedded_connection, is_embedded_connection
+
+        if is_embedded_connection(connection):
+            ensure_embedded_connection()
+            connection.refresh_from_db()
+    except Exception:
+        pass
+
     now = datetime.now(timezone.utc)
     if connection.last_check_in:
         connection.is_online = (now - connection.last_check_in).total_seconds() < 600
@@ -369,11 +391,19 @@ def agent_status_stream(request):
     def _event_stream():
         try:
             while True:
+                # Keep embedded last_check_in fresh while the Connections page is open
+                try:
+                    from PipelineManager.agent_modes import ensure_embedded_connection
+
+                    ensure_embedded_connection()
+                except Exception:
+                    pass
+
                 now = datetime.now(timezone.utc)
                 connections = list(
                     ConnectionTable.objects
                     .filter(connection_type=ConnectionTable.ConnectionType.AGENT)
-                    .values('pk', 'name', 'last_check_in', 'status_blob')
+                    .values('pk', 'name', 'last_check_in', 'status_blob', 'agent_id')
                 )
 
                 for conn in connections:

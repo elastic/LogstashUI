@@ -1,246 +1,92 @@
-# Host Mode - High-Performance Pipeline Simulation
+# Simulate agents (formerly “Host Mode”)
 
-## What is Host Mode?
+> **Renamed concept:** What older docs called **host mode** is now an enrolled **simulate** LogstashAgent with isolated paths. You should not point simulation at your production Logstash under `/etc/logstash`.
+>
+> For **Packaged**, **Managed**, ports, coexistence, and VERSION CLI, see  
+> **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)**.
 
-Host mode runs the LogstashAgent **natively** on your host machine instead of inside a Docker container. This provides more reliable pipeline simulations, making it ideal for users who frequently test and iterate on pipeline configurations.
+## Why simulate agents?
 
-### Embedded Mode vs Host Mode
-
-| Feature | Embedded Mode                                                                         | Host Mode                      |
-|---------|---------------------------------------------------------------------------------------|--------------------------------|
-| **Performance** | Error prone with large  pipelines due to container memory allocation                  | Highly reliable                |
-| **Setup** | Simple - no dependencies                                                              | Requires Logstash installation |
-| **Best For** | Quick start, occasional simulations                                                   | Heavy simulation workloads     |
-| **Logstash Required** | ❌ No                                                                                  | ✅ Yes (dedicated instance)     |
-
-> [!WARNING]
-> Host mode requires a **dedicated Logstash installation** that is not running any production pipelines. The simulation agent will overwrite configuration files and manage the Logstash process.
-
----
+| Feature | Embedded (Docker) | Simulate agent (enrolled) |
+|---------|-------------------|---------------------------|
+| **Reliability** | Weaker for large pipelines | Strong — native JVM/Logstash |
+| **Setup** | Compose only | Install LogstashAgent + enroll |
+| **Isolation** | Container | `/opt/logstash-agent/simulate-N/` |
+| **Multi-version** | Single image | Pin VERSION per policy / instance |
+| **Coexist with prod agent** | N/A | Yes — same host as Packaged / Managed |
 
 ## Prerequisites
 
-### System Requirements
-- **Windows**: Windows 10/11 or Windows Server 2016+
-- **Linux**: Ubuntu 20.04+, RHEL 8+, or similar
-- **RAM**: 8 GB minimum
-- **CPU**: 4 cores minimum
+- **LogstashUI** and **LogstashAgent** paired on the agent-modes branch/release (simulate units, VERSION apply)
+- Linux host (systemd) for install templates
+- Root for `logstash-agent install --enroll …` (or non-root enroll + `sudo logstash-agent setup-simulate`)
+- Logstash binary available either:
+  - **SYSTEM** — package or tarball already on the host, or
+  - **VERSION** — agent downloads from Elastic artifacts into `/opt/logstash-agent/logstash-versions/`
+- Reachable LogstashUI URL from the agent host
 
-### Software Requirements
-1. **[Docker](https://www.docker.com/get-started/)** - For running the LogstashUI and Nginx containers
-2. **[Python 3.12+](https://www.python.org/downloads/)** - For running the native LogstashAgent
-3. **[Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash)** - Dedicated instance for simulation (must not be running)
+## Install a simulate agent
 
----
-
-## Installation
-
-### Step 1: Install Logstash
-
-Download and install Logstash on your host machine:
-
-#### Windows
-1. Download Logstash from [elastic.co/downloads/logstash](https://www.elastic.co/downloads/logstash)
-2. Extract to a location like `C:\logstash-9.3.1\`
-3. Note the installation path - you'll need it for configuration
-
-#### Linux
-Follow [these instructions](https://www.elastic.co/docs/reference/logstash/installing-logstash)
-
-
-> [!IMPORTANT]
-> Ensure Logstash is **not running** as a service. The LogstashAgent will manage the Logstash process.
+1. In LogstashUI **Agent Policies**, open **Simulate Policy** (or a clone).
+2. Optionally set **Source = VERSION** and a pin (e.g. `9.4.3`) — applied on check-in / install materialize.
+3. Copy an enrollment token.
+4. On the agent host:
 
 ```bash
-# Stop Logstash service if running
-sudo systemctl stop logstash
-sudo systemctl disable logstash
+sudo logstash-agent install \
+  --enroll '<TOKEN>' \
+  --logstash-ui-url 'https://your-logstashui.example'
 ```
 
-### Step 2: Install Python
+Install enables and starts `lsagent-simulate@N` (N is assigned at enroll; see install output). Logstash unit `ls-simulate@N` is enabled; the agent restarts it when ready.
 
-#### Windows
-1. Download Python 3.12+ from [python.org](https://www.python.org/downloads/)
-2. During installation, check "Add Python to PATH"
-3. Verify installation:
-   ```cmd
-   python --version
-   ```
-   
-```cmd
-set PATH=%PATH%;C:\Python312
-```
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install python3.12 python3-pip python3.12-venv
-
-# Verify installation
-python3 --version
-```
-
-### Step 3: Clone LogstashUI
+5. In the pipeline editor, select the target under **Sim target**.
 
 ```bash
-git clone https://github.com/elastic/LogstashUI.git
-cd LogstashUI
+# Day-2
+sudo systemctl status lsagent-simulate@N
+logstash-agent list-instances
 ```
 
----
+## Paths and ports
 
-## Configuration
+For instance **N**:
 
-Edit `logstashui.yml` in the project root to configure host mode:
+| Item | Location / value |
+|------|------------------|
+| Settings | `/opt/logstash-agent/simulate-N/settings` |
+| Config | `/opt/logstash-agent/simulate-N/config` |
+| Logs | `/opt/logstash-agent/simulate-N/logs` |
+| Data | `/opt/logstash-agent/simulate-N/data` |
+| Env (incl. keystore pass + `LOGSTASH_BINARY`) | `/opt/logstash-agent/simulate-N/env` |
+| Agent config / state | `…/logstash-agent.yml`, `…/state/` (isolated from packaged) |
+| Agent FastAPI | **9500 + N** |
+| Logstash HTTP API | **9560 + N** |
+| Agent unit | `lsagent-simulate@N` |
+| Logstash unit | `ls-simulate@N` |
 
-### Windows Example
+Embedded Docker remains **9500 / 9560** and does not use these paths.
 
-```yaml
-simulation:
-  mode: host  # Change from 'embedded' to 'host'
+Managed multi-instance production trees use **9600+N / 9700+N** and `logstash-agent@N` / `logstash-managed@N` — see the [roles guide](/docs/docs/logstashagent/general/roles.md).
 
-  logstash_agent:
-    mode: simulation
-    
-    # Windows paths - adjust to match your Logstash installation
-    logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
-    logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
-    logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs
-```
+## Upgrade from old “host mode”
 
-### Linux Example
+1. Stop any local agent that was managing production `/etc/logstash` for UI sim only.
+2. Enroll a **Simulate** policy agent as above.
+3. Leave production agents on **Packaged** policies (legacy **Default** maps to Packaged; no re-enroll required for those).
+4. Prefer the editor Sim target list over `simulation.mode: host` in `logstashui.yml`.
+## Legacy start script (`simulation.mode: host`)
 
-```yaml
-simulation:
-  mode: host  # Change from 'embedded' to 'host'
+`bin/start_logstashui.sh` / `.bat` still accept **`simulation.mode: host`** for a **local** agent:
 
-  logstash_agent:
-    mode: simulation
-    
-    # Linux paths - adjust if you installed Logstash in a custom location
-    logstash_binary: /usr/share/logstash/bin/logstash
-    logstash_settings: /etc/logstash
-    logstash_log_path: /var/log/logstash
-```
+- Starts native FastAPI agent on port **9501** (supervisor `Popen` of package Logstash)
+- `bin/sync_config.py` writes `mode: embedded` + `simulation_mode: host` (not enrolled `mode: simulate`)
+- Compose runs UI + nginx only; nginx proxies to `host.docker.internal:9501`
 
-> [!TIP]
-> The default Linux paths shown above work for package manager installations (apt/yum). If you extracted Logstash manually, adjust the paths accordingly.
+This path is **legacy**. It is not the same as `lsagent-simulate@N` / isolated `/opt/logstash-agent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
 
----
+## Related
 
-## Running Host Mode
-
-Once configured, start LogstashUI using the startup script:
-
-### Windows
-
-```cmd
-cd LogstashUI\bin
-start_logstashui.bat
-```
-
-### Linux
-
-```bash
-cd LogstashUI/bin
-./start_logstashui.sh
-```
-
-### What Happens During Startup
-
-1. **Script detects host mode** from `logstashui.yml`
-2. **Python dependencies** are installed automatically
-3. **LogstashAgent starts natively** on your host machine (port 9501)
-4. **Docker containers start** for LogstashUI (Django) and Nginx
-5. **Nginx proxies** simulation requests from port 9500 to the native agent at 9501
-
-> [!NOTE]
-> The native agent's bind address differs by platform: on **Linux** it binds to `0.0.0.0:9501` (reachable from other machines), while on **Windows** it binds to `127.0.0.1:9501` (localhost only). Nginx reaches it via `host.docker.internal:9501` in both cases, so LogstashUI works the same either way.
-
-### Verify Host Mode is Running
-
-Check that the LogstashAgent is running natively:
-
-#### Windows
-```cmd
-netstat -ano | findstr :9501
-```
-
-#### Linux
-```bash
-lsof -i :9501
-```
-
-You should see the Python process listening on port 9501.
-
----
-
-## Accessing LogstashUI
-
-Once started, navigate to:
-
-```
-https://<your_server_ip_or_hostname>
-```
-
----
-
-## Troubleshooting
-
-### "Logstash binary not found"
-
-**Cause**: The path in `logstashui.yml` doesn't match your Logstash installation.
-
-**Solution**: 
-1. Verify your Logstash installation path
-2. Update `logstash_binary` in `logstashui.yml` to match
-3. Restart LogstashUI
-
-### "Port 9501 already in use"
-
-**Cause**: Another process is using port 9501, or a previous LogstashAgent didn't shut down cleanly.
-
-**Solution**:
-```bash
-# Windows
-netstat -ano | findstr :9501
-taskkill /PID <PID> /F
-
-# Linux
-lsof -i :9501
-kill -9 <PID>
-```
-
-### "Permission denied" on Linux
-
-**Cause**: Logstash directories require elevated permissions.
-
-**Solution**: Ensure your user has read/write access to:
-- `/etc/logstash/`
-- `/var/log/logstash/`
-
-Or run with appropriate permissions:
-```bash
-sudo chown -R $USER:$USER /etc/logstash /var/log/logstash
-```
-
-
-## Known Limitations
-### Timing precision in Host Mode for Windows
-
-When running in Host mode on Windows, plugin execution times are rounded to whole milliseconds (1.000ms, 2.000ms, etc.) due to JRuby's time precision on Windows.
-
-This means that sub-ms plugin execution get rounded to 0.0ms, resulting in timing not displaying at all for plugins with less than 1ms execution.
-
-This still allows us to see the relative performance of plugins, but it does not provide accurate sub-millisecond timing like you get in every mode other than Windows Host mode.
-
-For accurate sub-millisecond timing during development on Windows, use Embedded mode or Host mode on Linux.
-
----
-
-## Related Documentation
-
-- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - Overview of simulation modes
-- **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)** - Full configuration reference
-- **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)** - Return to configuration index
-- **[Getting Started](/docs/docs/getting_started.md)** - Quick start guide
+- **[Simulation overview](/docs/docs/logstashui/configuration/simulation.md)**
+- **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)**
+- **[LogstashAgent modes](/docs/docs/logstashagent/configuration/logstashagent.yml.md)**

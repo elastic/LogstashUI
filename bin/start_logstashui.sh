@@ -4,9 +4,10 @@
 #you may not use this file except in compliance with the Elastic License.
 
 # logstashui Startup Script
-# Detects mode from logstashui.example.yml and starts accordingly
-# - Host mode: Starts native Python agent on Linux, then containers (without agent container)
-# - Embedded mode: Starts all containers including agent
+# Detects simulation.mode from logstashui.yml / example and starts accordingly
+# - embedded: all containers including LogstashAgent
+# - host (LEGACY): native agent on :9501 + UI only — not enrolled simulate@N
+# Preferred multi-instance sim: enroll a Simulate policy (see host_mode.md)
 #
 # Usage:
 #   ./start_logstashui.sh          - Start with existing images
@@ -63,15 +64,219 @@ fi
 echo "Using Docker Compose command: $DOCKER_COMPOSE"
 echo ""
 
+# ---------------------------------------------------------------------------
+# Host identity for product UI TLS SANs (containers cannot see Docker host IPs)
+# ---------------------------------------------------------------------------
+# Iterate a comma-separated list without IFS word-splitting (safe + portable).
+# Callback receives one trimmed token per call.
+foreach_csv() {
+    local csv="$1"
+    local fn="$2"
+    local token
+    while IFS= read -r token; do
+        # trim whitespace
+        token="${token#"${token%%[![:space:]]*}"}"
+        token="${token%"${token##*[![:space:]]}"}"
+        [ -n "$token" ] || continue
+        "$fn" "$token"
+    done <<EOF
+$(printf '%s' "$csv" | tr ',' '\n')
+EOF
+}
+
+# Best-effort PTR for one IP → FQDN (strip trailing dot). Empty if none / NXDOMAIN.
+# Prefer dig, then host(1), then python3 — works on Linux + macOS.
+reverse_lookup_ip() {
+    local ip="$1"
+    local name=""
+    [ -n "$ip" ] || return 0
+
+    if command -v dig >/dev/null 2>&1; then
+        name=$(dig +short -x "$ip" 2>/dev/null | head -1 | sed 's/\.$//')
+    fi
+    if [ -z "$name" ] && command -v host >/dev/null 2>&1; then
+        name=$(host "$ip" 2>/dev/null | awk '/pointer/ {print $NF; exit}' | sed 's/\.$//')
+    fi
+    if [ -z "$name" ] && command -v python3 >/dev/null 2>&1; then
+        # Quote IP via env to avoid shell injection into python -c
+        name=$(
+            IP_ADDR="$ip" python3 -c "
+import os, socket
+socket.setdefaulttimeout(1.0)
+try:
+    print(socket.gethostbyaddr(os.environ['IP_ADDR'])[0].rstrip('.'))
+except Exception:
+    pass
+" 2>/dev/null || true
+        )
+    fi
+
+    # Keep only multi-label names (real FQDNs), not the IP echoed back or short labels
+    if [ -n "$name" ] && [ "$name" != "$ip" ] && [[ "$name" == *.* ]]; then
+        printf '%s' "$name"
+    fi
+}
+
+# Append unique comma-separated token (case-insensitive dedupe for hostnames)
+append_unique_csv() {
+    local list="$1"
+    local token="$2"
+    local t lower_token lower_t
+    [ -n "$token" ] || { printf '%s' "$list"; return 0; }
+    if [ -z "$list" ]; then
+        printf '%s' "$token"
+        return 0
+    fi
+    lower_token=$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')
+    while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        lower_t=$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')
+        if [ "$lower_t" = "$lower_token" ]; then
+            printf '%s' "$list"
+            return 0
+        fi
+    done <<EOF
+$(printf '%s' "$list" | tr ',' '\n')
+EOF
+    printf '%s,%s' "$list" "$token"
+}
+
+collect_host_tls_env() {
+    # Bare hostname from the OS (often short on macOS — prefer PTR FQDNs below)
+    local hn
+    hn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")
+
+    # Collect non-loopback IPv4 addresses from the host
+    local ips=""
+    if command -v ip >/dev/null 2>&1; then
+        ips=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | tr '\n' ',' | sed 's/,$//')
+    fi
+    if [ -z "$ips" ] && command -v ifconfig >/dev/null 2>&1; then
+        # macOS / BSD ifconfig
+        ips=$(ifconfig 2>/dev/null | awk '/inet / && $2 != "127.0.0.1" {print $2}' | tr '\n' ',' | sed 's/,$//')
+    fi
+    # Optional: IPv6 global (skip link-local fe80:)
+    local ips6=""
+    if command -v ip >/dev/null 2>&1; then
+        ips6=$(ip -6 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -v '^fe80' | tr '\n' ',' | sed 's/,$//')
+    fi
+    if [ -n "$ips6" ]; then
+        if [ -n "$ips" ]; then
+            ips="${ips},${ips6}"
+        else
+            ips="$ips6"
+        fi
+    fi
+    export LOGSTASHUI_HOST_IPS="${LOGSTASHUI_HOST_IPS:-$ips}"
+
+    # Reverse-lookup each host IP for FQDNs (PTR). Prefer those over bare hostname.
+    local fqdns=""
+    local first_fqdn=""
+    _tls_ptr_one() {
+        local ip="$1" name
+        name=$(reverse_lookup_ip "$ip")
+        [ -n "$name" ] || return 0
+        fqdns=$(append_unique_csv "$fqdns" "$name")
+        [ -z "$first_fqdn" ] && first_fqdn="$name"
+    }
+    if [ -n "${LOGSTASHUI_HOST_IPS:-}" ]; then
+        foreach_csv "$LOGSTASHUI_HOST_IPS" _tls_ptr_one
+    fi
+
+    # HOST_HOSTNAME: operator override > first PTR FQDN > OS hostname
+    if [ -z "${LOGSTASHUI_HOST_HOSTNAME:-}" ]; then
+        if [ -n "$first_fqdn" ]; then
+            export LOGSTASHUI_HOST_HOSTNAME="$first_fqdn"
+        else
+            export LOGSTASHUI_HOST_HOSTNAME="$hn"
+        fi
+    fi
+
+    # Merge into TLS_SANS if operator did not set it:
+    # all PTR FQDNs (or bare hostname if none), plus host IPs
+    if [ -z "${LOGSTASHUI_TLS_SANS:-}" ]; then
+        local merged=""
+        if [ -n "$fqdns" ]; then
+            merged="$fqdns"
+        elif [ -n "$LOGSTASHUI_HOST_HOSTNAME" ]; then
+            # No PTR results — fall back to hostname (may be short)
+            merged="$LOGSTASHUI_HOST_HOSTNAME"
+        fi
+        if [ -n "$LOGSTASHUI_HOST_IPS" ]; then
+            if [ -n "$merged" ]; then
+                merged="${merged},${LOGSTASHUI_HOST_IPS}"
+            else
+                merged="$LOGSTASHUI_HOST_IPS"
+            fi
+        fi
+        export LOGSTASHUI_TLS_SANS="$merged"
+    fi
+
+    # Expand CSRF trusted origins for each host name + IP (browsers hit https://…:8443)
+    # Rebuild from a clean base so a prior broken CSRF_TRUSTED_ORIGINS cannot leak in.
+    local origins="https://localhost:8443,https://127.0.0.1:8443"
+    if [ -n "${CSRF_TRUSTED_ORIGINS:-}" ]; then
+        # Keep only already-valid https?://… entries from the operator env
+        _tls_keep_origin() {
+            local o="$1"
+            case "$o" in
+                https://*|http://*) origins=$(append_unique_csv "$origins" "$o") ;;
+            esac
+        }
+        foreach_csv "$CSRF_TRUSTED_ORIGINS" _tls_keep_origin
+    fi
+    _tls_add_origin_host() {
+        local h="$1"
+        [ -n "$h" ] || return 0
+        origins=$(append_unique_csv "$origins" "https://${h}:8443")
+    }
+    if [ -n "$fqdns" ]; then
+        foreach_csv "$fqdns" _tls_add_origin_host
+    elif [ -n "$LOGSTASHUI_HOST_HOSTNAME" ]; then
+        _tls_add_origin_host "$LOGSTASHUI_HOST_HOSTNAME"
+    fi
+    if [ -n "$LOGSTASHUI_HOST_IPS" ]; then
+        foreach_csv "$LOGSTASHUI_HOST_IPS" _tls_add_origin_host
+    fi
+    export CSRF_TRUSTED_ORIGINS="$origins"
+
+    echo "Host TLS SAN injection for UI product cert:"
+    echo "  LOGSTASHUI_HOST_HOSTNAME=$LOGSTASHUI_HOST_HOSTNAME"
+    echo "  LOGSTASHUI_HOST_IPS=$LOGSTASHUI_HOST_IPS"
+    echo "  LOGSTASHUI_TLS_SANS=$LOGSTASHUI_TLS_SANS"
+    if [ -n "$fqdns" ]; then
+        echo "  reverse-DNS FQDNs=$fqdns"
+    else
+        echo "  reverse-DNS FQDNs=(none — using hostname fallback)"
+    fi
+    echo ""
+}
+collect_host_tls_env
+
 # Parse command line arguments
 REBUILD_FLAG=""
 UPDATE_MODE=0
+# --rebuild builds from local source (docker-compose.smoke.yml). Plain `up`
+# without --rebuild uses Hub images (codyjackson032/*) and does NOT pick up
+# uncommitted local TLS/callback changes.
 if [ "$1" == "--rebuild" ]; then
     REBUILD_FLAG="--build"
 fi
 if [ "$1" == "--update" ]; then
     UPDATE_MODE=1
 fi
+
+# Compose file set: smoke override tags local images and enables `build:`.
+# Used whenever REBUILD_FLAG is set so --rebuild actually compiles this tree.
+compose_cmd() {
+    # Usage: compose_cmd [docker compose args...]
+    # Always run from $PROJECT_ROOT/docker (caller must cd there).
+    if [ -n "$REBUILD_FLAG" ] && [ -f "docker-compose.smoke.yml" ]; then
+        $DOCKER_COMPOSE -f docker-compose.yml -f docker-compose.smoke.yml "$@"
+    else
+        $DOCKER_COMPOSE "$@"
+    fi
+}
 
 echo "========================================"
 echo "LogstashUI Startup"
@@ -189,10 +394,15 @@ echo ""
 
 if [ "$MODE" == "host" ]; then
     echo "========================================"
-    echo "HOST MODE DETECTED"
+    echo "LEGACY HOST MODE DETECTED"
     echo "========================================"
-    echo "Starting LogstashAgent natively on Linux"
-    echo "This allows the agent to control your host Logstash instance."
+    echo "Starting a native LogstashAgent (FastAPI + supervisor) on Linux."
+    echo ""
+    echo "NOTE: This is a LEGACY local sim path (simulation.mode: host)."
+    echo "It is NOT an enrolled mode:simulate / lsagent-simulate@N instance."
+    echo "Prefer enrolling a Simulate policy agent for multi-instance sim:"
+    echo "  sudo logstash-agent install --enroll <TOKEN> --logstash-ui-url <URL>"
+    echo "  sudo systemctl enable --now lsagent-simulate@N"
     echo ""
     
     # Check if uv is available
@@ -279,40 +489,46 @@ if [ "$MODE" == "host" ]; then
     fi
     echo ""
     
-    echo "Starting LogstashAgent on port 9501 (accessible remotely)"
-    cd "$PROJECT_ROOT/LogstashAgent"
-    # Start in background using nohup with uv run - bind to 0.0.0.0 for remote access
-    nohup uv run uvicorn logstashagent.main:app --host 0.0.0.0 --port 9501 > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
-    AGENT_PID=$!
-    echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
-    cd "$PROJECT_ROOT"
-    
-    echo "LogstashAgent started with PID: $AGENT_PID"
-    echo "Waiting 5 seconds for agent to initialize"
-    sleep 5
-    
-    echo ""
     echo "========================================"
-    echo "Starting Docker containers (UI + Nginx only)"
+    echo "Starting Docker UI first (HTTPS :8443), then legacy native agent"
     echo "========================================"
-    echo "Note: LogstashAgent container will NOT start (running natively instead)"
-    echo "Note: Native agent runs on port 9501, nginx proxies from 9500 to 9501"
+    echo "Note: LogstashAgent container will NOT start (legacy native agent instead)"
+    echo "Note: Native agent HTTPS on port 9501; UI uses LOGSTASH_AGENT_URL=https://host.docker.internal:9501"
     echo ""
-    
-    # Ensure agent container is stopped in host mode
+
+    # Ensure agent container is stopped for legacy host path
     echo "Stopping any existing containers"
     cd "$PROJECT_ROOT/docker"
     $DOCKER_COMPOSE stop logstashagent 2>/dev/null || true
     $DOCKER_COMPOSE rm -f logstashagent 2>/dev/null || true
-    
-    # Start only logstashui and nginx in detached mode
-    # Nginx will detect host mode and proxy to host.docker.internal:9501
+
+    export LOGSTASH_AGENT_URL="${LOGSTASH_AGENT_URL:-https://host.docker.internal:9501}"
+    export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
     if [ -n "$REBUILD_FLAG" ]; then
-        $DOCKER_COMPOSE up -d $REBUILD_FLAG logstashui nginx
+        echo "Rebuilding UI image from local source (docker-compose.smoke.yml)..."
+        compose_cmd up -d $REBUILD_FLAG logstashui
     else
-        $DOCKER_COMPOSE up -d logstashui nginx
+        compose_cmd up -d logstashui
     fi
     cd "$PROJECT_ROOT"
+
+    echo "Waiting 8 seconds for UI TLS material..."
+    sleep 8
+
+    echo "Starting LogstashAgent on port 9501 (HTTPS when cert issued)"
+    cd "$PROJECT_ROOT/LogstashAgent"
+    export LOGSTASH_UI_URL="${LOGSTASH_UI_URL:-https://localhost:8443}"
+    export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
+    # Host-mode legacy uses 9501 so it does not clash with container 9500
+    nohup env LOGSTASH_UI_URL="$LOGSTASH_UI_URL" \
+        LOGSTASHUI_AGENT_CSR_SECRET="$LOGSTASHUI_AGENT_CSR_SECRET" \
+        LOGSTASH_AGENT_PORT=9501 \
+        uv run python -m logstashagent.main --mode embedded \
+        > "$PROJECT_ROOT/logstashagent.log" 2>&1 &
+    AGENT_PID=$!
+    echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
+    cd "$PROJECT_ROOT"
+    echo "LogstashAgent started with PID: $AGENT_PID"
     
 else
     echo "========================================"
@@ -327,24 +543,29 @@ else
     
     # Change to docker directory for docker-compose commands
     cd "$PROJECT_ROOT/docker"
-    
+
+    if [ -n "$REBUILD_FLAG" ]; then
+        echo "Rebuilding UI + embedded agent from local source (docker-compose.smoke.yml)..."
+        echo "  (plain 'docker compose --build' without smoke.yml still uses Hub images)"
+    fi
+
     # Start all containers in detached mode with embedded profile
     # Retry once if network failure occurs
     if [ -n "$REBUILD_FLAG" ]; then
-        $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG || {
+        compose_cmd --profile embedded up -d $REBUILD_FLAG || {
             echo "Startup failed, cleaning up and retrying..."
             docker rm -f logstashui-logstashagent-1 2>/dev/null || true
-            $DOCKER_COMPOSE down --remove-orphans
+            compose_cmd down --remove-orphans
             sleep 1
-            $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG
+            compose_cmd --profile embedded up -d $REBUILD_FLAG
         }
     else
-        $DOCKER_COMPOSE --profile embedded up -d || {
+        compose_cmd --profile embedded up -d || {
             echo "Startup failed, cleaning up and retrying..."
             docker rm -f logstashui-logstashagent-1 2>/dev/null || true
-            $DOCKER_COMPOSE down --remove-orphans
+            compose_cmd down --remove-orphans
             sleep 1
-            $DOCKER_COMPOSE --profile embedded up -d
+            compose_cmd --profile embedded up -d
         }
     fi
     cd "$PROJECT_ROOT"
@@ -358,5 +579,6 @@ echo ""
 echo "Containers are running in the background."
 echo "To stop LogstashUI, run: ./stop_logstashui.sh"
 echo ""
-echo "Access LogstashUI at: https://your_ip_or_hostname_here"
+echo "Access LogstashUI at: https://your_ip_or_hostname_here:8443"
+echo "(Product CA by default — browsers will warn until you trust it or upload a public cert in Settings.)"
 echo ""

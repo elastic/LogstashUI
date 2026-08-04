@@ -1,135 +1,141 @@
-# logstashagent.yml Configuration
+# logstashagent.yml
 
-> **Note:** `logstashagent.yml` ONLY applies for simulation mode. It is unused when running this as an agent to control Logstash instances.
+Configuration for LogstashAgent runtime. Installed agents also store enrollment state under the agent **state directory** (not only this file).
 
-The `logstashagent.yml` file configures the LogstashAgent component, which is responsible for managing Logstash processes for pipeline simulation.
+> Full operator reference: **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)**
 
----
-
-## File Location
-
-The configuration file lives under the source package:
-
-```
-LogstashAgent/
-├── src/
-│   └── logstashagent/
-│       └── config/
-│           ├── logstashagent.example.yml
-│           └── logstashagent.yml
-└── ...
-```
-
----
-
-## Configuration Sections
-
-### `mode`
-
-Determines if the agent is used for simulating in LogstashUI, or for controlling an actual Logstash host.
+## Modes (roles)
 
 ```yaml
-mode: simulation  # simulation | host
+mode: packaged   # packaged | managed | simulate | embedded
+# legacy alias still accepted:
+# mode: default  → packaged
 ```
 
-**Options:**
-- `simulation` - Agent manages Logstash for pipeline simulation in LogstashUI
-- `host` - Agent controls an actual Logstash host instance
+| Mode | Meaning |
+|------|---------|
+| **packaged** | Enrolled production agent (Packaged policy). Controller check-in; `systemctl` manages package `logstash`. Config: `/etc/logstash-agent/logstash-agent.yml`. |
+| **managed** | Enrolled multi-instance agent **N** (Managed policy). Controller + FastAPI; manages `logstash-managed@N` under `/opt/logstash-agent/managed-N/`. |
+| **simulate** | Enrolled simulation agent **N**. FastAPI + controller; manages `ls-simulate@N` with isolated paths. |
+| **embedded** | Docker/local sim without enrollment. FastAPI + process supervisor. |
+| **default** | Legacy alias of **packaged** (still accepted). |
 
----
+### Legacy values
 
-### `simulation_mode`
+Still accepted and mapped at startup:
 
-Controls how the simulation Logstash instance runs. Only applies if `mode` is set to `simulation`.
+| Legacy | Maps to |
+|--------|---------|
+| `agent`, `host` | `packaged` |
+| `default` | kept as `default` (treated like packaged controller) |
+| `simulation` + `simulation_mode: embedded` | `embedded` |
+| `simulation` + `simulation_mode: host` | `simulate` (prefer re-enroll under Simulate Policy) |
 
-```yaml
-simulation_mode: embedded  # embedded | host
+Startup logs include lines like:
+
+```text
+mode=packaged (legacy 'agent' mapped) [config]
 ```
 
-**Options:**
-- `embedded` - Runs Logstash in a local container (slower, easier setup)
-- `host` - Runs Logstash natively on the host machine (faster, requires Logstash installation)
-
-**Quick Comparison:**
-
-| Feature | Embedded Mode | Host Mode |
-|---------|---------------|-----------|
-| **Performance** | Error prone with large pipelines | Highly reliable |
-| **Setup** | Simple - no dependencies | Requires Logstash installation |
-| **Best For** | Quick start, occasional simulations | Heavy simulation workloads |
-
----
-
-### Logstash Paths
-
-Configures the paths to the Logstash installation. These settings are used when `simulation_mode: host`.
+## Paths (packaged / SYSTEM)
 
 ```yaml
+mode: packaged
 logstash_binary: /usr/share/logstash/bin/logstash
 logstash_settings: /etc/logstash
 logstash_log_path: /var/log/logstash
+logstash_api_port: 9600   # package Logstash monitoring API
 ```
 
-**Settings:**
+State: `/var/lib/logstash-agent/`. Unit: `logstash-agent`.
 
-- **`logstash_binary`** - Path to the Logstash executable
-  - Linux (default): `/usr/share/logstash/bin/logstash`
-  - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat`
-
-- **`logstash_settings`** - Path to Logstash configuration directory
-  - Linux (default): `/etc/logstash`
-  - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\config`
-
-- **`logstash_log_path`** - Path to Logstash log directory
-  - Linux (default): `/var/log/logstash`
-  - Windows example: `C:\logstash-9.3.1\logstash-9.3.1\logs`
-
-> **IMPORTANT:** When using host mode, Logstash is fully managed by LogstashAgent. Logstash should not be started manually, and your configuration files will be modified.
-
----
-
-## Complete Examples
-
-### Linux (Embedded Mode)
+## Managed-specific (usually from enrollment)
 
 ```yaml
-mode: simulation
-simulation_mode: embedded
-
-logstash_binary: /usr/share/logstash/bin/logstash
-logstash_settings: /etc/logstash
-logstash_log_path: /var/log/logstash
+mode: managed
+instance_id: 1
+port: 9601                 # agent FastAPI = 9600 + N
+logstash_api_port: 9701    # 9700 + N
+logstash_settings: /opt/logstash-agent/managed-1/settings
+logstash_log_path: /opt/logstash-agent/managed-1/logs
+logstash_source: SYSTEM    # or VERSION
+logstash_version: "9.4.3"  # when VERSION
+logstash_download_dir: /opt/logstash-agent/logstash-versions
 ```
 
-### Linux (Host Mode)
+File location on disk (host coexistence):  
+`/opt/logstash-agent/managed-1/logstash-agent.yml`  
+(not under `/etc/logstash-agent/`).
+
+Units: `logstash-agent@1`, `logstash-managed@1`.
+
+## Simulate-specific (usually from enrollment)
 
 ```yaml
-mode: simulation
-simulation_mode: host
-
-# Linux paths (adjust if Logstash is installed in a custom location)
-logstash_binary: /usr/share/logstash/bin/logstash
-logstash_settings: /etc/logstash
-logstash_log_path: /var/log/logstash
+mode: simulate
+instance_id: 1
+port: 9501                 # agent FastAPI = 9500 + N
+logstash_api_port: 9561    # 9560 + N
+logstash_settings: /opt/logstash-agent/simulate-1/settings
+logstash_log_path: /opt/logstash-agent/simulate-1/logs
+logstash_source: SYSTEM    # or VERSION
+logstash_version: "9.4.3"  # when VERSION
+logstash_download_dir: /opt/logstash-agent/logstash-versions
 ```
 
-### Windows (Host Mode)
+File location: `/opt/logstash-agent/simulate-1/logstash-agent.yml`.  
+Units: `lsagent-simulate@1`, `ls-simulate@1`.
+
+## VERSION settings
 
 ```yaml
-mode: simulation
-simulation_mode: host
-
-# Windows paths - adjust to match your Logstash installation
-logstash_binary: C:\logstash-9.3.1\logstash-9.3.1\bin\logstash.bat
-logstash_settings: C:\logstash-9.3.1\logstash-9.3.1\config
-logstash_log_path: C:\logstash-9.3.1\logstash-9.3.1\logs
+logstash_source: VERSION
+logstash_version: "9.4.3"
+logstash_download_dir: /opt/logstash-agent/logstash-versions
 ```
 
----
+| Setting | Purpose |
+|---------|---------|
+| `logstash_source` | `SYSTEM` (host binary) or `VERSION` (download pin) |
+| `logstash_version` | Elastic version string when source is VERSION |
+| `logstash_download_dir` | Extract root (default `/opt/logstash-agent/logstash-versions`) |
 
-## Related Documentation
+Applied on agent check-in when the policy pin drifts (download → update instance `env` `LOGSTASH_BINARY` → restart Logstash unit). Host helpers:
 
-- **[Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)** - LogstashUI simulation modes
-- **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - Setting up host mode for high-performance simulations
-- **[Configuration Overview](/docs/docs/logstashagent/configuration/index.md)** - Return to LogstashAgent configuration index
-- **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Return to LogstashAgent documentation
+```bash
+logstash-agent list-versions
+logstash-agent ensure-version 9.4.3
+logstash-agent prune-versions --dry-run
+```
+
+See [VERSION binary lifecycle](/docs/docs/logstashagent/general/roles.md#version-binary-lifecycle).
+
+## FastAPI (managed / simulate / embedded)
+
+```yaml
+host: 0.0.0.0
+port: 9500   # embedded; simulate uses 9500+N; managed uses 9600+N
+```
+
+Notable endpoints:
+
+- `/_logstash/simulate`, slots, validate, logs (sim)
+- `GET /_logstash/keystore` — current secrets (for compare)
+- `POST /_logstash/keystore/sync` — write only if different; restart only then
+
+## Install vs runtime
+
+| Command | Purpose |
+|---------|---------|
+| `sudo logstash-agent install --enroll …` | Root: binary, units, enroll; materialize multi-instance tree / VERSION download |
+| `logstash-agent --run` | Controller (packaged) or controller+FastAPI (managed/simulate) |
+| `sudo logstash-agent configure` | Permissions/sudoers after late Logstash install (packaged agents) |
+| `sudo logstash-agent setup-simulate` | Finish multi-instance materialize after non-root enroll |
+| `logstash-agent list-instances` | Host install registry (all roles) |
+| `logstash-agent list-versions` / `ensure-version` / `prune-versions` | VERSION cache lifecycle |
+
+## Related
+
+- **[Roles, ports, coexistence, VERSION](/docs/docs/logstashagent/general/roles.md)**
+- **[Simulation](/docs/docs/logstashui/configuration/simulation.md)**
+- **[Simulate agent setup](/docs/docs/logstashui/configuration/host_mode.md)**

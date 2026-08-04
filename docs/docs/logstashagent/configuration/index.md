@@ -1,33 +1,52 @@
 # Configuration
 
-LogstashAgent configuration for simulation mode and host management.
+LogstashAgent configuration for **packaged**, **managed**, **simulate**, and **embedded** roles.
+
+> **Roles, ports, coexistence, VERSION CLI:** see the full guide  
+> **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)**
 
 ---
 
 ## Configuration Files
 
-### Controller / Host Mode — `/etc/logstash-agent/logstash-agent.yml`
+### Packaged agent — `/etc/logstash-agent/logstash-agent.yml`
 
-When LogstashAgent is installed as a system service (via `logstash-agent install`), its configuration is written to:
+When you install with a **Packaged** policy token, configuration is written to:
 
 ```
 /etc/logstash-agent/logstash-agent.yml
 ```
 
-This file is managed by the installer. The key settings you may need to adjust are `logstash_binary`, `logstash_settings`, and `logstash_log_path` if Logstash is installed in a non-standard location. After editing, run `sudo logstash-agent configure` to re-apply permissions, then restart the service.
+State lives under `/var/lib/logstash-agent/`. Unit: `logstash-agent` (Logstash: `logstash`).
+
+### Multi-instance (Managed / Simulate) — under the instance tree
+
+Managed and Simulate do **not** use the packaged `/etc` file for runtime config. Each instance has:
+
+```
+/opt/logstash-agent/managed-N/logstash-agent.yml
+/opt/logstash-agent/simulate-N/logstash-agent.yml
+```
+
+with isolated state under `…/state/` and systemd `EnvironmentFile=…/agent.env` (`LOGSTASH_AGENT_STATE_DIR`, `LOGSTASH_AGENT_CONFIG`).
+
+| Role | Paths | Units |
+|------|-------|-------|
+| **Managed N** | `/opt/logstash-agent/managed-N/` | `logstash-agent@N`, `logstash-managed@N` |
+| **Simulate N** | `/opt/logstash-agent/simulate-N/` | `lsagent-simulate@N`, `ls-simulate@N` |
+
+Packaged and multi-instance roles can **coexist** on one host. See the [roles guide](/docs/docs/logstashagent/general/roles.md#host-coexistence).
+
+Adjust SYSTEM paths if Logstash is nonstandard. For packaged agents, run `sudo logstash-agent configure` after installing Logstash late, then restart `logstash-agent`.
 
 ---
 
-### **[logstashagent.yml](/docs/docs/logstashagent/configuration/logstashagent.yml.md)** — Simulation Mode Only
-
-> **Note:** This file only applies when LogstashAgent is running in simulation mode. It is unused when running as an installed agent to control Logstash instances.
-
-The configuration file for LogstashAgent when used for pipeline simulation.
+### **[logstashagent.yml](/docs/docs/logstashagent/configuration/logstashagent.yml.md)** — Modes and paths
 
 **Key settings:**
-- Agent mode (`simulation` vs `host`)
-- Simulation mode (`embedded` vs `host`)
-- Logstash installation paths
+- `mode`: `packaged` | `managed` | `simulate` | `embedded` (legacy `default` / `agent` / `host` mapped)
+- Paths, API ports, VERSION download settings
+- Keystore sync endpoints for simulation
 
 **📖 [View full logstashagent.yml documentation →](/docs/docs/logstashagent/configuration/logstashagent.yml.md)**
 
@@ -35,5 +54,7 @@ The configuration file for LogstashAgent when used for pipeline simulation.
 
 ## Quick Links
 
-- **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Feature overview and introduction
-- **[LogstashUI Configuration](/docs/docs/logstashui/configuration/index.md)** - Main LogstashUI configuration
+- **[Roles, ports, coexistence, VERSION](/docs/docs/logstashagent/general/roles.md)** — operator reference
+- **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** — feature overview
+- **[Simulate agents](/docs/docs/logstashui/configuration/host_mode.md)** — sim enroll details
+- **[LogstashUI Configuration](/docs/docs/logstashui/configuration/index.md)** — main LogstashUI configuration

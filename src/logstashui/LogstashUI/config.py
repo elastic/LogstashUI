@@ -21,7 +21,14 @@ DEFAULT_CONFIG = {
     },
     "no_auth": {
         "enabled": False
-    }
+    },
+    # Agent-facing LogstashUI base URL (backend channel; may differ from browser proxy).
+    # Used to prefill --logstash-ui-url in generated enroll commands.
+    "agent": {
+        "ui_url": "",
+        # Embed product CA fingerprint in enrollment tokens (pin-and-fetch at enroll)
+        "include_ca_fingerprint": True,
+    },
 }
 
 

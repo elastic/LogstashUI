@@ -2,31 +2,60 @@
 
 LogstashAgent can be run in multiple ways depending on your use case.
 
+For **roles, ports, coexistence, and VERSION CLI**, see  
+**[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)**.
+
+---
+
+## E2E smoke (LogstashUI + agent)
+
+From a LogstashUI checkout with a sibling `LogstashAgent` tree:
+
+```bash
+# Offline agent suites only
+../LogstashUI/bin/smoke_agent_modes.sh --offline
+# or from UI repo:
+./bin/smoke_agent_modes.sh --offline
+
+# Full: UI CA + embedded agent HTTPS + Django enroll + agent offline
+./bin/smoke_agent_modes.sh
+
+# Rebuild smoke images (applies migrations) then smoke
+./bin/smoke_agent_modes.sh --rebuild
+```
+
 ---
 
 ## Using Docker Compose (Recommended for Testing)
 
-The easiest way to run LogstashAgent standalone for testing:
+Prefer the **LogstashUI** compose stack for dual HTTPS UI+agent testing:
+
+```bash
+cd LogstashUI/bin
+./start_logstashui.sh --rebuild   # UI :8443, embedded agent :9500 (HTTPS, no nginx)
+```
+
+Standalone agent compose (LogstashAgent repo):
 
 ```bash
 cd LogstashAgent/docker
-docker-compose up --build
+docker compose up --build
 ```
 
 This will:
 - Build the LogstashAgent Docker image with Python 3.12
 - Start Logstash with the agent supervisor
-- Expose ports:
-  - `9650`: Logstash API
+- Expose ports (embedded-style):
+  - `9560`: Logstash API (embedded default; some images also map `9650`)
   - `9449`: Logstash HTTP input (for simulation)
-  - `9500`: FastAPI sidecar API
+  - `9500`: FastAPI agent API (**HTTPS** with product-CA cert when UI is reachable)
 
 ### Configuration
 
-Set the LogstashUI URL via environment variable:
+Set the LogstashUI URL via environment variable (HTTPS UI):
 
 ```bash
-LOGSTASH_URL=http://your-logstashui:8080 docker-compose up --build
+LOGSTASH_UI_URL=https://your-logstashui:8443 docker compose up --build
 ```
 
 Or mount a custom config:

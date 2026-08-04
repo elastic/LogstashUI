@@ -86,6 +86,7 @@ New to LogstashUI? Start here:
 
 ### LogstashAgent
 - **[LogstashAgent Overview](/docs/docs/logstashagent/index.md)** - Features and introduction
+- **[Roles, ports, coexistence, VERSION](/docs/docs/logstashagent/general/roles.md)** - Operator reference (Packaged / Managed / Simulate)
 
 #### Configuration
 - **[Configuration Overview](/docs/docs/logstashagent/configuration/index.md)**
@@ -93,6 +94,7 @@ New to LogstashUI? Start here:
 
 #### General
 - **[General Overview](/docs/docs/logstashagent/general/index.md)**
+  - **[Roles, ports, coexistence, VERSION](/docs/docs/logstashagent/general/roles.md)**
   - **[Building and Running](/docs/docs/logstashagent/general/build.md)** - Docker, enrollment, and controller modes
 
 ---

@@ -7,17 +7,29 @@
 no_auth:
   enabled: false  # true | false
 
+# Agent / backend channel (may differ from the browser reverse-proxy URL)
+agent:
+  # Prefills --logstash-ui-url in generated enrollment commands
+  # Example: https://10.0.0.50:8443  or  https://logstashui-internal
+  ui_url: ""
+  # Embed product CA fingerprint in tokens so agents pin-and-fetch
+  # {ui_url}/.well-known/logstashui/ca.crt  (omit if UI uses only public CAs)
+  include_ca_fingerprint: true
+
 simulation:
-  # embedded - Runs in a local container (slower)
-  # host  - Runs on the host machine (much faster, requires Logstash to be installed and not running. If you have pipelines or configuration it will overwrite / remove it)
+  # Secondary to enrolled simulate agents (preferred) and the editor Sim target list.
+  # embedded - Docker agent URL defaults (agent API 9500, LS API 9560)
+  # host     - Legacy local-agent URL defaults; prefer enrolling a Simulate policy agent
   mode: embedded # embedded | host
 
-  # This YML gets passed through to the simulation agent
-  # When running via start_logstashui.bat, the agent reads this config
+  # Optional: passed through when a local agent is started beside LogstashUI (legacy tooling).
+  # Enrolled simulate agents get paths/ports from policy enrollment, not only this block.
   logstash_agent:
-    mode: simulation
+    # Agent role when using a local process: embedded | simulate | default
+    # (legacy: mode: simulation + simulation_mode still accepted by the agent)
+    mode: embedded
 
-    # Linux example, default
+    # Linux example (SYSTEM Logstash) — not used for isolated simulate-N trees
     logstash_binary: /usr/share/logstash/bin/logstash
     logstash_settings: /etc/logstash
     logstash_log_path: /var/log/logstash

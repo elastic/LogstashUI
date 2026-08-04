@@ -1364,24 +1364,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (selectedValue === 'add_new') {
-            // Reset to default values for new policy
+            // Reset to default values for new policy (user-created PACKAGED)
             document.getElementById('settingsPath').value = '/etc/logstash/';
             document.getElementById('logsPath').value = '/var/log/logstash';
             document.getElementById('binaryPath').value = '/usr/share/logstash/bin';
+            if (document.getElementById('dataPath')) document.getElementById('dataPath').value = '';
+            if (document.getElementById('keystoreEnvFile')) document.getElementById('keystoreEnvFile').value = '/etc/default/logstash';
             
             // Show popup to add new policy
             const policyName = await ConfirmationModal.prompt(
-                'Enter a name for the new policy:',
+                'Enter a name for the new Packaged (distro Logstash) policy:\n'
+                + '(Clone Packaged → Managed for isolated multi-instance trees.\n'
+                + 'Clone Simulate Policy for simulation.)',
                 '',
                 'Add New Policy',
-                'e.g., Production Policy'
+                'e.g., Production Packaged'
             );
             
             if (policyName && policyName.trim()) {
                 const trimmedName = policyName.trim();
                 
                 // Check if policy already exists
-                if (customPolicies.includes(trimmedName) || trimmedName.toLowerCase() === 'default policy') {
+                const reservedNames = ['default policy', 'packaged policy', 'managed policy'];
+                if (customPolicies.includes(trimmedName) || reservedNames.includes(trimmedName.toLowerCase())) {
                     await ConfirmationModal.show(
                         'A policy with this name already exists. Please choose a different name.',
                         'Duplicate Policy Name',
@@ -1435,59 +1440,171 @@ document.addEventListener('DOMContentLoaded', function() {
             // Regular policy selection
             currentPolicy = selectedValue;
 
-            // Update UI - all policies are now editable
-            updatePolicyUI(false);
+            // Update UI from policy type (refined after loadPolicyData)
+            applyPolicyFieldEditability();
 
             // Fetch fresh policy data from database
             loadPolicyData(selectedValue);
         }
     });
     
-    // Function to update UI based on policy type
-    function updatePolicyUI(isDefaultPolicy) {
-        const deletePolicyBtn = document.getElementById('deletePolicyBtn');
-        const settingsPathInput = document.getElementById('settingsPath');
-        const logsPathInput = document.getElementById('logsPath');
-        const binaryPathInput = document.getElementById('binaryPath');
-        
-        // All policies are now editable (no default policy)
-        // Just ensure everything is enabled
-        if (deletePolicyBtn) {
-            deletePolicyBtn.classList.remove('hidden');
-        }
-        
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-            saveBtn.title = '';
-        }
-        
-        if (settingsPathInput) {
-            settingsPathInput.disabled = false;
-            settingsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-        
-        if (logsPathInput) {
-            logsPathInput.disabled = false;
-            logsPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-        
-        if (binaryPathInput) {
-            binaryPathInput.disabled = false;
-            binaryPathInput.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-        
-        if (editor) {
-            editor.setOption('readOnly', false);
-            editor.getWrapperElement().style.opacity = '1';
-            editor.getWrapperElement().style.cursor = 'text';
-        }
-        
-        if (deployBtn) {
-            deployBtn.disabled = false;
-            deployBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    // Function to update UI based on policy_type / is_system (from selected option)
+    function updatePolicyUI(_legacyIsDefault) {
+        applyPolicyFieldEditability();
+    }
+
+    function setFieldDisabled(el, disabled) {
+        if (!el) return;
+        el.disabled = !!disabled;
+        if (disabled) {
+            el.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            el.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
+
+    function applyPolicyFieldEditability() {
+        const policySelect = document.getElementById('policySelect');
+        const selectedOption = policySelect?.options[policySelect.selectedIndex];
+        let policyType = (selectedOption?.dataset.policyType || 'PACKAGED').toUpperCase();
+        if (policyType === 'DEFAULT') policyType = 'PACKAGED';
+        const isSystem = selectedOption?.dataset.isSystem === 'true';
+        const isEmbedded = policyType === 'EMBEDDED';
+        const isSystemSimulate = isSystem && policyType === 'SIMULATE';
+        const isSystemManaged = isSystem && policyType === 'MANAGED';
+        const isSimulate = policyType === 'SIMULATE';
+        const isManaged = policyType === 'MANAGED';
+        const isSystemPathLocked = isSystemSimulate || isSystemManaged;
+
+        const deletePolicyBtn = document.getElementById('deletePolicyBtn');
+        const clonePolicyBtn = document.getElementById('clonePolicyBtn');
+        const banner = document.getElementById('policyLockBanner');
+        const typeBadge = document.getElementById('policyTypeBadge');
+        const systemBadge = document.getElementById('policySystemBadge');
+        const simulateFields = document.getElementById('simulatePolicyFields');
+
+        if (typeBadge) {
+            typeBadge.textContent = policyType;
+            typeBadge.className = 'px-2 py-0.5 rounded text-xs font-semibold border ' + (
+                policyType === 'SIMULATE' ? 'bg-purple-900/40 text-purple-200 border-purple-500/40' :
+                policyType === 'EMBEDDED' ? 'bg-cyan-900/40 text-cyan-200 border-cyan-500/40' :
+                policyType === 'MANAGED' ? 'bg-amber-900/40 text-amber-200 border-amber-500/40' :
+                policyType === 'PACKAGED' ? 'bg-blue-900/40 text-blue-200 border-blue-500/40' :
+                'bg-gray-700 text-gray-200 border-gray-600'
+            );
+        }
+        if (systemBadge) {
+            systemBadge.classList.toggle('hidden', !isSystem);
+        }
+        if (simulateFields) {
+            // VERSION source fields apply to Simulate and Managed multi-instance roles
+            simulateFields.classList.toggle('hidden', !isSimulate && !isManaged && !isEmbedded);
+        }
+
+        // Delete: system policies cannot be deleted
+        if (deletePolicyBtn) {
+            if (isSystem || isEmbedded) {
+                deletePolicyBtn.classList.add('hidden');
+            } else {
+                deletePolicyBtn.classList.remove('hidden');
+            }
+        }
+        // Clone: not for Embedded
+        if (clonePolicyBtn) {
+            clonePolicyBtn.classList.toggle('hidden', isEmbedded);
+        }
+
+        // Path / binary fields
+        const pathLocked = isEmbedded || isSystemPathLocked;
+        setFieldDisabled(document.getElementById('settingsPath'), pathLocked);
+        setFieldDisabled(document.getElementById('logsPath'), pathLocked);
+        setFieldDisabled(document.getElementById('dataPath'), pathLocked);
+        // binary path editable for simulate/managed (SYSTEM) and packaged
+        setFieldDisabled(document.getElementById('binaryPath'), isEmbedded);
+        setFieldDisabled(document.getElementById('keystoreEnvFile'), isEmbedded || isSystemPathLocked);
+
+        // Source fields
+        setFieldDisabled(document.getElementById('logstashSource'), isEmbedded);
+        setFieldDisabled(document.getElementById('logstashVersion'), isEmbedded);
+        setFieldDisabled(document.getElementById('logstashDownloadDir'), isEmbedded);
+        // Port defaults informational for system multi-instance (enroll formula wins)
+        setFieldDisabled(document.getElementById('agentApiPort'), isEmbedded || isSystemPathLocked);
+        setFieldDisabled(document.getElementById('logstashApiPort'), isEmbedded || isSystemPathLocked);
+
+        toggleVersionFieldsVisibility();
+
+        // Save / deploy / editor
+        if (saveBtn) {
+            if (isEmbedded) {
+                saveBtn.disabled = true;
+                saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                saveBtn.title = 'Embedded Policy cannot be modified';
+            } else {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                saveBtn.title = '';
+            }
+        }
+        if (deployBtn) {
+            if (isEmbedded) {
+                deployBtn.disabled = true;
+                deployBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                deployBtn.disabled = false;
+                deployBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        if (typeof editor !== 'undefined' && editor) {
+            editor.setOption('readOnly', isEmbedded);
+            editor.getWrapperElement().style.opacity = isEmbedded ? '0.6' : '1';
+            editor.getWrapperElement().style.cursor = isEmbedded ? 'not-allowed' : 'text';
+        }
+
+        if (banner) {
+            if (isEmbedded) {
+                banner.classList.remove('hidden');
+                banner.textContent = 'Embedded Policy is system-managed (Docker sim). Ports and paths are fixed; clone is not available.';
+            } else if (isSystemSimulate) {
+                banner.classList.remove('hidden');
+                banner.textContent = 'System Simulate Policy: path scheme is fixed (simulate-N at enroll). You can edit JVM, logstash.yml, binary source/version, and binary path. Clone to create a versioned user policy.';
+            } else if (isSystemManaged) {
+                banner.classList.remove('hidden');
+                banner.textContent = 'System Managed Policy: path scheme is fixed (managed-N at enroll). Agent-owned isolated Logstash trees. Clone for versioned user policies.';
+            } else if (isSystem && (policyType === 'PACKAGED' || policyType === 'DEFAULT')) {
+                banner.classList.remove('hidden');
+                banner.textContent = 'System Packaged Policy: distro Logstash (system unit). Paths and config are editable; the policy itself cannot be deleted. Clone creates a Managed multi-instance policy.';
+            } else if (!isSystem && isManaged) {
+                banner.classList.remove('hidden');
+                banner.textContent = 'Managed policy: each enrollment gets managed-N paths and ports. Clone from Packaged to create additional Managed policies.';
+            } else {
+                banner.classList.add('hidden');
+                banner.textContent = '';
+            }
+        }
+    }
+
+    function toggleVersionFieldsVisibility() {
+        const source = document.getElementById('logstashSource')?.value || 'SYSTEM';
+        const showVersion = source === 'VERSION';
+        document.getElementById('logstashVersionWrap')?.classList.toggle('opacity-50', !showVersion);
+        document.getElementById('logstashDownloadDirWrap')?.classList.toggle('opacity-50', !showVersion);
+        const ver = document.getElementById('logstashVersion');
+        const dl = document.getElementById('logstashDownloadDir');
+        if (ver && !ver.disabled) ver.placeholder = showVersion ? 'e.g. 9.4.3' : '(only when source is VERSION)';
+        if (dl && !dl.disabled) { /* keep value */ }
+        const hint = document.getElementById('versionLifecycleHint');
+        if (hint) {
+            hint.classList.toggle('hidden', !showVersion);
+        }
+    }
+
+    window.applyPolicyFieldEditability = applyPolicyFieldEditability;
+    window.toggleVersionFieldsVisibility = toggleVersionFieldsVisibility;
+
+    document.getElementById('logstashSource')?.addEventListener('change', () => {
+        toggleVersionFieldsVisibility();
+        if (typeof detectChanges === 'function') detectChanges();
+    });
     
     // Load policies on page load, auto-selecting a policy if policy_id is in the URL
     const _urlParams = new URLSearchParams(window.location.search);
@@ -1540,9 +1657,32 @@ async function loadPolicyData(policyValue) {
             
             if (policy) {
                 // Update form fields
-                document.getElementById('settingsPath').value = policy.settings_path;
-                document.getElementById('logsPath').value = policy.logs_path;
+                document.getElementById('settingsPath').value = policy.settings_path || '';
+                document.getElementById('logsPath').value = policy.logs_path || '';
                 document.getElementById('binaryPath').value = policy.binary_path || '/usr/share/logstash/bin';
+                const dataPathEl = document.getElementById('dataPath');
+                if (dataPathEl) dataPathEl.value = policy.data_path || '';
+                const keystoreEnvEl = document.getElementById('keystoreEnvFile');
+                if (keystoreEnvEl) keystoreEnvEl.value = policy.keystore_env_file || '/etc/default/logstash';
+                const sourceEl = document.getElementById('logstashSource');
+                if (sourceEl) sourceEl.value = policy.logstash_source || 'SYSTEM';
+                const versionEl = document.getElementById('logstashVersion');
+                if (versionEl) versionEl.value = policy.logstash_version || '';
+                const downloadEl = document.getElementById('logstashDownloadDir');
+                if (downloadEl) downloadEl.value = policy.logstash_download_dir || '/opt/logstash-agent/logstash-versions';
+                const agentPortEl = document.getElementById('agentApiPort');
+                if (agentPortEl) agentPortEl.value = policy.agent_api_port ?? 9500;
+                const lsPortEl = document.getElementById('logstashApiPort');
+                if (lsPortEl) lsPortEl.value = policy.logstash_api_port ?? 9560;
+
+                // Keep option dataset in sync for editability helpers
+                if (selectedOption) {
+                    selectedOption.dataset.policyType = policy.policy_type || 'PACKAGED';
+                    selectedOption.dataset.isSystem = policy.is_system ? 'true' : 'false';
+                }
+                if (typeof applyPolicyFieldEditability === 'function') {
+                    applyPolicyFieldEditability();
+                }
                 
                 // Update file contents with fresh data from database
                 window.policyFileContents['logstash.yml'] = policy.logstash_yml;
@@ -1724,13 +1864,17 @@ async function loadPolicies(newPolicyName = null, selectPolicyId = null) {
             emptyState.classList.add('hidden');
             mainContent.classList.remove('hidden');
             
-            // Add policies from server
+            // Add policies from server (label includes role for clarity)
             data.policies.forEach(policy => {
                 const option = document.createElement('option');
                 option.value = policy.name.toLowerCase().replace(/\s+/g, '_');
-                option.textContent = policy.name;
+                let ptype = (policy.policy_type || 'PACKAGED').toUpperCase();
+                if (ptype === 'DEFAULT') ptype = 'PACKAGED';
+                option.textContent = `${policy.name} (${ptype})`;
                 option.dataset.policyName = policy.name;
                 option.dataset.policyId = policy.id;
+                option.dataset.policyType = ptype;
+                option.dataset.isSystem = policy.is_system ? 'true' : 'false';
                 
                 // Store policy data for later use
                 option.dataset.settingsPath = policy.settings_path;
@@ -1809,6 +1953,13 @@ async function savePolicyChanges() {
     const settingsPath = document.getElementById('settingsPath').value;
     const logsPath = document.getElementById('logsPath').value;
     const binaryPath = document.getElementById('binaryPath').value;
+    const dataPath = document.getElementById('dataPath')?.value ?? '';
+    const keystoreEnvFile = document.getElementById('keystoreEnvFile')?.value ?? '';
+    const logstashSource = document.getElementById('logstashSource')?.value || 'SYSTEM';
+    const logstashVersion = document.getElementById('logstashVersion')?.value || '';
+    const logstashDownloadDir = document.getElementById('logstashDownloadDir')?.value || '';
+    const agentApiPort = parseInt(document.getElementById('agentApiPort')?.value, 10);
+    const logstashApiPort = parseInt(document.getElementById('logstashApiPort')?.value, 10);
     
     // Update fileContents with current editor/form state
     if (window.policyFileContents) {
@@ -1855,6 +2006,13 @@ async function savePolicyChanges() {
                 settings_path: settingsPath,
                 logs_path: logsPath,
                 binary_path: binaryPath,
+                data_path: dataPath,
+                keystore_env_file: keystoreEnvFile,
+                logstash_source: logstashSource,
+                logstash_version: logstashVersion,
+                logstash_download_dir: logstashDownloadDir,
+                agent_api_port: Number.isFinite(agentApiPort) ? agentApiPort : undefined,
+                logstash_api_port: Number.isFinite(logstashApiPort) ? logstashApiPort : undefined,
                 logstash_yml: window.policyFileContents ? window.policyFileContents['logstash.yml'] : '',
                 jvm_options: window.policyFileContents ? window.policyFileContents['jvm.options'] : '',
                 log4j2_properties: window.policyFileContents ? window.policyFileContents['log4j2.properties'] : ''
@@ -2017,12 +2175,17 @@ async function loadEnrollmentTokens() {
             data.tokens.forEach(token => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-700';
+                // Prefer full install command (includes --logstash-ui-url from agent.ui_url)
+                const copyPayload = token.enroll_command || token.encoded_token;
+                const copyLabel = token.enroll_command ? 'Copy command' : 'Copy token';
+                const copyEscaped = escapeHtml(copyPayload).replace(/'/g, "\\'");
                 row.innerHTML = `
                     <td class="px-4 py-3 text-sm text-gray-300">
                         <span class="font-medium">${escapeHtml(token.name)}</span>
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-300">
-                        <span class="font-mono text-xs break-all">${token.encoded_token}</span>
+                        <span class="font-mono text-xs break-all" title="Enrollment token (v2 may include CA fingerprint)">${escapeHtml(token.encoded_token)}</span>
+                        ${token.enroll_command ? `<div class="mt-1 text-xs text-gray-500 font-mono break-all">${escapeHtml(token.enroll_command)}</div>` : ''}
                     </td>
                     <td class="px-4 py-3 text-sm text-right">
                         <div class="action-menu relative inline-block">
@@ -2031,13 +2194,13 @@ async function loadEnrollmentTokens() {
                                     <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                                 </svg>
                             </button>
-                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 bottom-full mb-1 z-50 w-32 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
+                            <div id="token-menu-${token.id}" class="action-menu-items hidden absolute right-0 bottom-full mb-1 z-50 w-40 bg-gray-800 rounded-md shadow-lg py-1" role="menu">
                                 <div class="px-1 py-1">
-                                    <a href="#" onclick="event.preventDefault(); copyTokenToClipboard('${escapeHtml(token.encoded_token)}'); toggleEnrollmentTokenMenu(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
+                                    <a href="#" onclick="event.preventDefault(); copyTokenToClipboard('${copyEscaped}'); toggleEnrollmentTokenMenu(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-blue-400 hover:bg-gray-700 rounded-md" role="menuitem">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                         </svg>
-                                        Copy
+                                        ${copyLabel}
                                     </a>
                                     <a href="#" onclick="event.preventDefault(); deleteEnrollmentToken(${token.id}); return false;" class="group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md" role="menuitem">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2275,31 +2438,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // console.log('Added event listeners to config logs path field');
     }
     
-    // Also monitor settings path and binary path for changes
-    const settingsPathField = document.getElementById('settingsPath');
-    if (settingsPathField) {
-        settingsPathField.addEventListener('input', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-        settingsPathField.addEventListener('change', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-    }
-
-    const binaryPathField = document.getElementById('binaryPath');
-    if (binaryPathField) {
-        binaryPathField.addEventListener('input', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-        binaryPathField.addEventListener('change', () => { 
-            detectChanges(); 
-            checkPathPermissionNotifications();
-        });
-        // console.log('Added event listeners to binary path field');
-    }
+    // Policy Config fields are wired in setupChangeDetection() via POLICY_CONFIG_FIELD_IDS
     
     // Initial check for notifications
     setTimeout(() => {
@@ -2809,6 +2948,20 @@ window.addEventListener('scroll', function() {
     });
 }, true);
 
+// Policy Config fields that participate in the purple unsaved-change tracker
+const POLICY_CONFIG_FIELD_IDS = [
+    'settingsPath',
+    'logsPath',
+    'binaryPath',
+    'dataPath',
+    'keystoreEnvFile',
+    'logstashSource',
+    'logstashVersion',
+    'logstashDownloadDir',
+    'agentApiPort',
+    'logstashApiPort',
+];
+
 // Store original content when policy loads
 function storeOriginalContent() {
     originalFileContents = {};
@@ -2819,10 +2972,10 @@ function storeOriginalContent() {
     originalFileContents['jvm.options'] = window.policyFileContents['jvm.options'] || '';
     originalFileContents['log4j2.properties'] = window.policyFileContents['log4j2.properties'] || '';
     
-    // Store original settings, logs, and binary paths
-    originalFileContents['settingsPath'] = document.getElementById('settingsPath')?.value || '';
-    originalFileContents['logsPath'] = document.getElementById('logsPath')?.value || '';
-    originalFileContents['binaryPath'] = document.getElementById('binaryPath')?.value || '';
+    // Store original Policy Config form fields (paths, simulate source, etc.)
+    POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+        originalFileContents[id] = document.getElementById(id)?.value ?? '';
+    });
     
     // Reset all visual indicators
     updateChangeIndicators();
@@ -2883,15 +3036,23 @@ function detectChanges() {
         }
     });
     
-    // Check settings path, logs path, and binary path changes
-    const currentSettingsPath = document.getElementById('settingsPath')?.value || '';
-    const currentLogsPath = document.getElementById('logsPath')?.value || '';
-    const currentBinaryPath = document.getElementById('binaryPath')?.value || '';
-    const originalSettingsPath = originalFileContents['settingsPath'] || '';
-    const originalLogsPath = originalFileContents['logsPath'] || '';
-    const originalBinaryPath = originalFileContents['binaryPath'] || '';
-
-    if (currentSettingsPath !== originalSettingsPath || currentLogsPath !== originalLogsPath || currentBinaryPath !== originalBinaryPath) {
+    // Check Policy Config field changes (paths, keystore env, simulate source, ports, …)
+    let configChanged = false;
+    POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        const current = el?.value ?? '';
+        const original = originalFileContents[id] ?? '';
+        const fieldChanged = current !== original;
+        if (el) {
+            if (fieldChanged) {
+                el.classList.add('field-modified');
+            } else {
+                el.classList.remove('field-modified');
+            }
+        }
+        if (fieldChanged) configChanged = true;
+    });
+    if (configChanged) {
         changedFiles.add('settings');
     }
     
@@ -2919,6 +3080,12 @@ function updateChangeIndicators() {
         policyConfigIndicator?.classList.remove('hidden');
     } else {
         policyConfigIndicator?.classList.add('hidden');
+        // Clear purple outlines when config is clean
+        if (typeof POLICY_CONFIG_FIELD_IDS !== 'undefined') {
+            POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+                document.getElementById(id)?.classList.remove('field-modified');
+            });
+        }
     }
     
     // Update tab indicators
@@ -2958,39 +3125,23 @@ function setupChangeDetection() {
         });
     });
     
-    // Monitor settings path and logs path changes
-    const settingsPath = document.getElementById('settingsPath');
-    const logsPath = document.getElementById('logsPath');
-    
-    if (settingsPath) {
-        // console.log('Added event listeners to settings path field');
-        settingsPath.addEventListener('input', () => {
-            // console.log('Settings path input event fired');
+    // Monitor all Policy Config fields (paths, simulate source, ports, …)
+    POLICY_CONFIG_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const handler = () => {
+            if (id === 'logsPath') checkConfigNotifications();
+            if (id === 'settingsPath' || id === 'binaryPath' || id === 'logsPath') {
+                checkPathPermissionNotifications();
+            }
+            if (id === 'logstashSource' && typeof toggleVersionFieldsVisibility === 'function') {
+                toggleVersionFieldsVisibility();
+            }
             detectChanges();
-        });
-        settingsPath.addEventListener('change', () => {
-            // console.log('Settings path change event fired');
-            detectChanges();
-        });
-    } else {
-        console.warn('Settings path field not found');
-    }
-    
-    if (logsPath) {
-        // console.log('Added event listeners to logs path field');
-        logsPath.addEventListener('input', () => {
-            // console.log('Logs path input event fired');
-            checkConfigNotifications();
-            detectChanges();
-        });
-        logsPath.addEventListener('change', () => {
-            // console.log('Logs path change event fired');
-            checkConfigNotifications();
-            detectChanges();
-        });
-    } else {
-        console.warn('Logs path field not found');
-    }
+        };
+        el.addEventListener('input', handler);
+        el.addEventListener('change', handler);
+    });
     
     // Monitor code editor changes
     if (window.policyEditor) {

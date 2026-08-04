@@ -1,0 +1,23 @@
+# Local smoke override: build from source instead of Docker Hub images.
+# Usage (from docker/):
+#   # Inject host IPs + PTR FQDNs into UI cert SANs (prefer start_logstashui.sh /
+#   # smoke_agent_modes.sh which reverse-lookup host IPs for FQDNs).
+#   export LOGSTASHUI_HOST_IPS=...
+#   export LOGSTASHUI_HOST_HOSTNAME=...   # FQDN from PTR when available
+#   docker compose -f docker-compose.yml -f docker-compose.smoke.yml --profile embedded up -d --build
+# Or use ../../bin/start_logstashui.sh which sets these automatically.
+
+services:
+  logstashui:
+    image: logstashui:smoke
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    pull_policy: never
+
+  logstashagent:
+    image: logstash-agent:smoke
+    build:
+      context: ../../LogstashAgent
+      dockerfile: docker/Dockerfile
+    pull_policy: never

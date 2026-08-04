@@ -28,24 +28,29 @@ cd LogstashUI/bin
 start_logstashui.bat         # Windows
 ```
 
-Then browse to `https://<your_server_ip_or_hostname>`.
+Then browse to `https://<your_server_ip_or_hostname>:8443`.
 
-This is **embedded mode** — the default `simulation.mode` — which brings up three containers: **LogstashUI** (the web app), **LogstashAgent** (pipeline simulation), and **Nginx** (HTTPS reverse proxy on port 443). The mode is controlled by `simulation.mode` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md); leave it as `embedded` for this option.
+This is **embedded mode** — the default `simulation.mode` — which brings up two containers: **LogstashUI** (gunicorn HTTPS on **8443**) and **LogstashAgent** (uvicorn HTTPS on **9500**). There is **no nginx**. The mode is controlled by `simulation.mode` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md); leave it as `embedded` for this option.
+
+**HTTPS / product CA:** On first start, LogstashUI writes a product CA and a UI server certificate under `data/tls/` (`ui-server.crt` / `ui-server.key`). Gunicorn presents that cert on port **8443** (ports under 1000 would need root). The product leaf SANs include `localhost`, `logstashui`, **all non-loopback host IPs**, and **PTR reverse-DNS FQDNs** for those IPs when available (injected by `start_logstashui.sh` as `LOGSTASHUI_HOST_*` / `LOGSTASHUI_TLS_SANS`, because the container cannot see the host LAN addresses by itself). Bare short hostnames (common on macOS) are replaced by reverse-lookup FQDNs when PTR records exist. Changing the Agent callback URL or those env SANs **re-issues** the product leaf on next startup (or Settings save); restart the UI container so gunicorn reloads the file. Agents:
+
+1. Bootstrap-fetch `https://…:8443/.well-known/logstashui/ca.crt` with **verify=False only for that GET**, then pin the CA (TOFU or enrollment-token fingerprint).
+2. Obtain a **product-CA-signed server cert** (CSR at enroll, re-issue on check-in, or compose `LOGSTASHUI_AGENT_CSR_SECRET`) and serve FastAPI over HTTPS on **9500**.
+
+Browsers warn on the product default leaf until you trust the product CA or upload a public/custom cert under **Management → Settings**. After changing the UI certificate, restart the UI container (`docker compose restart logstashui`).
 
 > [!NOTE]
-> If you run Docker Compose directly instead of using the scripts, the simulation agent is gated behind the `embedded` Compose profile: `cd docker && docker compose --profile embedded up -d`. A plain `docker compose up` starts only LogstashUI and Nginx.
+> If you run Docker Compose directly instead of using the scripts, the simulation agent is gated behind the `embedded` Compose profile: `cd docker && docker compose --profile embedded up -d`. A plain `docker compose up` starts only LogstashUI.
 
 ---
 
-## Option 2: Host-backed Simulation
+## Option 2: Host-backed Simulation (prefer enrolled Simulate agents)
 
-Use this when you want LogstashUI to run normally, but pipeline simulation should execute against a host-installed Logstash instance. Recommended for frequent or heavy simulation workloads — it's more reliable than the embedded container.
+For frequent or heavy simulation, enroll one or more **Simulate** policy agents (`lsagent-simulate@N` / isolated `simulate-N` paths). Select them in the pipeline editor **Sim target** control.
 
-**Requirements:** [Docker](https://www.docker.com/get-started/), [Python 3.12+](https://www.python.org/downloads/), [Logstash 9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash) (a dedicated instance that is not running production pipelines)
+**Preferred:** [Simulate agents setup](/docs/docs/logstashui/configuration/host_mode.md)
 
-This uses the **same startup script as Option 1** — the difference is one setting. Set `simulation.mode: host` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md) (see [Simulation Configuration](/docs/docs/logstashui/configuration/simulation.md)) before running it. The script then runs the simulation agent natively on the host (port 9501) and starts only the LogstashUI and Nginx containers; Nginx proxies simulation traffic to the native agent.
-
-**📖 Full setup guide: [Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)**
+**Legacy alternative:** Set `simulation.mode: host` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md) and run the same startup script as Option 1. That path starts a **native FastAPI agent on port 9501** (supervisor, not enrolled `mode: simulate`) and only the UI/nginx containers. Prefer enrolled Simulate agents for multi-instance or production-quality sim.
 
 ---
 

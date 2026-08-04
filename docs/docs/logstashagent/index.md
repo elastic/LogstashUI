@@ -10,14 +10,17 @@ LogstashAgent is the host-side runtime for LogstashUI-managed instances.
 
 It enrolls with LogstashUI, persists local agent state, checks in for policy and configuration changes, and applies those changes directly to the local Logstash installation.
 
+**Roles:** **Packaged** (production distro Logstash), **Managed** (multi-instance agent-owned trees), **Simulate** (isolated sim instances), and **Embedded** (Docker/local, no enroll).  
+See **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)** for ports, paths, host coexistence, and the VERSION download CLI.
+
 ---
 
 ### Enrollment + Reconciliation Loop
 Enroll with LogstashUI and continuously reconcile desired state to the local Logstash instance.
 
 - **Install and enroll**: `sudo ./logstash-agent/logstash-agent install --enroll <TOKEN> --logstash-ui-url <URL>`
-- **Controller mode**: managed automatically by the `logstash-agent` systemd service after installation
-- Agent state includes enrollment identity, policy assignment, and revision tracking
+- **Controller mode**: systemd — `logstash-agent` (Packaged), `logstash-agent@N` (Managed), or `lsagent-simulate@N` (Simulate)
+- Agent state includes enrollment identity, policy assignment, and revision tracking (per-instance paths when multi-instance)
 
 ### Pipeline Management API
 Create, update, delete, validate, and inspect Logstash pipelines.
@@ -72,39 +75,44 @@ This produces a `logstash-agent/` directory containing the `logstash-agent` exec
 
 ### 2. Install and enroll
 
-Run the installer as root, passing the enrollment token generated from LogstashUI:
+Run the installer as root, passing the enrollment token generated from LogstashUI (**Packaged**, **Managed**, or **Simulate** policy):
 
 ```bash
 sudo ./logstash-agent/logstash-agent install \
   --enroll <BASE64_TOKEN> \
-  --logstash-ui-url http://<logstashui-host>:8080 \
+  --logstash-ui-url https://<logstashui-host>:8443 \
   --yes
 ```
 
 The installer will:
 - Copy the bundle to `/opt/logstash-agent/bin/`
 - Create a symlink at `/usr/local/bin/logstash-agent` (or `/usr/bin/` on RHEL)
-- Write a config file to `/etc/logstash-agent/logstash-agent.yml`
-- Register and start the `logstash-agent` systemd service
-- Enroll with LogstashUI
+- Enroll with LogstashUI (policy type drives paths and units)
+- **Packaged:** write `/etc/logstash-agent/logstash-agent.yml`, enable+start `logstash-agent` (distro `logstash` enable-only)
+- **Managed / Simulate:** materialize `/opt/logstash-agent/{managed,simulate}-N/`, enable multi-instance units (isolated state/config)
+- Record the install in `/var/lib/logstash-agent/install-registry.json`
 
 > [!NOTE]
-> If Logstash is not yet installed on the host, the installer will warn you but continue. The agent will be set up and enrolled, but will not manage pipelines until Logstash is installed and the paths in `/etc/logstash-agent/logstash-agent.yml` are correct.
+> If Logstash is not yet installed on the host (Packaged/SYSTEM), the installer will warn you but continue. Run `sudo logstash-agent configure` after installing Logstash.
+>
+> Multi-instance **VERSION** policies download Logstash into `/opt/logstash-agent/logstash-versions/` instead of requiring the OS package.
 
-### 3. Enable and start the service
-
-```bash
-sudo systemctl enable logstash-agent
-sudo systemctl start logstash-agent
-```
-
-### 4. Verify
+### 3. Verify
 
 ```bash
+# Packaged
 sudo systemctl status logstash-agent
 sudo journalctl -u logstash-agent -f
+
+# Or multi-instance (N from install output / UI connection)
+sudo systemctl status logstash-agent@N          # managed
+sudo systemctl status lsagent-simulate@N       # simulate
+
+# Host map (all roles on this machine)
+logstash-agent list-instances
 ```
 
+Install already enables and starts the agent unit for a full deploy; you normally do not need a separate enable/start step.
 ---
 
 ## Installing Logstash After the Agent
