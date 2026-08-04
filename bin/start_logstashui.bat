@@ -67,6 +67,29 @@ if %errorlevel% equ 0 (
 echo Using Docker Compose command: %DOCKER_COMPOSE%
 echo.
 
+REM ---------------------------------------------------------------------------
+REM Host identity for product UI TLS SANs (containers cannot see Docker host IPs)
+REM Uses PowerShell to collect hostname / non-loopback IPs / reverse-DNS FQDN.
+REM Operator can pre-set any of these vars to override auto-detection.
+REM ---------------------------------------------------------------------------
+set "_TLS_TMP=%TEMP%\logstashui_tls_%RANDOM%.txt"
+powershell -NoProfile -NonInteractive -Command "$ErrorActionPreference='SilentlyContinue'; $hn=[System.Net.Dns]::GetHostName(); try{$ips=(Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object{$_.IPAddress -notmatch '^127\.' -and $_.IPAddress -ne '0.0.0.0'} | Select-Object -ExpandProperty IPAddress) -join ','}catch{$ips=''}; $fqdn=$hn; try{$e=[System.Net.Dns]::GetHostEntry($hn); if($e.HostName -match '\.'){$fqdn=$e.HostName}}catch{}; $sans=if($ips){$fqdn+','+$ips}else{$fqdn}; $csrf='https://localhost:8443,https://127.0.0.1:8443'; if($fqdn){$csrf+=',https://'+$fqdn+':8443'}; ($ips -split ',' | Where-Object{$_})|ForEach-Object{$csrf+=',https://'+$_+':8443'}; Write-Output ('LOGSTASHUI_HOST_HOSTNAME='+$fqdn); Write-Output ('LOGSTASHUI_HOST_IPS='+$ips); Write-Output ('LOGSTASHUI_TLS_SANS='+$sans); Write-Output ('CSRF_TRUSTED_ORIGINS='+$csrf)" > "%_TLS_TMP%" 2>nul
+if exist "%_TLS_TMP%" (
+    for /f "usebackq tokens=1* delims==" %%K in ("%_TLS_TMP%") do (
+        if /i "%%K"=="LOGSTASHUI_HOST_HOSTNAME" if not defined LOGSTASHUI_HOST_HOSTNAME set "LOGSTASHUI_HOST_HOSTNAME=%%L"
+        if /i "%%K"=="LOGSTASHUI_HOST_IPS" if not defined LOGSTASHUI_HOST_IPS set "LOGSTASHUI_HOST_IPS=%%L"
+        if /i "%%K"=="LOGSTASHUI_TLS_SANS" if not defined LOGSTASHUI_TLS_SANS set "LOGSTASHUI_TLS_SANS=%%L"
+        if /i "%%K"=="CSRF_TRUSTED_ORIGINS" if not defined CSRF_TRUSTED_ORIGINS set "CSRF_TRUSTED_ORIGINS=%%L"
+    )
+    del "%_TLS_TMP%" >nul 2>&1
+)
+set _TLS_TMP=
+echo Host TLS SAN injection for UI product cert:
+echo   LOGSTASHUI_HOST_HOSTNAME=%LOGSTASHUI_HOST_HOSTNAME%
+echo   LOGSTASHUI_HOST_IPS=%LOGSTASHUI_HOST_IPS%
+echo   LOGSTASHUI_TLS_SANS=%LOGSTASHUI_TLS_SANS%
+echo.
+
 REM Parse command line arguments
 set REBUILD_FLAG=
 set UPDATE_MODE=0
@@ -191,6 +214,15 @@ set MODE=!MODE: =!
 echo Detected mode: !MODE!
 echo.
 
+REM Compose file set: smoke override tags local images and enables build:.
+REM Used whenever REBUILD_FLAG is set so --rebuild actually compiles this tree.
+set "COMPOSE_FILES="
+if not "!REBUILD_FLAG!"=="" (
+    if exist "docker\docker-compose.smoke.yml" (
+        set "COMPOSE_FILES=-f docker-compose.yml -f docker-compose.smoke.yml"
+    )
+)
+
 if /i "!MODE!"=="host" (
     goto HOST_MODE
 ) else (
@@ -254,23 +286,14 @@ if errorlevel 1 (
     exit /b 1
 )
 echo Dependencies installed successfully
-
-echo Starting LogstashAgent on port 9501 (localhost only)
-cd LogstashAgent
-REM Start uvicorn using uv run
-start "LogstashAgent" cmd /K "uv run uvicorn logstashagent.main:app --host 127.0.0.1 --port 9501"
 cd ..
-
-echo Waiting 5 seconds for agent to initialize
-ping 127.0.0.1 -n 6 >nul
 
 echo.
 echo ========================================
-echo Starting Docker containers (UI only; legacy host agent)
+echo Starting Docker UI first (HTTPS :8443), then legacy native agent
 echo ========================================
 echo Note: LogstashAgent container will NOT start (legacy native agent instead)
-echo Note: Native agent HTTPS on port 9501; UI LOGSTASH_AGENT_URL=https://host.docker.internal:9501
-echo Note: UI HTTPS on port 8443 (no nginx)
+echo Note: Native agent HTTPS on port 9501; UI uses LOGSTASH_AGENT_URL=https://host.docker.internal:9501
 echo.
 
 REM Ensure agent container is stopped for legacy host path
@@ -279,9 +302,21 @@ cd docker
 %DOCKER_COMPOSE% stop logstashagent 2>nul
 %DOCKER_COMPOSE% rm -f logstashagent 2>nul
 
-REM Start only logstashui (HTTPS :8443)
-set LOGSTASH_AGENT_URL=https://host.docker.internal:9501
-%DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui
+REM UI must start before the agent so TLS material is issued first
+if not defined LOGSTASH_AGENT_URL set "LOGSTASH_AGENT_URL=https://host.docker.internal:9501"
+if not defined LOGSTASHUI_AGENT_CSR_SECRET set "LOGSTASHUI_AGENT_CSR_SECRET=logstashui-compose-dev"
+%DOCKER_COMPOSE% !COMPOSE_FILES! up -d !REBUILD_FLAG! logstashui
+cd ..
+
+echo Waiting 8 seconds for UI TLS material...
+ping 127.0.0.1 -n 9 >nul
+
+echo Starting LogstashAgent on port 9501 (HTTPS when cert issued)
+cd LogstashAgent
+if not defined LOGSTASH_UI_URL set "LOGSTASH_UI_URL=https://localhost:8443"
+if not defined LOGSTASHUI_AGENT_CSR_SECRET set "LOGSTASHUI_AGENT_CSR_SECRET=logstashui-compose-dev"
+set "LOGSTASH_AGENT_PORT=9501"
+start "LogstashAgent" cmd /K "uv run python -m logstashagent.main --mode embedded"
 cd ..
 goto END_MODE_SELECTION
 
@@ -295,7 +330,7 @@ echo.
 
 REM Start all containers in detached mode with embedded profile
 cd docker
-%DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
+%DOCKER_COMPOSE% !COMPOSE_FILES! --profile embedded up -d !REBUILD_FLAG!
 cd ..
 goto END_MODE_SELECTION
 
@@ -309,7 +344,7 @@ echo.
 echo Containers are running in the background.
 echo To stop LogstashUI, run: stop_logstashui.bat
 echo.
-echo Access LogstashUI at: https://your_ip_or_hostname_here
+echo Access LogstashUI at: https://your_ip_or_hostname_here:8443
 echo.
 
 REM Restore original directory
