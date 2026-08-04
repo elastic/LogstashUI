@@ -12,6 +12,7 @@ from Common.elastic_utils import get_elastic_connection
 from Common.logstash_config_parse import ComponentToPipeline
 from Common.decorators import require_admin_role
 from Common.formatters import _sanitize_pipeline_name_component, format_display_name
+from Common.validators import validate_namespace
 
 from .snmp_pipeline_generator import (
     _generate_input, 
@@ -1211,6 +1212,11 @@ def AddNetwork(request):
         deployment_mode = request.POST.get('deployment_mode', 'CENTRALIZED')
         credential_mode = request.POST.get('credential_mode', 'KEYSTORE')
 
+        if not namespace_from_device_template:
+            ns_valid, ns_error = validate_namespace(namespace)
+            if not ns_valid:
+                return HttpResponse(ns_error, status=400)
+
         # Create network object
         network = Network(
             name=name,
@@ -1282,6 +1288,12 @@ def UpdateNetwork(request, network_id):
             pass  # Invalid CIDR will be caught by model validation below
         network.namespace = request.POST.get('namespace', network.namespace)
         network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
+
+        if not network.namespace_from_device_template:
+            ns_valid, ns_error = validate_namespace(network.namespace)
+            if not ns_valid:
+                return HttpResponse(ns_error, status=400)
+
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         network.deployment_mode = request.POST.get('deployment_mode', network.deployment_mode)

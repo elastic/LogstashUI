@@ -212,8 +212,8 @@
               </a>
               Namespace <span class="text-red-500">*</span>
             </label>
-            <input type="text" id="networkNamespace" name="namespace" class="input input-bordered w-full" required value="default" maxlength="100" placeholder="default">
-            <p class="text-gray-400 text-xs mt-1">User-configurable grouping (e.g., dev, prod, qa). Max 100 bytes.</p>
+            <input type="text" id="networkNamespace" name="namespace" class="input input-bordered w-full" required value="default" maxlength="100" placeholder="default" oninput="this.value = this.value.toLowerCase()">
+            <p class="text-gray-400 text-xs mt-1">User-configurable grouping (e.g., dev, prod, qa). Max 100 characters.</p>
           </div>
 
           <!-- Use device template as namespace toggle -->
