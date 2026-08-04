@@ -115,8 +115,7 @@ AGENT_CTR="$(docker ps --format '{{.Names}}' | grep -E 'logstashagent' | head -1
 
 compose_up() {
   echo "[Compose] Starting smoke stack (embedded profile)..."
-  # Host SANs for product CA (same idea as start_logstashui.sh)
-  export LOGSTASHUI_HOST_HOSTNAME="${LOGSTASHUI_HOST_HOSTNAME:-$(hostname -f 2>/dev/null || hostname)}"
+  # Host SANs for product CA (same idea as start_logstashui.sh — PTR FQDNs preferred)
   if [[ -z "${LOGSTASHUI_HOST_IPS:-}" ]]; then
     if command -v ip >/dev/null 2>&1; then
       LOGSTASHUI_HOST_IPS=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | tr '\n' ',' | sed 's/,$//')
@@ -124,6 +123,37 @@ compose_up() {
       LOGSTASHUI_HOST_IPS=$(ifconfig 2>/dev/null | awk '/inet / && $2 != "127.0.0.1" {print $2}' | paste -sd, -)
     fi
     export LOGSTASHUI_HOST_IPS
+  fi
+  if [[ -z "${LOGSTASHUI_HOST_HOSTNAME:-}" ]]; then
+    first_fqdn=""
+    if [[ -n "${LOGSTASHUI_HOST_IPS:-}" ]]; then
+      IFS=',' read -ra _smoke_ips <<< "$LOGSTASHUI_HOST_IPS"
+      for _ip in "${_smoke_ips[@]}"; do
+        [[ -z "$_ip" ]] && continue
+        _name=""
+        if command -v dig >/dev/null 2>&1; then
+          _name=$(dig +short -x "$_ip" 2>/dev/null | head -1 | sed 's/\.$//')
+        fi
+        if [[ -z "$_name" ]] && command -v python3 >/dev/null 2>&1; then
+          _name=$(python3 -c "
+import socket
+socket.setdefaulttimeout(1.0)
+try:
+    print(socket.gethostbyaddr('$_ip')[0].rstrip('.'))
+except Exception:
+    pass
+" 2>/dev/null || true)
+        fi
+        if [[ -n "$_name" && "$_name" != "$_ip" && "$_name" == *.* ]]; then
+          first_fqdn="$_name"
+          break
+        fi
+      done
+    fi
+    export LOGSTASHUI_HOST_HOSTNAME="${first_fqdn:-$(hostname -f 2>/dev/null || hostname)}"
+  fi
+  if [[ -z "${LOGSTASHUI_TLS_SANS:-}" && -n "${LOGSTASHUI_HOST_HOSTNAME:-}" ]]; then
+    export LOGSTASHUI_TLS_SANS="${LOGSTASHUI_HOST_HOSTNAME}${LOGSTASHUI_HOST_IPS:+,${LOGSTASHUI_HOST_IPS}}"
   fi
   cd "$DOCKER_DIR"
   # shellcheck disable=SC2086

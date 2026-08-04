@@ -128,7 +128,8 @@ class TestEnrollEndpoint:
         # Verify connection was created
         assert Connection.objects.filter(agent_id='new-agent-001').exists()
         connection = Connection.objects.get(agent_id='new-agent-001')
-        assert connection.name == 'new-agent.example.com'
+        # Display name uses short host; host field keeps FQDN for UI→agent callbacks
+        assert connection.name == 'new-agent'
         assert connection.host == 'new-agent.example.com'
         assert connection.connection_type == 'AGENT'
         assert connection.policy == test_enrollment_token.policy
@@ -357,6 +358,82 @@ class TestCheckInEndpoint:
         # Verify status_blob was saved
         test_agent_connection.refresh_from_db()
         assert test_agent_connection.status_blob == status_blob
+
+    def test_checkin_updates_host_to_callback_ip_in_container(
+        self, client, test_agent_connection, test_api_key, monkeypatch
+    ):
+        """Containerized UI stores agent IP for Connection.host (DNS unreliable)."""
+        from PipelineManager import agent_api as agent_api_mod
+
+        monkeypatch.setattr(agent_api_mod, "running_in_container", lambda: True)
+        test_agent_connection.host = "loggy"
+        test_agent_connection.save()
+
+        response = client.post(
+            '/ConnectionManager/CheckIn/',
+            data=json.dumps({
+                'connection_id': test_agent_connection.id,
+                'host': 'loggy.untergeek.net',
+                'callback_ip': '10.9.5.31',
+                'status_blob': {
+                    'callback_host': 'loggy.untergeek.net',
+                    'callback_ip': '10.9.5.31',
+                },
+            }),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'ApiKey {test_api_key}'
+        )
+
+        assert response.status_code == 200
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.host == '10.9.5.31'
+
+    def test_checkin_ignores_dns_host_when_in_container_without_ip(
+        self, client, test_agent_connection, test_api_key, monkeypatch
+    ):
+        """Do not overwrite Connection.host with unresolvable DNS from a container."""
+        from PipelineManager import agent_api as agent_api_mod
+
+        monkeypatch.setattr(agent_api_mod, "running_in_container", lambda: True)
+        test_agent_connection.host = "10.1.1.1"
+        test_agent_connection.save()
+
+        response = client.post(
+            '/ConnectionManager/CheckIn/',
+            data=json.dumps({
+                'connection_id': test_agent_connection.id,
+                'host': 'loggy',
+            }),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'ApiKey {test_api_key}'
+        )
+
+        assert response.status_code == 200
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.host == '10.1.1.1'
+
+    def test_checkin_accepts_dns_host_when_not_in_container(
+        self, client, test_agent_connection, test_api_key, monkeypatch
+    ):
+        from PipelineManager import agent_api as agent_api_mod
+
+        monkeypatch.setattr(agent_api_mod, "running_in_container", lambda: False)
+        test_agent_connection.host = "old.example.com"
+        test_agent_connection.save()
+
+        response = client.post(
+            '/ConnectionManager/CheckIn/',
+            data=json.dumps({
+                'connection_id': test_agent_connection.id,
+                'host': 'agent.example.com',
+            }),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'ApiKey {test_api_key}'
+        )
+
+        assert response.status_code == 200
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.host == 'agent.example.com'
 
     def test_checkin_restart_flag(self, client, test_agent_connection, test_api_key):
         """Test check-in with restart flag set"""

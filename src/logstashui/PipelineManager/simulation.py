@@ -493,17 +493,21 @@ end
             return count
 
         total_plugin_count = count_all_plugins(filter_plugins)
-        # Add HTTP output that only sends cloned events (identified by type field)
+        # Add HTTP output that only sends cloned events (identified by type field).
+        # Must target LogstashUI StreamSimulate (not the agent API). On host
+        # simulate agents the agent still rebuilds slot conf with pipeline→simulate-end
+        # output, but drop-plugin instrumentation posts here directly.
         output_plugins = [
             {
                 "id": "http_output",
                 "type": "output",
                 "plugin": "http",
                 "config": {
-                    "url": f"{logstash_agent_url}/ConnectionManager/StreamSimulate/",
+                    "url": f"{logstash_ui_url}/ConnectionManager/StreamSimulate/",
                     "http_method": "post",
                     "format": "json",
-                    "content_type": "application/json"
+                    "content_type": "application/json",
+                    "ssl_verification_mode": "none",
                 }
             }
         ]
@@ -532,81 +536,165 @@ end
             "index": 1
         }
 
-        # Allocate a slot - the logstashagent will detect if config changed
-        slot_allocation_body = {
-            "pipeline_name": request.GET.get('pipeline', 'simulation'),
-            "pipelines": [pipeline_data]
-        }
-        
-        logger.info(f"[BE->AGENT] Sending slot allocation with {len(filter_plugins)} filter plugins")
-        logger.debug(f"[BE->AGENT] filter_config being sent:\n{filter_content}")
-
+        # Session slot: multi-document runs allocate once on the client, then pass
+        # slot_id for every document so we never re-allocate mid-session.
+        # IMPORTANT: slots are per-agent. A warm slot on host simulate is not valid
+        # on embedded (and vice versa). Verify the slot exists on *this* agent before
+        # skipping allocate.
+        session_slot_raw = (
+            request.POST.get("slot_id")
+            or request.POST.get("session_slot_id")
+            or ""
+        ).strip()
         slot_id = None
-        try:
-            response = requests.post(
-                f"{logstash_agent_url}/_logstash/slots/allocate",
-                json=slot_allocation_body,
-                verify=agent_requests_verify(),
-                timeout=30  # Increased timeout for slot eviction + allocation when slots are full
-            )
+        reused = False
+        use_session_slot = False
 
-            # Try to extract slot_id from response before checking status
-            # This way we have it even if verification fails
+        if session_slot_raw and log_text:
             try:
-                response_data = response.json()
-                slot_id = response_data.get('slot_id')
-                reused = response_data.get('reused', False)
-            except Exception:
-                pass
-
-            # Now check if the request was successful
-            response.raise_for_status()
-
-            logger.info(f"Allocated slot {slot_id} (reused: {reused})")
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to allocate slot: {e}")
-            logger.error(f"slot_id extracted before error: {slot_id}")
-
-            # If slot_id wasn't extracted from successful response, try to get it from error response
-            if not slot_id and hasattr(e, 'response') and e.response is not None:
+                candidate = int(session_slot_raw)
+                if candidate < 1:
+                    raise ValueError("slot_id must be >= 1")
+                # Confirm this agent actually has the slot (guards host→embedded bleed)
+                slots_data = {}
                 try:
-                    logger.debug(f"Error response status: {e.response.status_code}")
-                    logger.debug(f"Error response content: {e.response.text[:500]}")
+                    slots_resp = requests.get(
+                        f"{logstash_agent_url}/_logstash/slots",
+                        verify=agent_requests_verify(),
+                        timeout=5,
+                    )
+                    slots_resp.raise_for_status()
+                    slots_data = slots_resp.json() or {}
+                    has_slot = (
+                        str(candidate) in slots_data
+                        or candidate in slots_data
+                    )
+                except Exception as probe_err:
+                    logger.warning(
+                        "Could not verify session slot %s on agent: %s — will re-allocate",
+                        candidate,
+                        probe_err,
+                    )
+                    has_slot = False
 
-                    error_data = e.response.json()
-                    logger.debug(f"Error response JSON: {error_data}")
+                if has_slot:
+                    slot_id = candidate
+                    reused = True
+                    use_session_slot = True
+                    logger.info(
+                        "[BE->AGENT] Using session slot %s (skip allocate; document input only)",
+                        slot_id,
+                    )
+                else:
+                    logger.warning(
+                        "[BE->AGENT] Session slot %s not present on agent (available=%s); "
+                        "re-allocating on this target",
+                        candidate,
+                        list(slots_data.keys()) if isinstance(slots_data, dict) else slots_data,
+                    )
+            except (TypeError, ValueError) as e:
+                return HttpResponse(
+                    f'<div class="text-red-400" data-pipeline-failed="true">'
+                    f'Error: invalid session slot_id {session_slot_raw!r}: {e}</div>'
+                )
 
-                    # Check if detail is a dict with slot_id (new format)
-                    detail = error_data.get('detail')
-                    logger.debug(f"Error detail type: {type(detail)}, value: {detail}")
+        if not use_session_slot:
+            # Allocate a slot - the logstashagent will detect if config changed
+            slot_allocation_body = {
+                "pipeline_name": request.GET.get('pipeline', 'simulation')
+                or request.POST.get('pipeline', 'simulation'),
+                "pipelines": [pipeline_data]
+            }
 
-                    if isinstance(detail, dict):
-                        slot_id = detail.get('slot_id')
-                        logger.debug(f"Extracted slot_id {slot_id} from error response detail dict")
-                    elif isinstance(detail, str) and 'Slot' in detail:
-                        # Fallback: try to extract from string
-                        match = re.search(r'Slot (\d+)', detail)
-                        if match:
-                            slot_id = int(match.group(1))
-                            logger.debug(f"Extracted slot_id {slot_id} from error detail string")
-                except Exception as extract_error:
-                    logger.error(f"Could not extract slot_id from error detail: {extract_error}")
-                    logger.error(traceback.format_exc())
+            logger.info(f"[BE->AGENT] Sending slot allocation with {len(filter_plugins)} filter plugins")
+            logger.debug(f"[BE->AGENT] filter_config being sent:\n{filter_content}")
 
-            # Build error response with slot_id if we have it
-            slot_id_attr = f' data-slot-id="{slot_id}"' if slot_id else ""
-            # Mark that the pipeline failed so JavaScript doesn't re-check status
-            failed_attr = ' data-pipeline-failed="true"'
+            try:
+                # Cold allocate can take well over 30s: optional eviction wait (up to 30s),
+                # pipeline create, verify (up to ~20s), and bus settle. Keep UI→agent timeout
+                # high so page-load prealloc can finish and Run stays instant on a warm slot.
+                response = requests.post(
+                    f"{logstash_agent_url}/_logstash/slots/allocate",
+                    json=slot_allocation_body,
+                    verify=agent_requests_verify(),
+                    timeout=120,
+                )
 
-            if slot_id:
-                logger.debug(f"Including slot_id {slot_id} in error response for logs access")
-            else:
-                logger.warning("No slot_id available for error response - logs will not be accessible")
+                # Try to extract slot_id from response before checking status
+                # This way we have it even if verification fails
+                try:
+                    response_data = response.json()
+                    slot_id = response_data.get('slot_id')
+                    reused = response_data.get('reused', False)
+                except Exception:
+                    pass
 
-            error_html = f'<div class="text-red-400"{slot_id_attr}{failed_attr}>Error allocating slot: {str(e)}</div>'
-            logger.debug(f"Returning error HTML: {error_html}")
-            return HttpResponse(error_html)
+                # Now check if the request was successful
+                response.raise_for_status()
+
+                logger.info(f"Allocated slot {slot_id} (reused: {reused})")
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to allocate slot: {e}")
+                logger.error(f"slot_id extracted before error: {slot_id}")
+                agent_detail = None
+
+                # If slot_id wasn't extracted from successful response, try to get it from error response
+                if not slot_id and hasattr(e, 'response') and e.response is not None:
+                    try:
+                        logger.error(
+                            "Agent allocate error status=%s body=%s",
+                            e.response.status_code,
+                            (e.response.text or "")[:800],
+                        )
+
+                        error_data = e.response.json()
+                        logger.error(f"Agent allocate error JSON: {error_data}")
+
+                        # Check if detail is a dict with slot_id (new format)
+                        detail = error_data.get('detail')
+                        agent_detail = detail
+
+                        if isinstance(detail, dict):
+                            slot_id = detail.get('slot_id')
+                            agent_detail = detail.get('message') or detail
+                            logger.debug(f"Extracted slot_id {slot_id} from error response detail dict")
+                        elif isinstance(detail, str) and 'Slot' in detail:
+                            # Fallback: try to extract from string
+                            match = re.search(r'Slot (\d+)', detail)
+                            if match:
+                                slot_id = int(match.group(1))
+                                logger.debug(f"Extracted slot_id {slot_id} from error detail string")
+                    except Exception as extract_error:
+                        logger.error(f"Could not extract slot_id from error detail: {extract_error}")
+                        logger.error(traceback.format_exc())
+
+                # Build error response with slot_id if we have it
+                slot_id_attr = f' data-slot-id="{slot_id}"' if slot_id else ""
+                # Mark that the pipeline failed so JavaScript doesn't re-check status
+                failed_attr = ' data-pipeline-failed="true"'
+
+                if slot_id:
+                    logger.debug(f"Including slot_id {slot_id} in error response for logs access")
+                else:
+                    logger.warning("No slot_id available for error response - logs will not be accessible")
+
+                # Prefer agent detail message for the chip/tooltip when present
+                if isinstance(agent_detail, dict):
+                    human = agent_detail.get("message") or str(agent_detail)
+                elif agent_detail:
+                    human = str(agent_detail)
+                else:
+                    human = str(e)
+                # Escape for HTML
+                from html import escape as _html_escape
+                human_esc = _html_escape(human[:300])
+                error_html = (
+                    f'<div class="text-red-400"{slot_id_attr}{failed_attr}>'
+                    f'Error allocating slot: {human_esc}</div>'
+                )
+                logger.debug(f"Returning error HTML: {error_html}")
+                return HttpResponse(error_html)
 
         # Use the slot-based pipeline name
         pipeline_name = f"slot{slot_id}-filter1"
@@ -705,7 +793,19 @@ def StreamSimulate(request):
         # Log detailed information about the received event
         event_run_id = event_data.get('run_id', 'MISSING')
         snapshots = event_data.get('snapshots', {})
-        snapshot_count = len(snapshots) if snapshots else 0
+        # Logstash may nest as {"plugin-id": {...}} or leave empty on start/end only
+        if not snapshots and isinstance(event_data.get('simulation'), dict):
+            # Debug empty snapshots: step 0 is expected from simulate-start
+            step = event_data.get('simulation', {}).get('step')
+            logger.info(
+                "[AGENT->BE] Event run_id=%s has no snapshots (simulation.step=%s, id=%s); "
+                "keys=%s",
+                event_run_id,
+                step,
+                event_data.get('simulation', {}).get('id'),
+                list(event_data.keys())[:30],
+            )
+        snapshot_count = len(snapshots) if isinstance(snapshots, dict) else 0
         logger.info(f"[AGENT->BE] Received event with run_id={event_run_id}, snapshots={snapshot_count}, queue size now: {queue_size}")
         if snapshots:
             logger.debug(f"[AGENT->BE] Snapshot keys: {list(snapshots.keys()) if isinstance(snapshots, dict) else 'NOT A DICT'}")
@@ -1047,7 +1147,7 @@ def GetSimulationNodeStatus(request):
             
             return JsonResponse({
                 "status": "running",
-                "message": "Sim Node Running",
+                "message": "Agent running",
                 "agent_info": agent_data
             }, status=200)
             
@@ -1055,7 +1155,7 @@ def GetSimulationNodeStatus(request):
             logger.warning(f"logstashagent not responding: {e}")
             return JsonResponse({
                 "status": "not_responding",
-                "message": "Sim Node Offline",
+                "message": "Agent offline",
                 "error": str(e)
             }, status=200)
     
@@ -1064,7 +1164,7 @@ def GetSimulationNodeStatus(request):
         logger.error(traceback.format_exc())
         return JsonResponse({
             "status": "error",
-            "message": "Sim Node Offline",
+            "message": "Agent offline",
             "error": str(e)
         }, status=200)
 

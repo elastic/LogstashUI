@@ -382,29 +382,22 @@ if (document.readyState === 'loading') {
 
 function attachFormListener() {
   const form = document.getElementById('simulationForm');
+  if (form && form.dataset.simSubmitBound === '1') {
+    return; // Prevent double-submit from re-binding
+  }
   if (form) {
+    form.dataset.simSubmitBound = '1';
     form.addEventListener('submit', async function(event) {
 event.preventDefault();
 event.stopPropagation();
 
-// Update status chip to show allocation is starting (for embedded mode)
-const statusContainer = document.getElementById('pipelineLoadStatus');
-const statusIcon = document.getElementById('pipelineStatusIcon');
-const statusMessage = document.getElementById('pipelineStatusMessage');
-
-if (statusContainer && statusIcon && statusMessage) {
-    statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
-    statusIcon.outerHTML = `
-        <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-    `;
-    statusMessage.className = 'text-xs font-medium text-gray-300';
-    statusMessage.textContent = 'Allocating pipeline slot...';
+// Guard against double-clicks while a run is in flight
+if (form.dataset.simRunning === '1') {
+  console.warn('[sim] Ignoring duplicate simulate submit');
+  return;
 }
 
-// Check if there are any filters in the pipeline
+// Check if there are any filters in the pipeline (before closing modal)
 let pipelineComponents;
 if (typeof getSubsetComponents === 'function') {
   pipelineComponents = getSubsetComponents();
@@ -421,6 +414,10 @@ if (!pipelineComponents.filter || pipelineComponents.filter.length === 0) {
   }
   return;
 }
+
+form.dataset.simRunning = '1';
+const submitBtns = form.querySelectorAll('button[type="submit"], #runSimulationBtn, #simulateSubmitBtn');
+submitBtns.forEach((b) => { b.disabled = true; });
 
 const inputSource = document.querySelector('input[name="inputSource"]:checked').value;
 const logInput = document.getElementById('logInput');
@@ -525,32 +522,187 @@ window.currentDocumentIndex = 0;
 window.simulationRunIds = [];
 
 // Submit all documents simultaneously
-submitAllDocuments(documents);
+try {
+  await submitAllDocuments(documents);
+} finally {
+  form.dataset.simRunning = '0';
+  submitBtns.forEach((b) => { b.disabled = false; });
+}
     });
   }
 }
 
-// Function to submit all documents for simulation simultaneously
+/**
+ * Allocate exactly one slot for this simulate session (not per document).
+ * Returns slot id string/number or null.
+ */
+async function allocateSessionSlot(componentsData) {
+  const formData = new FormData();
+  formData.append('components', JSON.stringify(componentsData));
+  formData.append('log_text', ''); // allocate only — no document payload
+  formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+  const esId = new URLSearchParams(window.location.search).get('es_id');
+  const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
+  const lsId = new URLSearchParams(window.location.search).get('ls_id');
+  if (esId) formData.append('es_id', esId);
+  if (pipelineName) formData.append('pipeline', pipelineName);
+  if (lsId) formData.append('ls_id', lsId);
+  if (typeof window.appendSimConnectionToFormData === 'function') {
+    window.appendSimConnectionToFormData(formData);
+  } else if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+    formData.append('sim_connection_id', window.getSimConnectionId());
+  }
+
+  console.log('[FE->BE] Session slot allocate (once for all documents)');
+  const response = await fetch('/ConnectionManager/SimulatePipeline/', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+  });
+  const html = await response.text();
+  const slotMatch =
+    html.match(/data-slot-id="(\d+)"/) ||
+    html.match(/Slot\s+(\d+)/i);
+  if (!slotMatch) {
+    console.error('[FE->BE] Session allocate failed:', html.slice(0, 500));
+    return null;
+  }
+  return slotMatch[1];
+}
+
+// Function to submit all documents for simulation.
+// Session owns the slot: allocate once (or reuse warm slot), then feed every
+// document into that slot in series (never allocate per document).
 async function submitAllDocuments(documents) {
 // Create a deep copy of components with file paths updated for simulation
 window.simulationComponents = createSimulationComponentsCopy();
 
-// Show toast immediately
-showToast('Simulation launched!', 'success');
-
-// Close modal
+// Immediate UX — don't leave the modal sitting open during allocate (can take seconds)
+const docLabel =
+  documents.length > 1
+    ? `Simulation started (${documents.length} documents)…`
+    : 'Simulation started…';
+if (typeof showToast === 'function') {
+  showToast(docLabel, 'success');
+}
 if (typeof closeSimulationModal === 'function') {
   closeSimulationModal();
+}
+
+// Prefer warm slot from page-load prealloc when available (skip a full re-allocate).
+// Slot must belong to the *currently selected* sim agent — host slot ≠ embedded slot.
+let sessionSlotId =
+  typeof window.getWarmSessionSlotForCurrentTarget === 'function'
+    ? window.getWarmSessionSlotForCurrentTarget()
+    : window.simulationSessionSlotId ||
+      window.currentSlotId ||
+      (typeof currentSlotId !== 'undefined' ? currentSlotId : null) ||
+      null;
+
+// If target-switch warm is still running, join it — do NOT start a second cold allocate
+if (
+  !sessionSlotId &&
+  typeof window.isSlotWarmInFlightForCurrentTarget === 'function' &&
+  window.isSlotWarmInFlightForCurrentTarget() &&
+  typeof window.warmSlotForCurrentTarget === 'function'
+) {
+  console.log('[FE->BE] Run waiting for in-flight slot warm (same agent)');
+  if (typeof window.setPipelineSlotChip === 'function') {
+    window.setPipelineSlotChip('warming', {
+      title: 'Waiting for slot allocate already in progress…',
+    });
+  }
+  try {
+    sessionSlotId = await window.warmSlotForCurrentTarget({ showWarming: true });
+  } catch (e) {
+    console.error('[FE->BE] join in-flight warm failed', e);
+    sessionSlotId = null;
+  }
+}
+
+if (sessionSlotId) {
+  console.log(
+    '[FE->BE] Using pre-warmed session slot',
+    sessionSlotId,
+    'on connection',
+    window.simulationSessionConnectionId || window.getSimConnectionId?.(),
+    '(skip allocate on Run)'
+  );
+}
+
+if (!sessionSlotId) {
+  // No warm and nothing in flight — allocate now (single path via warmSlot when available)
+  if (typeof window.setPipelineSlotChip === 'function') {
+    window.setPipelineSlotChip('warming', {
+      title: 'Preparing simulation slot…',
+    });
+  } else {
+    const statusContainer = document.getElementById('pipelineLoadStatus');
+    const statusMessage = document.getElementById('pipelineStatusMessage');
+    if (statusContainer && statusMessage) {
+      statusContainer.title = 'Preparing simulation slot…';
+      statusMessage.className = 'text-xs font-medium text-gray-300 truncate';
+      statusMessage.textContent = 'Preparing…';
+    }
+  }
+  try {
+    if (typeof window.warmSlotForCurrentTarget === 'function') {
+      sessionSlotId = await window.warmSlotForCurrentTarget({ showWarming: true });
+    } else {
+      sessionSlotId = await allocateSessionSlot(window.simulationComponents);
+    }
+  } catch (e) {
+    console.error(e);
+    sessionSlotId = null;
+  }
+}
+
+if (!sessionSlotId) {
+  showToast('Failed to allocate simulation slot for this session', 'error');
+  setPipelineSlotStatusFailed('Session slot allocate failed');
+  return;
+}
+
+if (typeof window.rememberSimulationSessionSlot === 'function') {
+  window.rememberSimulationSessionSlot(sessionSlotId);
+} else {
+  window.simulationSessionSlotId = sessionSlotId;
+  if (typeof currentSlotId !== 'undefined') {
+    currentSlotId = sessionSlotId;
+  }
+  window.currentSlotId = sessionSlotId;
+}
+
+// Chip → Ready once session slot is known
+{
+  const statusContainer = document.getElementById('pipelineLoadStatus');
+  const statusMessage = document.getElementById('pipelineStatusMessage');
+  let statusIcon = document.getElementById('pipelineStatusIcon');
+  if (statusContainer && statusMessage) {
+    statusContainer.className =
+      'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-green-600 bg-green-900/30 max-w-[11rem]';
+    statusContainer.title = `Simulation session slot ${sessionSlotId}`;
+    if (statusIcon) {
+      statusIcon.outerHTML = `
+        <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      `;
+    }
+    statusMessage.className = 'text-xs font-medium text-green-300 truncate';
+    statusMessage.textContent = `Slot ${sessionSlotId}`;
+  }
 }
 
 // Initialize run_ids array
 window.simulationRunIds = new Array(documents.length).fill(null);
 
-// Submit all documents and start polling for each
-const submissions = documents.map((doc, index) => submitAndPollDocument(doc, index));
-
-// Wait for all submissions to complete
-await Promise.all(submissions);
+// Feed documents in series into the same session slot
+for (let index = 0; index < documents.length; index++) {
+  await submitAndPollDocument(documents[index], index, sessionSlotId);
+}
 }
 
 // Function to create a deep copy of components with file paths updated for simulation only
@@ -597,11 +749,17 @@ filePathInputs.forEach(input => {
 return componentsCopy;
 }
 
-// Function to submit a single document, start polling, and return its run_id
-async function submitAndPollDocument(doc, index) {
+// Function to submit a single document into an already-allocated session slot
+async function submitAndPollDocument(doc, index, sessionSlotId) {
 // Use the simulation components copy (with file paths updated)
 // This was created in submitAllDocuments and stored in window.simulationComponents
 const componentsData = window.simulationComponents;
+const slotId = sessionSlotId || window.simulationSessionSlotId;
+if (!slotId) {
+  console.error('[FE->BE] submitAndPollDocument called without session slot');
+  showToast(`Document ${index + 1}: no session slot`, 'error');
+  return null;
+}
 
 // Get es_id and pipeline from URL parameters
 const esId = new URLSearchParams(window.location.search).get('es_id');
@@ -610,6 +768,7 @@ const pipelineName = new URLSearchParams(window.location.search).get('pipeline')
 const formData = new FormData();
 formData.append('log_text', JSON.stringify(doc));
 formData.append('components', JSON.stringify(componentsData));
+formData.append('slot_id', String(slotId)); // session slot — server skips allocate
 formData.append('es_id', esId);
 formData.append('pipeline', pipelineName);
 const lsId = new URLSearchParams(window.location.search).get('ls_id');
@@ -623,9 +782,10 @@ if (typeof window.appendSimConnectionToFormData === 'function') {
   formData.append('sim_connection_id', window.getSimConnectionId());
 }
 
-console.log('[FE->BE] Sending simulation request with components:', {
+console.log('[FE->BE] Document into session slot', {
+  docIndex: index,
+  slotId: slotId,
   filterCount: componentsData.filter?.length || 0,
-  filterPlugins: componentsData.filter?.map(f => f.plugin) || []
 });
 
 try {
@@ -668,14 +828,15 @@ try {
       const statusMessage = document.getElementById('pipelineStatusMessage');
       
       if (statusContainer && statusIcon && statusMessage) {
-        statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
+        statusContainer.className = 'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-green-600 bg-green-900/30 max-w-[11rem]';
+        statusContainer.title = slotId ? `Simulation ready (slot ${slotId})` : 'Simulation ready';
         statusIcon.outerHTML = `
-          <svg id="pipelineStatusIcon" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
           </svg>
         `;
-        statusMessage.className = 'text-xs font-medium text-green-300';
-        statusMessage.textContent = 'Simulation Ready';
+        statusMessage.className = 'text-xs font-medium text-green-300 truncate';
+        statusMessage.textContent = 'Ready';
       }
     }
 
@@ -710,13 +871,42 @@ try {
   } else {
     console.error('No run_id found in response for document', index);
     console.error('Response content:', html);
-    showToast('Error submitting document ' + (index + 1), 'error');
+    const n = index + 1;
+    const hint = html.includes('Error allocating')
+      ? `Document ${n}: slot allocate failed`
+      : `Document ${n}: simulation failed (no run_id in response)`;
+    showToast(hint, 'error');
+    setPipelineSlotStatusFailed(hint);
     return null;
   }
 } catch (error) {
   console.error('Error submitting document', index, ':', error);
+  const n = index + 1;
+  const hint = `Document ${n}: ${error.message || 'request failed'}`;
+  showToast(hint, 'error');
+  setPipelineSlotStatusFailed(hint);
   return null;
 }
+}
+
+/** Compact status chip: failed allocation / sim (clears stuck Allocating…) */
+function setPipelineSlotStatusFailed(detail) {
+  const statusContainer = document.getElementById('pipelineLoadStatus');
+  let statusIcon = document.getElementById('pipelineStatusIcon');
+  const statusMessage = document.getElementById('pipelineStatusMessage');
+  if (!statusContainer || !statusMessage) return;
+  statusContainer.className =
+    'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-red-600/50 bg-red-900/20 max-w-[11rem]';
+  statusContainer.title = detail || 'Simulation failed';
+  if (statusIcon) {
+    statusIcon.outerHTML = `
+      <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      </svg>
+    `;
+  }
+  statusMessage.className = 'text-xs font-medium text-red-300 truncate';
+  statusMessage.textContent = 'Failed';
 }
 
 
@@ -867,12 +1057,10 @@ function openSimulationModal() {
 const modal = document.getElementById('simulationModal');
 if (modal) {
     modal.classList.remove('hidden');
-    
-    // Trigger custom event for slot preallocation
-    // This allows the pipeline to warm up when the modal opens
-    const slotPreallocation = document.getElementById('slotPreallocation');
-    if (slotPreallocation) {
-        htmx.trigger(slotPreallocation, 'simulationModalOpened');
+
+    // Prefer page-load warm; only allocate here if we still have no session slot
+    if (typeof triggerPipelineWarmingAndChecking === 'function') {
+      triggerPipelineWarmingAndChecking({ soft: true });
     }
 }
 }

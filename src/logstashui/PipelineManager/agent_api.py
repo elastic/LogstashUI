@@ -9,8 +9,10 @@ from datetime import datetime, timezone
 
 import base64
 import hashlib
+import ipaddress
 import json
 import logging
+import os
 import secrets
 
 from cryptography.fernet import Fernet
@@ -19,6 +21,7 @@ from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken, Poli
 from .agent_modes import (
     build_policy_config,
     managed_ports,
+    materialize_simulate_logstash_yml,
     next_managed_instance_id,
     next_simulate_instance_id,
     normalize_policy_type,
@@ -29,6 +32,94 @@ from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
 
 
 logger = logging.getLogger(__name__)
+
+
+def running_in_container() -> bool:
+    """
+    True when LogstashUI appears to run inside a container (Docker/Podman/k8s).
+
+    Inside containers, host DNS is often incomplete, so UI→agent callbacks
+    should use agent IPs rather than short hostnames or private DNS names.
+    Override with LOGSTASHUI_IN_CONTAINER=1/0 when detection is wrong.
+    """
+    forced = (os.environ.get("LOGSTASHUI_IN_CONTAINER") or "").strip().lower()
+    if forced in ("1", "true", "yes", "on"):
+        return True
+    if forced in ("0", "false", "no", "off"):
+        return False
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", encoding="utf-8", errors="ignore") as fh:
+            text = fh.read()
+        for marker in ("docker", "containerd", "kubepods", "libpod", "podman"):
+            if marker in text:
+                return True
+    except OSError:
+        pass
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8", errors="ignore") as fh:
+            text = fh.read()
+        if "/docker/" in text or "/containers/" in text:
+            return True
+    except OSError:
+        pass
+    return False
+
+
+def _is_ip_literal(value: str) -> bool:
+    try:
+        ipaddress.ip_address((value or "").strip())
+        return True
+    except ValueError:
+        return False
+
+
+def resolve_agent_callback_host(data: dict, *, prefer_ip: bool | None = None) -> str | None:
+    """
+    Pick Connection.host from enroll/check-in payload.
+
+    When *prefer_ip* (default: running_in_container()), prefer callback_ip /
+    IP-literal host so Docker LogstashUI can reach the agent without DNS.
+    """
+    if prefer_ip is None:
+        prefer_ip = running_in_container()
+
+    host = (data.get("host") or "").strip()
+    callback_ip = (data.get("callback_ip") or "").strip()
+    blob = data.get("status_blob")
+    if isinstance(blob, dict):
+        if not host:
+            host = (blob.get("callback_host") or "").strip()
+        if not callback_ip:
+            callback_ip = (blob.get("callback_ip") or "").strip()
+
+    if prefer_ip:
+        if _is_ip_literal(callback_ip):
+            return callback_ip
+        if _is_ip_literal(host):
+            return host
+        # DNS names from the agent are unreliable inside containers
+        return None
+
+    if host:
+        return host
+    if _is_ip_literal(callback_ip):
+        return callback_ip
+    return None
+
+
+def expand_instance_path(path: str | None, instance_id) -> str | None:
+    """
+    Expand multi-instance path templates (e.g. simulate-{instance_id}/settings).
+
+    Policy rows may store the template form; Connection.instance_id is the real N.
+    """
+    if path is None:
+        return None
+    if instance_id is None or instance_id == "":
+        return path
+    return str(path).replace("{instance_id}", str(instance_id))
 
 
 def _sign_csr_if_present(data: dict) -> dict | None:
@@ -289,16 +380,29 @@ def enroll(request):
                 instance_id = next_managed_instance_id()
                 agent_api_port, logstash_api_port = managed_ports(instance_id)
 
+            # host = IP (preferred in container) or FQDN for UI→agent callbacks;
+            # host_short for display labels only.
+            callback_host = resolve_agent_callback_host(data) or (host or "").strip()
+            host_short = (data.get("host_short") or "").strip()
+            if not host_short:
+                if _is_ip_literal(callback_host):
+                    host_short = callback_host
+                else:
+                    host_short = (
+                        callback_host.split(".")[0]
+                        if callback_host and "." in callback_host
+                        else callback_host
+                    )
             if ptype == Policy.PolicyType.SIMULATE:
-                conn_name = f"{host}-simulate-{instance_id}"
+                conn_name = f"{host_short}-simulate-{instance_id}"
             elif ptype == Policy.PolicyType.MANAGED:
-                conn_name = f"{host}-managed-{instance_id}"
+                conn_name = f"{host_short}-managed-{instance_id}"
             else:
-                conn_name = host
+                conn_name = host_short or callback_host
             connection = ConnectionTable.objects.create(
                 name=conn_name,
                 connection_type="AGENT",
-                host=host,
+                host=callback_host,
                 agent_id=agent_id,
                 is_active=True,
                 policy=policy,
@@ -458,6 +562,20 @@ def check_in(request):
 
         connection.last_check_in = datetime.now(timezone.utc)
 
+        # Connection.host must be reachable from this UI process. In containers
+        # prefer the agent callback IP (DNS is unpredictable); otherwise accept host.
+        new_host = resolve_agent_callback_host(data)
+        if new_host and new_host != connection.host:
+            old_host = connection.host or ""
+            connection.host = new_host
+            logger.info(
+                "Updated connection %s host %r → %r (callback reachability%s)",
+                connection_id,
+                old_host,
+                new_host,
+                ", container IP preferred" if running_in_container() else "",
+            )
+
         status_blob = data.get("status_blob")
         if status_blob:
             connection.status_blob = status_blob
@@ -502,19 +620,23 @@ def check_in(request):
             "snmp": _snmp_changes_available(connection, policy, managed_state_hashes.get("snmp")),
         }
 
+        iid = connection.instance_id
         response_payload = {
             "success": True,
             "message": "Check-in successful",
             "timestamp": connection.last_check_in.isoformat(),
             "current_revision_number": policy.current_revision_number,
-            "settings_path": policy.settings_path,
-            "logs_path": policy.logs_path,
-            "binary_path": policy.binary_path,
+            "settings_path": expand_instance_path(policy.settings_path, iid),
+            "logs_path": expand_instance_path(policy.logs_path, iid),
+            "binary_path": expand_instance_path(policy.binary_path, iid),
             # Desired Logstash runtime (agent applies VERSION download when these change)
             "logstash_source": getattr(policy, "logstash_source", None) or "SYSTEM",
             "logstash_version": getattr(policy, "logstash_version", None) or "",
-            "logstash_download_dir": getattr(policy, "logstash_download_dir", None)
-            or "/opt/logstash-agent/logstash-versions",
+            "logstash_download_dir": expand_instance_path(
+                getattr(policy, "logstash_download_dir", None)
+                or "/opt/logstash-agent/logstash-versions",
+                iid,
+            ),
             "restart": should_restart,
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
@@ -593,23 +715,52 @@ def get_config_changes(request):
 
         policy = connection.policy
         changes = {}
+        iid = connection.instance_id
+        desired_settings = expand_instance_path(policy.settings_path, iid)
+        desired_logs = expand_instance_path(policy.logs_path, iid)
+        desired_binary = expand_instance_path(policy.binary_path, iid)
+        desired_download = expand_instance_path(
+            getattr(policy, "logstash_download_dir", None)
+            or "/opt/logstash-agent/logstash-versions",
+            iid,
+        )
 
-        changes["logstash_yml"] = policy.logstash_yml if agent_logstash_yml_hash != policy.logstash_yml_hash else False
+        # Multi-instance: materialize nested api.http.port + {instance_id} paths
+        # before hash-compare / push so agents never re-apply template port 9560.
+        desired_logstash_yml = policy.logstash_yml or ""
+        if iid is not None:
+            ls_port = connection.logstash_api_port
+            if not ls_port:
+                ptype = normalize_policy_type(policy.policy_type)
+                if ptype == Policy.PolicyType.MANAGED:
+                    _, ls_port = managed_ports(int(iid))
+                else:
+                    _, ls_port = simulate_ports(int(iid))
+            desired_logstash_yml = materialize_simulate_logstash_yml(
+                policy.logstash_yml or "",
+                int(ls_port),
+                instance_id=int(iid),
+            )
+        desired_yml_hash = hashlib.sha256(
+            desired_logstash_yml.encode("utf-8")
+        ).hexdigest()
+        changes["logstash_yml"] = (
+            desired_logstash_yml
+            if agent_logstash_yml_hash != desired_yml_hash
+            else False
+        )
         changes["jvm_options"] = policy.jvm_options if agent_jvm_options_hash != policy.jvm_options_hash else False
         changes["log4j2_properties"] = (
             policy.log4j2_properties if agent_log4j2_properties_hash != policy.log4j2_properties_hash else False
         )
-        changes["settings_path"] = policy.settings_path if agent_settings_path != policy.settings_path else False
-        changes["logs_path"] = policy.logs_path if agent_logs_path != policy.logs_path else False
-        changes["binary_path"] = policy.binary_path if agent_binary_path != policy.binary_path else False
+        changes["settings_path"] = desired_settings if agent_settings_path != desired_settings else False
+        changes["logs_path"] = desired_logs if agent_logs_path != desired_logs else False
+        changes["binary_path"] = desired_binary if agent_binary_path != desired_binary else False
 
         # Desired Logstash runtime for simulate/managed VERSION/SYSTEM switches
         policy_source = (getattr(policy, "logstash_source", None) or "SYSTEM").upper()
         policy_version = getattr(policy, "logstash_version", None) or ""
-        policy_download_dir = (
-            getattr(policy, "logstash_download_dir", None)
-            or "/opt/logstash-agent/logstash-versions"
-        )
+        policy_download_dir = desired_download
         if policy_download_dir.startswith("/opt/LogstashAgent"):
             policy_download_dir = "/opt/logstash-agent" + policy_download_dir[
                 len("/opt/LogstashAgent") :

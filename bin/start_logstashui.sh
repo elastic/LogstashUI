@@ -67,11 +67,84 @@ echo ""
 # ---------------------------------------------------------------------------
 # Host identity for product UI TLS SANs (containers cannot see Docker host IPs)
 # ---------------------------------------------------------------------------
+# Iterate a comma-separated list without IFS word-splitting (safe + portable).
+# Callback receives one trimmed token per call.
+foreach_csv() {
+    local csv="$1"
+    local fn="$2"
+    local token
+    while IFS= read -r token; do
+        # trim whitespace
+        token="${token#"${token%%[![:space:]]*}"}"
+        token="${token%"${token##*[![:space:]]}"}"
+        [ -n "$token" ] || continue
+        "$fn" "$token"
+    done <<EOF
+$(printf '%s' "$csv" | tr ',' '\n')
+EOF
+}
+
+# Best-effort PTR for one IP → FQDN (strip trailing dot). Empty if none / NXDOMAIN.
+# Prefer dig, then host(1), then python3 — works on Linux + macOS.
+reverse_lookup_ip() {
+    local ip="$1"
+    local name=""
+    [ -n "$ip" ] || return 0
+
+    if command -v dig >/dev/null 2>&1; then
+        name=$(dig +short -x "$ip" 2>/dev/null | head -1 | sed 's/\.$//')
+    fi
+    if [ -z "$name" ] && command -v host >/dev/null 2>&1; then
+        name=$(host "$ip" 2>/dev/null | awk '/pointer/ {print $NF; exit}' | sed 's/\.$//')
+    fi
+    if [ -z "$name" ] && command -v python3 >/dev/null 2>&1; then
+        # Quote IP via env to avoid shell injection into python -c
+        name=$(
+            IP_ADDR="$ip" python3 -c "
+import os, socket
+socket.setdefaulttimeout(1.0)
+try:
+    print(socket.gethostbyaddr(os.environ['IP_ADDR'])[0].rstrip('.'))
+except Exception:
+    pass
+" 2>/dev/null || true
+        )
+    fi
+
+    # Keep only multi-label names (real FQDNs), not the IP echoed back or short labels
+    if [ -n "$name" ] && [ "$name" != "$ip" ] && [[ "$name" == *.* ]]; then
+        printf '%s' "$name"
+    fi
+}
+
+# Append unique comma-separated token (case-insensitive dedupe for hostnames)
+append_unique_csv() {
+    local list="$1"
+    local token="$2"
+    local t lower_token lower_t
+    [ -n "$token" ] || { printf '%s' "$list"; return 0; }
+    if [ -z "$list" ]; then
+        printf '%s' "$token"
+        return 0
+    fi
+    lower_token=$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')
+    while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        lower_t=$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')
+        if [ "$lower_t" = "$lower_token" ]; then
+            printf '%s' "$list"
+            return 0
+        fi
+    done <<EOF
+$(printf '%s' "$list" | tr ',' '\n')
+EOF
+    printf '%s,%s' "$list" "$token"
+}
+
 collect_host_tls_env() {
-    # Hostname / FQDN of the machine running Docker
+    # Bare hostname from the OS (often short on macOS — prefer PTR FQDNs below)
     local hn
     hn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")
-    export LOGSTASHUI_HOST_HOSTNAME="${LOGSTASHUI_HOST_HOSTNAME:-$hn}"
 
     # Collect non-loopback IPv4 addresses from the host
     local ips=""
@@ -96,10 +169,39 @@ collect_host_tls_env() {
     fi
     export LOGSTASHUI_HOST_IPS="${LOGSTASHUI_HOST_IPS:-$ips}"
 
-    # Merge into TLS_SANS if operator did not set it
+    # Reverse-lookup each host IP for FQDNs (PTR). Prefer those over bare hostname.
+    local fqdns=""
+    local first_fqdn=""
+    _tls_ptr_one() {
+        local ip="$1" name
+        name=$(reverse_lookup_ip "$ip")
+        [ -n "$name" ] || return 0
+        fqdns=$(append_unique_csv "$fqdns" "$name")
+        [ -z "$first_fqdn" ] && first_fqdn="$name"
+    }
+    if [ -n "${LOGSTASHUI_HOST_IPS:-}" ]; then
+        foreach_csv "$LOGSTASHUI_HOST_IPS" _tls_ptr_one
+    fi
+
+    # HOST_HOSTNAME: operator override > first PTR FQDN > OS hostname
+    if [ -z "${LOGSTASHUI_HOST_HOSTNAME:-}" ]; then
+        if [ -n "$first_fqdn" ]; then
+            export LOGSTASHUI_HOST_HOSTNAME="$first_fqdn"
+        else
+            export LOGSTASHUI_HOST_HOSTNAME="$hn"
+        fi
+    fi
+
+    # Merge into TLS_SANS if operator did not set it:
+    # all PTR FQDNs (or bare hostname if none), plus host IPs
     if [ -z "${LOGSTASHUI_TLS_SANS:-}" ]; then
         local merged=""
-        [ -n "$LOGSTASHUI_HOST_HOSTNAME" ] && merged="$LOGSTASHUI_HOST_HOSTNAME"
+        if [ -n "$fqdns" ]; then
+            merged="$fqdns"
+        elif [ -n "$LOGSTASHUI_HOST_HOSTNAME" ]; then
+            # No PTR results — fall back to hostname (may be short)
+            merged="$LOGSTASHUI_HOST_HOSTNAME"
+        fi
         if [ -n "$LOGSTASHUI_HOST_IPS" ]; then
             if [ -n "$merged" ]; then
                 merged="${merged},${LOGSTASHUI_HOST_IPS}"
@@ -110,17 +212,31 @@ collect_host_tls_env() {
         export LOGSTASHUI_TLS_SANS="$merged"
     fi
 
-    # Expand CSRF trusted origins for each host IP (browsers hit https://IP:8443)
-    local origins="${CSRF_TRUSTED_ORIGINS:-https://localhost:8443,https://127.0.0.1:8443}"
-    if [ -n "$LOGSTASHUI_HOST_HOSTNAME" ]; then
-        origins="${origins},https://${LOGSTASHUI_HOST_HOSTNAME}:8443"
+    # Expand CSRF trusted origins for each host name + IP (browsers hit https://…:8443)
+    # Rebuild from a clean base so a prior broken CSRF_TRUSTED_ORIGINS cannot leak in.
+    local origins="https://localhost:8443,https://127.0.0.1:8443"
+    if [ -n "${CSRF_TRUSTED_ORIGINS:-}" ]; then
+        # Keep only already-valid https?://… entries from the operator env
+        _tls_keep_origin() {
+            local o="$1"
+            case "$o" in
+                https://*|http://*) origins=$(append_unique_csv "$origins" "$o") ;;
+            esac
+        }
+        foreach_csv "$CSRF_TRUSTED_ORIGINS" _tls_keep_origin
+    fi
+    _tls_add_origin_host() {
+        local h="$1"
+        [ -n "$h" ] || return 0
+        origins=$(append_unique_csv "$origins" "https://${h}:8443")
+    }
+    if [ -n "$fqdns" ]; then
+        foreach_csv "$fqdns" _tls_add_origin_host
+    elif [ -n "$LOGSTASHUI_HOST_HOSTNAME" ]; then
+        _tls_add_origin_host "$LOGSTASHUI_HOST_HOSTNAME"
     fi
     if [ -n "$LOGSTASHUI_HOST_IPS" ]; then
-        local IFS=','
-        for ip in $LOGSTASHUI_HOST_IPS; do
-            [ -n "$ip" ] && origins="${origins},https://${ip}:8443"
-        done
-        unset IFS
+        foreach_csv "$LOGSTASHUI_HOST_IPS" _tls_add_origin_host
     fi
     export CSRF_TRUSTED_ORIGINS="$origins"
 
@@ -128,6 +244,11 @@ collect_host_tls_env() {
     echo "  LOGSTASHUI_HOST_HOSTNAME=$LOGSTASHUI_HOST_HOSTNAME"
     echo "  LOGSTASHUI_HOST_IPS=$LOGSTASHUI_HOST_IPS"
     echo "  LOGSTASHUI_TLS_SANS=$LOGSTASHUI_TLS_SANS"
+    if [ -n "$fqdns" ]; then
+        echo "  reverse-DNS FQDNs=$fqdns"
+    else
+        echo "  reverse-DNS FQDNs=(none — using hostname fallback)"
+    fi
     echo ""
 }
 collect_host_tls_env
@@ -135,12 +256,27 @@ collect_host_tls_env
 # Parse command line arguments
 REBUILD_FLAG=""
 UPDATE_MODE=0
+# --rebuild builds from local source (docker-compose.smoke.yml). Plain `up`
+# without --rebuild uses Hub images (codyjackson032/*) and does NOT pick up
+# uncommitted local TLS/callback changes.
 if [ "$1" == "--rebuild" ]; then
     REBUILD_FLAG="--build"
 fi
 if [ "$1" == "--update" ]; then
     UPDATE_MODE=1
 fi
+
+# Compose file set: smoke override tags local images and enables `build:`.
+# Used whenever REBUILD_FLAG is set so --rebuild actually compiles this tree.
+compose_cmd() {
+    # Usage: compose_cmd [docker compose args...]
+    # Always run from $PROJECT_ROOT/docker (caller must cd there).
+    if [ -n "$REBUILD_FLAG" ] && [ -f "docker-compose.smoke.yml" ]; then
+        $DOCKER_COMPOSE -f docker-compose.yml -f docker-compose.smoke.yml "$@"
+    else
+        $DOCKER_COMPOSE "$@"
+    fi
+}
 
 echo "========================================"
 echo "LogstashUI Startup"
@@ -369,9 +505,10 @@ if [ "$MODE" == "host" ]; then
     export LOGSTASH_AGENT_URL="${LOGSTASH_AGENT_URL:-https://host.docker.internal:9501}"
     export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
     if [ -n "$REBUILD_FLAG" ]; then
-        $DOCKER_COMPOSE up -d $REBUILD_FLAG logstashui
+        echo "Rebuilding UI image from local source (docker-compose.smoke.yml)..."
+        compose_cmd up -d $REBUILD_FLAG logstashui
     else
-        $DOCKER_COMPOSE up -d logstashui
+        compose_cmd up -d logstashui
     fi
     cd "$PROJECT_ROOT"
 
@@ -406,24 +543,29 @@ else
     
     # Change to docker directory for docker-compose commands
     cd "$PROJECT_ROOT/docker"
-    
+
+    if [ -n "$REBUILD_FLAG" ]; then
+        echo "Rebuilding UI + embedded agent from local source (docker-compose.smoke.yml)..."
+        echo "  (plain 'docker compose --build' without smoke.yml still uses Hub images)"
+    fi
+
     # Start all containers in detached mode with embedded profile
     # Retry once if network failure occurs
     if [ -n "$REBUILD_FLAG" ]; then
-        $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG || {
+        compose_cmd --profile embedded up -d $REBUILD_FLAG || {
             echo "Startup failed, cleaning up and retrying..."
             docker rm -f logstashui-logstashagent-1 2>/dev/null || true
-            $DOCKER_COMPOSE down --remove-orphans
+            compose_cmd down --remove-orphans
             sleep 1
-            $DOCKER_COMPOSE --profile embedded up -d $REBUILD_FLAG
+            compose_cmd --profile embedded up -d $REBUILD_FLAG
         }
     else
-        $DOCKER_COMPOSE --profile embedded up -d || {
+        compose_cmd --profile embedded up -d || {
             echo "Startup failed, cleaning up and retrying..."
             docker rm -f logstashui-logstashagent-1 2>/dev/null || true
-            $DOCKER_COMPOSE down --remove-orphans
+            compose_cmd down --remove-orphans
             sleep 1
-            $DOCKER_COMPOSE --profile embedded up -d
+            compose_cmd --profile embedded up -d
         }
     fi
     cd "$PROJECT_ROOT"

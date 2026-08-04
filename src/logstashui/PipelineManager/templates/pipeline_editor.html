@@ -80,15 +80,24 @@
         
         document.body.appendChild(modal);
         
-        // Fetch logs from API
+        // Fetch logs from API (include sim target for multi-agent routing)
         try {
-            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            let logsUrl = `/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`;
+            if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+                logsUrl += `&sim_connection_id=${encodeURIComponent(window.getSimConnectionId())}`;
+            }
+            const response = await fetch(logsUrl);
             const data = await response.json();
             
             const logsContent = document.getElementById('pipeline-logs-content');
+
+            if (data.error) {
+                logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${data.error}</div>`;
+                return;
+            }
             
             if (!data.logs || data.logs.length === 0) {
-                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline. Clean runs often have no INFO-level entries.</div>';
                 return;
             }
             
@@ -132,6 +141,42 @@
     }
     
     /**
+     * Compact sim status light: colored circle + tooltip; message is sr-only.
+     * @param {'ok'|'warn'|'err'|'busy'} kind
+     */
+    function setSimStatusLight(containerId, iconId, messageId, kind, title) {
+        const el = document.getElementById(containerId);
+        const msg = document.getElementById(messageId);
+        if (!el) return;
+        const base =
+            'sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border';
+        const styles = {
+            ok: `${base} border-green-600 bg-green-900/40`,
+            warn: `${base} border-yellow-600 bg-yellow-900/40`,
+            err: `${base} border-red-600 bg-red-900/40`,
+            busy: `${base} border-gray-600 bg-gray-700/50`,
+        };
+        el.className = styles[kind] || styles.busy;
+        el.title = title || '';
+        el.setAttribute('aria-label', title || '');
+
+        const icons = {
+            ok: `<svg id="${iconId}" class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle></svg>`,
+            warn: `<svg id="${iconId}" class="w-4 h-4 text-yellow-400 animate-spin" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
+            err: `<svg id="${iconId}" class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18.364 5.636L5.636 18.364M5.636 5.636l12.728 12.728"></path></svg>`,
+            busy: `<svg id="${iconId}" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
+        };
+        const icon = document.getElementById(iconId);
+        if (icon) {
+            icon.outerHTML = icons[kind] || icons.busy;
+        }
+        if (msg) {
+            msg.className = 'sr-only';
+            msg.textContent = title || '';
+        }
+    }
+
+    /**
      * Check Logstash state (healthy, restarting, queued requests)
      */
     async function checkLogstashState() {
@@ -144,41 +189,41 @@
                 : '/ConnectionManager/GetSimulationNodeHealth/';
             const response = await fetch(healthUrl);
             const data = await response.json();
-            
-            const stateDiv = document.getElementById('logstashState');
-            const stateIcon = document.getElementById('logstashStateIcon');
-            const stateMessage = document.getElementById('logstashStateMessage');
-            
+
             if (data.healthy) {
-                // Logstash is healthy
-                stateDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
-                stateIcon.outerHTML = `
-                    <svg id="logstashStateIcon" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                `;
-                stateMessage.className = 'text-xs font-medium text-green-300';
-                stateMessage.textContent = 'Sim Node Healthy';
+                setSimStatusLight(
+                    'logstashState',
+                    'logstashStateIcon',
+                    'logstashStateMessage',
+                    'ok',
+                    'Logstash healthy'
+                );
             } else if (data.restarting) {
-                // Logstash is restarting
-                stateDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600 bg-yellow-900/30';
-                stateIcon.outerHTML = `
-                    <svg id="logstashStateIcon" class="w-4 h-4 text-yellow-400 animate-spin" fill="currentColor" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                `;
-                stateMessage.className = 'text-xs font-medium text-yellow-300';
                 const queuedCount = data.queued_requests || 0;
-                stateMessage.textContent = queuedCount > 0 ? `Restarting (${queuedCount} queued)` : 'Restarting';
+                const title =
+                    queuedCount > 0
+                        ? `Logstash restarting (${queuedCount} queued)`
+                        : 'Logstash restarting';
+                setSimStatusLight(
+                    'logstashState',
+                    'logstashStateIcon',
+                    'logstashStateMessage',
+                    'warn',
+                    title
+                );
+            } else {
+                // Explicit unhealthy (not transient silence)
+                setSimStatusLight(
+                    'logstashState',
+                    'logstashStateIcon',
+                    'logstashStateMessage',
+                    'err',
+                    data.message || data.error || 'Logstash not healthy'
+                );
             }
-            // Note: If neither healthy nor restarting, don't update UI
-            // This prevents transient failures (e.g., during validation) from showing false "unhealthy" state
-            // The UI will keep showing the last known good state
         } catch (error) {
             console.error('Error checking Logstash state:', error);
-            // Don't update UI on network errors - keep last known state
-            // This prevents brief network issues from showing false "unhealthy" state
+            // Keep last known state on network blips
         }
     }
     
@@ -195,47 +240,33 @@
                 : '/ConnectionManager/GetSimulationNodeStatus/';
             const response = await fetch(statusUrl);
             const data = await response.json();
-            
-            const agentStatusDiv = document.getElementById('agentStatus');
-            const agentStatusIcon = document.getElementById('agentStatusIcon');
-            const agentStatusMessage = document.getElementById('agentStatusMessage');
-            
+
             if (data.status === 'running') {
-                // Agent is running - show green checkmark
-                agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
-                agentStatusIcon.outerHTML = `
-                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                `;
-                agentStatusMessage.className = 'text-xs font-medium text-green-300';
-                agentStatusMessage.textContent = data.message;
+                setSimStatusLight(
+                    'agentStatus',
+                    'agentStatusIcon',
+                    'agentStatusMessage',
+                    'ok',
+                    data.message || 'Agent running'
+                );
             } else {
-                // Agent not responding - show red X
-                agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
-                agentStatusIcon.outerHTML = `
-                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                `;
-                agentStatusMessage.className = 'text-xs font-medium text-red-300';
-                agentStatusMessage.textContent = data.message;
+                setSimStatusLight(
+                    'agentStatus',
+                    'agentStatusIcon',
+                    'agentStatusMessage',
+                    'err',
+                    data.message || data.error || 'Agent offline'
+                );
             }
         } catch (error) {
             console.error('Error checking agent status:', error);
-            const agentStatusDiv = document.getElementById('agentStatus');
-            const agentStatusIcon = document.getElementById('agentStatusIcon');
-            const agentStatusMessage = document.getElementById('agentStatusMessage');
-            
-            // Show error state
-            agentStatusDiv.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-600 bg-red-900/30';
-            agentStatusIcon.outerHTML = `
-                <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            `;
-            agentStatusMessage.className = 'text-xs font-medium text-red-300';
-            agentStatusMessage.textContent = 'Sim Node Offline';
+            setSimStatusLight(
+                'agentStatus',
+                'agentStatusIcon',
+                'agentStatusMessage',
+                'err',
+                'Agent offline (unreachable)'
+            );
         }
     }
     
@@ -384,27 +415,35 @@
             });
         }
         
-        // Listen for when preallocation request starts (for embedded mode)
+        // Background prealloc: keep chip as "Unallocated" (no spinner). Ready only after success.
+        // Track HTMX-driven load prealloc so the JS backup does not double-allocate.
         if (slotPreallocation) {
-            slotPreallocation.addEventListener('htmx:beforeRequest', function(event) {
-                // Show 'Allocating pipeline slot...' when request starts
-                const statusContainer = document.getElementById('pipelineLoadStatus');
-                const statusIcon = document.getElementById('pipelineStatusIcon');
-                const statusMessage = document.getElementById('pipelineStatusMessage');
-                
-                if (statusContainer && statusIcon && statusMessage) {
-                    statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
-                    statusIcon.outerHTML = `
-                        <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    `;
-                    statusMessage.className = 'text-xs font-medium text-gray-300';
-                    statusMessage.textContent = 'Allocating pipeline slot...';
-                }
+            slotPreallocation.addEventListener('htmx:beforeRequest', function() {
+                window.__slotPreallocInFlight = true;
+            });
+            slotPreallocation.addEventListener('htmx:afterRequest', function() {
+                window.__slotPreallocInFlight = false;
+            });
+            slotPreallocation.addEventListener('htmx:sendError', function() {
+                window.__slotPreallocInFlight = false;
+            });
+            slotPreallocation.addEventListener('htmx:timeout', function() {
+                window.__slotPreallocInFlight = false;
+                console.warn('[Slot Prealloc] HTMX request timed out');
             });
         }
+
+        // Explicit page-open warm backup if hx-trigger=load did not fire / failed early.
+        // Soft: skips when a slot is already warm or a prealloc is in flight.
+        {% if sim_prealloc_on_load %}
+        setTimeout(function() {
+            if (window.__slotPreallocInFlight) return;
+            if (window.simulationSessionSlotId || window.currentSlotId) return;
+            if (typeof triggerPipelineWarmingAndChecking === 'function') {
+                triggerPipelineWarmingAndChecking({ fromPageLoad: true, soft: true });
+            }
+        }, 400);
+        {% endif %}
         
         // Check agent status once on page load
         checkAgentStatus();
@@ -821,87 +860,90 @@
             {% endif %}
         </div>
         
-        <!-- Row 2: Status + Centered Toggle + Actions (Responsive Layout) -->
-        <div class="flex flex-col 2xl:flex-row 2xl:justify-between 2xl:items-center gap-4 relative">
-            <!-- Left: Status Chip + Logs -->
-            <div class="flex items-center gap-4 flex-wrap">
-                <!-- Simulation target picker (name/N + Logstash version) -->
-                <div id="simTargetSelectWrap" class="inline-flex items-center gap-2">
-                    <label for="simTargetSelect" class="text-xs text-gray-400 font-medium whitespace-nowrap">Sim target</label>
+        <!-- Row 2: Status | Mode toggle | Actions — 3-col grid avoids absolute-center overlap -->
+        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-center">
+            <!-- Left: compact sim target + status lights + logs -->
+            <div class="flex items-center gap-2 flex-wrap min-w-0">
+                <!-- Simulation target: terse closed label; detail via title / option list -->
+                <div id="simTargetSelectWrap" class="inline-flex items-center gap-1.5 shrink-0">
+                    <label for="simTargetSelect" class="text-xs text-gray-400 font-medium whitespace-nowrap">Target</label>
                     <select id="simTargetSelect"
-                            class="text-xs bg-gray-800 border border-gray-600 text-gray-200 rounded-md px-2 py-1.5 max-w-[16rem] focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            title="Choose which LogstashAgent / Logstash version runs this simulation">
+                            class="text-xs bg-gray-800 border border-gray-600 text-gray-200 rounded-md px-2 py-1.5 w-auto min-w-[6.5rem] max-w-[9rem] focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            title="Simulation agent (hover options for host / Logstash version)">
                         {% if sim_targets %}
                             {% for t in sim_targets %}
                             <option value="{{ t.connection_id }}"
+                                    title="{{ t.detail|default:t.label }}"
+                                    data-detail="{{ t.detail|default:t.label }}"
+                                    data-policy-type="{{ t.policy_type }}"
                                 {% if selected_sim_connection_id == t.connection_id %}selected{% endif %}>
                                 {{ t.label }}
                             </option>
                             {% endfor %}
                         {% else %}
-                            <option value="">Loading…</option>
+                            <option value="">…</option>
                         {% endif %}
                     </select>
                 </div>
 
-                <!-- logstashagent Status Chip -->
-                <div id="agentStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
-                    <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                <!-- Agent reachability: icon-only light (detail on hover) -->
+                <div id="agentStatus"
+                     class="sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-600 bg-gray-700/50"
+                     title="Checking agent…"
+                     role="status"
+                     aria-live="polite">
+                    <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span id="agentStatusMessage" class="text-xs font-medium text-gray-300">Checking Sim Node...</span>
+                    <span id="agentStatusMessage" class="sr-only">Checking agent…</span>
                 </div>
                 
-                <!-- Logstash State Chip -->
-                <div id="logstashState" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
-                    <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                <!-- Logstash health: icon-only light (detail on hover) -->
+                <div id="logstashState"
+                     class="sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-600 bg-gray-700/50"
+                     title="Checking Logstash health…"
+                     role="status"
+                     aria-live="polite">
+                    <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span id="logstashStateMessage" class="text-xs font-medium text-gray-300">Checking Sim Health...</span>
+                    <span id="logstashStateMessage" class="sr-only">Checking Logstash health…</span>
                 </div>
                 
-                <!-- Pipeline Status Chip -->
-                {% if simulation_mode == 'embedded' %}
-                <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
-                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Pipeline slot: quiet "Unallocated" until a slot is actually ready (no spin on page load) -->
+                <div id="pipelineLoadStatus"
+                     class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]"
+                     title="No simulation slot yet">
+                    <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
                     </svg>
-                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400">Slot unallocated</span>
+                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400 truncate">Unallocated</span>
                 </div>
-                {% else %}
-                <div id="pipelineLoadStatus" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50">
-                    <svg id="pipelineStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-300">Allocating pipeline slot...</span>
-                </div>
-                {% endif %}
                 
                 <!-- Simulation Logs Button -->
                 <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
-                        class="text-xs px-3 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white underline">
-                    Simulation Logs
+                        class="text-xs px-2 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white underline whitespace-nowrap">
+                    Logs
                 </button>
             </div>
             
-            <!-- Center: Presentation Mode Toggle -->
-            <div class="2xl:absolute 2xl:left-1/2 2xl:transform 2xl:-translate-x-1/2 flex items-center gap-2 bg-gray-700 rounded-lg p-1 w-fit">
-                <button id="uiModeBtn" class="w-20 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
+            <!-- Center: Presentation Mode Toggle (no absolute positioning) -->
+            <div class="flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
+                <button id="uiModeBtn" class="w-16 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
                     UI
                 </button>
-                <button id="textModeBtn" class="w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()">
+                <button id="textModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()">
                     Text
                 </button>
-                <button id="graphModeBtn" class="w-20 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()">
+                <button id="graphModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()">
                     Graph
                 </button>
             </div>
             
             <!-- Right: Action Buttons -->
-            <div class="flex items-center gap-4 flex-wrap">
+            <div class="flex items-center gap-3 flex-wrap xl:justify-end">
                 <form onsubmit="return false;" class="flex items-center gap-4">
                     {% csrf_token %}
                     
@@ -1279,14 +1321,15 @@
 
 <!-- Slot preallocation - warm up a slot when page loads so simulations are fast -->
 <!-- Empty log_text means only allocate slot, don't run simulation -->
-<!-- Prealloc on load when enrolled simulate agents exist (or legacy host mode) -->
+<!-- Prealloc on load whenever any sim target exists (see sim_prealloc_on_load) -->
 <div id="slotPreallocation"
      hx-post="/ConnectionManager/SimulatePipeline/"
      hx-target="#slotPreallocationResult"
      hx-swap="innerHTML"
      hx-vals="js:simConnectionHtmxValues({components: components, log_text: ''})"
      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-     hx-trigger="{% if sim_prealloc_on_load %}load, pipelineChanged, simulationModalOpened{% else %}simulationModalOpened{% endif %}"
+     hx-timeout="130000"
+     hx-trigger="{% if sim_prealloc_on_load %}load, pipelineChanged{% else %}none{% endif %}"
      class="hidden">
 </div>
 <div id="slotPreallocationResult" class="hidden"></div>
@@ -1295,15 +1338,30 @@
   /* Single target: keep selection but de-emphasize the control */
   #simTargetSelectWrap.sim-target-single label { display: none; }
   #simTargetSelectWrap.sim-target-single select {
-    max-width: 14rem;
+    max-width: 7.5rem;
     border-style: dashed;
     opacity: 0.9;
   }
+  /* Screen-reader-only status text (icon lights use title tooltips) */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .sim-status-light { flex-shrink: 0; cursor: default; }
 </style>
 
 <script>
     const pipelineName = "{{ pipeline_name }}";
-    const simulationMode = "{{ simulation_mode }}";
+    // Mutable so Sim target picker can switch embedded ↔ simulate without reload
+    var simulationMode = "{{ simulation_mode }}";
+    window.simulationMode = simulationMode;
     window.__simConnectionId = {% if selected_sim_connection_id %}{{ selected_sim_connection_id }}{% else %}null{% endif %};
     // currentSlotId is declared in the early script block above
     
@@ -1403,15 +1461,24 @@
         
         document.body.appendChild(modal);
         
-        // Fetch logs from API
+        // Fetch logs from API (include sim target for multi-agent routing)
         try {
-            const response = await fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`);
+            let logsUrl = `/ConnectionManager/GetRelatedLogs/?slot_id=${currentSlotId}&max_entries=100&min_level=INFO`;
+            if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+                logsUrl += `&sim_connection_id=${encodeURIComponent(window.getSimConnectionId())}`;
+            }
+            const response = await fetch(logsUrl);
             const data = await response.json();
             
             const logsContent = document.getElementById('pipeline-logs-content');
+
+            if (data.error) {
+                logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${data.error}</div>`;
+                return;
+            }
             
             if (!data.logs || data.logs.length === 0) {
-                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline. Clean runs often have no INFO-level entries.</div>';
                 return;
             }
             

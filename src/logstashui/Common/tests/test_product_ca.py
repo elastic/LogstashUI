@@ -5,6 +5,8 @@
 """Tests for product CA generation and enrollment token payload."""
 
 import hashlib
+import ipaddress
+import socket
 
 import pytest
 from cryptography import x509
@@ -148,6 +150,80 @@ def test_ui_cert_includes_host_ips_and_reissues_on_san_change(tmp_path, settings
     assert ipaddress.IPv4Address("10.20.30.99") in ips2
     fp2 = product_ca.fingerprint_sha256_der(leaf2)
     assert fp1 != fp2
+
+
+def test_reverse_lookup_fqdns_filters_short_and_ip(monkeypatch):
+    from Common import product_ca
+
+    def _fake(ip):
+        if ip == "10.0.0.5":
+            return ("host.example.com.", ["alias.example.com"], ["10.0.0.5"])
+        if ip == "10.0.0.6":
+            return ("shortname", [], ["10.0.0.6"])
+        raise socket.herror("no PTR")
+
+    monkeypatch.setattr(product_ca.socket, "gethostbyaddr", _fake)
+    assert product_ca._reverse_lookup_fqdns("10.0.0.5") == [
+        "host.example.com",
+        "alias.example.com",
+    ]
+    assert product_ca._reverse_lookup_fqdns("10.0.0.6") == []
+    assert product_ca._reverse_lookup_fqdns("10.0.0.7") == []
+
+
+def test_prefer_ptr_fqdns_over_short_hostnames(monkeypatch):
+    from Common import product_ca
+
+    def _fake(ip):
+        if ip == "10.9.5.31":
+            return ("mac.untergeek.dev", [], [ip])
+        raise socket.herror("no PTR")
+
+    monkeypatch.setattr(product_ca.socket, "gethostbyaddr", _fake)
+
+    dns = ["localhost", "logstashui", "Palpatine"]
+    ips = [
+        ipaddress.IPv4Address("127.0.0.1"),
+        ipaddress.IPv4Address("10.9.5.31"),
+    ]
+    product_ca._prefer_ptr_fqdns_over_short_hostnames(dns, ips)
+    assert "mac.untergeek.dev" in dns
+    assert "localhost" in dns
+    assert "logstashui" in dns
+    assert "Palpatine" not in dns
+
+
+def test_collect_desired_ui_sans_uses_ptr_over_bare_hostname(monkeypatch, settings):
+    from Common import product_ca
+
+    settings.LOGSTASHUI_CONFIG = {}
+    monkeypatch.setenv("LOGSTASHUI_HOST_HOSTNAME", "Palpatine")
+    monkeypatch.setenv("LOGSTASHUI_HOST_IPS", "172.19.7.21")
+    monkeypatch.delenv("LOGSTASHUI_TLS_SANS", raising=False)
+
+    def _fake(ip):
+        if ip == "172.19.7.21":
+            return ("palpatine.untergeek.net", [], [ip])
+        raise socket.herror("no PTR")
+
+    monkeypatch.setattr(product_ca.socket, "gethostbyaddr", _fake)
+    # Avoid noise from local interface discovery / getfqdn
+    monkeypatch.setattr(product_ca.socket, "gethostname", lambda: "Palpatine")
+    monkeypatch.setattr(product_ca.socket, "getfqdn", lambda: "Palpatine")
+    monkeypatch.setattr(product_ca.socket, "getaddrinfo", lambda *a, **k: [])
+    # Skip UDP outbound-IP trick (would discover real LAN IPs and PTR them)
+    monkeypatch.setattr(
+        product_ca.socket,
+        "socket",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("skip")),
+    )
+
+    dns, ips = product_ca.collect_desired_ui_sans()
+    assert "palpatine.untergeek.net" in dns
+    assert "Palpatine" not in dns
+    assert "localhost" in dns
+    assert "logstashui" in dns
+    assert ipaddress.IPv4Address("172.19.7.21") in ips
 
 
 @pytest.mark.django_db

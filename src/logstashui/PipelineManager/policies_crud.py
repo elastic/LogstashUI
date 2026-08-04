@@ -163,6 +163,8 @@ def update_policy(request):
         )
         is_system_path_locked = is_system_simulate or is_system_managed
 
+        from PipelineManager.agent_modes import normalize_agent_opt_path
+
         if is_system_path_locked:
             # Allowlisted fields for system Simulate / Managed policies
             if 'jvm_options' in data:
@@ -172,31 +174,46 @@ def update_policy(request):
             if 'logstash_version' in data:
                 policy.logstash_version = data['logstash_version']
             if 'logstash_download_dir' in data:
-                policy.logstash_download_dir = data['logstash_download_dir']
+                policy.logstash_download_dir = normalize_agent_opt_path(
+                    data['logstash_download_dir']
+                ) or data['logstash_download_dir']
             if 'binary_path' in data:
-                policy.binary_path = data['binary_path']
+                policy.binary_path = normalize_agent_opt_path(data['binary_path']) or data[
+                    'binary_path'
+                ]
             if 'logstash_yml' in data:
                 policy.logstash_yml = data['logstash_yml']
             if 'log4j2_properties' in data:
                 policy.log4j2_properties = data['log4j2_properties']
-            # Intentionally ignore settings_path / logs_path / data_path / ports structural changes
+            # Force-correct legacy opt root on locked system path fields
+            policy.settings_path = normalize_agent_opt_path(policy.settings_path) or policy.settings_path
+            policy.logs_path = normalize_agent_opt_path(policy.logs_path) or policy.logs_path
+            policy.data_path = normalize_agent_opt_path(policy.data_path)
+            policy.keystore_env_file = normalize_agent_opt_path(policy.keystore_env_file)
+            # Intentionally ignore settings_path / logs_path / data_path / ports structural changes from client
         else:
             if 'settings_path' in data:
-                policy.settings_path = data['settings_path']
+                policy.settings_path = normalize_agent_opt_path(data['settings_path']) or data[
+                    'settings_path'
+                ]
             if 'logs_path' in data:
-                policy.logs_path = data['logs_path']
+                policy.logs_path = normalize_agent_opt_path(data['logs_path']) or data['logs_path']
             if 'binary_path' in data:
-                policy.binary_path = data['binary_path']
+                policy.binary_path = normalize_agent_opt_path(data['binary_path']) or data[
+                    'binary_path'
+                ]
             if 'data_path' in data:
-                policy.data_path = data['data_path']
+                policy.data_path = normalize_agent_opt_path(data['data_path'])
             if 'keystore_env_file' in data:
-                policy.keystore_env_file = data['keystore_env_file']
+                policy.keystore_env_file = normalize_agent_opt_path(data['keystore_env_file'])
             if 'logstash_source' in data:
                 policy.logstash_source = data['logstash_source']
             if 'logstash_version' in data:
                 policy.logstash_version = data['logstash_version']
             if 'logstash_download_dir' in data:
-                policy.logstash_download_dir = data['logstash_download_dir']
+                policy.logstash_download_dir = normalize_agent_opt_path(
+                    data['logstash_download_dir']
+                ) or data['logstash_download_dir']
             if 'agent_api_port' in data and data['agent_api_port'] is not None:
                 try:
                     policy.agent_api_port = int(data['agent_api_port'])
@@ -320,7 +337,11 @@ def clone_policy(request):
                 status=403,
             )
 
-        from PipelineManager.agent_modes import apply_managed_path_bundle, normalize_policy_type
+        from PipelineManager.agent_modes import (
+            apply_managed_path_bundle,
+            normalize_agent_opt_path,
+            normalize_policy_type,
+        )
 
         source_type = normalize_policy_type(source_policy.policy_type)
         # Clone matrix:
@@ -336,22 +357,24 @@ def clone_policy(request):
         else:
             cloned_type = Policy.PolicyType.MANAGED
 
-        # Create new policy with same configuration as source
+        # Create new policy with same configuration as source (rewrite legacy opt root)
         new_policy = Policy.objects.create(
             name=new_policy_name,
             policy_type=cloned_type,
             is_system=False,
             cloned_from=source_policy,
-            settings_path=source_policy.settings_path,
-            logs_path=source_policy.logs_path,
-            binary_path=source_policy.binary_path,
-            data_path=source_policy.data_path,
+            settings_path=normalize_agent_opt_path(source_policy.settings_path),
+            logs_path=normalize_agent_opt_path(source_policy.logs_path),
+            binary_path=normalize_agent_opt_path(source_policy.binary_path)
+            or source_policy.binary_path,
+            data_path=normalize_agent_opt_path(source_policy.data_path),
             agent_api_port=source_policy.agent_api_port,
             logstash_api_port=source_policy.logstash_api_port,
-            keystore_env_file=source_policy.keystore_env_file,
+            keystore_env_file=normalize_agent_opt_path(source_policy.keystore_env_file),
             logstash_source=source_policy.logstash_source,
             logstash_version=source_policy.logstash_version,
-            logstash_download_dir=source_policy.logstash_download_dir,
+            logstash_download_dir=normalize_agent_opt_path(source_policy.logstash_download_dir)
+            or source_policy.logstash_download_dir,
             logstash_yml=source_policy.logstash_yml,
             jvm_options=source_policy.jvm_options,
             log4j2_properties=source_policy.log4j2_properties,

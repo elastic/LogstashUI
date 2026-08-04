@@ -143,21 +143,70 @@ def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) ->
         policy.binary_path = "/usr/share/logstash/bin"
 
 
-def materialize_simulate_logstash_yml(template: str, logstash_api_port: int) -> str:
-    """Ensure api.http.port matches the instance port."""
-    lines = []
+def materialize_simulate_logstash_yml(
+    template: str,
+    logstash_api_port: int,
+    *,
+    instance_id: int | None = None,
+) -> str:
+    """
+    Ensure Logstash API port matches the instance and expand ``{instance_id}``.
+
+    Policy editor stores nested YAML (``api: { http: { port: N } }``). Older
+    seeds use flat ``api.http.port:``. Both must be rewritten; a naive flat-only
+    replace left nested ``port: 9560`` in place while agent expected 9560+N.
+    """
+    text = template or ""
+    if instance_id is not None:
+        text = text.replace("{instance_id}", str(instance_id))
+    port = int(logstash_api_port)
+
+    # Structured rewrite (preferred for nested UI editor output)
+    try:
+        import yaml
+
+        data = yaml.safe_load(text)
+        if isinstance(data, dict):
+            api = data.get("api")
+            if not isinstance(api, dict):
+                api = {}
+                data["api"] = api
+            http = api.get("http")
+            if not isinstance(http, dict):
+                http = {}
+                api["http"] = http
+            http["port"] = port
+            if "host" not in http:
+                http["host"] = "0.0.0.0"
+            # Keep flat keys in sync when present (or historically used)
+            if "api.http.port" in data:
+                data["api.http.port"] = port
+            if "http.port" in data:
+                data["http.port"] = port
+            out = yaml.safe_dump(
+                data,
+                default_flow_style=False,
+                sort_keys=False,
+                allow_unicode=True,
+            )
+            return out if out.endswith("\n") else out + "\n"
+    except Exception:
+        pass
+
+    # Line-based fallback for non-YAML or parse failures
+    lines: list[str] = []
     port_set = False
-    for line in (template or "").splitlines():
+    for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("api.http.port:") or stripped.startswith("http.port:"):
-            lines.append(f"api.http.port: {logstash_api_port}")
+            lines.append(f"api.http.port: {port}")
             port_set = True
         else:
             lines.append(line)
     if not port_set:
         if lines and lines[-1].strip():
             lines.append("")
-        lines.append(f"api.http.port: {logstash_api_port}")
+        lines.append(f"api.http.port: {port}")
     return "\n".join(lines) + ("\n" if lines else "")
 
 
@@ -186,7 +235,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
                 policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
             ),
             "logstash_yml": materialize_simulate_logstash_yml(
-                policy.logstash_yml, EMBEDDED_LOGSTASH_API_PORT
+                policy.logstash_yml, EMBEDDED_LOGSTASH_API_PORT, instance_id=None
             ),
             "jvm_options": policy.jvm_options,
             "log4j2_properties": policy.log4j2_properties,
@@ -197,7 +246,9 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             raise ValueError("instance_id required for SIMULATE policy_config")
         paths = simulate_paths(instance_id)
         agent_port, ls_port = simulate_ports(instance_id)
-        yml = materialize_simulate_logstash_yml(policy.logstash_yml, ls_port)
+        yml = materialize_simulate_logstash_yml(
+            policy.logstash_yml, ls_port, instance_id=instance_id
+        )
         download_dir = normalize_agent_opt_path(
             policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
         )
@@ -230,7 +281,9 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             raise ValueError("instance_id required for MANAGED policy_config")
         paths = managed_paths(instance_id)
         agent_port, ls_port = managed_ports(instance_id)
-        yml = materialize_simulate_logstash_yml(policy.logstash_yml, ls_port)
+        yml = materialize_simulate_logstash_yml(
+            policy.logstash_yml, ls_port, instance_id=instance_id
+        )
         download_dir = normalize_agent_opt_path(
             policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
         )
@@ -447,7 +500,9 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             or ("system" if policy.policy_type == Policy.PolicyType.SIMULATE else "")
         )
         if policy.policy_type == Policy.PolicyType.EMBEDDED:
-            label = f"embedded · {version or 'docker'}"
+            # Closed select: terse; detail on hover / open option list
+            label = "embedded"
+            ver_label = version or "docker"
             agent_port = conn.agent_api_port or EMBEDDED_AGENT_API_PORT
             # Prefer settings URL (https://logstashagent:9500) for embedded
             try:
@@ -460,14 +515,16 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
                 host = conn.host or "127.0.0.1"
                 base_url = f"https://{host}:{agent_port}"
             host = conn.host or "127.0.0.1"
+            detail = f"embedded · {host} · Logstash {ver_label}"
         else:
             n = conn.instance_id or "?"
             ver_label = version or "system"
-            label = f"simulate-{n} · Logstash {ver_label}"
+            host = conn.host or "127.0.0.1"
+            label = f"simulate-{n}"
+            detail = f"simulate-{n} · {host} · Logstash {ver_label}"
             agent_port = conn.agent_api_port
             if agent_port is None and conn.instance_id:
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id
-            host = conn.host or "127.0.0.1"
             base_url = f"https://{host}:{agent_port}" if agent_port else None
 
         targets.append(
@@ -475,6 +532,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
                 "connection_id": conn.id,
                 "name": conn.name,
                 "label": label,
+                "detail": detail,
                 "policy_type": policy.policy_type,
                 "policy_name": policy.name,
                 "instance_id": conn.instance_id,

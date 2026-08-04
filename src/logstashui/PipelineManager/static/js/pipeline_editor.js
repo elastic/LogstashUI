@@ -14,16 +14,445 @@ let isSelectionMode = false;
 // Note: moveMode is now defined in move_mode.js as window.moveMode
 
 /**
- * Trigger pipeline warming and checking after plugin changes
- * This function reuses the existing slot preallocation mechanism
+ * Trigger pipeline warming / slot preallocation.
+ * Used on page load/refresh, after plugin changes, and (as fallback) when the
+ * simulation modal opens. Prefer a warm slot so "Run simulate" only feeds docs.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.force=false] - warm even if we already have a session slot
+ * @param {boolean} [opts.fromPageLoad=false] - allow embedded mode (page open path)
+ * @param {boolean} [opts.soft=false] - skip if already warm (page-load / modal only)
  */
-function triggerPipelineWarmingAndChecking() {
-    // In embedded mode, don't warm up pipeline on component changes
-    // Only warm up when user opens simulation modal
-    if (typeof simulationMode !== 'undefined' && simulationMode === 'embedded') {
+// In-flight page warm: avoid double allocate from hx-trigger=load + setTimeout backup
+let _pipelineWarmInFlight = false;
+// Bump on each target-switch / force warm so stale allocate responses are ignored
+window.__slotWarmGeneration = 0;
+// Coalesce concurrent warms (target switch + Run + soft re-warm must share one request)
+window.__slotWarmPromise = null;
+window.__slotWarmConn = null;
+window.__slotWarmAbort = null;
+
+/**
+ * Session slot is scoped to a sim agent (connection id). Host slot 1 ≠ embedded slot 1.
+ */
+window.clearSimulationSessionSlot = function clearSimulationSessionSlot(reason) {
+    if (reason) {
+        console.log('[Slot Session] clear:', reason);
+    }
+    window.simulationSessionSlotId = null;
+    window.simulationSessionConnectionId = null;
+    window.currentSlotId = null;
+    if (typeof currentSlotId !== 'undefined') {
+        currentSlotId = null;
+    }
+};
+
+window.rememberSimulationSessionSlot = function rememberSimulationSessionSlot(slotId) {
+    if (!slotId) return;
+    const conn =
+        (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+        null;
+    window.simulationSessionSlotId = String(slotId);
+    window.simulationSessionConnectionId = conn != null ? String(conn) : null;
+    window.currentSlotId = String(slotId);
+    if (typeof currentSlotId !== 'undefined') {
+        currentSlotId = String(slotId);
+    }
+};
+
+/** Warm slot only if it belongs to the currently selected sim agent. */
+window.getWarmSessionSlotForCurrentTarget = function getWarmSessionSlotForCurrentTarget() {
+    const conn =
+        (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+        null;
+    const slotConn = window.simulationSessionConnectionId;
+    if (conn && slotConn && String(conn) !== String(slotConn)) {
+        console.warn(
+            '[Slot Session] ignoring warm slot for connection',
+            slotConn,
+            '(current target',
+            conn,
+            ')'
+        );
+        return null;
+    }
+    // If we never recorded which agent was warmed, treat as unusable when a
+    // target is selected (avoids host→embedded slot bleed after older builds).
+    if (conn && !slotConn && (window.simulationSessionSlotId || window.currentSlotId)) {
+        console.warn('[Slot Session] warm slot missing connection id; clearing');
+        window.clearSimulationSessionSlot('missing connection scope');
+        return null;
+    }
+    return (
+        window.simulationSessionSlotId ||
+        window.currentSlotId ||
+        (typeof currentSlotId !== 'undefined' ? currentSlotId : null) ||
+        null
+    );
+};
+
+/** True when a warm allocate is in flight for the current sim target. */
+window.isSlotWarmInFlightForCurrentTarget = function isSlotWarmInFlightForCurrentTarget() {
+    if (!window.__slotWarmPromise) return false;
+    const conn =
+        (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+        '';
+    return String(window.__slotWarmConn || '') === String(conn || '');
+};
+
+/**
+ * Compact slot chip states: unallocated | warming | ready | failed
+ * Used on page load, target switch, and allocate completion.
+ */
+window.setPipelineSlotChip = function setPipelineSlotChip(state, detail) {
+    const statusContainer = document.getElementById('pipelineLoadStatus');
+    let statusIcon = document.getElementById('pipelineStatusIcon');
+    const statusMessage = document.getElementById('pipelineStatusMessage');
+    if (!statusContainer || !statusMessage) return;
+
+    statusContainer.style.display = 'inline-flex';
+    statusContainer.classList.remove('hidden');
+
+    const slotId = detail && detail.slotId != null ? detail.slotId : null;
+    const title = (detail && detail.title) || '';
+
+    if (state === 'warming') {
+        statusContainer.className =
+            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-blue-600/40 bg-blue-900/20 max-w-[11rem]';
+        statusContainer.title = title || 'Allocating simulation slot on selected agent…';
+        if (statusIcon) {
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-blue-300 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>`;
+        }
+        statusMessage.className = 'text-xs font-medium text-blue-200 truncate';
+        statusMessage.textContent = 'Warming…';
         return;
     }
-    
+
+    if (state === 'ready') {
+        statusContainer.className =
+            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-green-600 bg-green-900/30 max-w-[11rem]';
+        statusContainer.title =
+            title || (slotId ? `Simulation ready (slot ${slotId})` : 'Simulation ready');
+        if (statusIcon) {
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>`;
+        }
+        statusMessage.className = 'text-xs font-medium text-green-300 truncate';
+        statusMessage.textContent = slotId ? `Slot ${slotId}` : 'Ready';
+        return;
+    }
+
+    if (state === 'failed') {
+        statusContainer.className =
+            'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-red-600/50 bg-red-900/20 max-w-[11rem]';
+        statusContainer.title = title || 'Simulation slot allocate failed';
+        if (statusIcon) {
+            statusIcon.outerHTML = `
+                <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>`;
+        }
+        statusMessage.className = 'text-xs font-medium text-red-300 truncate';
+        statusMessage.textContent = 'Failed';
+        return;
+    }
+
+    // default: unallocated
+    statusContainer.className =
+        'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]';
+    statusContainer.title = title || 'Simulation slot not allocated yet';
+    if (statusIcon) {
+        statusIcon.outerHTML = `
+            <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>`;
+    }
+    statusMessage.className = 'text-xs font-medium text-gray-400 truncate';
+    statusMessage.textContent = 'Unallocated';
+};
+
+/**
+ * One allocate attempt (shared by warmSlotForCurrentTarget + retry).
+ * @returns {Promise<{ok:boolean, slotId?:string, error?:string, aborted?:boolean, html?:string}>}
+ */
+async function _slotAllocateOnce(connAtStart, controller, generation) {
+    const formData = new FormData();
+    formData.append('components', JSON.stringify(components));
+    formData.append('log_text', '');
+    const csrf =
+        document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+        document.cookie
+            .split('; ')
+            .find((r) => r.startsWith('csrftoken='))
+            ?.split('=')[1] ||
+        '';
+    formData.append('csrfmiddlewaretoken', csrf);
+    if (connAtStart) {
+        formData.append('sim_connection_id', connAtStart);
+    }
+    const lsId = new URLSearchParams(window.location.search).get('ls_id');
+    const esId = new URLSearchParams(window.location.search).get('es_id');
+    const pipelineName = new URLSearchParams(window.location.search).get('pipeline');
+    if (lsId) formData.append('ls_id', lsId);
+    if (esId) formData.append('es_id', esId);
+    if (pipelineName) formData.append('pipeline', pipelineName);
+
+    try {
+        const timer = setTimeout(() => controller.abort(), 130000);
+        const response = await fetch('/ConnectionManager/SimulatePipeline/', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': csrf },
+            signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const html = await response.text();
+        if (generation !== window.__slotWarmGeneration) {
+            return { ok: false, aborted: true };
+        }
+        const errFailed = /data-pipeline-failed="true"/.test(html);
+        const slotMatch =
+            html.match(/data-slot-id="(\d+)"/) || html.match(/Slot\s+(\d+)/i);
+        if (slotMatch && !errFailed) {
+            return { ok: true, slotId: slotMatch[1], html };
+        }
+        // Parse human message from error HTML if present
+        let errMsg = 'Slot allocate failed';
+        const msgMatch = html.match(/Error allocating slot:\s*([^<]+)/i);
+        if (msgMatch) {
+            errMsg = msgMatch[1].trim();
+        } else if (errFailed) {
+            errMsg = 'Pipeline failed to load on agent';
+        } else if (!response.ok) {
+            errMsg = `HTTP ${response.status}`;
+        } else if (!slotMatch) {
+            errMsg = 'No slot id in allocate response';
+        }
+        return { ok: false, error: errMsg, html, slotId: slotMatch ? slotMatch[1] : null };
+    } catch (e) {
+        if (e && e.name === 'AbortError') {
+            return { ok: false, aborted: true, error: 'aborted' };
+        }
+        return { ok: false, error: String((e && e.message) || e) };
+    }
+}
+
+/**
+ * Allocate (or re-allocate) a slot on the *currently selected* sim agent via fetch.
+ * Concurrent callers for the same target share one in-flight promise (target switch
+ * + Run must not start two cold allocates).
+ *
+ * @returns {Promise<string|null>} slot id or null
+ */
+window.warmSlotForCurrentTarget = async function warmSlotForCurrentTarget(opts) {
+    const options = opts || {};
+    const showWarming = options.showWarming !== false;
+    const forceNew = !!options.forceNew;
+    const maxAttempts = options.maxAttempts != null ? options.maxAttempts : 2;
+    const connAtStart =
+        (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) ||
+        null;
+    const connKey = String(connAtStart || '');
+
+    const hasFilters = components && components.filter && components.filter.length > 0;
+    if (!hasFilters) {
+        const statusBanner = document.getElementById('pipelineStatusBanner');
+        if (statusBanner) statusBanner.style.display = 'none';
+        return null;
+    }
+
+    // Coalesce: wait for existing warm on the same agent instead of stacking allocates
+    if (
+        !forceNew &&
+        window.__slotWarmPromise &&
+        window.__slotWarmConn === connKey
+    ) {
+        console.log('[Slot Warm] joining in-flight warm for connection', connKey);
+        if (showWarming && typeof window.setPipelineSlotChip === 'function') {
+            window.setPipelineSlotChip('warming', {
+                title: 'Slot allocate already in progress on this agent…',
+            });
+        }
+        return window.__slotWarmPromise;
+    }
+
+    // Abort any warm for a different (or previous) target — never let the
+    // aborted call paint Failed on the chip (new warm owns the UI).
+    if (window.__slotWarmAbort) {
+        try {
+            window.__slotWarmAbort.abort();
+        } catch (_) {
+            /* ignore */
+        }
+        window.__slotWarmAbort = null;
+    }
+
+    const generation = ++window.__slotWarmGeneration;
+    const controller = new AbortController();
+    window.__slotWarmAbort = controller;
+    window.__slotWarmConn = connKey;
+
+    const run = (async function () {
+        if (showWarming && typeof window.setPipelineSlotChip === 'function') {
+            window.setPipelineSlotChip('warming', {
+                title: connAtStart
+                    ? `Allocating slot on agent ${connAtStart}… (cold start can take up to ~2 min)`
+                    : 'Allocating simulation slot… (cold start can take up to ~2 min)',
+            });
+        }
+
+        console.log('[Slot Warm] allocate on connection', connAtStart, 'gen', generation);
+
+        let lastError = 'Slot allocate failed';
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (generation !== window.__slotWarmGeneration) {
+                return null;
+            }
+            // Fresh AbortController per attempt (retry after transient agent 500)
+            const attemptController =
+                attempt === 1 ? controller : new AbortController();
+            if (attempt === 1) {
+                window.__slotWarmAbort = controller;
+            } else {
+                window.__slotWarmAbort = attemptController;
+                if (typeof window.setPipelineSlotChip === 'function') {
+                    window.setPipelineSlotChip('warming', {
+                        title: `Retrying slot allocate (attempt ${attempt}/${maxAttempts})…`,
+                    });
+                }
+                await new Promise((r) => setTimeout(r, 1500));
+                if (generation !== window.__slotWarmGeneration) {
+                    return null;
+                }
+            }
+
+            const result = await _slotAllocateOnce(
+                connAtStart,
+                attemptController,
+                generation
+            );
+
+            if (result.aborted || generation !== window.__slotWarmGeneration) {
+                // Superseded by a newer warm — do not paint Failed
+                console.log('[Slot Warm] attempt aborted/superseded gen', generation);
+                return null;
+            }
+
+            if (result.ok && result.slotId) {
+                const resultEl = document.getElementById('slotPreallocationResult');
+                if (resultEl && result.html) {
+                    resultEl.innerHTML = result.html;
+                }
+                if (typeof window.rememberSimulationSessionSlot === 'function') {
+                    window.rememberSimulationSessionSlot(result.slotId);
+                }
+                if (typeof window.setPipelineSlotChip === 'function') {
+                    window.setPipelineSlotChip('ready', {
+                        slotId: result.slotId,
+                        title: `Simulation ready (slot ${result.slotId})`,
+                    });
+                }
+                // Optional status probe — never undo Ready
+                if (typeof checkPipelineLoadStatus === 'function') {
+                    try {
+                        await checkPipelineLoadStatus({ preserveReadyOnError: true });
+                    } catch (probeErr) {
+                        console.warn('[Slot Warm] status probe failed (keeping Ready)', probeErr);
+                    }
+                }
+                return result.slotId;
+            }
+
+            lastError = result.error || lastError;
+            console.warn(
+                `[Slot Warm] attempt ${attempt}/${maxAttempts} failed:`,
+                lastError
+            );
+        }
+
+        if (generation !== window.__slotWarmGeneration) {
+            return null;
+        }
+        if (typeof window.setPipelineSlotChip === 'function') {
+            window.setPipelineSlotChip('failed', { title: lastError });
+        }
+        return null;
+    })();
+
+    window.__slotWarmPromise = run;
+    try {
+        return await run;
+    } finally {
+        // Only clear the shared promise if we still own this generation
+        if (generation === window.__slotWarmGeneration) {
+            if (window.__slotWarmPromise === run) {
+                window.__slotWarmPromise = null;
+                window.__slotWarmConn = null;
+            }
+            if (window.__slotWarmAbort === controller) {
+                window.__slotWarmAbort = null;
+            }
+        }
+        _pipelineWarmInFlight = false;
+    }
+};
+
+function triggerPipelineWarmingAndChecking(opts) {
+    const options = opts || {};
+    const force = !!options.force;
+    const fromPageLoad = !!options.fromPageLoad;
+    // Soft = page-load/modal: do not re-allocate if a session slot is already ready.
+    // Plugin/config edits leave soft=false so hash changes get a new warm slot.
+    const soft = !!options.soft || fromPageLoad;
+    // Target-switch / explicit re-warm: use fetch path with Warming chip (reliable)
+    const useFetchWarm = !!options.useFetch || force;
+
+    // Component-edit warming is host/simulate only; page-open always warms when filters exist.
+    // Force always runs (e.g. sim target switch to embedded).
+    if (
+        !fromPageLoad &&
+        !force &&
+        typeof simulationMode !== 'undefined' &&
+        simulationMode === 'embedded'
+    ) {
+        return;
+    }
+
+    // Already warm on *this* agent — skip only soft warms (not config edits / target switch)
+    const existing =
+        typeof window.getWarmSessionSlotForCurrentTarget === 'function'
+            ? window.getWarmSessionSlotForCurrentTarget()
+            : window.simulationSessionSlotId ||
+              window.currentSlotId ||
+              (typeof currentSlotId !== 'undefined' ? currentSlotId : null);
+    if (existing && soft && !force) {
+        return;
+    }
+
+    if ((_pipelineWarmInFlight || window.__slotPreallocInFlight) && soft && !force) {
+        return;
+    }
+
+    // Config / target change: clear previous session slot so Run does not reuse stale state
+    if (!soft || force) {
+        if (typeof window.clearSimulationSessionSlot === 'function') {
+            window.clearSimulationSessionSlot(force ? 'force re-warm' : 'config change');
+        } else {
+            window.simulationSessionSlotId = null;
+            window.simulationSessionConnectionId = null;
+            window.currentSlotId = null;
+            if (typeof currentSlotId !== 'undefined') {
+                currentSlotId = null;
+            }
+        }
+    }
+
     // Check if there are any filter components
     const hasFilters = components && components.filter && components.filter.length > 0;
 
@@ -36,23 +465,21 @@ function triggerPipelineWarmingAndChecking() {
         return;
     }
 
-    // Show the status banner and immediately set to loading state
+    // Target switch / force: fetch-based warm with visible Warming → Ready
+    if (useFetchWarm && typeof window.warmSlotForCurrentTarget === 'function') {
+        _pipelineWarmInFlight = true;
+        window
+            .warmSlotForCurrentTarget({ showWarming: true })
+            .finally(function () {
+                _pipelineWarmInFlight = false;
+            });
+        return;
+    }
+
+    // Quiet background warm (page load / soft) — leave Unallocated until Ready
     const statusBanner = document.getElementById('pipelineLoadStatus');
-    const statusIcon = document.getElementById('pipelineStatusIcon');
-    const statusMessage = document.getElementById('pipelineStatusMessage');
-
-    if (statusBanner && statusIcon && statusMessage) {
+    if (statusBanner) {
         statusBanner.style.display = 'inline-flex';
-        statusBanner.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
-
-        // Set loading spinner - statusIcon is already an SVG element
-        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
-        statusIcon.setAttribute('class', 'w-4 h-4 animate-spin text-gray-300');
-        statusIcon.setAttribute('fill', 'currentColor');
-        statusIcon.setAttribute('viewBox', '0 0 24 24');
-
-        statusMessage.textContent = 'Allocating pipeline slot...';
-        statusMessage.className = 'text-xs font-medium text-gray-300';
     }
 
     // Trigger the slot preallocation using HTMX
@@ -71,18 +498,31 @@ function triggerPipelineWarmingAndChecking() {
         if (lsIdWarm) {
             warmValues.ls_id = lsIdWarm;
         }
-        htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
+        _pipelineWarmInFlight = true;
+        const ajaxResult = htmx.ajax('POST', '/ConnectionManager/SimulatePipeline/', {
             target: '#slotPreallocationResult',
             swap: 'innerHTML',
             values: warmValues,
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-            }
+            },
+            // Cold allocate can exceed 30s (create + verify); keep request open.
+            timeout: 130000,
         });
+        if (ajaxResult && typeof ajaxResult.finally === 'function') {
+            ajaxResult.finally(function () {
+                _pipelineWarmInFlight = false;
+            });
+        } else {
+            _pipelineWarmInFlight = false;
+        }
     } else {
         console.error('[Pipeline Warming] Cannot trigger pipeline warming - slotPreallocation element or htmx library not found');
     }
 }
+
+// Expose for page-load / modal / target-switch callers
+window.triggerPipelineWarmingAndChecking = triggerPipelineWarmingAndChecking;
 
 // Function to update the floating Simulate Subset button
 function updateSimulateSubsetButton() {
@@ -2554,12 +2994,10 @@ window.openSimulateModal = function() {
     const modal = document.getElementById('simulationModal');
     if (modal) {
         modal.classList.remove('hidden');
-        
-        // Trigger slot preallocation when modal opens
-        // This warms up the pipeline so it's ready when user clicks "Run Simulation"
-        const slotPreallocation = document.getElementById('slotPreallocation');
-        if (slotPreallocation && typeof htmx !== 'undefined') {
-            htmx.trigger(slotPreallocation, 'simulationModalOpened');
+
+        // Only warm if page-load prealloc has not already prepared a slot
+        if (typeof triggerPipelineWarmingAndChecking === 'function') {
+            triggerPipelineWarmingAndChecking({ soft: true });
         }
     }
 };
@@ -2787,8 +3225,14 @@ document.addEventListener('htmx:afterSwap', function(event) {
         if (slotElement) {
             const slotId = slotElement.getAttribute('data-slot-id');
             if (slotId) {
-                // Store the slot ID globally
-                currentSlotId = slotId;
+                // Store the slot ID scoped to the current sim agent
+                if (typeof window.rememberSimulationSessionSlot === 'function') {
+                    window.rememberSimulationSessionSlot(slotId);
+                } else {
+                    currentSlotId = slotId;
+                    window.currentSlotId = slotId;
+                    window.simulationSessionSlotId = slotId;
+                }
                 // Check pipeline status
                 checkPipelineLoadStatus();
             }
@@ -2799,76 +3243,121 @@ document.addEventListener('htmx:afterSwap', function(event) {
 /**
  * Check if the pipeline successfully loaded in Logstash
  * Called after slot preallocation completes
+ * @param {object} [opts]
+ * @param {boolean} [opts.preserveReadyOnError] - if chip already Ready, don't overwrite on probe errors
  */
-async function checkPipelineLoadStatus() {
+async function checkPipelineLoadStatus(opts) {
+        const options = opts || {};
+        const preserveReadyOnError = !!options.preserveReadyOnError;
         const statusContainer = document.getElementById('pipelineLoadStatus');
-        const statusIcon = document.getElementById('pipelineStatusIcon');
+        // Re-query each time — setPipelineSlotChip replaces the icon node
+        let statusIcon = document.getElementById('pipelineStatusIcon');
         const statusMessage = document.getElementById('pipelineStatusMessage');
 
-        if (!statusContainer || !statusIcon || !statusMessage) {
+        if (!statusContainer || !statusMessage) {
             console.error('Pipeline status elements not found');
             return;
         }
+        if (!statusIcon) {
+            // Icon may be mid-replace; still allow Ready/failed via setPipelineSlotChip
+            console.warn('pipelineStatusIcon missing; continuing with chip helpers only');
+        }
 
-        // Get slot_id from preallocation result
+        // Get slot_id from preallocation result (or failed marker without slot_id)
         const preallocationResult = document.getElementById('slotPreallocationResult');
 
         const slotElement = preallocationResult?.querySelector('[data-slot-id]');
+        const failedOnly = preallocationResult?.querySelector('[data-pipeline-failed="true"]');
 
         const slotId = slotElement?.getAttribute('data-slot-id');
-        const pipelineFailed = slotElement?.getAttribute('data-pipeline-failed') === 'true';
+        const pipelineFailed =
+            slotElement?.getAttribute('data-pipeline-failed') === 'true' ||
+            (!!failedOnly && !slotId);
 
-        // Store slot_id globally for logs viewer (even if pipeline failed)
+        // Store slot_id scoped to current sim agent (even if pipeline failed — logs still useful)
         if (slotId) {
-            currentSlotId = slotId;
+            if (typeof window.rememberSimulationSessionSlot === 'function') {
+                window.rememberSimulationSessionSlot(slotId);
+            } else {
+                currentSlotId = slotId;
+                window.currentSlotId = slotId;
+                window.simulationSessionSlotId = slotId;
+            }
         }
 
         // If pipeline already failed during allocation, show failure immediately
+        // (unless we already marked Ready from a successful warm)
         if (pipelineFailed) {
-            statusContainer.classList.remove('hidden');
-            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
-            statusIcon.outerHTML = `
-                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                </svg>
-            `;
-            statusMessage.textContent = 'Simulation Error';
-            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            if (preserveReadyOnError) {
+                return;
+            }
+            if (typeof window.setPipelineSlotChip === 'function') {
+                window.setPipelineSlotChip('failed', { title: 'Simulation error during allocate' });
+            } else {
+                statusContainer.classList.remove('hidden');
+                statusContainer.className =
+                    'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-yellow-600/50 bg-yellow-900/20 max-w-[11rem]';
+                statusContainer.title = 'Simulation error';
+                statusMessage.textContent = 'Error';
+                statusMessage.className = 'text-xs font-medium text-yellow-400 truncate';
+            }
             return;
         }
 
         if (!slotId) {
+            if (preserveReadyOnError) {
+                return;
+            }
             // No slot_id means the pipeline failed to allocate a slot entirely
             console.error('Slot ID not found in preallocation result - pipeline failed to allocate');
-            statusContainer.classList.remove('hidden');
-            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
-            statusIcon.outerHTML = `
-                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                </svg>
-            `;
-            statusMessage.textContent = 'Simulation Failed';
-            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            if (typeof window.setPipelineSlotChip === 'function') {
+                window.setPipelineSlotChip('failed', {
+                    title: 'Simulation failed — no slot allocated',
+                });
+            } else {
+                statusContainer.classList.remove('hidden');
+                statusContainer.className =
+                    'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-yellow-600/50 bg-yellow-900/20 max-w-[11rem]';
+                statusContainer.title = 'Simulation failed — no slot allocated';
+                statusMessage.textContent = 'Failed';
+                statusMessage.className = 'text-xs font-medium text-yellow-400 truncate';
+            }
             return;
         }
 
         // The actual pipeline name in Logstash is slot{id}-filter1
         const slotPipelineName = `slot${slotId}-filter1`;
 
-        // Show loading state
-        statusContainer.classList.remove('hidden');
-        statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-600 bg-gray-700/50';
-        statusIcon.innerHTML = '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>';
-        statusIcon.classList.add('animate-spin', 'w-5', 'h-5', 'text-gray-300');
-        statusMessage.textContent = 'Running simulation...';
-        statusMessage.className = 'text-xs font-medium text-gray-300';
+        // If we already marked Ready (warm path), skip the intermediate "Running…" flip
+        const alreadyReady =
+            preserveReadyOnError ||
+            (statusMessage.textContent &&
+                (statusMessage.textContent === 'Ready' ||
+                    statusMessage.textContent.startsWith('Slot ')));
+
+        if (!alreadyReady) {
+            statusContainer.classList.remove('hidden');
+            if (typeof window.setPipelineSlotChip === 'function') {
+                window.setPipelineSlotChip('warming', {
+                    title: `Verifying slot ${slotId} pipeline…`,
+                });
+            } else {
+                statusContainer.className =
+                    'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]';
+                statusContainer.title = 'Running simulation…';
+                statusMessage.textContent = 'Running…';
+                statusMessage.className = 'text-xs font-medium text-gray-300 truncate';
+            }
+        }
 
         try {
             // Backend already verifies pipelines are running before returning slot allocation
-            // No need to wait - check status immediately
-
-            // Check pipeline status using the slot pipeline name
-            const response = await fetch(`/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`);
+            // Check pipeline status using the slot pipeline name on the *selected* agent
+            let checkUrl = `/ConnectionManager/CheckIfPipelineLoaded/?pipeline_name=${encodeURIComponent(slotPipelineName)}`;
+            if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+                checkUrl += `&sim_connection_id=${encodeURIComponent(window.getSimConnectionId())}`;
+            }
+            const response = await fetch(checkUrl);
 
             // Try to parse response even if status is not OK (e.g., 500 errors may still have is_running field)
             let data;
@@ -2881,50 +3370,85 @@ async function checkPipelineLoadStatus() {
             // Check is_running field regardless of HTTP status code
             const isRunning = data.is_running;
 
-            statusIcon.classList.remove('animate-spin');
-
             if (isRunning) {
                 // Success - Pipeline is running
-                statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-600 bg-green-900/30';
-                statusIcon.outerHTML = `
-                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                `;
-                statusMessage.textContent = 'Simulation Ready';
-                statusMessage.className = 'text-xs font-medium text-green-300';
+                if (typeof window.setPipelineSlotChip === 'function') {
+                    window.setPipelineSlotChip('ready', {
+                        slotId,
+                        title: `Simulation ready (slot ${slotId})`,
+                    });
+                } else {
+                    statusContainer.className = 'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-green-600 bg-green-900/30 max-w-[11rem]';
+                    statusContainer.title = `Simulation ready (slot ${slotId})`;
+                    const iconOk = document.getElementById('pipelineStatusIcon');
+                    if (iconOk) {
+                        iconOk.outerHTML = `
+                        <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    `;
+                    }
+                    statusMessage.textContent = 'Ready';
+                    statusMessage.className = 'text-xs font-medium text-green-300 truncate';
+                }
+            } else if (preserveReadyOnError || alreadyReady) {
+                // Allocate already succeeded — keep Ready on a laggy status API
+                console.warn(
+                    'CheckIfPipelineLoaded reported not running; keeping Ready (allocate already verified)'
+                );
+                if (typeof window.setPipelineSlotChip === 'function') {
+                    window.setPipelineSlotChip('ready', {
+                        slotId,
+                        title: `Simulation ready (slot ${slotId})`,
+                    });
+                }
             } else {
                 // Failure - Pipeline not running
-                statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600/50 bg-yellow-900/20';
-                statusIcon.outerHTML = `
-                    <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                    </svg>
-                `;
-                statusMessage.textContent = 'Simulation Error';
-                statusMessage.className = 'text-xs font-medium text-yellow-400';
+                statusContainer.className = 'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-yellow-600/50 bg-yellow-900/20 max-w-[11rem]';
+                statusContainer.title = 'Simulation error — pipeline not running';
+                const iconEl = document.getElementById('pipelineStatusIcon');
+                if (iconEl) {
+                    iconEl.outerHTML = `
+                        <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    `;
+                }
+                statusMessage.textContent = 'Error';
+                statusMessage.className = 'text-xs font-medium text-yellow-400 truncate';
             }
 
         } catch (error) {
             console.error('Error checking pipeline status:', error);
 
             // Don't overwrite a successful green status with yellow on transient errors
-            // If the status is already green (Simulation Ready), keep it
-            if (statusMessage.textContent === 'Simulation Ready') {
-                console.log('Status already shows Simulation Ready, not overwriting with error state');
+            if (
+                preserveReadyOnError ||
+                statusMessage.textContent === 'Ready' ||
+                statusMessage.textContent === 'Simulation Ready' ||
+                (statusMessage.textContent && statusMessage.textContent.startsWith('Slot '))
+            ) {
+                console.log('Status already shows Ready, not overwriting with error state');
+                if (typeof window.setPipelineSlotChip === 'function' && slotId) {
+                    window.setPipelineSlotChip('ready', {
+                        slotId,
+                        title: `Simulation ready (slot ${slotId})`,
+                    });
+                }
                 return;
             }
 
             // Unknown - Error occurred (network failure or unparseable response)
             statusIcon.classList.remove('animate-spin');
-            statusContainer.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow-600 bg-yellow-900/30';
+            statusContainer.className = 'inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-yellow-600 bg-yellow-900/30 max-w-[11rem]';
+            statusContainer.title = 'Unable to verify simulation status';
             statusIcon.outerHTML = `
-                <svg id="pipelineStatusIcon" class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                 </svg>
             `;
-            statusMessage.textContent = 'Unable to verify status';
-            statusMessage.className = 'text-xs font-medium text-yellow-400';
+            statusMessage.textContent = 'Unknown';
+            statusMessage.className = 'text-xs font-medium text-yellow-400 truncate';
         }
     }
 

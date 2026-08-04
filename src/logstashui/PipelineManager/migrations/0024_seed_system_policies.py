@@ -102,6 +102,15 @@ def seed_system_policies(apps, schema_editor):
     if not created:
         simulate_policy.policy_type = 'SIMULATE'
         simulate_policy.is_system = True
+        # Keep path scheme current if an older seed used /opt/LogstashAgent
+        simulate_policy.settings_path = '/opt/logstash-agent/simulate-{instance_id}/settings'
+        simulate_policy.logs_path = '/opt/logstash-agent/simulate-{instance_id}/logs'
+        simulate_policy.data_path = '/opt/logstash-agent/simulate-{instance_id}/data'
+        simulate_policy.keystore_env_file = '/opt/logstash-agent/simulate-{instance_id}/env'
+        if not simulate_policy.logstash_download_dir or 'LogstashAgent' in (
+            simulate_policy.logstash_download_dir or ''
+        ):
+            simulate_policy.logstash_download_dir = '/opt/logstash-agent/logstash-versions'
         simulate_policy.save()
 
     if not EnrollmentToken.objects.filter(policy=simulate_policy, name='default').exists():

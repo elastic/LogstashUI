@@ -104,6 +104,14 @@ def migrate_packaged_managed(apps, schema_editor):
     if not created:
         managed.policy_type = 'MANAGED'
         managed.is_system = True
+        managed.settings_path = '/opt/logstash-agent/managed-{instance_id}/settings'
+        managed.logs_path = '/opt/logstash-agent/managed-{instance_id}/logs'
+        managed.data_path = '/opt/logstash-agent/managed-{instance_id}/data'
+        managed.keystore_env_file = '/opt/logstash-agent/managed-{instance_id}/env'
+        if not managed.logstash_download_dir or 'LogstashAgent' in (
+            managed.logstash_download_dir or ''
+        ):
+            managed.logstash_download_dir = '/opt/logstash-agent/logstash-versions'
         managed.save()
 
     if not EnrollmentToken.objects.filter(policy=managed, name='default').exists():

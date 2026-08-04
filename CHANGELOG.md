@@ -24,6 +24,9 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 - Product-CA-signed **agent server certs** (enroll, check-in re-issue, or compose CSR secret).
 - Settings: agent callback URL and custom UI certificate upload / revert to product default.
 - Host hostname and LAN IPs injected for product cert SANs so browsers can use `https://<host-ip>:8443`.
+- **Container-aware agent callback host:** when LogstashUI runs in a container (or `LOGSTASHUI_IN_CONTAINER=1`), check-in/enroll prefer the agent’s `callback_ip` / IP-literal `host` for `Connection.host` so sim health and editor traffic do not depend on host DNS.
+- Check-in / GetConfigChanges expand multi-instance path templates (`{instance_id}`) using `Connection.instance_id` so simulate/managed agents do not get literal `simulate-{instance_id}` paths.
+- Materialize nested `api.http.port` (and `{instance_id}` in paths) for simulate/managed enroll and GetConfigChanges so Logstash listens on **9560+N** / **9700+N** instead of leaving the template port **9560**.
 
 ### SNMP network management (NMS)
 

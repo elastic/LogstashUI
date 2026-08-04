@@ -313,6 +313,78 @@ def _split_csv(value: str) -> List[str]:
     return [p.strip() for p in value.replace(";", ",").split(",") if p.strip()]
 
 
+# Always-kept short DNS SANs (never dropped when PTR FQDNs are present).
+_RESERVED_SHORT_DNS = frozenset({"localhost", "logstashui"})
+
+
+def _is_fqdn(name: str) -> bool:
+    """Multi-label DNS name suitable as a browser-facing SAN."""
+    n = (name or "").strip().rstrip(".")
+    if not n or "." not in n:
+        return False
+    try:
+        ipaddress.ip_address(n)
+        return False
+    except ValueError:
+        return True
+
+
+def _reverse_lookup_fqdns(ip_str: str, timeout: float = 1.0) -> List[str]:
+    """
+    Best-effort PTR lookup for *ip_str*.
+
+    Returns multi-label names only (real FQDNs). Empty on failure / NXDOMAIN /
+    short single-label results. Short timeout so cert issuance is not blocked
+    when reverse DNS is slow or unavailable.
+    """
+    names: List[str] = []
+    old_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(timeout)
+        try:
+            primary, aliases, _ = socket.gethostbyaddr(ip_str)
+        except Exception:
+            return []
+        for raw in (primary, *(aliases or ())):
+            n = (raw or "").strip().rstrip(".")
+            if _is_fqdn(n) and n not in names:
+                names.append(n)
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+    return names
+
+
+def _prefer_ptr_fqdns_over_short_hostnames(
+    dns_names: List[str],
+    ip_addrs: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]],
+) -> None:
+    """
+    Reverse-lookup non-loopback IPs and add PTR FQDNs as DNS SANs.
+
+    When at least one PTR FQDN is found, drop non-reserved single-label hostnames
+    (e.g. bare ``Palpatine`` from ``hostname``) so the leaf prefers real FQDNs.
+    Mutates *dns_names* in place.
+    """
+    found_ptr = False
+    for ip in list(ip_addrs):
+        if getattr(ip, "is_loopback", False):
+            continue
+        for name in _reverse_lookup_fqdns(str(ip)):
+            found_ptr = True
+            _add_san_token(name, dns_names, ip_addrs)
+
+    if not found_ptr:
+        return
+
+    kept: List[str] = []
+    for name in dns_names:
+        lower = name.lower()
+        if lower in _RESERVED_SHORT_DNS or _is_fqdn(name):
+            kept.append(name)
+        # else: bare short hostname — drop when FQDNs are available
+    dns_names[:] = kept
+
+
 def collect_desired_ui_sans(
     extra_dns: Optional[Iterable[str]] = None,
 ) -> Tuple[List[str], List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]]:
@@ -327,6 +399,7 @@ def collect_desired_ui_sans(
       - logstashui.yml tls.sans if present
       - extra_dns argument
       - Best-effort local non-loopback interface addresses (container or host)
+      - PTR reverse lookups on non-loopback IPs (FQDNs preferred over bare hostnames)
     """
     dns_names: List[str] = ["localhost", "logstashui"]
     ip_addrs: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = [
@@ -400,6 +473,9 @@ def collect_desired_ui_sans(
             s.close()
     except Exception:
         pass
+
+    # Prefer PTR FQDNs (e.g. palpatine.untergeek.net) over bare short hostnames.
+    _prefer_ptr_fqdns_over_short_hostnames(dns_names, ip_addrs)
 
     return dns_names, ip_addrs
 
@@ -834,26 +910,78 @@ def sign_agent_csr(
     }
 
 
+# Process-local cache for agent CA bundle path (avoids concurrent write races).
+_agent_verify_bundle_path: Optional[str] = None
+_agent_verify_bundle_mtime: Optional[float] = None
+
+
 def agent_requests_verify() -> Union[bool, str]:
     """
     Value for requests ``verify=`` when the UI calls agents over HTTPS.
 
     Uses system CAs ∪ product CA so product-issued agent leaves verify, while
     custom public agent certs still work if operators use them later.
-    """
-    try:
-        import certifi
 
-        system_pem = Path(certifi.where()).read_text(encoding="utf-8")
-    except Exception:
-        system_pem = ""
+    Writes the combined PEM **atomically** and caches the path. Concurrent
+    gevent/gunicorn requests used to call write_text on the same file, producing
+    truncated PEMs and intermittent ``[X509] PEM lib`` SSL failures mid-sim.
+    """
+    global _agent_verify_bundle_path, _agent_verify_bundle_mtime
     try:
         ensure_product_ca()
-        product_pem = ca_cert_path().read_text(encoding="utf-8")
+        product_path = ca_cert_path()
+        product_mtime = product_path.stat().st_mtime
     except Exception:
         return True
-    combined = (system_pem.rstrip() + "\n" + product_pem).strip() + "\n"
-    bundle = tls_data_dir() / "ui-agent-ca-bundle.pem"
-    bundle.write_text(combined, encoding="utf-8")
-    return str(bundle)
+
+    # Fast path (no lock): cache hit
+    if (
+        _agent_verify_bundle_path
+        and _agent_verify_bundle_mtime == product_mtime
+        and Path(_agent_verify_bundle_path).is_file()
+    ):
+        return _agent_verify_bundle_path
+
+    with _lock:
+        # Re-check under lock
+        if (
+            _agent_verify_bundle_path
+            and _agent_verify_bundle_mtime == product_mtime
+            and Path(_agent_verify_bundle_path).is_file()
+        ):
+            return _agent_verify_bundle_path
+
+        try:
+            import certifi
+
+            system_pem = Path(certifi.where()).read_text(encoding="utf-8")
+        except Exception:
+            system_pem = ""
+        try:
+            product_pem = product_path.read_text(encoding="utf-8")
+        except Exception:
+            return True
+        if not product_pem.strip():
+            return True
+
+        combined = (system_pem.rstrip() + "\n" + product_pem.strip()).strip() + "\n"
+        bundle = tls_data_dir() / "ui-agent-ca-bundle.pem"
+        tmp = bundle.with_suffix(f".pem.tmp.{os.getpid()}")
+        try:
+            tmp.write_text(combined, encoding="utf-8")
+            os.replace(tmp, bundle)
+        except Exception:
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except OSError:
+                pass
+            try:
+                bundle.write_text(combined, encoding="utf-8")
+            except Exception:
+                return True
+
+        _agent_verify_bundle_path = str(bundle)
+        _agent_verify_bundle_mtime = product_mtime
+        return _agent_verify_bundle_path
 

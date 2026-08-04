@@ -15,6 +15,7 @@ from PipelineManager.agent_modes import (
     list_simulation_targets,
     managed_paths,
     managed_ports,
+    materialize_simulate_logstash_yml,
     next_managed_instance_id,
     next_simulate_instance_id,
     normalize_policy_type,
@@ -160,6 +161,22 @@ def test_next_managed_instance_id_skips_used(db, system_policies):
     assert next_managed_instance_id() == 2
 
 
+def test_materialize_nested_api_http_port():
+    nested = (
+        "api:\n"
+        "  http:\n"
+        "    host: 0.0.0.0\n"
+        "    port: 9560\n"
+        "path:\n"
+        "  logs: /opt/logstash-agent/simulate-{instance_id}/logs\n"
+    )
+    out = materialize_simulate_logstash_yml(nested, 9561, instance_id=1)
+    assert "9560" not in out or "9561" in out
+    assert "port: 9561" in out
+    assert "simulate-1/logs" in out
+    assert "{instance_id}" not in out
+
+
 def test_build_policy_config_simulate(system_policies):
     _, _, simulate, _ = system_policies
     cfg = build_policy_config(simulate, instance_id=1)
@@ -167,7 +184,9 @@ def test_build_policy_config_simulate(system_policies):
     assert cfg['instance_id'] == 1
     assert cfg['agent_api_port'] == 9501
     assert cfg['logstash_api_port'] == 9561
-    assert 'api.http.port: 9561' in cfg['logstash_yml']
+    # Flat or nested form after materialize — port must be instance-specific
+    assert '9561' in cfg['logstash_yml']
+    assert '9560' not in cfg['logstash_yml'].replace('9561', '')
     assert cfg['logstash_unit'] == 'ls-simulate@1'
 
 
@@ -262,7 +281,8 @@ def test_enroll_managed_allocates_instance(db, system_policies):
     assert body['policy_config']['path_root'] == '/opt/logstash-agent/managed-1'
     conn = Connection.objects.get(agent_id='agent-managed-1')
     assert conn.instance_id == 1
-    assert conn.name == 'managedhost.example-managed-1'
+    assert conn.name == 'managedhost-managed-1'
+    assert conn.host == 'managedhost.example'
 
 
 def test_enroll_embedded_rejected(db, system_policies):
@@ -321,8 +341,14 @@ def test_list_simulation_targets(db, system_policies):
     targets = list_simulation_targets(ensure_embedded=False)
     assert len(targets) == 2
     labels = {t['label'] for t in targets}
-    assert any('simulate-1' in lb and '9.4.3' in lb for lb in labels)
-    assert any('embedded' in lb for lb in labels)
+    # Closed control: terse labels only
+    assert 'simulate-1' in labels
+    assert 'embedded' in labels
+    sim = next(t for t in targets if t['label'] == 'simulate-1')
+    assert '10.0.0.5' in sim['detail']
+    assert '9.4.3' in sim['detail']
+    emb = next(t for t in targets if t['label'] == 'embedded')
+    assert 'embedded' in emb['detail']
     # Default ensure_embedded also lists the docker pseudo-connection if missing
     with_auto = list_simulation_targets(ensure_embedded=True)
     assert len(with_auto) >= 2
@@ -411,6 +437,45 @@ def test_build_policy_config_simulate_paths_use_logstash_agent_root(system_polic
     assert cfg["logstash_download_dir"].startswith(SIMULATE_ROOT)
     assert "/opt/LogstashAgent" not in cfg["settings_path"]
     assert "/opt/LogstashAgent" not in (cfg.get("logstash_download_dir") or "")
+
+
+def test_normalize_agent_opt_path_rewrites_legacy_root():
+    from PipelineManager.agent_modes import normalize_agent_opt_path
+
+    assert (
+        normalize_agent_opt_path("/opt/LogstashAgent/simulate-{instance_id}/settings")
+        == "/opt/logstash-agent/simulate-{instance_id}/settings"
+    )
+    assert (
+        normalize_agent_opt_path("/opt/logstash-agent/simulate-1/settings")
+        == "/opt/logstash-agent/simulate-1/settings"
+    )
+    assert normalize_agent_opt_path("/etc/logstash/") == "/etc/logstash/"
+    assert normalize_agent_opt_path("") == ""
+
+
+@pytest.mark.django_db
+def test_legacy_simulate_policy_paths_rewritten_on_config(system_policies):
+    """Even if DB still has legacy /opt/LogstashAgent, enroll payload is canonical."""
+    from PipelineManager.agent_modes import build_policy_config
+    from PipelineManager.models import Policy
+
+    sim = Policy.objects.filter(policy_type=Policy.PolicyType.SIMULATE, is_system=True).first()
+    assert sim is not None
+    sim.settings_path = "/opt/LogstashAgent/simulate-{instance_id}/settings"
+    sim.logs_path = "/opt/LogstashAgent/simulate-{instance_id}/logs"
+    sim.data_path = "/opt/LogstashAgent/simulate-{instance_id}/data"
+    sim.keystore_env_file = "/opt/LogstashAgent/simulate-{instance_id}/env"
+    sim.logstash_download_dir = "/opt/LogstashAgent/logstash-versions"
+    sim.save()
+
+    cfg = build_policy_config(sim, instance_id=2)
+    assert cfg["settings_path"] == "/opt/logstash-agent/simulate-2/settings"
+    assert cfg["logs_path"] == "/opt/logstash-agent/simulate-2/logs"
+    assert cfg["data_path"] == "/opt/logstash-agent/simulate-2/data"
+    assert cfg["keystore_env_file"] == "/opt/logstash-agent/simulate-2/env"
+    assert cfg["logstash_download_dir"] == "/opt/logstash-agent/logstash-versions"
+    assert "/opt/LogstashAgent" not in str(cfg)
 
 
 def test_list_targets_includes_embedded(system_policies):

@@ -11,11 +11,11 @@ name: LogstashUI
 
 services:
   logstashui:
+    # Default: published Hub image. Local source + TLS/callback fixes require:
+    #   docker compose -f docker-compose.yml -f docker-compose.smoke.yml --profile embedded up -d --build
+    # or:  ../../bin/start_logstashui.sh --rebuild
+    # Plain `docker compose up --build` does NOT rebuild from this tree (no build: here).
     image: codyjackson032/logstashui:latest
-    # Uncomment below to build locally instead of pulling from Docker Hub
-    #build:
-    #  context: ..
-    #  dockerfile: docker/Dockerfile
     ports:
       - "8443:8443"
     volumes:
