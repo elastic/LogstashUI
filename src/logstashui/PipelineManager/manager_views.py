@@ -75,11 +75,14 @@ def AgentPolicies(request):
 def PipelineManager(request):
     """Builds the table of pipelines"""
     context = {}
-    # Refresh sticky embedded row (probe + last_check_in) before listing
+    # Refresh sticky embedded row (probe + last_check_in) in the background.
+    # The probe is a blocking HTTP call; running it in a daemon thread means the
+    # page renders immediately and the SSE stream picks up the result shortly after.
     try:
+        import threading
         from PipelineManager.agent_modes import ensure_embedded_connection
 
-        ensure_embedded_connection()
+        threading.Thread(target=ensure_embedded_connection, daemon=True).start()
     except Exception:
         pass
 
