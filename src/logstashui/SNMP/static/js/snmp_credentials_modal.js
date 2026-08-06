@@ -18,7 +18,7 @@ if (addCredentialBtn) {
 function openCredentialModal(credentialData = null) {
   const modal = document.getElementById('credentialFormModal');
   const form = document.getElementById('credentialForm');
-  const modalTitle = document.getElementById('modalTitle');
+  const modalTitle = document.getElementById('credentialModalTitle');
 
   // Reset form
   form.reset();
