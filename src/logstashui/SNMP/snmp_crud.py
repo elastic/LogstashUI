@@ -12,6 +12,7 @@ from Common.elastic_utils import get_elastic_connection
 from Common.logstash_config_parse import ComponentToPipeline
 from Common.decorators import require_admin_role
 from Common.formatters import _sanitize_pipeline_name_component, format_display_name
+from Common.validators import validate_namespace
 
 from .snmp_pipeline_generator import (
     _generate_input, 
@@ -1211,6 +1212,11 @@ def AddNetwork(request):
         deployment_mode = request.POST.get('deployment_mode', 'CENTRALIZED')
         credential_mode = request.POST.get('credential_mode', 'KEYSTORE')
 
+        if not namespace_from_device_template:
+            ns_valid, ns_error = validate_namespace(namespace)
+            if not ns_valid:
+                return HttpResponse(ns_error, status=400)
+
         # Create network object
         network = Network(
             name=name,
@@ -1282,6 +1288,12 @@ def UpdateNetwork(request, network_id):
             pass  # Invalid CIDR will be caught by model validation below
         network.namespace = request.POST.get('namespace', network.namespace)
         network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
+
+        if not network.namespace_from_device_template:
+            ns_valid, ns_error = validate_namespace(network.namespace)
+            if not ns_valid:
+                return HttpResponse(ns_error, status=400)
+
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         network.deployment_mode = request.POST.get('deployment_mode', network.deployment_mode)
@@ -3723,7 +3735,7 @@ def _get_device_fans(device, es_connection):
                     _device_host_filter(device),
                     {
                         "term": {
-                            "event.category": "fans"
+                            "event.category": "component.fan"
                         }
                     }
                 ]
@@ -3732,14 +3744,14 @@ def _get_device_fans(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "fans.description",
+                    "field": "component.fan.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_fan_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["fans.state", "fans.description"]
+                            "_source": ["component.fan.state", "component.fan.description"]
                         }
                     }
                 }
@@ -3753,7 +3765,8 @@ def _get_device_fans(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_fan_doc']['hits']['hits']:
-            visualization_data['fans'].append(doc['_source']['fans'])
+            fan_data = doc['_source'].get('component', {}).get('fan', {})
+            visualization_data['fans'].append(fan_data)
 
     return visualization_data
 
@@ -3777,7 +3790,7 @@ def _get_device_sensors(device, es_connection):
                     _device_host_filter(device),
                     {
                         "term": {
-                            "event.category": "sensors"
+                            "event.category": "component.sensor"
                         }
                     }
                 ]
@@ -3786,15 +3799,15 @@ def _get_device_sensors(device, es_connection):
         aggregations={
             "sensors": {
                 "terms": {
-                    "field": "sensors.description",
+                    "field": "component.sensor.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_sensor_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["sensors.state", "sensors.description", "sensors.temp_celsius",
-                                        "sensors.temp_threshold"]
+                            "_source": ["component.sensor.state", "component.sensor.description",
+                                        "component.sensor.temp.celsius", "component.sensor.temp.threshold"]
                         }
                     }
                 }
@@ -3808,7 +3821,14 @@ def _get_device_sensors(device, es_connection):
 
     for sensor in results['aggregations']['sensors']['buckets']:
         for doc in sensor['top_sensor_doc']['hits']['hits']:
-            visualization_data['sensors'].append(doc['_source']['sensors'])
+            sensor_raw = doc['_source'].get('component', {}).get('sensor', {})
+            temp = sensor_raw.get('temp', {})
+            visualization_data['sensors'].append({
+                'description': sensor_raw.get('description'),
+                'state': sensor_raw.get('state'),
+                'temp_celsius': temp.get('celsius'),
+                'temp_threshold': temp.get('threshold'),
+            })
 
     return visualization_data
 
@@ -4168,9 +4188,9 @@ def generate_visualizations(visualizations, device, es_connection):
     visualization_data = {}
     if "metrics" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
-    if "sensors" in visualizations:
+    if "component.sensor" in visualizations:
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)
-    if "fans" in visualizations:
+    if "component.fan" in visualizations:
         visualization_data['fans'] = _get_device_fans(device, es_connection)
     if "interface" in visualizations:
         visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)

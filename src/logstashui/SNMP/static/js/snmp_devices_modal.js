@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function () {
 function openDeviceModal(deviceData = null) {
   const modal = document.getElementById('deviceFormModal');
   const form = document.getElementById('deviceForm');
-  const modalTitle = document.getElementById('modalTitle');
+  const modalTitle = document.getElementById('deviceModalTitle');
 
   deviceModalIsOpen = true;
 

@@ -18,7 +18,7 @@ if (addNetworkBtn) {
 function openNetworkModal(networkData = null) {
   const modal = document.getElementById('networkFormModal');
   const form = document.getElementById('networkForm');
-  const modalTitle = document.getElementById('modalTitle');
+  const modalTitle = document.getElementById('networkModalTitle');
 
   networkModalIsOpen = true;
 
