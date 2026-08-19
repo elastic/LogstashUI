@@ -86,11 +86,17 @@ def PipelineManager(request):
     except Exception:
         pass
 
-    connections = list(ConnectionTable.objects.values(
-        "connection_type", "name", "host", "cloud_id", "cloud_url", "pk",
-        "policy__name", "policy_id", "policy__policy_type", "agent_id",
-        "last_check_in", "status_blob", "desired_agent_version",
-    ))
+    from PipelineManager.agent_modes import is_embedded_connection
+
+    connections = [
+        conn
+        for conn in ConnectionTable.objects.values(
+            "connection_type", "name", "host", "cloud_id", "cloud_url", "pk",
+            "policy__name", "policy_id", "policy__policy_type", "agent_id",
+            "last_check_in", "status_blob", "desired_agent_version",
+        )
+        if not is_embedded_connection(conn)
+    ]
     
     # Add is_online flag based on last_check_in time (within 10 minutes)
     now = datetime.now(timezone.utc)
@@ -403,11 +409,15 @@ def agent_status_stream(request):
                     pass
 
                 now = datetime.now(timezone.utc)
-                connections = list(
-                    ConnectionTable.objects
+                from PipelineManager.agent_modes import is_embedded_connection
+
+                connections = [
+                    conn
+                    for conn in ConnectionTable.objects
                     .filter(connection_type=ConnectionTable.ConnectionType.AGENT)
-                    .values('pk', 'name', 'last_check_in', 'status_blob', 'agent_id')
-                )
+                    .values('pk', 'name', 'last_check_in', 'status_blob', 'agent_id', 'policy__policy_type')
+                    if not is_embedded_connection(conn)
+                ]
 
                 for conn in connections:
                     if conn['last_check_in']:

@@ -143,6 +143,69 @@ def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) ->
         policy.binary_path = "/usr/share/logstash/bin"
 
 
+def apply_simulate_path_bundle(policy: Policy, instance_id: int | None = None) -> None:
+    """
+    Write simulate path scheme onto a Policy (used when creating a SIMULATE policy).
+
+    When instance_id is None, stores template placeholders (enroll allocates N).
+    When set, stores concrete simulate-N paths (tests / display).
+    """
+    if instance_id is None:
+        root = f"{SIMULATE_ROOT}/simulate-{{instance_id}}"
+        policy.settings_path = f"{root}/settings"
+        policy.logs_path = f"{root}/logs"
+        policy.data_path = f"{root}/data"
+        policy.keystore_env_file = f"{root}/env"
+        policy.agent_api_port = SIMULATE_AGENT_API_BASE
+        policy.logstash_api_port = SIMULATE_LOGSTASH_API_BASE
+    else:
+        paths = simulate_paths(instance_id)
+        agent_port, ls_port = simulate_ports(instance_id)
+        policy.settings_path = paths["settings_path"]
+        policy.logs_path = paths["logs_path"]
+        policy.data_path = paths["data_path"]
+        policy.keystore_env_file = paths["keystore_env_file"]
+        policy.agent_api_port = agent_port
+        policy.logstash_api_port = ls_port
+    if not policy.logstash_download_dir or "LogstashAgent" in (policy.logstash_download_dir or ""):
+        policy.logstash_download_dir = f"{AGENT_OPT_ROOT}/logstash-versions"
+    if not policy.binary_path:
+        policy.binary_path = "/usr/share/logstash/bin"
+
+
+def uses_packaged_default_paths(policy: Policy) -> bool:
+    """True when settings/logs still look like distro Packaged defaults (or empty)."""
+    settings = (policy.settings_path or "").rstrip("/")
+    logs = (policy.logs_path or "").rstrip("/")
+    return settings in ("", "/etc/logstash") and logs in ("", "/var/log/logstash")
+
+
+CREATABLE_POLICY_TYPES = frozenset(
+    {
+        Policy.PolicyType.PACKAGED,
+        Policy.PolicyType.MANAGED,
+        Policy.PolicyType.SIMULATE,
+    }
+)
+
+
+def parse_creatable_policy_type(raw) -> tuple[str | None, str | None]:
+    """
+    Return (policy_type, error). Empty/missing defaults to PACKAGED.
+    EMBEDDED, DEFAULT, and unknown values are rejected.
+    """
+    if raw is None or str(raw).strip() == "":
+        return Policy.PolicyType.PACKAGED, None
+    pt = str(raw).strip().upper()
+    if pt == "DEFAULT":
+        return None, "policy_type DEFAULT is not allowed; use PACKAGED"
+    if pt == Policy.PolicyType.EMBEDDED:
+        return None, "Cannot create Embedded Policy"
+    if pt not in CREATABLE_POLICY_TYPES:
+        return None, f"Invalid policy_type '{raw}'"
+    return pt, None
+
+
 def materialize_simulate_logstash_yml(
     template: str,
     logstash_api_port: int,
@@ -423,9 +486,15 @@ def ensure_embedded_connection() -> Connection | None:
                 "online": True,
             }
         else:
-            # Keep sticky row; do not wipe last_check_in on transient probe fail
-            # if we never had success — leave as-is
-            pass
+            # Keep sticky row; do not wipe last_check_in on transient probe fail.
+            # Mark offline so the Sim picker can hide undiscovered embedded.
+            update_fields["status_blob"] = {
+                "embedded": True,
+                "mode": "embedded",
+                "agent_url": agent_url,
+                "probed_at": now.isoformat(),
+                "online": False,
+            }
 
         if conn:
             Connection.objects.filter(pk=conn.pk).update(**update_fields)
@@ -453,6 +522,29 @@ def ensure_embedded_connection() -> Connection | None:
             "Could not ensure embedded simulation connection: %s", exc
         )
         return None
+
+
+def is_embedded_discovered(conn) -> bool:
+    """True when the docker/local embedded agent has been successfully probed."""
+    if conn is None:
+        return False
+    if isinstance(conn, dict):
+        blob = conn.get("status_blob") or {}
+        last_check_in = conn.get("last_check_in")
+    else:
+        blob = getattr(conn, "status_blob", None) or {}
+        last_check_in = getattr(conn, "last_check_in", None)
+    if blob.get("online") is True:
+        return True
+    if not last_check_in:
+        return False
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    ts = last_check_in
+    if getattr(ts, "tzinfo", None) is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return (now - ts).total_seconds() < 600
 
 
 def is_embedded_connection(conn) -> bool:
@@ -489,7 +581,8 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
     if active_only:
         qs = qs.filter(is_active=True)
 
-    targets = []
+    simulate_targets = []
+    embedded_targets = []
     for conn in qs.order_by("instance_id", "name"):
         policy = conn.policy
         if not policy:
@@ -500,6 +593,9 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             or ("system" if policy.policy_type == Policy.PolicyType.SIMULATE else "")
         )
         if policy.policy_type == Policy.PolicyType.EMBEDDED:
+            # Picker only — and only after a successful live probe
+            if not is_embedded_discovered(conn):
+                continue
             # Closed select: terse; detail on hover / open option list
             label = "embedded"
             ver_label = version or "docker"
@@ -527,27 +623,30 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id
             base_url = f"https://{host}:{agent_port}" if agent_port else None
 
-        targets.append(
-            {
-                "connection_id": conn.id,
-                "name": conn.name,
-                "label": label,
-                "detail": detail,
-                "policy_type": policy.policy_type,
-                "policy_name": policy.name,
-                "instance_id": conn.instance_id,
-                "agent_api_port": agent_port,
-                "logstash_api_port": conn.logstash_api_port,
-                "logstash_version": version or None,
-                "logstash_source": policy.logstash_source,
-                "host": host,
-                "base_url": base_url,
-                "last_selected_at": conn.last_selected_at.isoformat()
-                if conn.last_selected_at
-                else None,
-            }
-        )
-    return targets
+        row = {
+            "connection_id": conn.id,
+            "name": conn.name,
+            "label": label,
+            "detail": detail,
+            "policy_type": policy.policy_type,
+            "policy_name": policy.name,
+            "instance_id": conn.instance_id,
+            "agent_api_port": agent_port,
+            "logstash_api_port": conn.logstash_api_port,
+            "logstash_version": version or None,
+            "logstash_source": policy.logstash_source,
+            "host": host,
+            "base_url": base_url,
+            "last_selected_at": conn.last_selected_at.isoformat()
+            if conn.last_selected_at
+            else None,
+        }
+        if policy.policy_type == Policy.PolicyType.EMBEDDED:
+            embedded_targets.append(row)
+        else:
+            simulate_targets.append(row)
+    # Dedicated simulate-N first; embedded last when discovered
+    return simulate_targets + embedded_targets
 
 
 def resolve_simulation_target(connection_id=None, session=None):

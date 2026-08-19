@@ -29,6 +29,12 @@ DEFAULT_CONFIG = {
         # Embed product CA fingerprint in enrollment tokens (pin-and-fetch at enroll)
         "include_ca_fingerprint": True,
     },
+    # Runtime storage (env LOGSTASHUI_DATA_DIR / LOGSTASHUI_LOGS_DIR wins).
+    # Relative paths.data is resolved from the git/project root.
+    "paths": {
+        "data": None,
+        "logs": None,
+    },
 }
 
 

@@ -20,7 +20,7 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 ### Dual HTTPS and product CA
 
 - UI serves HTTPS on **:8443** (gunicorn); embedded agent on **:9500**. Compose no longer uses nginx.
-- Auto product CA under `data/tls/`; public `/.well-known/logstashui/ca.crt`; optional enrollment-token CA fingerprint.
+- Auto product CA under `$LOGSTASHUI_DATA_DIR/tls/` (git checkout bind: `<project_root>/logstashui_data`); public `/.well-known/logstashui/ca.crt`; optional enrollment-token CA fingerprint.
 - Product-CA-signed **agent server certs** (enroll, check-in re-issue, or compose CSR secret).
 - Settings: agent callback URL and custom UI certificate upload / revert to product default.
 - Host hostname and LAN IPs injected for product cert SANs so browsers can use `https://<host-ip>:8443`.
@@ -39,6 +39,7 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 
 ### Operations and docs
 
+- Runtime state (sqlite, TLS, secrets, logs) is configurable via `LOGSTASHUI_DATA_DIR` / `paths.data` and lives outside `src/`. Git-checkout Compose bind-mounts `<project_root>/logstashui_data` → `/var/lib/logstashui`.
 - Operator guide: [Agent roles, ports, coexistence, and VERSION](docs/docs/logstashagent/general/roles.md).
 - E2E smoke: `bin/smoke_agent_modes.sh` (HTTPS, Django enroll, sibling agent offline tests).
 - Migrations through **0025** (Packaged/Managed seeds). Compose entrypoint migrates on start.

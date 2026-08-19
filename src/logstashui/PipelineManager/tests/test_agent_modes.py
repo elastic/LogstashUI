@@ -9,7 +9,11 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
 
+from datetime import datetime, timezone
+
 from PipelineManager.agent_modes import (
+    apply_managed_path_bundle,
+    apply_simulate_path_bundle,
     build_policy_config,
     ensure_embedded_connection,
     list_simulation_targets,
@@ -19,8 +23,10 @@ from PipelineManager.agent_modes import (
     next_managed_instance_id,
     next_simulate_instance_id,
     normalize_policy_type,
+    parse_creatable_policy_type,
     simulate_paths,
     simulate_ports,
+    uses_packaged_default_paths,
 )
 from PipelineManager.models import Connection, EnrollmentToken, Policy
 
@@ -107,6 +113,45 @@ def test_normalize_policy_type_legacy_default():
     assert normalize_policy_type('default') == Policy.PolicyType.PACKAGED
     assert normalize_policy_type(None) == Policy.PolicyType.PACKAGED
     assert normalize_policy_type('MANAGED') == Policy.PolicyType.MANAGED
+
+
+def test_parse_creatable_policy_type():
+    assert parse_creatable_policy_type(None) == (Policy.PolicyType.PACKAGED, None)
+    assert parse_creatable_policy_type('') == (Policy.PolicyType.PACKAGED, None)
+    assert parse_creatable_policy_type('managed')[0] == Policy.PolicyType.MANAGED
+    pt, err = parse_creatable_policy_type('EMBEDDED')
+    assert pt is None and 'Embedded' in err
+    pt, err = parse_creatable_policy_type('DEFAULT')
+    assert pt is None and 'PACKAGED' in err
+    pt, err = parse_creatable_policy_type('WIZARD')
+    assert pt is None and 'Invalid' in err
+
+
+def test_apply_simulate_path_bundle_templates(db):
+    policy = Policy.objects.create(
+        name='Sim Draft',
+        policy_type=Policy.PolicyType.SIMULATE,
+        logstash_yml='x: 1\n',
+        jvm_options='-Xms1g\n',
+        log4j2_properties='x=1\n',
+    )
+    apply_simulate_path_bundle(policy)
+    assert policy.settings_path == '/opt/logstash-agent/simulate-{instance_id}/settings'
+    assert policy.logs_path == '/opt/logstash-agent/simulate-{instance_id}/logs'
+    assert policy.agent_api_port == 9500
+    assert policy.logstash_api_port == 9560
+
+
+def test_uses_packaged_default_paths(db):
+    policy = Policy.objects.create(
+        name='Path Probe',
+        logstash_yml='x: 1\n',
+        jvm_options='-Xms1g\n',
+        log4j2_properties='x=1\n',
+    )
+    assert uses_packaged_default_paths(policy) is True
+    apply_managed_path_bundle(policy)
+    assert uses_packaged_default_paths(policy) is False
 
 
 def test_simulate_ports_formula():
@@ -336,20 +381,21 @@ def test_list_simulation_targets(db, system_policies):
         agent_api_port=9500,
         logstash_api_port=9560,
         is_active=True,
+        last_check_in=datetime.now(timezone.utc),
+        status_blob={'online': True, 'embedded': True},
     )
     # ensure_embedded=False: only the two rows we created (no extra pseudo conn)
     targets = list_simulation_targets(ensure_embedded=False)
     assert len(targets) == 2
-    labels = {t['label'] for t in targets}
-    # Closed control: terse labels only
-    assert 'simulate-1' in labels
-    assert 'embedded' in labels
+    labels = [t['label'] for t in targets]
+    # Dedicated simulate-N first; discovered embedded last
+    assert labels == ['simulate-1', 'embedded']
     sim = next(t for t in targets if t['label'] == 'simulate-1')
     assert '10.0.0.5' in sim['detail']
     assert '9.4.3' in sim['detail']
     emb = next(t for t in targets if t['label'] == 'embedded')
     assert 'embedded' in emb['detail']
-    # Default ensure_embedded also lists the docker pseudo-connection if missing
+    # Default ensure_embedded also lists the docker pseudo-connection if probed online
     with_auto = list_simulation_targets(ensure_embedded=True)
     assert len(with_auto) >= 2
 
@@ -478,21 +524,66 @@ def test_legacy_simulate_policy_paths_rewritten_on_config(system_policies):
     assert "/opt/LogstashAgent" not in str(cfg)
 
 
-def test_list_targets_includes_embedded(system_policies):
+def test_list_targets_includes_embedded(system_policies, monkeypatch):
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: True,
+    )
     targets = list_simulation_targets(ensure_embedded=True)
     assert any(t['policy_type'] == 'EMBEDDED' for t in targets)
+    assert targets[-1]['label'] == 'embedded'
 
 
-def test_get_simulation_targets_api(admin_client, system_policies):
+def test_list_targets_omits_undiscovered_embedded(system_policies, monkeypatch):
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: False,
+    )
+    targets = list_simulation_targets(ensure_embedded=True)
+    assert not any(t['policy_type'] == 'EMBEDDED' for t in targets)
+
+
+def test_list_targets_embedded_after_simulate(system_policies, monkeypatch):
+    _, _, simulate, _ = system_policies
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: True,
+    )
+    Connection.objects.create(
+        name='sim1',
+        connection_type='AGENT',
+        host='10.0.0.5',
+        agent_id='s1',
+        policy=simulate,
+        instance_id=1,
+        agent_api_port=9501,
+        logstash_api_port=9561,
+        is_active=True,
+    )
+    labels = [t['label'] for t in list_simulation_targets(ensure_embedded=True)]
+    assert labels[0] == 'simulate-1'
+    assert labels[-1] == 'embedded'
+
+
+def test_get_simulation_targets_api(admin_client, system_policies, monkeypatch):
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: True,
+    )
     resp = admin_client.get('/ConnectionManager/GetSimulationTargets/')
     assert resp.status_code == 200
     data = resp.json()
     assert data['success'] is True
     assert data['count'] >= 1
     assert any(t['policy_type'] == 'EMBEDDED' for t in data['targets'])
+    assert data['targets'][-1]['label'] == 'embedded'
 
 
-def test_select_simulation_target_api(admin_client, system_policies):
+def test_select_simulation_target_api(admin_client, system_policies, monkeypatch):
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: True,
+    )
     ensure_embedded_connection()
     targets = list_simulation_targets()
     cid = targets[0]['connection_id']
@@ -504,3 +595,45 @@ def test_select_simulation_target_api(admin_client, system_policies):
     assert resp.status_code == 200
     assert resp.json()['success'] is True
     assert admin_client.session.get('sim_connection_id') == cid
+
+
+def test_get_policies_excludes_embedded(admin_client, system_policies):
+    resp = admin_client.get('/ConnectionManager/GetPolicies/')
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['success'] is True
+    names = [p['name'] for p in data['policies']]
+    types = [p['policy_type'] for p in data['policies']]
+    assert 'Embedded Policy' not in names
+    assert 'EMBEDDED' not in types
+    assert 'Simulate Policy' in names
+
+
+def test_pipeline_manager_hides_embedded_agent(admin_client, system_policies, monkeypatch):
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: True,
+    )
+    ensure_embedded_connection()
+    resp = admin_client.get('/ConnectionManager/')
+    assert resp.status_code == 200
+    names = [c['name'] for c in resp.context['connections']]
+    assert 'embedded' not in names
+    html = resp.content.decode()
+    # Table must not render the docker pseudo-agent; sim picker is a different page
+    assert 'embedded-local' not in html
+
+
+def test_get_connections_excludes_embedded(admin_client, system_policies, monkeypatch):
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: True,
+    )
+    conn = ensure_embedded_connection()
+    assert conn is not None
+    resp = admin_client.get('/ConnectionManager/GetConnections/')
+    assert resp.status_code == 200
+    ids = [c['id'] for c in resp.json()]
+    assert conn.id not in ids
+    names = [c['name'] for c in resp.json()]
+    assert 'embedded' not in names

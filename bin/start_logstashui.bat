@@ -196,6 +196,17 @@ if exist "src\logstashui\logstashui.yml" (
 echo Using config file: %CONFIG_FILE%
 echo.
 
+REM Bind-mount target: <checkout>\logstashui_data → /var/lib/logstashui
+if not exist "logstashui_data" mkdir logstashui_data
+if not exist "logstashui_data\db.sqlite3" (
+    if exist "src\logstashui\data\db.sqlite3" (
+        echo Migrating src\logstashui\data → logstashui_data\
+        xcopy /E /I /Y /Q "src\logstashui\data\*" "logstashui_data\" >nul
+    )
+)
+echo Host data directory: %CD%\logstashui_data
+echo.
+
 REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 

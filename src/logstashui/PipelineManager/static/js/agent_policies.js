@@ -5,6 +5,36 @@
 // Track original content for change detection
 let originalFileContents = {};
 let changedFiles = new Set();
+const DRAFT_POLICY_VALUE = '__draft__';
+
+const POLICY_TYPE_INFO = {
+    PACKAGED: {
+        hover: 'Distro Logstash as a system service.',
+        body: 'Manages the package Logstash unit (logstash + logstash-agent). Typical paths /etc/logstash. Clone creates a Managed multi-instance policy.',
+    },
+    MANAGED: {
+        hover: 'Isolated agent-owned Logstash instance(s).',
+        body: 'Each enrollment gets a managed-N tree under /opt/logstash-agent/managed-N/ and ports 9600+N / 9700+N. Can coexist with Packaged on the same host.',
+    },
+    SIMULATE: {
+        hover: 'Isolated simulation instance(s).',
+        body: 'Each enrollment gets a simulate-N tree under /opt/logstash-agent/simulate-N/ and ports 9500+N / 9560+N. For pipeline simulation, not production.',
+    },
+};
+
+function policyRoleClassName(ptype) {
+    let t = (ptype || 'PACKAGED').toUpperCase();
+    if (t === 'DEFAULT') t = 'PACKAGED';
+    if (t === 'SIMULATE') return 'role-simulate';
+    if (t === 'EMBEDDED') return 'role-embedded';
+    if (t === 'MANAGED') return 'role-managed';
+    if (t === 'PACKAGED') return 'role-packaged';
+    return 'role-default';
+}
+
+function isDraftPolicyOption(opt) {
+    return opt?.dataset?.isDraft === 'true' || opt?.value === DRAFT_POLICY_VALUE;
+}
 
 // Notification buckets — merged before updating the bell indicator
 let logstashNotifications = [];
@@ -1354,8 +1384,8 @@ document.addEventListener('DOMContentLoaded', function() {
     policySelect.addEventListener('change', async function() {
         const selectedValue = this.value;
 
-        // Persist selected policy to localStorage (skip the add_new pseudo-option)
-        if (selectedValue !== 'add_new') {
+        // Persist selected policy to localStorage (skip add_new / unsaved draft)
+        if (selectedValue !== 'add_new' && selectedValue !== DRAFT_POLICY_VALUE) {
             const selectedOpt = this.options[this.selectedIndex];
             const policyId = selectedOpt?.dataset.policyId;
             if (policyId) {
@@ -1364,29 +1394,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (selectedValue === 'add_new') {
-            // Reset to default values for new policy (user-created PACKAGED)
-            document.getElementById('settingsPath').value = '/etc/logstash/';
-            document.getElementById('logsPath').value = '/var/log/logstash';
-            document.getElementById('binaryPath').value = '/usr/share/logstash/bin';
-            if (document.getElementById('dataPath')) document.getElementById('dataPath').value = '';
-            if (document.getElementById('keystoreEnvFile')) document.getElementById('keystoreEnvFile').value = '/etc/default/logstash';
-            
-            // Show popup to add new policy
             const policyName = await ConfirmationModal.prompt(
-                'Enter a name for the new Packaged (distro Logstash) policy:\n'
-                + '(Clone Packaged → Managed for isolated multi-instance trees.\n'
-                + 'Clone Simulate Policy for simulation.)',
+                'Enter a name for the new policy:',
                 '',
                 'Add New Policy',
                 'e.g., Production Packaged'
             );
-            
+
             if (policyName && policyName.trim()) {
                 const trimmedName = policyName.trim();
-                
-                // Check if policy already exists
-                const reservedNames = ['default policy', 'packaged policy', 'managed policy'];
-                if (customPolicies.includes(trimmedName) || reservedNames.includes(trimmedName.toLowerCase())) {
+                const reservedNames = [
+                    'default policy', 'packaged policy', 'managed policy', 'simulate policy', 'embedded policy',
+                ];
+                const existingNames = new Set([
+                    ...(window.customPolicies || []),
+                    ...customPolicies,
+                ].map((n) => String(n).toLowerCase()));
+                if (existingNames.has(trimmedName.toLowerCase()) || reservedNames.includes(trimmedName.toLowerCase())) {
                     await ConfirmationModal.show(
                         'A policy with this name already exists. Please choose a different name.',
                         'Duplicate Policy Name',
@@ -1394,56 +1418,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         null,
                         true
                     );
-                    // Reset to current policy
                     this.value = currentPolicy;
                     return;
                 }
-                
-                // Make HTMX call to add policy
-                try {
-                    const response = await fetch('/ConnectionManager/AddPolicy/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': getCsrfToken()
-                        },
-                        body: JSON.stringify({
-                            name: trimmedName,
-                            settings_path: '/etc/logstash/',
-                            logs_path: '/var/log/logstash',
-                            binary_path: '/usr/share/logstash/bin'
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        showToast(data.message, 'success');
-                        
-                        // Reload policies to refresh the UI and show main content
-                        // Pass the newly created policy name so it gets selected
-                        await loadPolicies(trimmedName);
-                    } else {
-                        showToast(data.error || 'Failed to create policy', 'error');
-                        this.value = currentPolicy;
-                    }
-                } catch (error) {
-                    console.error('Error creating policy:', error);
-                    showToast('Failed to create policy: ' + error.message, 'error');
-                    this.value = currentPolicy;
-                }
+                enterDraftPolicy(trimmedName);
             } else {
-                // User cancelled or entered empty name, reset to current policy
                 this.value = currentPolicy;
             }
         } else {
-            // Regular policy selection
+            discardDraftPolicyOption(this);
             currentPolicy = selectedValue;
-
-            // Update UI from policy type (refined after loadPolicyData)
+            window.currentPolicy = currentPolicy;
             applyPolicyFieldEditability();
-
-            // Fetch fresh policy data from database
+            if (isDraftPolicyOption(this.options[this.selectedIndex])) {
+                return;
+            }
             loadPolicyData(selectedValue);
         }
     });
@@ -1483,35 +1472,32 @@ document.addEventListener('DOMContentLoaded', function() {
         const systemBadge = document.getElementById('policySystemBadge');
         const simulateFields = document.getElementById('simulatePolicyFields');
 
+        const isDraft = selectedOption?.dataset.isDraft === 'true';
         if (typeBadge) {
             typeBadge.textContent = policyType;
-            typeBadge.className = 'px-2 py-0.5 rounded text-xs font-semibold border ' + (
-                policyType === 'SIMULATE' ? 'bg-purple-900/40 text-purple-200 border-purple-500/40' :
-                policyType === 'EMBEDDED' ? 'bg-cyan-900/40 text-cyan-200 border-cyan-500/40' :
-                policyType === 'MANAGED' ? 'bg-amber-900/40 text-amber-200 border-amber-500/40' :
-                policyType === 'PACKAGED' ? 'bg-blue-900/40 text-blue-200 border-blue-500/40' :
-                'bg-gray-700 text-gray-200 border-gray-600'
-            );
+            typeBadge.className = 'policy-role-badge ' + policyRoleClassName(policyType);
         }
+        syncPolicyTypeControl(isDraft);
+        syncPolicyTypeInfo(policyType);
         if (systemBadge) {
-            systemBadge.classList.toggle('hidden', !isSystem);
+            systemBadge.classList.toggle('hidden', !isSystem || isDraft);
         }
         if (simulateFields) {
             // VERSION source fields apply to Simulate and Managed multi-instance roles
             simulateFields.classList.toggle('hidden', !isSimulate && !isManaged && !isEmbedded);
         }
 
-        // Delete: system policies cannot be deleted
+        // Delete: system / draft / embedded cannot be deleted
         if (deletePolicyBtn) {
-            if (isSystem || isEmbedded) {
+            if (isSystem || isEmbedded || isDraft) {
                 deletePolicyBtn.classList.add('hidden');
             } else {
                 deletePolicyBtn.classList.remove('hidden');
             }
         }
-        // Clone: not for Embedded
+        // Clone: not for Embedded or unsaved draft
         if (clonePolicyBtn) {
-            clonePolicyBtn.classList.toggle('hidden', isEmbedded);
+            clonePolicyBtn.classList.toggle('hidden', isEmbedded || isDraft);
         }
 
         // Path / binary fields
@@ -1546,7 +1532,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         if (deployBtn) {
-            if (isEmbedded) {
+            if (isEmbedded || isDraft) {
                 deployBtn.disabled = true;
                 deployBtn.classList.add('opacity-50', 'cursor-not-allowed');
             } else {
@@ -1566,16 +1552,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 banner.textContent = 'Embedded Policy is system-managed (Docker sim). Ports and paths are fixed; clone is not available.';
             } else if (isSystemSimulate) {
                 banner.classList.remove('hidden');
-                banner.textContent = 'System Simulate Policy: path scheme is fixed (simulate-N at enroll). You can edit JVM, logstash.yml, binary source/version, and binary path. Clone to create a versioned user policy.';
+                banner.textContent = 'System Simulate Policy: path scheme is fixed (simulate-N at enroll). You can edit JVM, logstash.yml, binary source/version, and binary path.';
             } else if (isSystemManaged) {
                 banner.classList.remove('hidden');
-                banner.textContent = 'System Managed Policy: path scheme is fixed (managed-N at enroll). Agent-owned isolated Logstash trees. Clone for versioned user policies.';
+                banner.textContent = 'System Managed Policy: path scheme is fixed (managed-N at enroll). Agent-owned isolated Logstash trees.';
             } else if (isSystem && (policyType === 'PACKAGED' || policyType === 'DEFAULT')) {
                 banner.classList.remove('hidden');
                 banner.textContent = 'System Packaged Policy: distro Logstash (system unit). Paths and config are editable; the policy itself cannot be deleted. Clone creates a Managed multi-instance policy.';
+            } else if (isDraft) {
+                banner.classList.remove('hidden');
+                banner.textContent = 'Unsaved policy. Choose Packaged, Managed, or Simulate next to Policy Config, then Save.';
             } else if (!isSystem && isManaged) {
                 banner.classList.remove('hidden');
-                banner.textContent = 'Managed policy: each enrollment gets managed-N paths and ports. Clone from Packaged to create additional Managed policies.';
+                banner.textContent = 'Managed policy: each enrollment gets managed-N paths and ports.';
             } else {
                 banner.classList.add('hidden');
                 banner.textContent = '';
@@ -1598,8 +1587,186 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function setPolicyFieldValue(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+    }
+
+    function seedDraftFileContents(ptype) {
+        const cache = window._policiesCache || [];
+        const matchType = (p) => {
+            let t = (p.policy_type || 'PACKAGED').toUpperCase();
+            if (t === 'DEFAULT') t = 'PACKAGED';
+            return t === ptype;
+        };
+        const match = cache.find((p) => matchType(p) && p.is_system) || cache.find(matchType);
+        if (!window.policyFileContents) {
+            window.policyFileContents = {
+                'logstash.yml': '',
+                'jvm.options': '',
+                'log4j2.properties': '',
+            };
+        }
+        window.policyFileContents['logstash.yml'] = match?.logstash_yml || '';
+        window.policyFileContents['jvm.options'] = match?.jvm_options || '';
+        window.policyFileContents['log4j2.properties'] = match?.log4j2_properties || '';
+        const yml = window.policyFileContents['logstash.yml'];
+        if (yml && window.policyCurrentFile === 'logstash.yml') {
+            const formMode = document.getElementById('formModeBtn')?.classList.contains('active');
+            if (formMode) {
+                parseYmlToForm(yml);
+            }
+        }
+        if (window.policyEditor && window.policyCurrentFile) {
+            window.policyEditor.setValue(window.policyFileContents[window.policyCurrentFile] || '');
+            window.policyEditor.refresh();
+        }
+        storeOriginalContent();
+    }
+
+    function applyDraftPolicyType(ptype) {
+        ptype = (ptype || 'PACKAGED').toUpperCase();
+        if (ptype === 'DEFAULT') ptype = 'PACKAGED';
+        const select = document.getElementById('policySelect');
+        const opt = select?.querySelector('option[data-is-draft="true"]');
+        if (!opt) return;
+        opt.dataset.policyType = ptype;
+        opt.textContent = `${opt.dataset.policyName} (${ptype})`;
+
+        if (ptype === 'MANAGED') {
+            setPolicyFieldValue('settingsPath', '/opt/logstash-agent/managed-{instance_id}/settings');
+            setPolicyFieldValue('logsPath', '/opt/logstash-agent/managed-{instance_id}/logs');
+            setPolicyFieldValue('dataPath', '/opt/logstash-agent/managed-{instance_id}/data');
+            setPolicyFieldValue('keystoreEnvFile', '/opt/logstash-agent/managed-{instance_id}/env');
+            setPolicyFieldValue('binaryPath', '/usr/share/logstash/bin');
+            setPolicyFieldValue('agentApiPort', '9600');
+            setPolicyFieldValue('logstashApiPort', '9700');
+            setPolicyFieldValue('logstashDownloadDir', '/opt/logstash-agent/logstash-versions');
+        } else if (ptype === 'SIMULATE') {
+            setPolicyFieldValue('settingsPath', '/opt/logstash-agent/simulate-{instance_id}/settings');
+            setPolicyFieldValue('logsPath', '/opt/logstash-agent/simulate-{instance_id}/logs');
+            setPolicyFieldValue('dataPath', '/opt/logstash-agent/simulate-{instance_id}/data');
+            setPolicyFieldValue('keystoreEnvFile', '/opt/logstash-agent/simulate-{instance_id}/env');
+            setPolicyFieldValue('binaryPath', '/usr/share/logstash/bin');
+            setPolicyFieldValue('agentApiPort', '9500');
+            setPolicyFieldValue('logstashApiPort', '9560');
+            setPolicyFieldValue('logstashDownloadDir', '/opt/logstash-agent/logstash-versions');
+        } else {
+            setPolicyFieldValue('settingsPath', '/etc/logstash/');
+            setPolicyFieldValue('logsPath', '/var/log/logstash');
+            setPolicyFieldValue('dataPath', '');
+            setPolicyFieldValue('keystoreEnvFile', '/etc/default/logstash');
+            setPolicyFieldValue('binaryPath', '/usr/share/logstash/bin');
+            setPolicyFieldValue('agentApiPort', '9600');
+            setPolicyFieldValue('logstashApiPort', '9600');
+            setPolicyFieldValue('logstashDownloadDir', '/opt/logstash-agent/logstash-versions');
+        }
+        if (document.getElementById('logstashSource')) {
+            document.getElementById('logstashSource').value = 'SYSTEM';
+        }
+        seedDraftFileContents(ptype);
+        window._policyDraftUnsaved = true;
+        applyPolicyFieldEditability();
+        if (typeof window.syncPolicySwitcherLabel === 'function') {
+            window.syncPolicySwitcherLabel();
+        }
+        detectChanges();
+        updateChangeIndicators();
+    }
+
+    function discardDraftPolicyOption(select) {
+        const target = select || document.getElementById('policySelect');
+        const draft = target?.querySelector('option[data-is-draft="true"]');
+        if (!draft) return;
+        if (target.options[target.selectedIndex] === draft) return;
+        draft.remove();
+        window._policyDraftUnsaved = false;
+    }
+
+    function closePolicyTypeMenu() {
+        document.getElementById('policyTypeMenu')?.classList.add('hidden');
+        document.getElementById('policyTypeBtn')?.setAttribute('aria-expanded', 'false');
+    }
+
+    function closePolicyTypeInfo() {
+        document.getElementById('policyTypeInfoPop')?.classList.add('hidden');
+        document.getElementById('policyTypeInfoBtn')?.setAttribute('aria-expanded', 'false');
+        const hover = document.getElementById('policyTypeInfoHover');
+        if (hover && !hover.matches(':hover')) {
+            hover.classList.add('hidden');
+        }
+    }
+
+    function currentPolicyTypeFromSelect() {
+        const select = document.getElementById('policySelect');
+        const opt = select?.options[select.selectedIndex];
+        let t = (opt?.dataset.policyType || 'PACKAGED').toUpperCase();
+        if (t === 'DEFAULT') t = 'PACKAGED';
+        return t;
+    }
+
+    function syncPolicyTypeInfo(policyType) {
+        const info = POLICY_TYPE_INFO[policyType] || POLICY_TYPE_INFO.PACKAGED;
+        const hover = document.getElementById('policyTypeInfoHover');
+        const body = document.getElementById('policyTypeInfoPopBody');
+        const popBadge = document.getElementById('policyTypeInfoPopBadge');
+        const infoBtn = document.getElementById('policyTypeInfoBtn');
+        if (hover) hover.textContent = info.hover;
+        if (body) body.textContent = info.body;
+        if (popBadge) {
+            popBadge.textContent = policyType;
+            popBadge.className = 'policy-role-badge ' + policyRoleClassName(policyType);
+        }
+        if (infoBtn) infoBtn.removeAttribute('title');
+    }
+
+    function syncPolicyTypeControl(isDraft) {
+        const btn = document.getElementById('policyTypeBtn');
+        const chevronBtn = document.getElementById('policyTypeChevronBtn');
+        if (btn) {
+            btn.classList.toggle('is-draft', !!isDraft);
+        }
+        chevronBtn?.classList.toggle('hidden', !isDraft);
+        if (!isDraft) closePolicyTypeMenu();
+        syncPolicyTypeInfo(currentPolicyTypeFromSelect());
+    }
+
+    function enterDraftPolicy(name) {
+        const policySelect = document.getElementById('policySelect');
+        const addNewOption = policySelect.querySelector('option[value="add_new"]');
+        policySelect.querySelector('option[data-is-draft="true"]')?.remove();
+
+        const option = document.createElement('option');
+        option.value = DRAFT_POLICY_VALUE;
+        option.dataset.isDraft = 'true';
+        option.dataset.policyName = name;
+        option.dataset.policyType = 'PACKAGED';
+        option.dataset.isSystem = 'false';
+        option.textContent = `${name} (PACKAGED)`;
+        policySelect.insertBefore(option, addNewOption);
+        policySelect.value = DRAFT_POLICY_VALUE;
+        currentPolicy = DRAFT_POLICY_VALUE;
+        window.currentPolicy = currentPolicy;
+
+        document.getElementById('emptyState')?.classList.add('hidden');
+        document.getElementById('mainContent')?.classList.remove('hidden');
+
+        const stats = {
+            current_revision_number: 0,
+            connection_count: 0,
+            last_deployed_at: null,
+        };
+        updatePolicyStats(stats);
+        updateDeployButtonIndicator(0);
+
+        window._policyDraftUnsaved = true;
+        applyDraftPolicyType('PACKAGED');
+    }
+
     window.applyPolicyFieldEditability = applyPolicyFieldEditability;
     window.toggleVersionFieldsVisibility = toggleVersionFieldsVisibility;
+    window.applyDraftPolicyType = applyDraftPolicyType;
+    window.enterDraftPolicy = enterDraftPolicy;
 
     document.getElementById('logstashSource')?.addEventListener('change', () => {
         toggleVersionFieldsVisibility();
@@ -1630,6 +1797,61 @@ document.addEventListener('DOMContentLoaded', function() {
             policySelect.dispatchEvent(new Event('change'));
         });
     }
+
+    function togglePolicyTypeMenu(e) {
+        e.stopPropagation();
+        const opt = document.getElementById('policySelect')?.options[
+            document.getElementById('policySelect').selectedIndex
+        ];
+        if (!isDraftPolicyOption(opt)) return;
+        closePolicyTypeInfo();
+        const menu = document.getElementById('policyTypeMenu');
+        const btn = document.getElementById('policyTypeBtn');
+        const isOpen = !menu?.classList.contains('hidden');
+        menu?.classList.toggle('hidden', isOpen);
+        btn?.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    }
+    document.getElementById('policyTypeBtn')?.addEventListener('click', togglePolicyTypeMenu);
+    document.getElementById('policyTypeChevronBtn')?.addEventListener('click', togglePolicyTypeMenu);
+    document.getElementById('policyTypeMenu')?.querySelectorAll('.policy-type-option').forEach((el) => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            applyDraftPolicyType(el.dataset.type);
+            closePolicyTypeMenu();
+        });
+    });
+
+    const infoBtn = document.getElementById('policyTypeInfoBtn');
+    const infoHover = document.getElementById('policyTypeInfoHover');
+    const infoPop = document.getElementById('policyTypeInfoPop');
+    infoBtn?.addEventListener('mouseenter', () => {
+        if (infoPop && !infoPop.classList.contains('hidden')) return;
+        infoHover?.classList.remove('hidden');
+    });
+    infoBtn?.addEventListener('mouseleave', () => {
+        infoHover?.classList.add('hidden');
+    });
+    infoBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closePolicyTypeMenu();
+        infoHover?.classList.add('hidden');
+        const open = infoPop && !infoPop.classList.contains('hidden');
+        infoPop?.classList.toggle('hidden', open);
+        infoBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    });
+    document.addEventListener('click', (e) => {
+        const control = document.getElementById('policyTypeControl');
+        if (control && !control.contains(e.target)) {
+            closePolicyTypeMenu();
+            closePolicyTypeInfo();
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closePolicyTypeMenu();
+            closePolicyTypeInfo();
+        }
+    });
     
     // Initialize in Form mode by default
     // (Form mode is already active by default in HTML)
@@ -1651,6 +1873,9 @@ async function loadPolicyData(policyValue) {
             // Find the policy by matching the value
             const policySelect = document.getElementById('policySelect');
             const selectedOption = policySelect.options[policySelect.selectedIndex];
+            if (isDraftPolicyOption(selectedOption)) {
+                return;
+            }
             const policyName = selectedOption.dataset.policyName || selectedOption.textContent;
             
             const policy = data.policies.find(p => p.name === policyName);
@@ -1843,7 +2068,9 @@ async function loadPolicies(newPolicyName = null, selectPolicyId = null) {
             const addNewOption = policySelect.querySelector('option[value="add_new"]');
             const emptyState = document.getElementById('emptyState');
             const mainContent = document.getElementById('mainContent');
-            
+            window._policiesCache = data.policies;
+            window.customPolicies = [];
+
             // Clear existing policies (keep only + Add Policy)
             const options = Array.from(policySelect.options);
             options.forEach(option => {
@@ -1864,11 +2091,15 @@ async function loadPolicies(newPolicyName = null, selectPolicyId = null) {
             emptyState.classList.add('hidden');
             mainContent.classList.remove('hidden');
             
-            // Add policies from server (label includes role for clarity)
+            // Add policies from server (label includes role for clarity).
+            // Embedded is docker/auto — never shown in this dropdown.
             data.policies.forEach(policy => {
+                let ptype = (policy.policy_type || 'PACKAGED').toUpperCase();
+                if (ptype === 'EMBEDDED') {
+                    return;
+                }
                 const option = document.createElement('option');
                 option.value = policy.name.toLowerCase().replace(/\s+/g, '_');
-                let ptype = (policy.policy_type || 'PACKAGED').toUpperCase();
                 if (ptype === 'DEFAULT') ptype = 'PACKAGED';
                 option.textContent = `${policy.name} (${ptype})`;
                 option.dataset.policyName = policy.name;
@@ -1887,10 +2118,6 @@ async function loadPolicies(newPolicyName = null, selectPolicyId = null) {
                 // Insert before "+ Add Policy" option
                 policySelect.insertBefore(option, addNewOption);
                 
-                // Add to customPolicies array
-                if (!window.customPolicies) {
-                    window.customPolicies = [];
-                }
                 window.customPolicies.push(policy.name);
             });
             
@@ -1948,6 +2175,7 @@ async function savePolicyChanges() {
     const policySelect = document.getElementById('policySelect');
     const selectedOption = policySelect.options[policySelect.selectedIndex];
     const policyName = selectedOption.dataset.policyName || selectedOption.textContent;
+    const isDraft = isDraftPolicyOption(selectedOption);
     
     // Get the current editor instance and save current content to fileContents
     const settingsPath = document.getElementById('settingsPath').value;
@@ -1994,29 +2222,53 @@ async function savePolicyChanges() {
         }
     }
     
+    const payload = {
+        settings_path: settingsPath,
+        logs_path: logsPath,
+        binary_path: binaryPath,
+        data_path: dataPath,
+        keystore_env_file: keystoreEnvFile,
+        logstash_source: logstashSource,
+        logstash_version: logstashVersion,
+        logstash_download_dir: logstashDownloadDir,
+        agent_api_port: Number.isFinite(agentApiPort) ? agentApiPort : undefined,
+        logstash_api_port: Number.isFinite(logstashApiPort) ? logstashApiPort : undefined,
+        logstash_yml: window.policyFileContents ? window.policyFileContents['logstash.yml'] : '',
+        jvm_options: window.policyFileContents ? window.policyFileContents['jvm.options'] : '',
+        log4j2_properties: window.policyFileContents ? window.policyFileContents['log4j2.properties'] : ''
+    };
+
     try {
+        if (isDraft) {
+            payload.name = policyName;
+            payload.policy_type = (selectedOption.dataset.policyType || 'PACKAGED').toUpperCase();
+            const response = await fetch('/ConnectionManager/AddPolicy/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast(data.message, 'success');
+                window._policyDraftUnsaved = false;
+                await loadPolicies(policyName);
+            } else {
+                showToast(data.error || 'Failed to create policy', 'error');
+            }
+            return;
+        }
+
+        payload.policy_name = policyName;
         const response = await fetch('/ConnectionManager/UpdatePolicy/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCsrfToken()
             },
-            body: JSON.stringify({
-                policy_name: policyName,
-                settings_path: settingsPath,
-                logs_path: logsPath,
-                binary_path: binaryPath,
-                data_path: dataPath,
-                keystore_env_file: keystoreEnvFile,
-                logstash_source: logstashSource,
-                logstash_version: logstashVersion,
-                logstash_download_dir: logstashDownloadDir,
-                agent_api_port: Number.isFinite(agentApiPort) ? agentApiPort : undefined,
-                logstash_api_port: Number.isFinite(logstashApiPort) ? logstashApiPort : undefined,
-                logstash_yml: window.policyFileContents ? window.policyFileContents['logstash.yml'] : '',
-                jvm_options: window.policyFileContents ? window.policyFileContents['jvm.options'] : '',
-                log4j2_properties: window.policyFileContents ? window.policyFileContents['log4j2.properties'] : ''
-            })
+            body: JSON.stringify(payload)
         });
         
         const data = await response.json();
@@ -2029,8 +2281,8 @@ async function savePolicyChanges() {
             showToast(data.error || 'Failed to update policy', 'error');
         }
     } catch (error) {
-        console.error('Error updating policy:', error);
-        showToast('Failed to update policy: ' + error.message, 'error');
+        console.error('Error saving policy:', error);
+        showToast('Failed to save policy: ' + error.message, 'error');
     }
 }
 
@@ -3061,7 +3313,8 @@ function detectChanges() {
 
 // Update all visual indicators
 function updateChangeIndicators() {
-    const hasChanges = changedFiles.size > 0;
+    const selected = document.getElementById('policySelect')?.selectedOptions?.[0];
+    const hasChanges = changedFiles.size > 0 || isDraftPolicyOption(selected) || !!window._policyDraftUnsaved;
     const saveBtn = document.getElementById('saveBtn');
     const unsavedIndicator = document.getElementById('unsavedChangesIndicator');
     const policyConfigIndicator = document.getElementById('policyConfigChangedIndicator');

@@ -24,6 +24,27 @@ If the file does not exist, the startup script creates it from `logstashui.examp
 
 ## Configuration Sections
 
+### `paths`
+
+Where LogstashUI stores sqlite, TLS material, secrets, and logs. **Outside the application tree.**
+
+```yaml
+paths:
+  data: /var/lib/logstashui   # or relative to the git/project root, e.g. logstashui_data
+  logs: /var/log/logstashui   # optional; default is <data>/logs
+```
+
+Environment variables **win** over this file:
+
+| Variable | Purpose |
+|----------|---------|
+| `LOGSTASHUI_DATA_DIR` | Data root (db, `tls/`, `.secret_key`, `.django_secret_key`) |
+| `LOGSTASHUI_LOGS_DIR` | Log directory (default `<data>/logs`) |
+
+From a git checkout, `docker compose` bind-mounts `<project_root>/logstashui_data` → `/var/lib/logstashui`. Native default (no env) is `<project_root>/logstashui_data`.
+
+`SNMP/data/` is shipped product content and is **not** this directory.
+
 ### `no_auth`
 
 Controls authentication for the LogstashUI application.

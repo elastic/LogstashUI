@@ -235,6 +235,13 @@ __marimo__/
 # Agentic / local tooling scratch (not product docs)
 .grokignore
 /docs/superpowers/
+.hermes.md
+HERMES.md
+AGENTS.md
+CLAUDE.md
+.cursorrules
+IDEA.md
+graphify-out/
 
 # LogstashAgent (cloned from GitHub in host mode)
 /LogstashAgent/

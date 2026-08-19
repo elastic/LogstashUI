@@ -365,18 +365,32 @@
   }
 
   /* Role color coding in the policy list */
-  .policy-switcher-item.role-default {
+  .policy-switcher-item.role-default,
+  .policy-switcher-item.role-packaged {
     border-left: 3px solid #60a5fa;
   }
-  .policy-switcher-item.role-default .policy-role-badge {
+  .policy-switcher-item.role-default .policy-role-badge,
+  .policy-switcher-item.role-packaged .policy-role-badge,
+  .policy-role-badge.role-default,
+  .policy-role-badge.role-packaged {
     background: rgba(37, 99, 235, 0.25);
     color: #93c5fd;
     border: 1px solid rgba(96, 165, 250, 0.35);
   }
+  .policy-switcher-item.role-managed {
+    border-left: 3px solid #fbbf24;
+  }
+  .policy-switcher-item.role-managed .policy-role-badge,
+  .policy-role-badge.role-managed {
+    background: rgba(180, 83, 9, 0.3);
+    color: #fde68a;
+    border: 1px solid rgba(251, 191, 36, 0.55);
+  }
   .policy-switcher-item.role-simulate {
     border-left: 3px solid #c084fc;
   }
-  .policy-switcher-item.role-simulate .policy-role-badge {
+  .policy-switcher-item.role-simulate .policy-role-badge,
+  .policy-role-badge.role-simulate {
     background: rgba(147, 51, 234, 0.25);
     color: #e9d5ff;
     border: 1px solid rgba(192, 132, 252, 0.4);
@@ -384,7 +398,8 @@
   .policy-switcher-item.role-embedded {
     border-left: 3px solid #22d3ee;
   }
-  .policy-switcher-item.role-embedded .policy-role-badge {
+  .policy-switcher-item.role-embedded .policy-role-badge,
+  .policy-role-badge.role-embedded {
     background: rgba(8, 145, 178, 0.3);
     color: #a5f3fc;
     border: 1px solid rgba(34, 211, 238, 0.4);
@@ -398,6 +413,131 @@
     padding: 0.1rem 0.4rem;
     border-radius: 9999px;
     text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+
+  .policy-type-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .policy-type-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: default;
+  }
+  .policy-type-btn.is-draft {
+    cursor: pointer;
+  }
+  .policy-type-btn.is-draft:hover {
+    opacity: 0.9;
+  }
+  .policy-type-btn .policy-role-badge {
+    margin-left: 0;
+  }
+  .policy-type-info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+    border-radius: 9999px;
+    position: relative;
+  }
+  .policy-type-info-btn:hover,
+  .policy-type-info-btn[aria-expanded="true"] {
+    color: #e5e7eb;
+  }
+  .policy-type-info-btn svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+  .policy-type-info-hover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 12rem;
+    max-width: 16rem;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.7rem;
+    line-height: 1.35;
+    color: #e5e7eb;
+    background: #1a1f2e;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 0.375rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 110;
+    white-space: normal;
+    text-align: left;
+    pointer-events: none;
+  }
+  .policy-type-info-pop {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 18rem;
+    padding: 0.7rem 0.8rem;
+    background: #1a1f2e;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 120;
+  }
+  .policy-type-info-pop-body {
+    margin: 0.45rem 0 0;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: #d1d5db;
+  }
+  .policy-type-chevron-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .policy-type-chevron {
+    width: 0.75rem;
+    height: 0.75rem;
+    color: #9ca3af;
+    flex-shrink: 0;
+  }
+  .policy-type-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 10rem;
+    background: #1a1f2e;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    overflow: hidden;
+  }
+  .policy-type-option {
+    display: flex;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    cursor: pointer;
+  }
+  .policy-type-option:hover {
+    background: rgba(139, 92, 246, 0.1);
+  }
+  .policy-type-option .policy-role-badge {
+    margin-left: 0;
   }
 
   .policy-switcher-filters {
@@ -655,26 +795,48 @@
 
   <!-- Global Config Section -->
   <div class="bg-gray-800/95 rounded-lg shadow-xl p-4 mb-4">
-    <div class="flex items-center mb-2">
+    <div class="flex items-center mb-2 gap-3">
       <button id="globalConfigToggle" class="flex items-center gap-2 text-white font-medium hover:text-blue-400 transition-colors relative">
         <svg class="w-5 h-5 transform transition-transform" id="globalConfigChevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
         Policy Config
-        <span id="policyConfigChangedIndicator" class="hidden ml-2 w-2 h-2 bg-purple-500 rounded-full" style="box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);"></span>
       </button>
+      <div id="policyTypeControl" class="policy-type-control">
+        <button type="button" id="policyTypeBtn" class="policy-type-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Policy type">
+          <span id="policyTypeBadge" class="policy-role-badge role-packaged">PACKAGED</span>
+        </button>
+        <button type="button" id="policyTypeInfoBtn" class="policy-type-info-btn" aria-label="About this policy type" aria-expanded="false" aria-describedby="policyTypeInfoHover">
+          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+          </svg>
+          <span id="policyTypeInfoHover" class="policy-type-info-hover hidden" role="tooltip">Distro Logstash as a system service.</span>
+        </button>
+        <button type="button" id="policyTypeChevronBtn" class="policy-type-chevron-btn hidden" aria-label="Change policy type">
+          <svg id="policyTypeChevron" class="policy-type-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+        <span id="policySystemBadge" class="hidden px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-900/50 text-blue-300 border border-blue-500/40">System</span>
+        <div id="policyTypeMenu" class="policy-type-menu hidden" role="listbox">
+          <div class="policy-type-option" data-type="PACKAGED" role="option">
+            <span class="policy-role-badge role-packaged">PACKAGED</span>
+          </div>
+          <div class="policy-type-option" data-type="MANAGED" role="option">
+            <span class="policy-role-badge role-managed">MANAGED</span>
+          </div>
+          <div class="policy-type-option" data-type="SIMULATE" role="option">
+            <span class="policy-role-badge role-simulate">SIMULATE</span>
+          </div>
+        </div>
+        <div id="policyTypeInfoPop" class="policy-type-info-pop hidden" role="dialog" aria-label="Policy type details">
+          <span id="policyTypeInfoPopBadge" class="policy-role-badge role-packaged">PACKAGED</span>
+          <p id="policyTypeInfoPopBody" class="policy-type-info-pop-body"></p>
+        </div>
+      </div>
+      <span id="policyConfigChangedIndicator" class="hidden w-2 h-2 bg-purple-500 rounded-full" style="box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);"></span>
     </div>
     <div id="globalConfigContent" class="mt-3 space-y-3">
-      <!-- Role / type (read-only) -->
-      <div class="flex flex-wrap items-center gap-3 text-sm">
-        <div class="flex items-center gap-2">
-          <span class="text-gray-400">Role:</span>
-          <span id="policyTypeBadge" class="px-2 py-0.5 rounded text-xs font-semibold bg-gray-700 text-gray-200">DEFAULT</span>
-          <span id="policySystemBadge" class="hidden px-2 py-0.5 rounded text-xs font-semibold bg-blue-900/50 text-blue-300 border border-blue-500/40">System</span>
-        </div>
-        <p id="policyTypeHelp" class="text-xs text-gray-500">Production agents use Default policies. Simulation uses Simulate (or a clone).</p>
-      </div>
-
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1">Settings Path:</label>
@@ -2140,9 +2302,12 @@
 // Policy Switcher — visual layer over the hidden native #policySelect
 (function() {
   // Active role filters: empty set or all selected = show everything
-  let roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE', 'EMBEDDED']);
+  let roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE']);
 
   function roleClass(ptype) {
+    if (typeof policyRoleClassName === 'function') {
+      return policyRoleClassName(ptype);
+    }
     let t = (ptype || 'PACKAGED').toUpperCase();
     if (t === 'DEFAULT') t = 'PACKAGED';
     if (t === 'SIMULATE') return 'role-simulate';
@@ -2183,7 +2348,6 @@
       { key: 'PACKAGED', label: 'Packaged' },
       { key: 'MANAGED', label: 'Managed' },
       { key: 'SIMULATE', label: 'Simulate' },
-      { key: 'EMBEDDED', label: 'Embedded' },
     ].forEach(({ key, label }) => {
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -2202,7 +2366,7 @@
         }
         // If user cleared all, re-enable all (toggle UX)
         if (roleFilter.size === 0) {
-          roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE', 'EMBEDDED']);
+          roleFilter = new Set(['PACKAGED', 'MANAGED', 'SIMULATE']);
         }
         rebuildMenu();
       });
@@ -2284,6 +2448,12 @@
     const btn = document.getElementById('policySwitcherBtn');
     menu?.classList.add('hidden');
     btn?.classList.remove('open');
+  };
+
+  window.syncPolicySwitcherLabel = function() {
+    const select = document.getElementById('policySelect');
+    const sel = select?.options[select.selectedIndex];
+    updateLabel(sel);
   };
 
   // Close on outside click

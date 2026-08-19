@@ -27,9 +27,8 @@ def get_policies(request):
                 filter=Q(connections__connection_type='AGENT', connections__is_active=True)
             )
         )
-        # Connection "Add Logstash Agent" enroll flow — Embedded is docker/auto, not enrollable
-        if request.GET.get('for_enroll') in ('1', 'true', 'yes'):
-            qs = qs.exclude(policy_type=Policy.PolicyType.EMBEDDED)
+        # Embedded is docker/auto — never listed in Policies or enroll dropdowns
+        qs = qs.exclude(policy_type=Policy.PolicyType.EMBEDDED)
 
         policies = list(qs.values(
             'id', 'name', 'policy_type', 'is_system', 'cloned_from_id',
@@ -88,16 +87,56 @@ def add_policy(request):
         if Policy.objects.filter(name=name).exists():
             return JsonResponse({"success": False, "error": f"Policy '{name}' already exists"}, status=400)
 
+        from PipelineManager.agent_modes import (
+            apply_managed_path_bundle,
+            apply_simulate_path_bundle,
+            normalize_agent_opt_path,
+            parse_creatable_policy_type,
+            uses_packaged_default_paths,
+        )
+
+        policy_type, type_error = parse_creatable_policy_type(data.get('policy_type'))
+        if type_error:
+            return JsonResponse({"success": False, "error": type_error}, status=400)
+
+        def _optional_int(key, default):
+            raw = data.get(key, default)
+            if raw is None or raw == '':
+                return default
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return default
+
         # Create the policy
         policy = Policy.objects.create(
             name=name,
-            settings_path=settings_path,
-            logs_path=logs_path,
-            binary_path=binary_path,
+            policy_type=policy_type,
+            settings_path=normalize_agent_opt_path(settings_path) or settings_path,
+            logs_path=normalize_agent_opt_path(logs_path) or logs_path,
+            binary_path=normalize_agent_opt_path(binary_path) or binary_path,
+            data_path=normalize_agent_opt_path(data.get('data_path', '')),
+            keystore_env_file=normalize_agent_opt_path(
+                data.get('keystore_env_file') or '/etc/default/logstash'
+            ) or (data.get('keystore_env_file') or '/etc/default/logstash'),
+            logstash_source=data.get('logstash_source') or Policy.LogstashSource.SYSTEM,
+            logstash_version=data.get('logstash_version') or '',
+            logstash_download_dir=normalize_agent_opt_path(
+                data.get('logstash_download_dir') or '/opt/logstash-agent/logstash-versions'
+            ) or '/opt/logstash-agent/logstash-versions',
+            agent_api_port=_optional_int('agent_api_port', 9500),
+            logstash_api_port=_optional_int('logstash_api_port', 9560),
             logstash_yml=logstash_yml,
             jvm_options=jvm_options,
             log4j2_properties=log4j2_properties
         )
+
+        if policy_type == Policy.PolicyType.MANAGED and uses_packaged_default_paths(policy):
+            apply_managed_path_bundle(policy)
+            policy.save()
+        elif policy_type == Policy.PolicyType.SIMULATE and uses_packaged_default_paths(policy):
+            apply_simulate_path_bundle(policy)
+            policy.save()
 
         # Generate enrollment token for the new policy
         enrollment_token = secrets.token_urlsafe(32)
@@ -109,13 +148,17 @@ def add_policy(request):
             token=enrollment_token
         )
 
-        logger.info(f"User '{request.user.username}' created policy '{name}' with enrollment token")
+        logger.info(
+            f"User '{request.user.username}' created policy '{name}' "
+            f"({policy.policy_type}) with enrollment token"
+        )
 
         return JsonResponse({
             "success": True,
             "message": f"Policy '{name}' created successfully",
             "policy_id": policy.id,
-            "policy_name": policy.name
+            "policy_name": policy.name,
+            "policy_type": policy.policy_type,
         })
 
     except json.JSONDecodeError:
@@ -151,6 +194,17 @@ def update_policy(request):
                 {"success": False, "error": "Cannot update Embedded Policy (immutable)"},
                 status=403,
             )
+
+        from PipelineManager.agent_modes import normalize_policy_type
+
+        if 'policy_type' in data and data['policy_type'] is not None and str(data['policy_type']).strip() != '':
+            incoming = normalize_policy_type(data['policy_type'])
+            stored = normalize_policy_type(policy.policy_type)
+            if incoming != stored:
+                return JsonResponse(
+                    {"success": False, "error": "Cannot change policy type"},
+                    status=403,
+                )
 
         # System Packaged/Default: allow path/config edits (production). Name/type locked by not exposing them.
         # System Simulate/Managed: allow jvm/binary/source; block path scheme (instance formula at enroll).

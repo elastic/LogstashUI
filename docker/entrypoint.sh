@@ -8,32 +8,30 @@ set -e
 # Change to Django project directory
 cd /app/src/logstashui
 
-# Create data directory if it doesn't exist
-mkdir -p /app/data
+DATA_DIR="${LOGSTASHUI_DATA_DIR:-/var/lib/logstashui}"
+mkdir -p "$DATA_DIR" "$DATA_DIR/tls" "$DATA_DIR/logs"
 
 # Diagnostic: Check data directory permissions and contents
 echo "=========================================="
 echo "Database Directory Diagnostics"
 echo "=========================================="
+echo "LOGSTASHUI_DATA_DIR=$DATA_DIR"
 echo "Directory permissions:"
-ls -lah /app/ | grep data
-echo ""
-echo "Directory contents:"
-ls -lah /app/data/
+ls -lah "$DATA_DIR" | head
 echo ""
 echo "Current user: $(whoami)"
 echo "User ID: $(id)"
 echo ""
 
 # Check if database file exists and is readable
-if [ -f /app/data/db.sqlite3 ]; then
-    echo "Database file exists ($(stat -c%s /app/data/db.sqlite3) bytes)"
-    if [ -r /app/data/db.sqlite3 ]; then
+if [ -f "$DATA_DIR/db.sqlite3" ]; then
+    echo "Database file exists ($(stat -c%s "$DATA_DIR/db.sqlite3") bytes)"
+    if [ -r "$DATA_DIR/db.sqlite3" ]; then
         echo "Database file is readable"
     else
         echo "WARNING: Database file exists but is NOT readable!"
     fi
-    if [ -w /app/data/db.sqlite3 ]; then
+    if [ -w "$DATA_DIR/db.sqlite3" ]; then
         echo "Database file is writable"
     else
         echo "WARNING: Database file exists but is NOT writable!"
@@ -42,8 +40,8 @@ if [ -f /app/data/db.sqlite3 ]; then
     # Check if migrations table exists
     echo ""
     echo "Checking for existing migrations table..."
-    if sqlite3 /app/data/db.sqlite3 "SELECT COUNT(*) FROM django_migrations;" 2>/dev/null; then
-        MIGRATION_COUNT=$(sqlite3 /app/data/db.sqlite3 "SELECT COUNT(*) FROM django_migrations;" 2>/dev/null)
+    if sqlite3 "$DATA_DIR/db.sqlite3" "SELECT COUNT(*) FROM django_migrations;" 2>/dev/null; then
+        MIGRATION_COUNT=$(sqlite3 "$DATA_DIR/db.sqlite3" "SELECT COUNT(*) FROM django_migrations;" 2>/dev/null)
         echo "Found django_migrations table with $MIGRATION_COUNT entries"
     else
         echo "No django_migrations table found (fresh database)"
@@ -68,8 +66,9 @@ echo "Syncing SNMP official data..."
 python manage.py sync_snmp_official_data --cleanup || echo "Warning: SNMP sync encountered an error but continuing startup"
 echo ""
 
-# Product CA + UI server cert (data/tls/; SANs from host hostname/IPs via env + callback URL)
+# Product CA + UI server cert (DATA_DIR/tls/; SANs from host hostname/IPs via env + callback URL)
 echo "Ensuring product CA and UI server certificate..."
+echo "  LOGSTASHUI_DATA_DIR=${LOGSTASHUI_DATA_DIR:-}"
 echo "  LOGSTASHUI_HOST_HOSTNAME=${LOGSTASHUI_HOST_HOSTNAME:-}"
 echo "  LOGSTASHUI_HOST_IPS=${LOGSTASHUI_HOST_IPS:-}"
 echo "  LOGSTASHUI_TLS_SANS=${LOGSTASHUI_TLS_SANS:-}"
@@ -86,7 +85,9 @@ from Common.product_ca import (
     get_ui_tls_status,
     ui_server_cert_path,
 )
+from django.conf import settings
 
+print(f"DATA_DIR={settings.DATA_DIR}")
 dns, ips = collect_desired_ui_sans()
 print(f"Desired SANs dns={dns} ips={[str(i) for i in ips]}")
 cert, key = ensure_default_ui_server_cert()
@@ -115,20 +116,28 @@ echo "  - localhost (if accessing locally)"
 echo "  - Your server's IP address"
 echo "  - Your server's hostname/domain"
 echo ""
-echo "UI serves HTTPS on :8443 using data/tls/ui-server.* (product CA by default)."
+echo "UI serves HTTPS on :8443 using \$LOGSTASHUI_DATA_DIR/tls/ui-server.* (product CA by default)."
 echo "Agents pin the product CA from /.well-known/logstashui/ca.crt — not a shared volume."
 echo ""
 echo "=========================================="
 echo ""
 
 # Assemble fullchain for gunicorn --certfile (leaf + optional intermediates)
-TLS_DIR="/app/src/logstashui/data/tls"
+TLS_DIR="$DATA_DIR/tls"
 if [ -f "$TLS_DIR/ui-server.crt" ]; then
   if [ -f "$TLS_DIR/ui-server.chain.crt" ]; then
     cat "$TLS_DIR/ui-server.crt" "$TLS_DIR/ui-server.chain.crt" > "$TLS_DIR/gunicorn-fullchain.pem"
   else
     cp "$TLS_DIR/ui-server.crt" "$TLS_DIR/gunicorn-fullchain.pem"
   fi
+fi
+
+if [ "$1" = "gunicorn" ]; then
+  shift
+  exec gunicorn \
+    --certfile "$TLS_DIR/gunicorn-fullchain.pem" \
+    --keyfile "$TLS_DIR/ui-server.key" \
+    "$@"
 fi
 
 exec "$@"
