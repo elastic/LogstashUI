@@ -369,13 +369,17 @@ def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
         return False
 
 
-def ensure_embedded_connection() -> Connection | None:
+def ensure_embedded_connection(*, probe: bool = True) -> Connection | None:
     """
     Ensure a pseudo Connection exists for the system Embedded Policy so the
     editor picker can list docker/local embedded agent without enrollment.
 
     Host/port derived from settings.LOGSTASH_AGENT_URL when possible.
-    Probes the agent and updates last_check_in so Connection Manager shows online.
+
+    The live HTTP probe updates last_check_in for online status. Page-render
+    paths that only need the sticky row must pass probe=False; Connection
+    Manager / SSE / inspect (and a background thread on editor load) keep
+    the default so the DB entry still gets refreshed.
     """
     try:
         from datetime import datetime, timezone
@@ -396,7 +400,7 @@ def ensure_embedded_connection() -> Connection | None:
         parsed = urlparse(agent_url)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or EMBEDDED_AGENT_API_PORT
-        online = probe_embedded_agent_online()
+        online = probe_embedded_agent_online() if probe else False
         now = datetime.now(timezone.utc)
 
         conn = Connection.objects.filter(
@@ -455,6 +459,16 @@ def ensure_embedded_connection() -> Connection | None:
         return None
 
 
+def refresh_embedded_connection_async():
+    """Probe embedded agent and update last_check_in without blocking the caller."""
+    try:
+        import threading
+
+        threading.Thread(target=ensure_embedded_connection, daemon=True).start()
+    except Exception:
+        pass
+
+
 def is_embedded_connection(conn) -> bool:
     """True for the docker/local pseudo agent (dict or model)."""
     if conn is None:
@@ -475,9 +489,13 @@ def is_embedded_connection(conn) -> bool:
 def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool = True):
     """
     Return list of dicts describing simulate-capable connections for the editor.
+
+    When ensure_embedded is True, the sticky embedded Connection row is created
+    if missing. The live agent probe is skipped here so editor listing does not
+    block on an unreachable embedded agent.
     """
     if ensure_embedded:
-        ensure_embedded_connection()
+        ensure_embedded_connection(probe=False)
 
     qs = Connection.objects.filter(
         connection_type=Connection.ConnectionType.AGENT,

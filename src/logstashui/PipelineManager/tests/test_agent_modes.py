@@ -426,6 +426,36 @@ def test_ensure_embedded_connection(system_policies, settings, monkeypatch):
     assert conn2.last_check_in is not None
 
 
+def test_ensure_embedded_connection_skip_probe(system_policies, settings, monkeypatch):
+    """Listing/page render must not wait on the live HTTP probe."""
+    settings.LOGSTASH_AGENT_URL = 'https://logstashagent:9500'
+    probed = {'called': False}
+
+    def _probe(timeout=2.0):
+        probed['called'] = True
+        return True
+
+    monkeypatch.setattr('PipelineManager.agent_modes.probe_embedded_agent_online', _probe)
+    conn = ensure_embedded_connection(probe=False)
+    assert conn is not None
+    assert conn.agent_id == 'embedded-local'
+    assert probed['called'] is False
+    assert conn.last_check_in is None
+
+
+def test_list_simulation_targets_does_not_probe(system_policies, monkeypatch):
+    """Editor listing must not block on an unreachable embedded agent."""
+    probed = {'called': False}
+
+    def _probe(timeout=2.0):
+        probed['called'] = True
+        return True
+
+    monkeypatch.setattr('PipelineManager.agent_modes.probe_embedded_agent_online', _probe)
+    list_simulation_targets(ensure_embedded=True)
+    assert probed['called'] is False
+
+
 def test_build_policy_config_simulate_paths_use_logstash_agent_root(system_policies):
     from PipelineManager.agent_modes import build_policy_config, SIMULATE_ROOT
     from PipelineManager.models import Policy
