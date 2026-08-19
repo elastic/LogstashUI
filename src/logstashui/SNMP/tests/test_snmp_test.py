@@ -8,12 +8,21 @@ RunSNMPTest / RunSNMPWalk view endpoints (SNMP network I/O mocked).
 """
 
 import json
+import socket
 import pytest
 from unittest.mock import patch, MagicMock
 from django.test import Client
 from django.contrib.auth.models import User
 
-from SNMP.snmp_test import _format_snmp_value, _create_auth_data, _load_profile_data, _merge_profile_oids
+from SNMP.snmp_test import (
+    _create_auth_data,
+    _device_poll_address,
+    _device_response_data,
+    _format_snmp_value,
+    _load_profile_data,
+    _merge_profile_oids,
+    _resolve_device_poll_address,
+)
 from SNMP.models import Device, DeviceTemplate, Profile, Credential, Network
 from PipelineManager.models import Connection
 from Management.models import UserProfile
@@ -276,6 +285,69 @@ class TestMergeProfileOids:
 
 
 # ===========================================================================
+# Device poll address
+# ===========================================================================
+
+class TestDevicePollAddress:
+
+    def test_hostname_is_preferred_over_ip_address(self):
+        device = MagicMock(
+            id=1,
+            name='switch-1',
+            hostname='switch-1.example.com',
+            ip_address='10.0.0.1',
+            port=161,
+        )
+
+        assert _device_poll_address(device) == 'switch-1.example.com'
+        assert _device_response_data(device)['address'] == 'switch-1.example.com'
+
+    def test_ip_address_is_used_when_hostname_is_empty(self):
+        device = MagicMock(hostname=None, ip_address='10.0.0.1')
+
+        assert _device_poll_address(device) == '10.0.0.1'
+
+    @patch('SNMP.snmp_test.socket.getaddrinfo')
+    def test_resolvable_hostname_is_used(self, mock_getaddrinfo):
+        mock_getaddrinfo.return_value = [(socket.AF_INET, socket.SOCK_DGRAM, 17, '', ('10.0.0.1', 161))]
+        device = MagicMock(
+            hostname='switch-1.example.com',
+            ip_address='10.0.0.1',
+            port=161,
+        )
+
+        address, warning = _resolve_device_poll_address(device)
+
+        assert address == 'switch-1.example.com'
+        assert warning is None
+
+    @patch('SNMP.snmp_test.socket.getaddrinfo', side_effect=socket.gaierror)
+    def test_unresolvable_hostname_falls_back_to_ip(self, mock_getaddrinfo):
+        device = MagicMock(
+            hostname='switch-1.example.com',
+            ip_address='10.0.0.1',
+            port=161,
+        )
+
+        address, warning = _resolve_device_poll_address(device)
+
+        assert address == '10.0.0.1'
+        assert 'cannot resolve' in warning
+        assert 'Falling back' in warning
+
+    @patch('SNMP.snmp_test.socket.getaddrinfo', side_effect=socket.gaierror)
+    def test_unresolvable_hostname_without_ip_raises_clear_error(self, mock_getaddrinfo):
+        device = MagicMock(
+            hostname='switch-1.example.com',
+            ip_address=None,
+            port=161,
+        )
+
+        with pytest.raises(ValueError, match='No fallback IP address'):
+            _resolve_device_poll_address(device)
+
+
+# ===========================================================================
 # _create_auth_data
 # ===========================================================================
 
@@ -466,7 +538,98 @@ class TestRunSNMPTestView:
         assert data['success'] is True
         assert 'results' in data
         assert data['device']['id'] == test_device.pk
+        assert data['device']['address'] == test_device.ip_address
         assert data['template']['name'] == test_device.device_template.name
+
+    @patch('SNMP.snmp_test._perform_snmp_get')
+    @patch('SNMP.snmp_test._perform_snmp_walk')
+    @patch('SNMP.snmp_test._perform_snmp_table')
+    def test_hostname_device_response_uses_hostname_as_poll_address(
+        self, mock_table, mock_walk, mock_get,
+        authenticated_client, test_device
+    ):
+        test_device.hostname = 'switch-1.example.com'
+        test_device.save(update_fields=['hostname'])
+        mock_get.return_value = {'sysDescr': 'Network switch'}
+        mock_walk.return_value = {}
+        mock_table.return_value = {}
+
+        with patch(
+            'SNMP.snmp_test._resolve_device_poll_address',
+            return_value=('switch-1.example.com', None),
+        ):
+            response = authenticated_client.post(
+                '/SNMP/RunSNMPTest/',
+                data=json.dumps({'device_id': test_device.pk}),
+                content_type='application/json'
+            )
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['device']['address'] == 'switch-1.example.com'
+        assert data['device']['hostname'] == 'switch-1.example.com'
+        assert data['device']['ip_address'] == '10.0.0.1'
+
+    @patch('SNMP.snmp_test._perform_snmp_get')
+    @patch('SNMP.snmp_test._perform_snmp_walk')
+    @patch('SNMP.snmp_test._perform_snmp_table')
+    def test_unresolvable_hostname_falls_back_to_ip_and_returns_warning(
+        self, mock_table, mock_walk, mock_get,
+        authenticated_client, test_device
+    ):
+        test_device.hostname = 'switch-1.example.com'
+        test_device.save(update_fields=['hostname'])
+        mock_get.return_value = {'sysDescr': 'Network switch'}
+        mock_walk.return_value = {}
+        mock_table.return_value = {}
+
+        warning = (
+            "The machine running LogstashUI cannot resolve hostname "
+            "'switch-1.example.com'. Falling back to IP address 10.0.0.1."
+        )
+        with patch(
+            'SNMP.snmp_test._resolve_device_poll_address',
+            return_value=('10.0.0.1', warning),
+        ):
+            response = authenticated_client.post(
+                '/SNMP/RunSNMPTest/',
+                data=json.dumps({'device_id': test_device.pk}),
+                content_type='application/json'
+            )
+
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['device']['address'] == '10.0.0.1'
+        assert data['address_warning'] == warning
+        mock_get.assert_called_once_with(
+            test_device, test_device.credential,
+            test_device.device_template.profiles.first().profile_data['get'],
+            '10.0.0.1'
+        )
+
+    @patch('SNMP.snmp_test.socket.getaddrinfo', side_effect=socket.gaierror)
+    def test_unresolvable_hostname_only_device_returns_clear_error(
+        self, mock_getaddrinfo, authenticated_client, test_device
+    ):
+        test_device.hostname = 'switch-1.example.com'
+        test_device.ip_address = None
+        test_device.save(update_fields=['hostname', 'ip_address'])
+
+        response = authenticated_client.post(
+            '/SNMP/RunSNMPTest/',
+            data=json.dumps({'device_id': test_device.pk}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.content)
+        assert data['success'] is False
+        assert data['error'] == (
+            "The machine running LogstashUI cannot resolve hostname "
+            "'switch-1.example.com'. No fallback IP address is configured "
+            "for this device."
+        )
 
     @patch('SNMP.snmp_test._perform_snmp_get')
     @patch('SNMP.snmp_test._perform_snmp_walk')
