@@ -1956,8 +1956,8 @@ def GetDeployDiff(request):
                 policy = network.agent_connection.policy if network.agent_connection else None
                 if not policy:
                     _add_block(
-                        f"Network '{network.name}' is in Agent mode but is not assigned to an "
-                        f"agent policy. Please assign an agent before deploying."
+                        f"Network '{network.name}' is in Agent mode but does not have an agent "
+                        f"assigned to it. Please go to Networks and assign an agent to this policy."
                     )
                 elif not policy.keystore_password:
                     _add_block(
