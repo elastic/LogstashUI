@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
         deviceSelect.addEventListener('change', function() {
             const opt = this.options[this.selectedIndex];
             if (this.value) {
-                const ip = opt.dataset.ip;
+                const address = opt.dataset.address;
                 const port = opt.dataset.port;
                 const hasCredential = opt.dataset.hasCredential === 'true';
                 const templateId = opt.dataset.templateId;
@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     deviceInfoText.classList.add('text-yellow-400');
                     deviceInfoText.classList.remove('text-gray-400');
                 } else {
-                    deviceInfoText.textContent = `${ip}:${port}`;
+                    deviceInfoText.textContent = `${address}:${port}`;
                     deviceInfoText.classList.remove('text-yellow-400');
                     deviceInfoText.classList.add('text-gray-400');
                 }
@@ -274,7 +274,7 @@ document.addEventListener('DOMContentLoaded', function() {
         errorState.classList.add('hidden');
 
         document.getElementById('snmpTestSummaryDevice').textContent =
-            `${data.device.name} (${data.device.ip_address}:${data.device.port})`;
+            `${data.device.name} (${data.device.address}:${data.device.port})`;
         document.getElementById('snmpTestSummaryTemplate').textContent = data.template.display_name || data.template.name;
 
         const executionTime = data.execution_time ? `${data.execution_time}s` : 'N/A';
@@ -283,7 +283,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.error_summary) {
                 statusHtml += `<br><span class="text-xs text-red-400 mt-1 block">${escapeHtml(data.error_summary)}</span>`;
             }
+            if (data.address_warning) {
+                statusHtml += `<br><span class="text-xs text-yellow-400 mt-1 block">${escapeHtml(data.address_warning)}</span>`;
+            }
             document.getElementById('snmpTestSummaryStatus').innerHTML = statusHtml;
+        } else if (data.address_warning) {
+            document.getElementById('snmpTestSummaryStatus').innerHTML =
+                `<span class="text-yellow-400">⚠ Success with IP Fallback</span><br>` +
+                `<span class="text-xs text-gray-400">Completed in ${executionTime}</span><br>` +
+                `<span class="text-xs text-yellow-400 mt-1 block">${escapeHtml(data.address_warning)}</span>`;
         } else {
             document.getElementById('snmpTestSummaryStatus').innerHTML =
                 `<span class="text-green-400">✓ Success</span><br><span class="text-xs text-gray-400">Completed in ${executionTime}</span>`;
