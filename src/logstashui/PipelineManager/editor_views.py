@@ -55,8 +55,13 @@ def _parse_queue_max_bytes(queue_max_bytes_str):
 
 def PipelineEditor(request):
     from django.conf import settings
-    from PipelineManager.agent_modes import list_simulation_targets
+    from PipelineManager.agent_modes import (
+        list_simulation_targets,
+        refresh_embedded_connection_async,
+    )
 
+    # Keep last_check_in fresh without blocking HTML on the live HTTP probe.
+    refresh_embedded_connection_async()
     sim_targets = list_simulation_targets(ensure_embedded=True)
     selected_sim = request.session.get("sim_connection_id")
     if selected_sim is not None and not any(
