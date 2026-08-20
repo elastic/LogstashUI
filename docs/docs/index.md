@@ -59,7 +59,7 @@ New to LogstashUI? Start here:
 
 #### Configuration
 - **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)**
-  - **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)** - Main configuration file reference
+  - **[Environment](/docs/docs/logstashui/configuration/environment.md)** - Environment variable configuration
   - **[Simulation Modes](/docs/docs/logstashui/configuration/simulation.md)** - Embedded vs Host mode
   - **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - High-performance simulation setup
 

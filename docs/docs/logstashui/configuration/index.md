@@ -1,21 +1,18 @@
 # Configuration
 
-LogstashUI is configured through the `logstashui.yml` file in the project root. This section covers the main configuration options and setup guides.
+LogstashUI is configured with **environment variables** (shell, systemd `/etc/default/logstashui`, Docker, or a Kubernetes ConfigMap). There is no required YAML file.
 
 ---
 
-## Configuration Files
+## Configuration
 
-### **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)**
+### **[Environment variables](/docs/docs/logstashui/configuration/environment.md)**
 
-The main configuration file for LogstashUI. Controls authentication, simulation helpers, and legacy local agent settings.
+Data dir, TLS, bind address, `LOGSTASHUI_NO_AUTH`, agent URL, systemd, and Kubernetes.
 
-**Key settings:**
-- Authentication (`no_auth`)
-- Simulation helpers (`simulation.mode` for compose/legacy URL defaults)
-- Optional local `logstash_agent` block (secondary to enrolled simulate agents)
+**📖 [View environment configuration →](/docs/docs/logstashui/configuration/environment.md)**
 
-**📖 [View full logstashui.yml documentation →](/docs/docs/logstashui/configuration/logstashui.yml.md)**
+`logstashui.yml` is [removed](/docs/docs/logstashui/configuration/logstashui.yml.md).
 
 ---
 

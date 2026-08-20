@@ -66,3 +66,14 @@ def test_pytest_default_is_legacy_not_checkout_bind():
     resolved = resolve_data_dir(migrate_legacy=False)
     assert resolved != PROJECT_ROOT / "logstashui_data"
     assert resolved.name == "data"
+
+
+def test_native_default_is_cwd_logstashui_data(tmp_path, monkeypatch):
+    """Installed / CLI default is $(pwd)/logstashui_data, not site-packages."""
+    from LogstashUI import paths as paths_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("LOGSTASHUI_DATA_DIR", raising=False)
+    monkeypatch.setattr(paths_mod, "_is_pytest", lambda: False)
+    resolved = paths_mod.resolve_data_dir(migrate_legacy=False)
+    assert resolved == (tmp_path / "logstashui_data").resolve()

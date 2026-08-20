@@ -74,19 +74,19 @@ Managed multi-instance production trees use **9550+N / 9700+N** and `logstash-ag
 1. Stop any local agent that was managing production `/etc/logstash` for UI sim only.
 2. Enroll a **Simulate** policy agent as above.
 3. Leave production agents on **Packaged** policies (legacy **Default** maps to Packaged; no re-enroll required for those).
-4. Prefer the editor Sim target list over `simulation.mode: host` in `logstashui.yml`.
-## Legacy start script (`simulation.mode: host`)
+4. Prefer the editor Sim target list over `bin/start_logstashui.sh --legacy-host-agent`.
+## Legacy start script (`--legacy-host-agent`)
 
-`bin/start_logstashui.sh` / `.bat` still accept **`simulation.mode: host`** for a **local** agent:
+`bin/start_logstashui.sh` / `.bat` still accept **`--legacy-host-agent`** for a **local** agent:
 
 - Starts native FastAPI agent on port **9501** (supervisor `Popen` of package Logstash)
 - `bin/sync_config.py` writes `mode: embedded` + `simulation_mode: host` (not enrolled `mode: simulate`)
-- Compose runs UI + nginx only; nginx proxies to `host.docker.internal:9501`
+- Compose runs UI only; set `LOGSTASH_AGENT_URL=https://host.docker.internal:9501`
 
 This path is **legacy**. It is not the same as `lsagent-simulate@N` / isolated `/opt/logstash-agent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
 
 ## Related
 
 - **[Simulation overview](/docs/docs/logstashui/configuration/simulation.md)**
-- **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)**
+- **[Environment configuration](/docs/docs/logstashui/configuration/environment.md)**
 - **[LogstashAgent modes](/docs/docs/logstashagent/configuration/logstashagent.yml.md)**

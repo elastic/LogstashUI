@@ -42,6 +42,7 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 
 - Runtime state (sqlite, TLS, secrets, logs) is configurable via `LOGSTASHUI_DATA_DIR` / `paths.data` and lives outside `src/`. Git-checkout Compose bind-mounts `<project_root>/logstashui_data` → `/var/lib/logstashui`.
 - Linux Docker bind-mount: entrypoint starts as root, chowns **only** the data dir if needed, drops to `PUID`/`PGID` (`start_logstashui.sh` uses the operator uid) or `appuser` **10001**. Does not rotate the product CA. K8s: PVC + `runAsUser`/`fsGroup` 10001.
+- Installable sdist/wheel with `logstashui` console script (`serve` / `manage` / `systemd`). Config is environment-only; `logstashui.yml` is not read. systemd unit generator writes `/etc/default/logstashui` (manual).
 - Operator guide: [Agent roles, ports, coexistence, and VERSION](docs/docs/logstashagent/general/roles.md).
 - E2E smoke: `bin/smoke_agent_modes.sh` (HTTPS, Django enroll, sibling agent offline tests).
 - Migrations through **0027** (Packaged/Managed default ports). Compose entrypoint migrates on start.
@@ -388,10 +389,3 @@ Fixed minor visual line bugs in the graph
 ### Fixed
 - Missing grok-patterns file, preventing autocomplete in grok debugger from working
 - Fixed user CRUD tests to work with new changes
-
-
-
-
-
-
-

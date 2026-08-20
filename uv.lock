@@ -561,7 +561,7 @@ wheels = [
 [[package]]
 name = "logstashui"
 version = "0.5.1"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
     { name = "django" },

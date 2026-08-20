@@ -7,7 +7,8 @@ The ways to deploy LogstashUI, from the standard Docker install to running from 
 
 - [Option 1: Standard Docker Deployment (Recommended)](#option-1-standard-docker-deployment-recommended)
 - [Option 2: Host-backed Simulation](#option-2-host-backed-simulation)
-- [Option 3: Source Development Setup](#option-3-source-development-setup)
+- [Option 3: pip / uv + systemd](#option-3-pip--uv--systemd)
+- [Option 4: Source Development Setup](#option-4-source-development-setup)
 
 ---
 
@@ -19,7 +20,7 @@ Use this when you want the simplest, self-contained deployment.
 
 **Who is this for?** Users who can access GitHub and container registries from the deployment network and can run Docker Compose on the LogstashUI host.
 
-The startup scripts handle everything — they read `simulation.mode` from `src/logstashui/logstashui.yml` (creating it from the example config on first run) and start the right services:
+The startup scripts start Docker Compose (`--profile embedded` by default):
 
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
@@ -30,9 +31,9 @@ start_logstashui.bat         # Windows
 
 Then browse to `https://<your_server_ip_or_hostname>:8443`.
 
-This is **embedded mode** — the default `simulation.mode` — which brings up two containers: **LogstashUI** (gunicorn HTTPS on **8443**) and **LogstashAgent** (uvicorn HTTPS on **9500**). There is **no nginx**. The mode is controlled by `simulation.mode` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md); leave it as `embedded` for this option.
+This is **embedded mode** — two containers: **LogstashUI** (gunicorn HTTPS on **8443**) and **LogstashAgent** (uvicorn HTTPS on **9500**). There is **no nginx**. Configuration is [environment variables](/docs/docs/logstashui/configuration/environment.md).
 
-**Data directory:** Runtime state (sqlite, TLS, secrets, logs) lives **outside** `src/`. From a git checkout, Docker Compose bind-mounts `<project_root>/logstashui_data` to `/var/lib/logstashui` and sets `LOGSTASHUI_DATA_DIR`. Override with `LOGSTASHUI_DATA_DIR` / `LOGSTASHUI_LOGS_DIR` or `paths.data` / `paths.logs` in `logstashui.yml`. Do not store this under `src/logstashui/data`.
+**Data directory:** Runtime state (sqlite, TLS, secrets, logs) lives **outside** `src/`. From a git checkout, Docker Compose bind-mounts `<project_root>/logstashui_data` to `/var/lib/logstashui` and sets `LOGSTASHUI_DATA_DIR`. Native CLI default (no env) is `$(pwd)/logstashui_data`. Do not store this under `src/logstashui/data`.
 
 On **Linux Docker**, that bind-mount keeps host file ownership. The image entrypoint starts as root, chowns **only** the data directory if it is not writable, then drops to `PUID`/`PGID` (from `start_logstashui.sh`: your uid/gid) or image user **appuser (10001)**. Gunicorn never stays root. Docker Desktop (macOS/Windows) usually maps UIDs already; the same path is a no-op chown. If the directory is still unwritable, startup exits before migrate so sqlite/TLS are not created as the wrong user.
 
@@ -56,11 +57,26 @@ For frequent or heavy simulation, enroll one or more **Simulate** policy agents 
 
 **Preferred:** [Simulate agents setup](/docs/docs/logstashui/configuration/host_mode.md)
 
-**Legacy alternative:** Set `simulation.mode: host` in [`logstashui.yml`](/docs/docs/logstashui/configuration/logstashui.yml.md) and run the same startup script as Option 1. That path starts a **native FastAPI agent on port 9501** (supervisor, not enrolled `mode: simulate`) and only the UI/nginx containers. Prefer enrolled Simulate agents for multi-instance or production-quality sim.
+**Legacy alternative:** `./start_logstashui.sh --legacy-host-agent` starts a **native FastAPI agent on port 9501** (supervisor, not enrolled `mode: simulate`) and only the UI container. Prefer enrolled Simulate agents for multi-instance or production-quality sim.
 
 ---
 
-## Option 3: Source Development Setup
+## Option 3: pip / uv + systemd
+
+```bash
+pip install logstashui-0.5.1-py3-none-any.whl   # or: uv pip install …
+logstashui                                       # HTTPS :8443, data in $(pwd)/logstashui_data
+sudo logstashui systemd                          # writes /etc/default/logstashui + unit; does not enable
+sudo systemctl enable --now logstashui
+```
+
+Set `LOGSTASHUI_DATA_DIR=/var/lib/logstashui` in `/etc/default/logstashui` (the generator does this). See [environment configuration](/docs/docs/logstashui/configuration/environment.md).
+
+Kubernetes: same image as Option 1, env/ConfigMap only, PVC at `/var/lib/logstashui`. No YAML mount.
+
+---
+
+## Option 4: Source Development Setup
 
 Use this when you want to run LogstashUI directly from source for development or contribution work.
 

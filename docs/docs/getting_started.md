@@ -22,7 +22,7 @@ If you choose to run LogstashUI with fewer resources, it will likely work fine, 
 - [Docker](https://www.docker.com/get-started/) (for LogstashUI itself)
 - [Python 3.12+](https://www.python.org/downloads/) / LogstashAgent package on the agent host
 - [Logstash 8.x/9.x](https://www.elastic.co/docs/reference/logstash/installing-logstash) (SYSTEM) **or** agent **VERSION** download
-- Prefer a **Simulate** or **Managed** policy enrollment over legacy `simulation.mode: host`
+- Prefer a **Simulate** or **Managed** policy enrollment over `start_logstashui.sh --legacy-host-agent`
 - Role/ports reference: [Agent roles](/docs/docs/logstashagent/general/roles.md)
 
 ### For Local Development
@@ -37,7 +37,7 @@ If you choose to run LogstashUI with fewer resources, it will likely work fine, 
 
 ## Quick Start
 > [!TIP]
-> For heavy simulation, prefer [enrolled simulate agents](/docs/docs/logstashui/configuration/host_mode.md). See also [agent roles / coexistence](/docs/docs/logstashagent/general/roles.md). `simulation.mode: host` in the start scripts is a **legacy** local path.
+> For heavy simulation, prefer [enrolled simulate agents](/docs/docs/logstashui/configuration/host_mode.md). See also [agent roles / coexistence](/docs/docs/logstashagent/general/roles.md). `start_logstashui.sh --legacy-host-agent` is a **legacy** local path.
 
 ### Download LogstashUI
 ```bash

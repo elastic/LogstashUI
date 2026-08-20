@@ -81,7 +81,7 @@ If you have internet access and can use Docker and GitHub, the standard install 
 
 ## Quick Start - Embedded Mode
 > [!TIP]
-> For heavy simulation, prefer [enrolled simulate agents](docs/docs/logstashui/configuration/host_mode.md) (isolated `simulate-N` instances). `simulation.mode: host` in start scripts is a **legacy** local path.
+> For heavy simulation, prefer [enrolled simulate agents](docs/docs/logstashui/configuration/host_mode.md) (isolated `simulate-N` instances). `start_logstashui.sh --legacy-host-agent` is a **legacy** local path.
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git
