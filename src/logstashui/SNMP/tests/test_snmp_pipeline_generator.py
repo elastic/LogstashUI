@@ -7,6 +7,7 @@ Tests for SNMP.snmp_pipeline_generator — pure utility functions that require
 no database or network access.
 """
 
+import base64
 import pytest
 from unittest.mock import MagicMock
 
@@ -18,6 +19,7 @@ from SNMP.snmp_pipeline_generator import (
     _auth_pass_key_name,
     _priv_pass_key_name,
     _es_api_key_name,
+    es_plaintext_api_key,
     _es_user_key_name,
     _es_password_key_name,
     _ref,
@@ -428,6 +430,19 @@ class TestEsConnectionKeystoreEntries:
         assert entries['snmp_es_2_user'] == 'elastic'
         assert entries['snmp_es_2_password'] == 'secret'
 
+    def test_keystore_entry_is_decoded_not_the_stored_blob(self):
+        """
+        The Agent path provisions the keystore itself, so the value it writes is
+        what Logstash ultimately resolves. Storing the base64 blob here 401s just
+        as surely as embedding it inline.
+        """
+        conn = self._conn(3, api_key='encrypted_key', username=None, password=None)
+        conn.get_api_key.return_value = base64.b64encode(
+            b'AbCdEf123:xyz-secret-value'
+        ).decode()
+        entries = es_connection_keystore_entries(conn)
+        assert entries['snmp_es_3_api_key'] == 'AbCdEf123:xyz-secret-value'
+
     def test_no_credentials_returns_empty(self):
         conn = self._conn(3, api_key=None, username='', password='')
         entries = es_connection_keystore_entries(conn)
@@ -632,3 +647,44 @@ class TestGenerateSnmpErrorCleanupFilter:
         result = _generate_snmp_error_cleanup_filter()
         code = result['config']['code']
         assert 'error' in code.lower()
+
+
+# ===========================================================================
+# es_plaintext_api_key
+# ===========================================================================
+
+class TestEsPlaintextApiKey:
+    """
+    Logstash's elasticsearch output requires a plain "id:secret" API key. The
+    Elastic API issues, and LogstashUI stores, base64("id:secret"). Handed the
+    encoded blob the plugin returns 401 on every bulk request, so the pipeline
+    deploys cleanly and indexes nothing.
+
+    This regressed once already: the decode was applied in snmp_crud.py, then
+    dropped when _generate_output moved into this module. These tests exist so a
+    refactor cannot silently lose it again.
+    """
+
+    def _conn(self, raw):
+        c = MagicMock()
+        c.id = 1
+        c.get_api_key.return_value = raw
+        return c
+
+    def test_decodes_base64_to_id_colon_secret(self):
+        encoded = base64.b64encode(b'AbCdEf123:xyz-secret-value').decode()
+        assert es_plaintext_api_key(self._conn(encoded)) == 'AbCdEf123:xyz-secret-value'
+
+    def test_already_plain_key_is_passed_through(self):
+        assert es_plaintext_api_key(self._conn('AbCdEf123:xyz')) == 'AbCdEf123:xyz'
+
+    def test_base64_without_a_colon_is_passed_through(self):
+        """Decodes cleanly but is not an id:secret pair — not ours to rewrite."""
+        encoded = base64.b64encode(b'no-colon-here').decode()
+        assert es_plaintext_api_key(self._conn(encoded)) == encoded
+
+    def test_non_base64_is_passed_through(self):
+        assert es_plaintext_api_key(self._conn('not!valid!base64')) == 'not!valid!base64'
+
+    def test_none_becomes_empty_string(self):
+        assert es_plaintext_api_key(self._conn(None)) == ''

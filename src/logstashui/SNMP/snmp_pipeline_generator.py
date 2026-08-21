@@ -5,6 +5,7 @@
 from django.conf import settings
 import os
 import re
+import base64
 import ipaddress
 import logging
 import json
@@ -74,6 +75,31 @@ def _es_api_key_name(connection):
     return f"snmp_es_{connection.id}_api_key"
 
 
+def es_plaintext_api_key(connection):
+    """
+    Return an ES connection's API key in the plain "id:secret" form Logstash needs.
+
+    The Elastic API issues — and LogstashUI stores — the key base64-encoded as
+    base64("id:secret"). The Logstash `elasticsearch` plugin requires the decoded
+    form: handed the encoded blob it returns HTTP 401 on every bulk request, so a
+    pipeline deploys cleanly and then indexes zero documents.
+
+    Both consumers must normalize: the inline `api_key` setting AND the keystore
+    entry the Agent path provisions (a reference resolves to whatever was stored).
+    Decoding lives here, once, so a future refactor cannot drop it at one site and
+    keep it at the other — which is exactly how it regressed before.
+
+    Falls back to the raw value when it is not base64, or decodes to something
+    without a colon (i.e. already plain, or a format we do not recognise).
+    """
+    raw = connection.get_api_key() or ""
+    try:
+        decoded = base64.b64decode(raw).decode("utf-8")
+    except Exception:
+        return raw
+    return decoded if ":" in decoded else raw
+
+
 def _es_user_key_name(connection):
     """Keystore key name holding an ES connection username."""
     return f"snmp_es_{connection.id}_user"
@@ -132,7 +158,7 @@ def es_connection_keystore_entries(connection):
         return entries
 
     if connection.api_key:
-        api_key = connection.get_api_key()
+        api_key = es_plaintext_api_key(connection)
         if api_key:
             entries[_es_api_key_name(connection)] = api_key
     elif connection.username and connection.password:
@@ -1024,7 +1050,7 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
             config["password"] = _ref(_es_password_key_name(connection))
     else:
         if connection.api_key:
-            config["api_key"] = connection.get_api_key()
+            config["api_key"] = es_plaintext_api_key(connection)
         elif connection.username and connection.password:
             config["user"] = connection.username
             config["password"] = connection.get_password()
