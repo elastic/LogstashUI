@@ -712,6 +712,54 @@ class TestDeployConfiguration:
             data = json.loads(response.content)
             assert data['success'] is True
             assert 'networks' in data
+            assert any(c['id'] == test_network.connection.id for c in data['connections'])
+
+    def test_get_deploy_diff_includes_es_connection_for_agent_only_networks(
+        self, authenticated_client, test_network, test_device, test_connection
+    ):
+        """Agent-only setups still need the SNMP index template on their ES connection."""
+        from PipelineManager.models import Policy, Connection as AgentConnection
+
+        policy = Policy.objects.create(
+            name='Simulated SNMP Policy',
+            settings_path='/etc/logstash/',
+            logs_path='/var/log/logstash',
+            binary_path='/usr/share/logstash/bin',
+            logstash_yml='http.host: "0.0.0.0"',
+            jvm_options='-Xms1g',
+            log4j2_properties='logger.logstash.name = logstash',
+            keystore_password='test_password',
+        )
+        agent = AgentConnection.objects.create(
+            name='SimulatedSNMP Agent',
+            connection_type='AGENT',
+            host='agent.example.com',
+            agent_id='sim-snmp-001',
+            is_active=True,
+            policy=policy,
+        )
+        test_network.deployment_mode = 'AGENT'
+        test_network.agent_connection = agent
+        test_network.save(update_fields=['deployment_mode', 'agent_connection'])
+
+        with patch('SNMP.snmp_crud.get_elastic_connection') as mock_es_conn:
+            mock_es = MagicMock()
+            mock_es.logstash.get_pipeline.return_value = {}
+            mock_es_conn.return_value = mock_es
+
+            response = authenticated_client.get('/SNMP/GetDeployDiff/')
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['connections'] == [
+            {'id': test_connection.id, 'name': test_connection.name}
+        ]
+
+        # GetDeployDiff caches a 60s deploy plan; don't leak an Agent-mode plan
+        # into later DeployConfiguration tests in this class.
+        from django.core.cache import cache
+        cache.delete('snmp_deployment_plan')
 
     def test_deploy_configuration_requires_admin(self, readonly_client):
         """Test that deploying configuration requires admin role"""
@@ -768,6 +816,44 @@ class TestDeviceStatusAndVisualization:
         data = json.loads(response.content)
         assert data['success'] is True
         assert 'statuses' in data
+        assert data['statuses'][str(test_device.id)]['is_online'] is True
+
+        search_kwargs = mock_es.search.call_args.kwargs
+        assert search_kwargs['index'] == 'metrics-snmp*'
+        assert search_kwargs['aggregations']['online_devices']['terms']['field'] == 'host.polled_address'
+
+    @patch('SNMP.snmp_crud.get_elastic_connection')
+    def test_get_devices_status_hostname_only_device(
+        self, mock_es_conn, authenticated_client, test_network, test_credential_v2c
+    ):
+        """Hostname-only devices are matched on host.polled_address, not IP."""
+        device = Device.objects.create(
+            name='Linux',
+            hostname='linux_host.lab',
+            ip_address=None,
+            port=1161,
+            credential=test_credential_v2c,
+            network=test_network,
+        )
+        mock_es = MagicMock()
+        mock_es.search.return_value = {
+            'aggregations': {
+                'online_devices': {
+                    'buckets': [
+                        {'key': 'linux_host.lab', 'doc_count': 4}
+                    ]
+                }
+            }
+        }
+        mock_es_conn.return_value = mock_es
+
+        response = authenticated_client.get(f'/SNMP/GetDevicesStatus/?device_ids={device.id}')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['statuses'][str(device.id)]['is_online'] is True
+
+        terms_filter = mock_es.search.call_args.kwargs['query']['bool']['filter'][1]
+        assert terms_filter == {'terms': {'host.polled_address': ['linux_host.lab']}}
 
     def test_get_devices_status_invalid_ids(self, authenticated_client):
         """Test getting device status with invalid IDs"""
