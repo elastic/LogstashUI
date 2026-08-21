@@ -24,14 +24,11 @@ services:
     environment:
       - DEBUG=False
       - LOGSTASHUI_DATA_DIR=/var/lib/logstashui
-<<<<<<< HEAD
+      - LOGSTASHUI_DOCS_DIR=/app/docs
       # Linux bind-mount: start_logstashui.sh sets these to the host uid/gid so
       # ./logstashui_data stays owned by the operator. Empty → image appuser (10001).
       - PUID=${PUID:-}
       - PGID=${PGID:-}
-=======
-      - LOGSTASHUI_DOCS_DIR=/app/docs
->>>>>>> 67fe80c (Packaging works now!)
       # SECRET_KEY: Optional - will auto-generate and persist in DATA_DIR/.django_secret_key if not set
       # - SECRET_KEY=${SECRET_KEY}
       # ALLOWED_HOSTS: Set to your domain(s) in production (comma-separated)

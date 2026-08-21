@@ -60,6 +60,11 @@ exclude = [
 [tool.hatch.build.targets.sdist.force-include]
 "src/logstashui/theme/static/css/dist/styles.css" = "src/logstashui/theme/static/css/dist/styles.css"
 
+[tool.hatch.build.targets.wheel]
+exclude = [
+  "**/node_modules/**",
+]
+
 [tool.hatch.build.targets.wheel.force-include]
 "src/logstashui/LogstashUI" = "LogstashUI"
 "src/logstashui/PipelineManager" = "PipelineManager"
@@ -73,7 +78,7 @@ exclude = [
 "src/logstashui/theme" = "theme"
 "src/logstashui/Common" = "Common"
 "docs/docs" = "Documentation/content/docs"
-"docs/images" = "Documentation/static"
+"docs/images" = "Documentation/content/images"
 "CHANGELOG.md" = "Documentation/content/CHANGELOG.md"
 
 [dependency-groups]

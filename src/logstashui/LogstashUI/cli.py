@@ -288,6 +288,17 @@ def _manage(argv: list[str]) -> None:
     execute_from_command_line(["logstashui", *argv])
 
 
+def _best_effort_call(name: str, **kwargs) -> None:
+    """Run a Django command without sys.exit on CommandError (unlike _manage)."""
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    try:
+        call_command(name, **kwargs)
+    except (CommandError, Exception) as exc:
+        print(f"Warning: {name} failed: {exc}", file=sys.stderr)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
     tls_env = os.environ.get("LOGSTASHUI_TLS", "true")
@@ -295,14 +306,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     if not args.skip_migrate:
         _manage(["migrate", "--noinput"])
-        try:
-            _manage(["sync_snmp_official_data", "--cleanup"])
-        except Exception as exc:  # pragma: no cover - best effort
-            print(f"Warning: SNMP sync failed: {exc}", file=sys.stderr)
-        try:
-            _manage(["collectstatic", "--noinput"])
-        except Exception as exc:  # pragma: no cover
-            print(f"Warning: collectstatic failed: {exc}", file=sys.stderr)
+        _best_effort_call("sync_snmp_official_data", cleanup=True)
+        _best_effort_call("collectstatic", interactive=False)
 
     gunicorn_cmd = [
         "gunicorn",

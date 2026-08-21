@@ -77,3 +77,15 @@ def test_native_default_is_cwd_logstashui_data(tmp_path, monkeypatch):
     monkeypatch.setattr(paths_mod, "_is_pytest", lambda: False)
     resolved = paths_mod.resolve_data_dir(migrate_legacy=False)
     assert resolved == (tmp_path / "logstashui_data").resolve()
+
+
+def test_packaged_docs_dir_expects_content_images(tmp_path, monkeypatch):
+    """Wheel install: docs root is Documentation/content (images live under that)."""
+    from LogstashUI import paths as paths_mod
+    from LogstashUI.paths import resolve_docs_dir
+
+    monkeypatch.delenv("LOGSTASHUI_DOCS_DIR", raising=False)
+    monkeypatch.setattr(paths_mod, "PROJECT_ROOT", tmp_path / "not-a-checkout")
+    resolved = resolve_docs_dir()
+    assert resolved == paths_mod.BASE_DIR / "Documentation" / "content"
+    assert resolved / "images" == paths_mod.BASE_DIR / "Documentation" / "content" / "images"

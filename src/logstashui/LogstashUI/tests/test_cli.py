@@ -2,7 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from LogstashUI.cli import build_parser, install_systemd
+from argparse import Namespace
+
+from django.core.management.base import CommandError
+
+from LogstashUI.cli import build_parser, cmd_serve, install_systemd
 
 
 def test_parser_defaults_to_serve():
@@ -51,3 +55,33 @@ def test_systemd_dry_run_writes_unit_and_default(tmp_path):
     assert "LOGSTASHUI_NO_AUTH=false" in env_text
     assert result["unit"] == unit
     assert result["default"] == envf
+
+
+def test_serve_snmp_commanderror_does_not_abort(monkeypatch):
+    """execute_from_command_line sys.exits on CommandError; call_command must not."""
+    from LogstashUI import cli
+
+    monkeypatch.setattr(cli, "_manage", lambda argv: None)
+    monkeypatch.setenv("LOGSTASHUI_TLS", "false")
+
+    def fake_call(name, *args, **kwargs):
+        if name == "sync_snmp_official_data":
+            raise CommandError("sync failed")
+        return None
+
+    monkeypatch.setattr("django.core.management.call_command", fake_call)
+
+    exec_called = {}
+
+    def fake_execvp(file, args):
+        exec_called["file"] = file
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvp", fake_execvp)
+
+    ns = Namespace(skip_migrate=False, no_tls=True, bind="127.0.0.1:8443", workers=1)
+    try:
+        cmd_serve(ns)
+    except SystemExit as exc:
+        assert exc.code == 0
+    assert exec_called.get("file") == "gunicorn"
