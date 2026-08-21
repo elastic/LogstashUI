@@ -10,7 +10,8 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 - Clone **Packaged → Managed** auto-applies isolated `managed-N` path schemes. Simulate policies stay cloneable with SYSTEM vs VERSION Logstash source.
 - Enroll allocates instance **N** with role-specific ports and units:
   - **Packaged:** `logstash-agent` + distro `logstash` (enable-only at install)
-  - **Managed N:** `logstash-agent@N` / `logstash-managed@N`, paths under `/opt/logstash-agent/managed-N/`, ports **9600+N** / **9700+N**
+  - **Packaged:** agent FastAPI **9550**, distro Logstash API **9600** (not both 9600)
+  - **Managed N:** `logstash-agent@N` / `logstash-managed@N`, paths under `/opt/logstash-agent/managed-N/`, ports **9550+N** / **9700+N**
   - **Simulate N:** `lsagent-simulate@N` / `ls-simulate@N`, paths under `/opt/logstash-agent/simulate-N/`, ports **9500+N** / **9560+N**
 - Pipeline editor **Sim target** picker (sticky selection); embedded Docker agent appears without enroll.
 - Pre-simulation keystore clone with compare-and-skip; keystore password clear over check-in.
@@ -40,9 +41,10 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 ### Operations and docs
 
 - Runtime state (sqlite, TLS, secrets, logs) is configurable via `LOGSTASHUI_DATA_DIR` / `paths.data` and lives outside `src/`. Git-checkout Compose bind-mounts `<project_root>/logstashui_data` → `/var/lib/logstashui`.
+- Linux Docker bind-mount: entrypoint starts as root, chowns **only** the data dir if needed, drops to `PUID`/`PGID` (`start_logstashui.sh` uses the operator uid) or `appuser` **10001**. Does not rotate the product CA. K8s: PVC + `runAsUser`/`fsGroup` 10001.
 - Operator guide: [Agent roles, ports, coexistence, and VERSION](docs/docs/logstashagent/general/roles.md).
 - E2E smoke: `bin/smoke_agent_modes.sh` (HTTPS, Django enroll, sibling agent offline tests).
-- Migrations through **0025** (Packaged/Managed seeds). Compose entrypoint migrates on start.
+- Migrations through **0027** (Packaged/Managed default ports). Compose entrypoint migrates on start.
 
 ### Upgrade notes
 

@@ -204,6 +204,27 @@ if not exist "logstashui_data\db.sqlite3" (
         xcopy /E /I /Y /Q "src\logstashui\data\*" "logstashui_data\" >nul
     )
 )
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect logstashui_logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume logstashui_logstashui_data → logstashui_data\
+        docker run --rm -v logstashui_logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume logstashui_data → logstashui_data\
+        docker run --rm -v logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect LogstashUI_logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume LogstashUI_logstashui_data → logstashui_data\
+        docker run --rm -v LogstashUI_logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
 echo Host data directory: %CD%\logstashui_data
 echo.
 

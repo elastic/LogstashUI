@@ -201,6 +201,8 @@ class TestAddPolicy:
         assert policy.settings_path == '/etc/logstash/'
         assert policy.logs_path == '/var/log/logstash'
         assert policy.binary_path == '/usr/share/logstash/bin'
+        assert policy.agent_api_port == 9550
+        assert policy.logstash_api_port == 9600
         assert len(policy.logstash_yml) > 0  # Should have default config
         assert len(policy.jvm_options) > 0
         assert len(policy.log4j2_properties) > 0
@@ -271,6 +273,8 @@ class TestAddPolicy:
         policy = Policy.objects.get(name='Explicit Packaged')
         assert policy.policy_type == Policy.PolicyType.PACKAGED
         assert policy.settings_path == '/etc/logstash/'
+        assert policy.agent_api_port == 9550
+        assert policy.logstash_api_port == 9600
 
     def test_add_policy_managed_seeds_templates(self, authenticated_client):
         response = authenticated_client.post(
@@ -291,7 +295,7 @@ class TestAddPolicy:
         assert policy.logs_path == '/opt/logstash-agent/managed-{instance_id}/logs'
         assert policy.data_path == '/opt/logstash-agent/managed-{instance_id}/data'
         assert policy.keystore_env_file == '/opt/logstash-agent/managed-{instance_id}/env'
-        assert policy.agent_api_port == 9600
+        assert policy.agent_api_port == 9550
         assert policy.logstash_api_port == 9700
 
     def test_add_policy_simulate_seeds_templates(self, authenticated_client):

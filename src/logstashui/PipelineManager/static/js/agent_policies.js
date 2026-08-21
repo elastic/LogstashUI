@@ -10,11 +10,11 @@ const DRAFT_POLICY_VALUE = '__draft__';
 const POLICY_TYPE_INFO = {
     PACKAGED: {
         hover: 'Distro Logstash as a system service.',
-        body: 'Manages the package Logstash unit (logstash + logstash-agent). Typical paths /etc/logstash. Clone creates a Managed multi-instance policy.',
+        body: 'Manages the package Logstash unit (logstash + logstash-agent). Typical paths /etc/logstash; agent API 9550, Logstash API 9600. Clone creates a Managed multi-instance policy.',
     },
     MANAGED: {
         hover: 'Isolated agent-owned Logstash instance(s).',
-        body: 'Each enrollment gets a managed-N tree under /opt/logstash-agent/managed-N/ and ports 9600+N / 9700+N. Can coexist with Packaged on the same host.',
+        body: 'Each enrollment gets a managed-N tree under /opt/logstash-agent/managed-N/ and ports 9550+N / 9700+N. Can coexist with Packaged on the same host.',
     },
     SIMULATE: {
         hover: 'Isolated simulation instance(s).',
@@ -1516,6 +1516,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Port defaults informational for system multi-instance (enroll formula wins)
         setFieldDisabled(document.getElementById('agentApiPort'), isEmbedded || isSystemPathLocked);
         setFieldDisabled(document.getElementById('logstashApiPort'), isEmbedded || isSystemPathLocked);
+        const agentHint = document.getElementById('agentApiPortHint');
+        const lsHint = document.getElementById('logstashApiPortHint');
+        if (isManaged) {
+            if (agentHint) agentHint.innerHTML = 'Enroll assigns <strong class="text-gray-400">9550+N</strong> per instance.';
+            if (lsHint) lsHint.innerHTML = 'Enroll assigns <strong class="text-gray-400">9700+N</strong> per instance.';
+        } else if (isSimulate) {
+            if (agentHint) agentHint.innerHTML = 'Enroll assigns <strong class="text-gray-400">9500+N</strong> per instance.';
+            if (lsHint) lsHint.innerHTML = 'Enroll assigns <strong class="text-gray-400">9560+N</strong> per instance.';
+        } else if (isEmbedded) {
+            if (agentHint) agentHint.innerHTML = 'Embedded agent API is fixed at <strong class="text-gray-400">9500</strong>.';
+            if (lsHint) lsHint.innerHTML = 'Embedded Logstash API is fixed at <strong class="text-gray-400">9560</strong>.';
+        } else {
+            if (agentHint) agentHint.innerHTML = 'Packaged agent API uses this value as-is (<strong class="text-gray-400">9550</strong>).';
+            if (lsHint) lsHint.innerHTML = 'Packaged Logstash API uses this value as-is (<strong class="text-gray-400">9600</strong>).';
+        }
 
         toggleVersionFieldsVisibility();
 
@@ -1639,7 +1654,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setPolicyFieldValue('dataPath', '/opt/logstash-agent/managed-{instance_id}/data');
             setPolicyFieldValue('keystoreEnvFile', '/opt/logstash-agent/managed-{instance_id}/env');
             setPolicyFieldValue('binaryPath', '/usr/share/logstash/bin');
-            setPolicyFieldValue('agentApiPort', '9600');
+            setPolicyFieldValue('agentApiPort', '9550');
             setPolicyFieldValue('logstashApiPort', '9700');
             setPolicyFieldValue('logstashDownloadDir', '/opt/logstash-agent/logstash-versions');
         } else if (ptype === 'SIMULATE') {
@@ -1657,7 +1672,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setPolicyFieldValue('dataPath', '');
             setPolicyFieldValue('keystoreEnvFile', '/etc/default/logstash');
             setPolicyFieldValue('binaryPath', '/usr/share/logstash/bin');
-            setPolicyFieldValue('agentApiPort', '9600');
+            setPolicyFieldValue('agentApiPort', '9550');
             setPolicyFieldValue('logstashApiPort', '9600');
             setPolicyFieldValue('logstashDownloadDir', '/opt/logstash-agent/logstash-versions');
         }

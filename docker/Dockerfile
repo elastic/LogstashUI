@@ -40,17 +40,18 @@ WORKDIR /app/src/logstashui
 RUN python manage.py tailwind build
 RUN python manage.py collectstatic --noinput --clear
 
-# Create app user with home directory and set permissions
-RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
+# Pinned uid so K8s runAsUser/fsGroup is stable. Entrypoint starts as root,
+# chowns only LOGSTASHUI_DATA_DIR when needed, then drops to this user (or PUID).
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -m -d /home/appuser appuser
 RUN mkdir -p /var/lib/logstashui && \
     chown -R appuser:appuser /app /home/appuser /var/lib/logstashui && \
     chmod -R 755 /app
 
-# Copy entrypoint script
+# Copy entrypoint script (must be root so it can chown the bind-mount)
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && chown appuser:appuser /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-USER appuser
 EXPOSE 8443
 ENTRYPOINT ["/entrypoint.sh"]
 # Cert paths are injected by entrypoint from LOGSTASHUI_DATA_DIR (JSON CMD cannot expand env).

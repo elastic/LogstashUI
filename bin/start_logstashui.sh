@@ -409,6 +409,13 @@ ensure_host_data_dir() {
 }
 ensure_host_data_dir
 
+# Linux Docker bind-mounts keep host UIDs; pass ours so the container can write
+# ./logstashui_data without chowning it to the image's appuser (10001).
+export PUID="${PUID:-$(id -u)}"
+export PGID="${PGID:-$(id -g)}"
+echo "Bind-mount owner: PUID=$PUID PGID=$PGID"
+echo ""
+
 # Parse the simulation mode from config file (under simulation.mode)
 MODE=$(grep -m 1 "^\s*mode:" "$CONFIG_FILE" | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
 

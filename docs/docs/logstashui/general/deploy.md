@@ -34,6 +34,10 @@ This is **embedded mode** — the default `simulation.mode` — which brings up 
 
 **Data directory:** Runtime state (sqlite, TLS, secrets, logs) lives **outside** `src/`. From a git checkout, Docker Compose bind-mounts `<project_root>/logstashui_data` to `/var/lib/logstashui` and sets `LOGSTASHUI_DATA_DIR`. Override with `LOGSTASHUI_DATA_DIR` / `LOGSTASHUI_LOGS_DIR` or `paths.data` / `paths.logs` in `logstashui.yml`. Do not store this under `src/logstashui/data`.
 
+On **Linux Docker**, that bind-mount keeps host file ownership. The image entrypoint starts as root, chowns **only** the data directory if it is not writable, then drops to `PUID`/`PGID` (from `start_logstashui.sh`: your uid/gid) or image user **appuser (10001)**. Gunicorn never stays root. Docker Desktop (macOS/Windows) usually maps UIDs already; the same path is a no-op chown. If the directory is still unwritable, startup exits before migrate so sqlite/TLS are not created as the wrong user.
+
+**Kubernetes:** use a PVC at `/var/lib/logstashui`, `runAsUser: 10001`, `runAsNonRoot: true`, and `fsGroup: 10001`. The entrypoint skips chown when it is not root.
+
 **HTTPS / product CA:** On first start, LogstashUI writes a product CA and a UI server certificate under `$LOGSTASHUI_DATA_DIR/tls/` (`ui-server.crt` / `ui-server.key`). Gunicorn presents that cert on port **8443** (ports under 1000 would need root). The product leaf SANs include `localhost`, `logstashui`, **all non-loopback host IPs**, and **PTR reverse-DNS FQDNs** for those IPs when available (injected by `start_logstashui.sh` as `LOGSTASHUI_HOST_*` / `LOGSTASHUI_TLS_SANS`, because the container cannot see the host LAN addresses by itself). Bare short hostnames (common on macOS) are replaced by reverse-lookup FQDNs when PTR records exist. Changing the Agent callback URL or those env SANs **re-issues** the product leaf on next startup (or Settings save); restart the UI container so gunicorn reloads the file. Agents:
 
 1. Bootstrap-fetch `https://…:8443/.well-known/logstashui/ca.crt` with **verify=False only for that GET**, then pin the CA (TOFU or enrollment-token fingerprint).

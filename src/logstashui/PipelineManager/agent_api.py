@@ -375,10 +375,10 @@ def enroll(request):
             ptype = normalize_policy_type(policy.policy_type)
             if ptype == Policy.PolicyType.SIMULATE:
                 instance_id = next_simulate_instance_id()
-                agent_api_port, logstash_api_port = simulate_ports(instance_id)
+                agent_api_port, logstash_api_port = simulate_ports(instance_id, policy)
             elif ptype == Policy.PolicyType.MANAGED:
                 instance_id = next_managed_instance_id()
-                agent_api_port, logstash_api_port = managed_ports(instance_id)
+                agent_api_port, logstash_api_port = managed_ports(instance_id, policy)
 
             # host = IP (preferred in container) or FQDN for UI→agent callbacks;
             # host_short for display labels only.
@@ -733,9 +733,9 @@ def get_config_changes(request):
             if not ls_port:
                 ptype = normalize_policy_type(policy.policy_type)
                 if ptype == Policy.PolicyType.MANAGED:
-                    _, ls_port = managed_ports(int(iid))
+                    _, ls_port = managed_ports(int(iid), policy)
                 else:
-                    _, ls_port = simulate_ports(int(iid))
+                    _, ls_port = simulate_ports(int(iid), policy)
             desired_logstash_yml = materialize_simulate_logstash_yml(
                 policy.logstash_yml or "",
                 int(ls_port),

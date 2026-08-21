@@ -88,6 +88,12 @@ def add_policy(request):
             return JsonResponse({"success": False, "error": f"Policy '{name}' already exists"}, status=400)
 
         from PipelineManager.agent_modes import (
+            MANAGED_AGENT_API_BASE,
+            MANAGED_LOGSTASH_API_BASE,
+            PACKAGED_AGENT_API_PORT,
+            PACKAGED_LOGSTASH_API_PORT,
+            SIMULATE_AGENT_API_BASE,
+            SIMULATE_LOGSTASH_API_BASE,
             apply_managed_path_bundle,
             apply_simulate_path_bundle,
             normalize_agent_opt_path,
@@ -108,6 +114,22 @@ def add_policy(request):
             except (TypeError, ValueError):
                 return default
 
+        if policy_type == Policy.PolicyType.MANAGED:
+            agent_port_default, ls_port_default = (
+                MANAGED_AGENT_API_BASE,
+                MANAGED_LOGSTASH_API_BASE,
+            )
+        elif policy_type == Policy.PolicyType.SIMULATE:
+            agent_port_default, ls_port_default = (
+                SIMULATE_AGENT_API_BASE,
+                SIMULATE_LOGSTASH_API_BASE,
+            )
+        else:
+            agent_port_default, ls_port_default = (
+                PACKAGED_AGENT_API_PORT,
+                PACKAGED_LOGSTASH_API_PORT,
+            )
+
         # Create the policy
         policy = Policy.objects.create(
             name=name,
@@ -124,8 +146,8 @@ def add_policy(request):
             logstash_download_dir=normalize_agent_opt_path(
                 data.get('logstash_download_dir') or '/opt/logstash-agent/logstash-versions'
             ) or '/opt/logstash-agent/logstash-versions',
-            agent_api_port=_optional_int('agent_api_port', 9500),
-            logstash_api_port=_optional_int('logstash_api_port', 9560),
+            agent_api_port=_optional_int('agent_api_port', agent_port_default),
+            logstash_api_port=_optional_int('logstash_api_port', ls_port_default),
             logstash_yml=logstash_yml,
             jvm_options=jvm_options,
             log4j2_properties=log4j2_properties

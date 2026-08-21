@@ -10,12 +10,14 @@ from django.db.models import Max, Q
 
 from PipelineManager.models import Connection, Policy
 
-# Port scheme: embedded fixed; simulate-N = base + N; managed-N separate band
+# Port scheme: packaged as-is; simulate-N / managed-N = policy base + N (N >= 1)
+PACKAGED_AGENT_API_PORT = 9550
+PACKAGED_LOGSTASH_API_PORT = 9600
 EMBEDDED_AGENT_API_PORT = 9500
 EMBEDDED_LOGSTASH_API_PORT = 9560
 SIMULATE_AGENT_API_BASE = 9500
 SIMULATE_LOGSTASH_API_BASE = 9560
-MANAGED_AGENT_API_BASE = 9600
+MANAGED_AGENT_API_BASE = 9550
 MANAGED_LOGSTASH_API_BASE = 9700
 AGENT_OPT_ROOT = "/opt/logstash-agent"
 SIMULATE_ROOT = AGENT_OPT_ROOT
@@ -99,18 +101,26 @@ def managed_paths(instance_id: int) -> dict:
     }
 
 
-def simulate_ports(instance_id: int) -> tuple[int, int]:
-    return (
-        SIMULATE_AGENT_API_BASE + instance_id,
-        SIMULATE_LOGSTASH_API_BASE + instance_id,
-    )
+def simulate_ports(instance_id: int, policy: Policy | None = None) -> tuple[int, int]:
+    agent_base = SIMULATE_AGENT_API_BASE
+    ls_base = SIMULATE_LOGSTASH_API_BASE
+    if policy is not None:
+        if policy.agent_api_port:
+            agent_base = int(policy.agent_api_port)
+        if policy.logstash_api_port:
+            ls_base = int(policy.logstash_api_port)
+    return (agent_base + instance_id, ls_base + instance_id)
 
 
-def managed_ports(instance_id: int) -> tuple[int, int]:
-    return (
-        MANAGED_AGENT_API_BASE + instance_id,
-        MANAGED_LOGSTASH_API_BASE + instance_id,
-    )
+def managed_ports(instance_id: int, policy: Policy | None = None) -> tuple[int, int]:
+    agent_base = MANAGED_AGENT_API_BASE
+    ls_base = MANAGED_LOGSTASH_API_BASE
+    if policy is not None:
+        if policy.agent_api_port:
+            agent_base = int(policy.agent_api_port)
+        if policy.logstash_api_port:
+            ls_base = int(policy.logstash_api_port)
+    return (agent_base + instance_id, ls_base + instance_id)
 
 
 def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) -> None:
@@ -308,7 +318,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         if not instance_id:
             raise ValueError("instance_id required for SIMULATE policy_config")
         paths = simulate_paths(instance_id)
-        agent_port, ls_port = simulate_ports(instance_id)
+        agent_port, ls_port = simulate_ports(instance_id, policy)
         yml = materialize_simulate_logstash_yml(
             policy.logstash_yml, ls_port, instance_id=instance_id
         )
@@ -343,7 +353,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         if not instance_id:
             raise ValueError("instance_id required for MANAGED policy_config")
         paths = managed_paths(instance_id)
-        agent_port, ls_port = managed_ports(instance_id)
+        agent_port, ls_port = managed_ports(instance_id, policy)
         yml = materialize_simulate_logstash_yml(
             policy.logstash_yml, ls_port, instance_id=instance_id
         )
@@ -381,8 +391,8 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         "logs_path": policy.logs_path,
         "binary_path": policy.binary_path,
         "data_path": policy.data_path or "",
-        "agent_api_port": policy.agent_api_port,
-        "logstash_api_port": policy.logstash_api_port or 9600,
+        "agent_api_port": policy.agent_api_port or PACKAGED_AGENT_API_PORT,
+        "logstash_api_port": policy.logstash_api_port or PACKAGED_LOGSTASH_API_PORT,
         "keystore_env_file": policy.keystore_env_file or "/etc/default/logstash",
         "logstash_source": policy.logstash_source or "SYSTEM",
         "logstash_version": policy.logstash_version or "",

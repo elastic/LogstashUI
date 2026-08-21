@@ -12,6 +12,7 @@ no_auth:
 # Relative paths.data is resolved from the git/project root.
 # Docker compose bind-mounts <checkout>/logstashui_data → /var/lib/logstashui
 # and sets LOGSTASHUI_DATA_DIR=/var/lib/logstashui.
+# Linux Docker: start_logstashui.sh exports PUID/PGID so the bind-mount is writable.
 # Native default (no env): <project_root>/logstashui_data
 #paths:
 #  data: /var/lib/logstashui

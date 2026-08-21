@@ -80,11 +80,11 @@ class Policy(models.Model):
     )
     agent_api_port = models.PositiveIntegerField(
         default=9500,
-        help_text="Default LogstashAgent FastAPI port (simulate/embedded; live ports may be assigned at enroll)"
+        help_text="Policy default agent FastAPI port (Packaged 9550 as-is; Managed 9550+N; Simulate/Embedded 9500+N or 9500)"
     )
     logstash_api_port = models.PositiveIntegerField(
         default=9560,
-        help_text="Default Logstash HTTP API port (embedded 9560; simulate uses 9560+N at enroll)"
+        help_text="Policy default Logstash HTTP API port (Packaged 9600 as-is; Managed 9700+N; Simulate/Embedded 9560+N or 9560)"
     )
     keystore_env_file = models.CharField(
         max_length=512,
@@ -334,12 +334,12 @@ class Connection(models.Model):
     agent_api_port = models.PositiveIntegerField(
         blank=True,
         null=True,
-        help_text="Agent FastAPI port for this connection (embedded 9500; simulate 9500+N)"
+        help_text="Agent FastAPI port for this connection (packaged 9550; managed 9550+N; simulate 9500+N; embedded 9500)"
     )
     logstash_api_port = models.PositiveIntegerField(
         blank=True,
         null=True,
-        help_text="Logstash HTTP API port for this connection (embedded 9560; simulate 9560+N)"
+        help_text="Logstash HTTP API port for this connection (packaged 9600; managed 9700+N; simulate 9560+N; embedded 9560)"
     )
     logstash_version_resolved = models.CharField(
         max_length=64,
