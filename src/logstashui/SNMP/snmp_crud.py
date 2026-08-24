@@ -1533,6 +1533,13 @@ def GetDeployDiff(request):
         network_pipeline_map = {}
 
         for network in networks:
+            # Agent-mode pipelines live in Django, but they still write metrics
+            # to Elasticsearch. The index-template panel is keyed off this map,
+            # so Agent networks must contribute their ES connection or a
+            # fresh Agent-only install never prompts to install the template.
+            if network.connection:
+                connection_name_map[network.connection.id] = network.connection.name
+
             # Agent-mode networks are reconciled against Django Pipeline records,
             # not Elasticsearch CPM. Handled in a dedicated section below.
             if network.deployment_mode == 'AGENT':
@@ -1541,7 +1548,6 @@ def GetDeployDiff(request):
                 conn_id = network.connection.id
                 if conn_id not in pipeline_names_by_connection:
                     pipeline_names_by_connection[conn_id] = []
-                connection_name_map[conn_id] = network.connection.name
 
                 # Get unique templates for this network
                 devices = network.devices.all()
@@ -1956,8 +1962,8 @@ def GetDeployDiff(request):
                 policy = network.agent_connection.policy if network.agent_connection else None
                 if not policy:
                     _add_block(
-                        f"Network '{network.name}' is in Agent mode but is not assigned to an "
-                        f"agent policy. Please assign an agent before deploying."
+                        f"Network '{network.name}' is in Agent mode but does not have an agent "
+                        f"assigned to it. Please go to Networks and assign an agent to this policy."
                     )
                 elif not policy.keystore_password:
                     _add_block(
@@ -4239,17 +4245,23 @@ def get_devices_online_batch(devices):
         try:
             es = get_elastic_connection(connection_id)
 
-            # Each device is polled by hostname (if set) or IP - that value is
-            # stored verbatim in host.polled_address
+            # Each device is polled by hostname (if set) or IP — that value is
+            # stored verbatim in host.polled_address (a keyword TSDS dimension).
             poll_addresses = [d.hostname or d.ip_address for d in device_list if d.hostname or d.ip_address]
-            addr_to_device = {(d.hostname or d.ip_address): d for d in device_list if d.hostname or d.ip_address}
 
             if not poll_addresses:
                 for device in device_list:
                     results[device.id] = False
                 continue
 
+            # Must target metrics-snmp* only: TSDS backing indices cannot be
+            # searched together with regular indices (the default _search).
+            # Aggregate on host.polled_address itself — it is already keyword
+            # (and a TSDS dimension). The .keyword multi-field is not present
+            # unless our custom template was applied, so using it fails on a
+            # fresh cluster and the exception was previously swallowed as "offline".
             search_results = es.search(
+                index="metrics-snmp*",
                 size=0,
                 query={
                     "bool": {
@@ -4272,7 +4284,7 @@ def get_devices_online_batch(devices):
                 aggregations={
                     "online_devices": {
                         "terms": {
-                            "field": "host.polled_address.keyword",
+                            "field": "host.polled_address",
                             "size": len(poll_addresses)
                         }
                     }
@@ -4289,6 +4301,10 @@ def get_devices_online_batch(devices):
                 results[device.id] = addr in online_addresses if addr else False
 
         except Exception as e:
+            logger.warning(
+                "Device online-status query failed for connection %s: %s",
+                connection_id, e,
+            )
             # If query fails, mark all devices on this connection as offline
             for device in device_list:
                 results[device.id] = False
