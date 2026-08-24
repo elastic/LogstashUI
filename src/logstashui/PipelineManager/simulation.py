@@ -19,6 +19,7 @@ from collections import deque
 from threading import Lock
 
 import json
+import os
 import traceback
 import logging
 import requests
@@ -210,19 +211,19 @@ def SimulatePipeline(request):
 
         # Callback URL for Ruby instrumentation posts (remote simulate agents need
         # a reachable LogstashUI URL; prefer agent-reported enroll URL later).
-        simulation_mode = settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
-        if sim_target and sim_target.get('policy_type') == 'SIMULATE':
-            # Enrolled simulate agent is typically not co-located in docker; use
-            # public-ish UI base from request if available, else localhost.
-            logstash_ui_url = request.build_absolute_uri('/').rstrip('/')
-        elif simulation_mode == 'host':
-            logstash_ui_url = "https://localhost:8443"
+        policy_type = (sim_target or {}).get("policy_type") or ""
+        if policy_type == "SIMULATE":
+            logstash_ui_url = request.build_absolute_uri("/").rstrip("/")
+        elif policy_type == "EMBEDDED":
+            logstash_ui_url = os.environ.get(
+                "LOGSTASHUI_SIMULATION_CALLBACK_URL",
+                "https://logstashui:8443",
+            ).rstrip("/")
         else:
-            if settings.DEBUG:
-                logstash_ui_url = "https://host.docker.internal:8443"
-            else:
-                # Agent container reaches UI service on compose network
-                logstash_ui_url = "https://logstashui:8443"
+            logstash_ui_url = (
+                os.environ.get("LOGSTASHUI_SIMULATION_CALLBACK_URL")
+                or request.build_absolute_uri("/")
+            ).rstrip("/")
 
         logger.debug("USING THIS URL: %s", logstash_ui_url)
         # Recursive function to instrument plugins, including nested conditionals

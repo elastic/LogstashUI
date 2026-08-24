@@ -70,12 +70,9 @@ def PipelineEditor(request):
     # Always warm a slot on page open/refresh when any sim target exists so
     # "Run simulate" is document-feed only (allocate is the slow path).
     has_simulate_agent = any(t.get("policy_type") == "SIMULATE" for t in sim_targets)
-    config_sim_mode = (
-        settings.LOGSTASHUI_CONFIG.get("simulation", {}).get("mode") or "embedded"
-    )
     sim_prealloc_on_load = bool(sim_targets)
 
-    # Effective mode for modal/JS: prefer selected Sim target, not only yml.
+    # Effective mode for modal/JS: prefer selected Sim target.
     # SIMULATE enrolled agents are host-side instances (not Docker embedded).
     selected_target = next(
         (t for t in sim_targets if t.get("connection_id") == selected_sim),
@@ -88,12 +85,11 @@ def PipelineEditor(request):
         elif pt == "EMBEDDED":
             effective_sim_mode = "embedded"
         else:
-            effective_sim_mode = config_sim_mode
+            effective_sim_mode = "embedded"
     elif has_simulate_agent:
-        # Prefer host simulate when any enrolled sim exists and nothing selected yet
         effective_sim_mode = "simulate"
     else:
-        effective_sim_mode = config_sim_mode
+        effective_sim_mode = "embedded"
 
     context = {
         "plugin_data": _load_plugin_data(),

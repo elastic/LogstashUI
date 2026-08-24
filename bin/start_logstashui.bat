@@ -1,14 +1,13 @@
 @echo off
 REM LogstashUI Startup Script
-REM Detects simulation.mode from logstashui.yml / example and starts accordingly
-REM - embedded: all containers including LogstashAgent
-REM - host (LEGACY): native agent on :9501 + UI/nginx only - not enrolled simulate@N
-REM Preferred multi-instance sim: enroll a Simulate policy (see host_mode.md)
+REM Default: Docker Compose --profile embedded (UI + embedded agent).
+REM --legacy-host-agent: native agent on :9501 + UI only — not enrolled simulate@N
 REM
 REM Usage:
-REM   start_logstashui.bat          - Start with existing images
-REM   start_logstashui.bat --rebuild - Rebuild images before starting
-REM   start_logstashui.bat --update  - Pull latest code and images, then start
+REM   start_logstashui.bat
+REM   start_logstashui.bat --rebuild
+REM   start_logstashui.bat --update
+REM   start_logstashui.bat --legacy-host-agent
 
 REM IMPORTANT: Don't enable delayed expansion yet - it breaks paths with exclamation marks
 setlocal disabledelayedexpansion
@@ -93,8 +92,16 @@ echo.
 REM Parse command line arguments
 set REBUILD_FLAG=
 set UPDATE_MODE=0
+set LEGACY_HOST_AGENT=0
 if "%1"=="--rebuild" set REBUILD_FLAG=--build
 if "%1"=="--update" set UPDATE_MODE=1
+if "%1"=="--legacy-host-agent" set LEGACY_HOST_AGENT=1
+if "%2"=="--rebuild" set REBUILD_FLAG=--build
+if "%2"=="--update" set UPDATE_MODE=1
+if "%2"=="--legacy-host-agent" set LEGACY_HOST_AGENT=1
+if "%3"=="--rebuild" set REBUILD_FLAG=--build
+if "%3"=="--update" set UPDATE_MODE=1
+if "%3"=="--legacy-host-agent" set LEGACY_HOST_AGENT=1
 
 echo ========================================
 echo LogstashUI Startup
@@ -165,37 +172,6 @@ REM Debug: Show current directory
 echo Current directory: %CD%
 echo.
 
-REM Ensure logstashui.yml exists (required for Docker volume mount)
-REM If it doesn't exist, create a copy from logstashui.example.yml
-if not exist "src\logstashui\logstashui.yml" (
-    if exist "src\logstashui\logstashui.example.yml" (
-        echo Creating logstashui.yml copy from logstashui.example.yml
-        copy src\logstashui\logstashui.example.yml src\logstashui\logstashui.yml >nul
-    ) else (
-        echo ERROR: src\logstashui\logstashui.example.yml not found!
-        echo Current directory: %CD%
-        exit /b 1
-    )
-)
-
-REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if exist "src\logstashui\logstashui.yml" (
-    set CONFIG_FILE=src\logstashui\logstashui.yml
-) else if exist "src\logstashui\logstashui.example.yml" (
-    set CONFIG_FILE=src\logstashui\logstashui.example.yml
-) else (
-    echo ERROR: No config file found!
-    echo Expected logstashui.yml or logstashui.example.yml in src\logstashui\
-    echo Current directory: %CD%
-    echo.
-    echo Directory contents:
-    dir /b
-    exit /b 1
-)
-
-echo Using config file: %CONFIG_FILE%
-echo.
-
 REM Bind-mount target: <checkout>\logstashui_data → /var/lib/logstashui
 if not exist "logstashui_data" mkdir logstashui_data
 if not exist "logstashui_data\db.sqlite3" (
@@ -231,19 +207,9 @@ echo.
 REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
-REM Parse the simulation mode from config file (under simulation.mode)
-REM Search for the line with "# embedded | host" comment to identify the right mode line
 set MODE=embedded
-for /f "tokens=2 delims=: " %%a in ('findstr /C:"# embedded | host" !CONFIG_FILE!') do (
-    set MODE=%%a
-)
-
-REM Remove any trailing comments or whitespace
-set MODE=!MODE: =!
-for /f "tokens=1 delims=#" %%a in ("!MODE!") do set MODE=%%a
-set MODE=!MODE: =!
-
-echo Detected mode: !MODE!
+if "!LEGACY_HOST_AGENT!"=="1" set MODE=host
+echo Start path: !MODE!
 echo.
 
 REM Compose file set: smoke override tags local images and enables build:.
@@ -267,7 +233,7 @@ echo LEGACY HOST MODE DETECTED
 echo ========================================
 echo Starting a native LogstashAgent (FastAPI + supervisor) on Windows.
 echo.
-echo NOTE: This is a LEGACY local sim path (simulation.mode: host).
+echo NOTE: This is a LEGACY local sim path (--legacy-host-agent).
 echo It is NOT an enrolled mode:simulate / lsagent-simulate@N instance.
 echo Prefer enrolling a Simulate policy agent for multi-instance sim.
 echo.
@@ -301,7 +267,7 @@ if not exist "LogstashAgent" (
 
 echo.
 echo Preparing LogstashAgent configuration
-REM Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+REM Copy legacy agent config into LogstashAgent\src\logstashagent\logstashagent.yml
 python bin\sync_config.py
 if errorlevel 1 (
     echo WARNING: Could not update agent config automatically

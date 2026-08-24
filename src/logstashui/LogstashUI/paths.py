@@ -4,12 +4,11 @@
 
 """Resolve runtime data / logs directories (no Django import).
 
-Precedence: LOGSTASHUI_DATA_DIR / LOGSTASHUI_LOGS_DIR → logstashui.yml
-``paths.data`` / ``paths.logs`` → default.
+Precedence: LOGSTASHUI_DATA_DIR / LOGSTASHUI_LOGS_DIR → default.
 
-Default data root is ``<project_root>/logstashui_data`` (outside src/).
-Pytest keeps using ``<BASE_DIR>/data`` so test runs do not touch a checkout
-bind-mount. Docker always sets LOGSTASHUI_DATA_DIR=/var/lib/logstashui.
+Default data root is ``$(pwd)/logstashui_data``. Pytest keeps using
+``<BASE_DIR>/data`` so test runs do not touch a checkout bind-mount.
+Docker/systemd always set LOGSTASHUI_DATA_DIR=/var/lib/logstashui.
 """
 
 from __future__ import annotations
@@ -42,16 +41,7 @@ def _is_pytest() -> bool:
 def _default_data_dir() -> Path:
     if _is_pytest():
         return LEGACY_DATA_DIR
-    return PROJECT_ROOT / "logstashui_data"
-
-
-def _yaml_paths() -> dict:
-    try:
-        from .config import CONFIG
-    except Exception:
-        return {}
-    paths = (CONFIG or {}).get("paths") or {}
-    return paths if isinstance(paths, dict) else {}
+    return Path.cwd() / "logstashui_data"
 
 
 def _coerce_path(raw: Optional[str], *, relative_to: Path) -> Optional[Path]:
@@ -71,8 +61,6 @@ def resolve_data_dir(*, migrate_legacy: bool = True) -> Path:
     env = os.environ.get("LOGSTASHUI_DATA_DIR")
     chosen = _coerce_path(env, relative_to=Path.cwd())
     if chosen is None:
-        chosen = _coerce_path(_yaml_paths().get("data"), relative_to=PROJECT_ROOT)
-    if chosen is None:
         chosen = _default_data_dir()
 
     if migrate_legacy and not _is_pytest():
@@ -84,8 +72,6 @@ def resolve_data_dir(*, migrate_legacy: bool = True) -> Path:
 def resolve_logs_dir(data_dir: Optional[Path] = None) -> Path:
     env = os.environ.get("LOGSTASHUI_LOGS_DIR")
     chosen = _coerce_path(env, relative_to=Path.cwd())
-    if chosen is None:
-        chosen = _coerce_path(_yaml_paths().get("logs"), relative_to=PROJECT_ROOT)
     if chosen is None:
         root = data_dir if data_dir is not None else resolve_data_dir()
         chosen = root / "logs"
@@ -114,3 +100,28 @@ def maybe_migrate_legacy_data(dest: Path) -> None:
             shutil.copytree(item, target, dirs_exist_ok=True)
         else:
             shutil.copy2(item, target)
+
+
+def resolve_docs_dir() -> Path:
+    """Markdown docs root (contains ``docs/`` and optionally ``CHANGELOG.md``)."""
+    env = os.environ.get("LOGSTASHUI_DOCS_DIR")
+    chosen = _coerce_path(env, relative_to=Path.cwd())
+    if chosen is not None:
+        return chosen
+    checkout = PROJECT_ROOT / "docs"
+    if (checkout / "docs").is_dir():
+        return checkout
+    packaged = BASE_DIR / "Documentation" / "content"
+    return packaged
+
+
+def resolve_changelog_path() -> Path:
+    env = os.environ.get("LOGSTASHUI_CHANGELOG")
+    chosen = _coerce_path(env, relative_to=Path.cwd())
+    if chosen is not None:
+        return chosen
+    checkout = PROJECT_ROOT / "CHANGELOG.md"
+    if checkout.is_file():
+        return checkout
+    return resolve_docs_dir() / "CHANGELOG.md"
+

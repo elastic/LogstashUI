@@ -1,0 +1,52 @@
+# /etc/default/logstashui — sourced by the systemd unit via EnvironmentFile=.
+# Also usable as a Kubernetes ConfigMap (non-secret keys) + Secret (SECRET_KEY).
+#
+# Boolean values: true/false, 1/0, yes/no, on/off.
+
+# Runtime data (sqlite, tls/, secrets). Required in Docker/K8s/systemd.
+# Native CLI default when unset: $(pwd)/logstashui_data
+LOGSTASHUI_DATA_DIR=/var/lib/logstashui
+# LOGSTASHUI_LOGS_DIR=/var/lib/logstashui/logs
+
+# HTTP server
+DEBUG=false
+# LOGSTASHUI_LOG_LEVEL=INFO
+# LOGSTASHUI_DJANGO_LOG_LEVEL=INFO
+# DJANGO_LOG_LEVEL=INFO
+LOGSTASHUI_BIND=0.0.0.0:8443
+LOGSTASHUI_WORKERS=2
+LOGSTASHUI_TLS=true
+ALLOWED_HOSTS=*
+# CSRF_TRUSTED_ORIGINS=https://logstashui.example.com:8443
+
+# Authentication bypass (sandbox only — never production)
+LOGSTASHUI_NO_AUTH=false
+
+# Product UI certificate SANs (needed when the process cannot see host IPs)
+# LOGSTASHUI_HOST_HOSTNAME=logstashui.example.com
+# LOGSTASHUI_HOST_IPS=10.0.0.5
+# LOGSTASHUI_TLS_SANS=logstashui.example.com,10.0.0.5
+
+# Prefill --logstash-ui-url in generated enroll commands (DB Settings wins)
+# LOGSTASHUI_AGENT_UI_URL=https://logstashui.example.com:8443
+LOGSTASHUI_INCLUDE_CA_FINGERPRINT=true
+
+# Embedded/compose agent URL. Enrolled Simulate agents do not use this.
+# LOGSTASH_AGENT_URL=https://logstashagent:9500
+
+# Optional: Django secret; auto-generated into DATA_DIR/.django_secret_key if unset
+# SECRET_KEY=
+
+# Shared secret so a compose/embedded agent can CSR without enroll
+# LOGSTASHUI_AGENT_CSR_SECRET=
+
+# In-app markdown docs (wheel ships a copy; checkout uses the git tree)
+# LOGSTASHUI_DOCS_DIR=
+
+# Future database backends (not implemented — sqlite only for now)
+# LOGSTASHUI_DB_ENGINE=sqlite
+# LOGSTASHUI_DB_NAME=logstashui
+# LOGSTASHUI_DB_HOST=
+# LOGSTASHUI_DB_PORT=
+# LOGSTASHUI_DB_USER=
+# LOGSTASHUI_DB_PASSWORD=

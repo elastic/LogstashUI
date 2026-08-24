@@ -4,32 +4,32 @@
 #you may not use this file except in compliance with the Elastic License.
 
 # logstashui Startup Script
-# Detects simulation.mode from logstashui.yml / example and starts accordingly
-# - embedded: all containers including LogstashAgent
-# - host (LEGACY): native agent on :9501 + UI only — not enrolled simulate@N
+# Default: Docker Compose --profile embedded (UI + embedded agent).
+# --legacy-host-agent: native agent on :9501 + UI only — not enrolled simulate@N
 # Preferred multi-instance sim: enroll a Simulate policy (see host_mode.md)
 #
 # Usage:
-#   ./start_logstashui.sh          - Start with existing images
-#   ./start_logstashui.sh --rebuild - Rebuild images before starting
-#   ./start_logstashui.sh --update  - Pull latest code and images, then start
+#   ./start_logstashui.sh                    Start with existing images
+#   ./start_logstashui.sh --rebuild          Rebuild images from this tree
+#   ./start_logstashui.sh --update           Pull latest code and images, then start
+#   ./start_logstashui.sh --legacy-host-agent  Legacy local FastAPI agent on :9501
 
 set -e  # Exit on error
 
 # Check for required dependencies
 check_dependencies() {
     local missing_deps=()
-    
+
     # Check for Docker
     if ! command -v docker &> /dev/null; then
         missing_deps+=("docker")
     fi
-    
+
     # Check for Git
     if ! command -v git &> /dev/null; then
         missing_deps+=("git")
     fi
-    
+
     if [ ${#missing_deps[@]} -gt 0 ]; then
         echo "ERROR: Missing required dependencies: ${missing_deps[*]}"
         echo ""
@@ -258,15 +258,17 @@ collect_host_tls_env
 # Parse command line arguments
 REBUILD_FLAG=""
 UPDATE_MODE=0
+LEGACY_HOST_AGENT=0
 # --rebuild builds from local source (docker-compose.smoke.yml). Plain `up`
 # without --rebuild uses Hub images (codyjackson032/*) and does NOT pick up
 # uncommitted local TLS/callback changes.
-if [ "$1" == "--rebuild" ]; then
-    REBUILD_FLAG="--build"
-fi
-if [ "$1" == "--update" ]; then
-    UPDATE_MODE=1
-fi
+for arg in "$@"; do
+    case "$arg" in
+        --rebuild) REBUILD_FLAG="--build" ;;
+        --update) UPDATE_MODE=1 ;;
+        --legacy-host-agent) LEGACY_HOST_AGENT=1 ;;
+    esac
+done
 
 # Compose file set: smoke override tags local images and enables `build:`.
 # Used whenever REBUILD_FLAG is set so --rebuild actually compiles this tree.
@@ -291,7 +293,7 @@ if [ $UPDATE_MODE -eq 1 ]; then
     echo "========================================"
     echo "Switching to main branch..."
     echo ""
-    
+
     git checkout main
     if [ $? -ne 0 ]; then
         echo "WARNING: Failed to switch to main branch. Continuing anyway..."
@@ -300,10 +302,10 @@ if [ $UPDATE_MODE -eq 1 ]; then
         echo "Switched to main branch successfully!"
         echo ""
     fi
-    
+
     echo "Pulling latest code from git..."
     echo ""
-    
+
     git pull
     if [ $? -ne 0 ]; then
         echo "WARNING: Git pull failed. Continuing with existing code..."
@@ -312,11 +314,11 @@ if [ $UPDATE_MODE -eq 1 ]; then
         echo "Git pull successful!"
         echo ""
     fi
-    
+
     echo "Stopping containers..."
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     "$SCRIPT_DIR/stop_logstashui.sh" >/dev/null 2>&1 || true
-    
+
     echo ""
     echo "Pulling latest Docker images..."
     $DOCKER_COMPOSE pull
@@ -330,7 +332,7 @@ if [ $UPDATE_MODE -eq 1 ]; then
 else
     echo "Ensuring clean state - stopping any existing services..."
     echo ""
-    
+
     # Call stop script first to ensure clean state
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     "$SCRIPT_DIR/stop_logstashui.sh" || true
@@ -350,37 +352,6 @@ PROJECT_ROOT="$(pwd)"
 
 # Debug: Show current directory
 echo "Current directory: $PROJECT_ROOT"
-echo ""
-
-# Ensure logstashui.yml exists (required for Docker volume mount)
-# If it doesn't exist, create a symlink to logstashui.example.yml
-if [ ! -f "src/logstashui/logstashui.yml" ]; then
-    if [ -f "src/logstashui/logstashui.example.yml" ]; then
-        echo "Creating logstashui.yml symlink to logstashui.example.yml"
-        ln -s logstashui.example.yml src/logstashui/logstashui.yml
-    else
-        echo "ERROR: src/logstashui/logstashui.example.yml not found!"
-        echo "Current directory: $(pwd)"
-        exit 1
-    fi
-fi
-
-# Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if [ -f "src/logstashui/logstashui.yml" ]; then
-    CONFIG_FILE="src/logstashui/logstashui.yml"
-elif [ -f "src/logstashui/logstashui.example.yml" ]; then
-    CONFIG_FILE="src/logstashui/logstashui.example.yml"
-else
-    echo "ERROR: No config file found!"
-    echo "Expected logstashui.yml or logstashui.example.yml in src/logstashui/"
-    echo "Current directory: $(pwd)"
-    echo ""
-    echo "Directory contents:"
-    ls -la
-    exit 1
-fi
-
-echo "Using config file: $CONFIG_FILE"
 echo ""
 
 # Bind-mount target: <checkout>/logstashui_data → /var/lib/logstashui
@@ -416,15 +387,13 @@ export PGID="${PGID:-$(id -g)}"
 echo "Bind-mount owner: PUID=$PUID PGID=$PGID"
 echo ""
 
-# Parse the simulation mode from config file (under simulation.mode)
-MODE=$(grep -m 1 "^\s*mode:" "$CONFIG_FILE" | sed 's/.*mode:\s*\([a-z]*\).*/\1/' | tr -d '[:space:]')
-
-# Default to embedded if parsing fails
-if [ -z "$MODE" ]; then
+if [ "$LEGACY_HOST_AGENT" -eq 1 ]; then
+    MODE="host"
+else
     MODE="embedded"
 fi
 
-echo "Detected mode: $MODE"
+echo "Start path: $MODE"
 echo ""
 
 if [ "$MODE" == "host" ]; then
@@ -433,13 +402,13 @@ if [ "$MODE" == "host" ]; then
     echo "========================================"
     echo "Starting a native LogstashAgent (FastAPI + supervisor) on Linux."
     echo ""
-    echo "NOTE: This is a LEGACY local sim path (simulation.mode: host)."
+    echo "NOTE: This is a LEGACY local sim path (--legacy-host-agent)."
     echo "It is NOT an enrolled mode:simulate / lsagent-simulate@N instance."
     echo "Prefer enrolling a Simulate policy agent for multi-instance sim:"
     echo "  sudo logstash-agent install --enroll <TOKEN> --logstash-ui-url <URL>"
     echo "  sudo systemctl enable --now lsagent-simulate@N"
     echo ""
-    
+
     # Check if uv is available
     if ! command -v uv &> /dev/null; then
         echo "ERROR: uv not found in PATH!"
@@ -448,7 +417,7 @@ if [ "$MODE" == "host" ]; then
         echo "Quick install: curl -LsSf https://astral.sh/uv/install.sh | sh"
         exit 1
     fi
-    
+
     # Clone LogstashAgent if it doesn't exist
     if [ ! -d "$PROJECT_ROOT/LogstashAgent" ]; then
         echo "LogstashAgent directory not found, cloning from GitHub..."
@@ -466,17 +435,17 @@ if [ "$MODE" == "host" ]; then
         echo "LogstashAgent directory found."
         echo ""
     fi
-    
+
     echo ""
     echo "Preparing LogstashAgent configuration"
-    # Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+    # Copy legacy agent config into LogstashAgent/src/logstashagent/logstashagent.yml
     cd "$PROJECT_ROOT"
     python3 bin/sync_config.py
     if [ $? -ne 0 ]; then
         echo "WARNING: Could not update agent config automatically"
         echo "Please ensure LogstashAgent/src/logstashagent/logstashagent.yml has correct paths"
     fi
-    
+
     # Install/update Python dependencies for logstashagent using uv
     echo "Installing Python dependencies for LogstashAgent with uv"
     cd "$PROJECT_ROOT/LogstashAgent"
@@ -487,16 +456,12 @@ if [ "$MODE" == "host" ]; then
         exit 1
     fi
     echo "Dependencies installed successfully"
-    
+
     echo ""
     echo "Setting Logstash directory ownership for logstash user"
-    # Detect Logstash home from config - default to /usr/share/logstash
-    LOGSTASH_HOME=$(grep -m 1 "logstash_binary:" "$PROJECT_ROOT/$CONFIG_FILE" | sed 's/.*logstash_binary:\s*\(.*\)\/bin\/logstash.*/\1/' | tr -d '[:space:]')
-    if [ -z "$LOGSTASH_HOME" ]; then
-        LOGSTASH_HOME="/usr/share/logstash"
-    fi
+    LOGSTASH_HOME="${LOGSTASH_HOME:-/usr/share/logstash}"
     echo "Logstash home: $LOGSTASH_HOME"
-    
+
     # Ensure logstash user owns the data directory
     if [ -d "$LOGSTASH_HOME/data" ]; then
         sudo chown -R logstash:logstash "$LOGSTASH_HOME/data"
@@ -504,15 +469,11 @@ if [ "$MODE" == "host" ]; then
     else
         echo "WARNING: $LOGSTASH_HOME/data not found, skipping chown"
     fi
-    
+
     # Ensure logstash user owns the log directory
-    # Detect log path from config - default to /var/log/logstash
-    LOGSTASH_LOG_PATH=$(grep -m 1 "logstash_log_path:" "$PROJECT_ROOT/$CONFIG_FILE" | sed 's/.*logstash_log_path:\s*\(.*\)/\1/' | tr -d '[:space:]')
-    if [ -z "$LOGSTASH_LOG_PATH" ]; then
-        LOGSTASH_LOG_PATH="/var/log/logstash"
-    fi
+    LOGSTASH_LOG_PATH="${LOGSTASH_LOG_PATH:-/var/log/logstash}"
     echo "Logstash log path: $LOGSTASH_LOG_PATH"
-    
+
     if [ -d "$LOGSTASH_LOG_PATH" ]; then
         sudo chown -R logstash:logstash "$LOGSTASH_LOG_PATH"
         echo "Set ownership of $LOGSTASH_LOG_PATH to logstash:logstash"
@@ -523,7 +484,7 @@ if [ "$MODE" == "host" ]; then
         echo "Created and set ownership of $LOGSTASH_LOG_PATH to logstash:logstash"
     fi
     echo ""
-    
+
     echo "========================================"
     echo "Starting Docker UI first (HTTPS :8443), then legacy native agent"
     echo "========================================"
@@ -564,7 +525,7 @@ if [ "$MODE" == "host" ]; then
     echo $AGENT_PID > "$PROJECT_ROOT/logstashagent.pid"
     cd "$PROJECT_ROOT"
     echo "LogstashAgent started with PID: $AGENT_PID"
-    
+
 else
     echo "========================================"
     echo "EMBEDDED MODE DETECTED"
@@ -572,10 +533,10 @@ else
     echo "Starting all containers including embedded LogstashAgent"
     echo "Logstash will run inside the agent container."
     echo ""
-    
+
     # Force remove any existing logstashagent container to prevent stale network references
     docker rm -f logstashui-logstashagent-1 2>/dev/null || true
-    
+
     # Change to docker directory for docker-compose commands
     cd "$PROJECT_ROOT/docker"
 

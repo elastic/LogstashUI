@@ -31,15 +31,21 @@ Each block below is self-contained — you can run it top to bottom like a scrip
 git clone https://github.com/elastic/LogstashUI.git
 cd LogstashUI
 uv sync
-cd src/logstashui/
-
-uv run manage.py migrate
+# Tailwind (first clone only)
+cd src/logstashui
 uv run manage.py tailwind install
 uv run manage.py tailwind build
-uv run manage.py collectstatic --noinput
-uv run manage.py sync_snmp_official_data --cleanup
+cd ../..
 
-LOGSTASHUI_CONFIG=logstashui.example.yml uv run manage.py runserver 0.0.0.0:8080
+uv run logstashui manage migrate
+uv run logstashui manage collectstatic --noinput
+uv run logstashui manage sync_snmp_official_data --cleanup
+
+# Product-like HTTPS on :8443 (data in ./logstashui_data)
+uv run logstashui
+
+# Or Django runserver (HTTP):
+uv run logstashui manage runserver 0.0.0.0:8080
 ```
 
 #### Windows (PowerShell)
@@ -47,20 +53,36 @@ LOGSTASHUI_CONFIG=logstashui.example.yml uv run manage.py runserver 0.0.0.0:8080
 git clone https://github.com/elastic/LogstashUI.git
 cd LogstashUI
 uv sync
-cd src/logstashui/
-
-uv run manage.py migrate
+cd src/logstashui
 uv run manage.py tailwind install
 uv run manage.py tailwind build
-uv run manage.py collectstatic --noinput
-uv run manage.py sync_snmp_official_data --cleanup
+cd ../..
 
-$env:LOGSTASHUI_CONFIG="logstashui.example.yml"
-uv run manage.py runserver 0.0.0.0:8080
+uv run logstashui manage migrate
+uv run logstashui manage collectstatic --noinput
+uv run logstashui manage sync_snmp_official_data --cleanup
+uv run logstashui
 ```
 
 > [!NOTE]
-> Relative `LOGSTASHUI_CONFIG` paths resolve from your current working directory — the commands above work because you `cd src/logstashui` first. If `LOGSTASHUI_CONFIG` is not set, LogstashUI falls back to `src/logstashui/logstashui.yml` (and then the data directory) automatically.
+> Configuration is environment variables only. Native default data dir is `$(pwd)/logstashui_data`. See [environment configuration](/docs/docs/logstashui/configuration/environment.md).
+
+---
+
+## Building an sdist and wheel
+
+Compile Tailwind first (the `dist/` CSS path is not `node_modules`; repo-root `/dist/` is the packaging output):
+
+```bash
+cd src/logstashui/theme/static_src
+npm install && npm run build
+cd ../../../..
+uv build
+# dist/logstashui-0.5.1.tar.gz
+# dist/logstashui-0.5.1-py3-none-any.whl
+```
+
+The wheel includes systemd templates (`LogstashUI/packaging/`) and the `logstashui` console script.
 
 ---
 

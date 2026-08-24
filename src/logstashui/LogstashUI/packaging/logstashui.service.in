@@ -1,0 +1,22 @@
+[Unit]
+Description=LogstashUI
+Documentation=https://github.com/elastic/LogstashUI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={user}
+Group={group}
+EnvironmentFile=-/etc/default/logstashui
+WorkingDirectory={working_directory}
+ExecStart={exec_start}
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+# Product TLS material and sqlite live under LOGSTASHUI_DATA_DIR.
+# Kubernetes: mount a PVC at the same path instead of this unit.
+
+[Install]
+WantedBy=multi-user.target

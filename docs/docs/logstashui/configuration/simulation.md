@@ -68,30 +68,17 @@ Default agents manage production Logstash. They are not selected as Sim targets.
 
 ---
 
-# Runtime Settings (`logstashui.yml`)
+# Runtime settings
 
-```yaml
-simulation:
-  # Legacy / compose helper — secondary to enrolled simulate agents
-  # embedded: prefer Docker agent URL defaults
-  # host: legacy local-agent URL defaults (prefer enrolled simulate instead)
-  mode: embedded  # embedded | host
+Simulation targets come from **enrolled Simulate agents** and the optional Docker embedded agent. Configure the UI with [environment variables](/docs/docs/logstashui/configuration/environment.md) (`LOGSTASH_AGENT_URL` for the compose embedded agent).
 
-  # Optional: config passed to a co-started local agent (legacy host tooling)
-  logstash_agent:
-    mode: embedded  # or simulate / default when using a local agent process
-    logstash_binary: /usr/share/logstash/bin/logstash
-    logstash_settings: /etc/logstash
-    logstash_log_path: /var/log/logstash
-```
-
-> **Note:** Prefer **enrolled simulate agents** over `simulation.mode: host`. Host mode remains for compatibility with older start scripts.
+> **Note:** Prefer enrolled simulate agents. `bin/start_logstashui.sh --legacy-host-agent` remains for a local FastAPI agent on :9501.
 
 ---
 
 ## Related Documentation
 
 - **[Simulate agents (formerly host mode)](/docs/docs/logstashui/configuration/host_mode.md)** - Setup notes for dedicated sim Logstash
-- **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)** - Full configuration reference
+- **[Environment configuration](/docs/docs/logstashui/configuration/environment.md)** - Env vars, systemd, Kubernetes
 - **[LogstashAgent configuration](/docs/docs/logstashagent/configuration/logstashagent.yml.md)** - Agent roles and paths
 - **[Configuration Overview](/docs/docs/logstashui/configuration/index.md)** - Return to configuration index

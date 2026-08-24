@@ -21,10 +21,10 @@ services:
       - "8443:8443"
     volumes:
       - ../logstashui_data:/var/lib/logstashui
-      - ../src/logstashui/logstashui.yml:/app/src/logstashui/logstashui.yml:ro
     environment:
       - DEBUG=False
       - LOGSTASHUI_DATA_DIR=/var/lib/logstashui
+      - LOGSTASHUI_DOCS_DIR=/app/docs
       # Linux bind-mount: start_logstashui.sh sets these to the host uid/gid so
       # ./logstashui_data stays owned by the operator. Empty → image appuser (10001).
       - PUID=${PUID:-}

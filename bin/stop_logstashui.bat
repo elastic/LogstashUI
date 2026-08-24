@@ -30,87 +30,20 @@ echo.
 REM Save current directory and change to project root
 pushd "%~dp0.."
 
-REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if exist "src\logstashui\logstashui.yml" (
-    set CONFIG_FILE=src\logstashui\logstashui.yml
-) else if exist "src\logstashui\logstashui.example.yml" (
-    set CONFIG_FILE=src\logstashui\logstashui.example.yml
-) else (
-    echo ERROR: No config file found!
-    echo Expected logstashui.yml or logstashui.example.yml in src\logstashui\
-    exit /b 1
-)
-
-REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
-REM Detect mode from config file
-REM Search for the line with "# embedded | host" comment to identify the right mode line
-echo Detecting simulation mode from !CONFIG_FILE!
-set MODE=embedded
-for /f "tokens=2 delims=: " %%a in ('findstr /C:"# embedded | host" !CONFIG_FILE!') do (
-    set MODE=%%a
+echo Stopping native LogstashAgent if port 9501 is in use
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9501 ^| findstr LISTENING') do (
+    echo Killing process on port 9501 (PID: %%a)
+    taskkill /PID %%a /F >nul 2>&1
 )
-REM Remove any trailing comments or whitespace
-set MODE=!MODE: =!
-for /f "tokens=1 delims=#" %%a in ("!MODE!") do set MODE=%%a
-set MODE=!MODE: =!
+taskkill /FI "WINDOWTITLE eq LogstashAgent*" /F >nul 2>&1
 
-echo Detected mode: !MODE!
-echo.
-
-if /i "!MODE!"=="host" (
-    echo ========================================
-    echo LEGACY HOST MODE SHUTDOWN
-    echo ========================================
-    echo Stopping native LogstashAgent process (legacy local sim path)
-    
-    REM Kill Python processes listening on port 9501 (uvicorn)
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9501 ^| findstr LISTENING') do (
-        echo Killing process on port 9501 (PID: %%a)
-        taskkill /PID %%a /F >nul 2>&1
-    )
-    
-    REM Also kill the LogstashAgent window if it exists
-    taskkill /FI "WINDOWTITLE eq LogstashAgent*" /F >nul 2>&1
-    
-    echo LogstashAgent stopped
-    
-    REM Kill Logstash process (managed by the agent)
-    REM Port 9650 is Logstash API, port 9449 is HTTP input
-    echo Stopping Logstash process
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9650 ^| findstr LISTENING') do (
-        echo Killing Logstash process on port 9650 (PID: %%a)
-        taskkill /PID %%a /F >nul 2>&1
-    )
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :9449 ^| findstr LISTENING') do (
-        echo Killing Logstash process on port 9449 (PID: %%a)
-        taskkill /PID %%a /F >nul 2>&1
-    )
-    
-    echo.
-    echo Stopping Docker containers (UI + Nginx)
-    cd docker
-    %DOCKER_COMPOSE% down --remove-orphans
-    cd ..
-    
-    REM Force remove agent container if it exists
-    echo Removing any stray agent containers
-    docker rm -f logstashui-logstashagent-1 2>nul
-    
-) else (
-    echo ========================================
-    echo EMBEDDED MODE SHUTDOWN
-    echo ========================================
-    echo Stopping all containers
-    
-    REM Force remove logstashagent container first (prevents stale network references)
-    docker rm -f logstashui-logstashagent-1 2>nul
-    
-    cd docker
-    %DOCKER_COMPOSE% down --remove-orphans
-    cd ..
-)
+echo Stopping Docker containers
+docker rm -f logstashui-logstashagent-1 2>nul
+cd docker
+%DOCKER_COMPOSE% --profile embedded down --remove-orphans
+cd ..
 
 echo.
 echo ========================================

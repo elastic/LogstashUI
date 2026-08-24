@@ -9,9 +9,13 @@ import markdown
 import re
 import yaml
 
-DOCS_BASE_DIR = settings.PROJECT_ROOT
-DOCS_DIR = DOCS_BASE_DIR / "docs" / "docs"
-CHANGELOG_PATH = DOCS_BASE_DIR / "CHANGELOG.md"
+from LogstashUI.paths import resolve_changelog_path, resolve_docs_dir
+
+DOCS_BASE_DIR = resolve_docs_dir()
+DOCS_DIR = DOCS_BASE_DIR / "docs"
+if not DOCS_DIR.is_dir() and (DOCS_BASE_DIR / "docs" / "docs").is_dir():
+    DOCS_DIR = DOCS_BASE_DIR / "docs" / "docs"
+CHANGELOG_PATH = resolve_changelog_path()
 
 # Manual title overrides for specific files/folders
 TITLE_OVERRIDES = {

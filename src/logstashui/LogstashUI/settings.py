@@ -19,7 +19,9 @@ import os, platform
 from importlib.metadata import version, PackageNotFoundError
 from Common.encryption import get_django_secret_key
 from .config import CONFIG
-from .paths import resolve_data_dir, resolve_logs_dir
+from .database import build_databases
+from .logging_config import resolve_django_log_levels, resolve_log_level
+from .paths import resolve_data_dir, resolve_docs_dir, resolve_logs_dir
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,14 +29,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Project root is 2 levels up from BASE_DIR (src/logstashui/)
 PROJECT_ROOT = BASE_DIR.parent.parent
 
-# logstashui Runtime Configuration
-# Loaded from YAML file specified in LOGSTASHUI_CONFIG environment variable
-# Falls back to DEFAULT_CONFIG if not specified
+# logstashui Runtime Configuration (environment variables; see LogstashUI.config)
 LOGSTASHUI_CONFIG = CONFIG
 
 # Runtime state (sqlite, tls, secrets). Outside src/ unless pytest.
-# Env LOGSTASHUI_DATA_DIR / yaml paths.data override the default
-# <project_root>/logstashui_data. Docker sets /var/lib/logstashui.
+# Env LOGSTASHUI_DATA_DIR overrides the default $(pwd)/logstashui_data.
+# Docker/systemd set /var/lib/logstashui.
 DATA_DIR = resolve_data_dir()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -147,12 +147,7 @@ WSGI_APPLICATION = 'LogstashUI.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': DATA_DIR / 'db.sqlite3',
-    }
-}
+DATABASES = build_databases(DATA_DIR)
 
 
 # Password validation
@@ -196,12 +191,16 @@ STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = DATA_DIR / "staticfiles"
 
 STATICFILES_DIRS = [
     BASE_DIR / "Site/static",
-    PROJECT_ROOT / "docs" / "images",
 ]
+_docs_images = resolve_docs_dir() / "images"
+if _docs_images.is_dir():
+    STATICFILES_DIRS.append(_docs_images)
+elif (PROJECT_ROOT / "docs" / "images").is_dir():
+    STATICFILES_DIRS.append(PROJECT_ROOT / "docs" / "images")
 
 if platform.system() == "Windows":
     NPM_BIN_PATH = "C:/Program Files/nodejs/npm.cmd"
@@ -309,33 +308,27 @@ else:
     X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # logstashagent Configuration
-# URL for the logstashagent API (HTTPS direct; no nginx)
-# Can be overridden with LOGSTASH_AGENT_URL environment variable
-#
-# Routing based on simulation mode:
-# - Host mode: https://host.docker.internal:9501 (native agent on host)
-# - Embedded mode: https://logstashagent:9500 (container FastAPI TLS)
+# URL for the logstashagent API (HTTPS direct; no nginx).
+# Override with LOGSTASH_AGENT_URL. Compose sets https://logstashagent:9500.
 if DEBUG:
-    # Development: local agent (HTTP unless you run agent with TLS)
     LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://127.0.0.1:9500')
 else:
-    simulation_mode = LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
-
-    if simulation_mode == 'host':
-        LOGSTASH_AGENT_URL = os.environ.get(
-            'LOGSTASH_AGENT_URL', 'https://host.docker.internal:9501'
-        )
-    else:
-        LOGSTASH_AGENT_URL = os.environ.get(
-            'LOGSTASH_AGENT_URL', 'https://logstashagent:9500'
-        )
+    LOGSTASH_AGENT_URL = os.environ.get(
+        'LOGSTASH_AGENT_URL', 'https://logstashagent:9500'
+    )
 
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/
 
-# Ensure logs directory exists (LOGSTASHUI_LOGS_DIR / yaml paths.logs / DATA_DIR/logs)
+# Ensure logs directory exists (LOGSTASHUI_LOGS_DIR / DATA_DIR/logs)
 LOGS_DIR = resolve_logs_dir(DATA_DIR)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGSTASHUI_LOG_LEVEL = resolve_log_level(
+    "LOGSTASHUI_LOG_LEVEL",
+    default="DEBUG" if DEBUG else "INFO",
+)
+DJANGO_LOGGER_LEVEL, DJANGO_REQUEST_LOG_LEVEL = resolve_django_log_levels()
 
 LOGGING = {
     'version': 1,
@@ -349,12 +342,12 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': LOGSTASHUI_LOG_LEVEL,
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
         'file': {
-            'level': 'INFO',
+            'level': LOGSTASHUI_LOG_LEVEL,
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': LOGS_DIR / 'logstashui.log',
             'maxBytes': 1024 * 1024 * 10,  # 10 MB
@@ -365,17 +358,17 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': DJANGO_LOGGER_LEVEL,
             'propagate': False,
         },
         'django.request': {
             'handlers': ['console', 'file'],
-            'level': 'ERROR',
+            'level': DJANGO_REQUEST_LOG_LEVEL,
             'propagate': False,
         },
     },
     'root': {
         'handlers': ['console', 'file'],
-        'level': 'DEBUG' if DEBUG else 'INFO',
+        'level': LOGSTASHUI_LOG_LEVEL,
     },
 }
