@@ -874,14 +874,40 @@ function triggerPipelineWarmingAndChecking(opts) {
     // Target-switch / explicit re-warm: use fetch path with Warming chip (reliable)
     const useFetchWarm = !!options.useFetch || force;
 
+    // Config / target change: ALWAYS clear the session slot before any early returns so
+    // that Run is forced to re-allocate even when we skip the embedded pre-warm below.
+    // Failing to clear here means the backend receives a stale slot_id, skips allocate
+    // entirely (use_session_slot=True), and the agent never sees the updated pipeline config.
+    if (!soft || force) {
+        if (typeof window.clearSimulationSessionSlot === 'function') {
+            window.clearSimulationSessionSlot(force ? 'force re-warm' : 'config change');
+        } else {
+            window.simulationSessionSlotId = null;
+            window.simulationSessionConnectionId = null;
+            window.currentSlotId = null;
+            if (typeof currentSlotId !== 'undefined') {
+                currentSlotId = null;
+            }
+        }
+    }
+
     // Component-edit warming is host/simulate only; page-open always warms when filters exist.
     // Force always runs (e.g. sim target switch to embedded).
+    // Slot was already cleared above — embedded mode skips the pre-warm, not the invalidation.
     if (
         !fromPageLoad &&
         !force &&
         typeof simulationMode !== 'undefined' &&
         simulationMode === 'embedded'
     ) {
+        // Reset the chip to Unallocated so the user can see the slot is stale and will
+        // be re-allocated on the next Run (otherwise it stays green "✓ Slot 1" which is
+        // misleading — the session slot variable is null at this point).
+        if (typeof window.setPipelineSlotChip === 'function') {
+            window.setPipelineSlotChip('unallocated', {
+                title: 'Pipeline changed — will re-allocate on next Run',
+            });
+        }
         return;
     }
 
@@ -898,20 +924,6 @@ function triggerPipelineWarmingAndChecking(opts) {
 
     if ((_pipelineWarmInFlight || window.__slotPreallocInFlight) && soft && !force) {
         return;
-    }
-
-    // Config / target change: clear previous session slot so Run does not reuse stale state
-    if (!soft || force) {
-        if (typeof window.clearSimulationSessionSlot === 'function') {
-            window.clearSimulationSessionSlot(force ? 'force re-warm' : 'config change');
-        } else {
-            window.simulationSessionSlotId = null;
-            window.simulationSessionConnectionId = null;
-            window.currentSlotId = null;
-            if (typeof currentSlotId !== 'undefined') {
-                currentSlotId = null;
-            }
-        }
     }
 
     // Check if there are any filter components
