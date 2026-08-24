@@ -29,6 +29,7 @@ COPY CHANGELOG.md /app/CHANGELOG.md
 
 # Set PYTHONPATH so Django can find LogstashUI module
 ENV PYTHONPATH=/app/src/logstashui
+ENV LOGSTASHUI_DATA_DIR=/var/lib/logstashui
 
 # Build Tailwind CSS
 WORKDIR /app/src/logstashui/theme/static_src
@@ -39,18 +40,19 @@ WORKDIR /app/src/logstashui
 RUN python manage.py tailwind build
 RUN python manage.py collectstatic --noinput --clear
 
-# Create app user with home directory and set permissions
-RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
-RUN mkdir -p /app/data && \
-    chown -R appuser:appuser /app /home/appuser && \
+# Pinned uid so K8s runAsUser/fsGroup is stable. Entrypoint starts as root,
+# chowns only LOGSTASHUI_DATA_DIR when needed, then drops to this user (or PUID).
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -m -d /home/appuser appuser
+RUN mkdir -p /var/lib/logstashui && \
+    chown -R appuser:appuser /app /home/appuser /var/lib/logstashui && \
     chmod -R 755 /app
 
-# Copy entrypoint script
+# Copy entrypoint script (must be root so it can chown the bind-mount)
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && chown appuser:appuser /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-USER appuser
 EXPOSE 8443
 ENTRYPOINT ["/entrypoint.sh"]
-# TLS material under data/tls/ui-server.* (generated in entrypoint). Default public port 8443 (no root).
-CMD ["gunicorn","LogstashUI.wsgi:application","--bind","0.0.0.0:8443","--certfile","/app/src/logstashui/data/tls/gunicorn-fullchain.pem","--keyfile","/app/src/logstashui/data/tls/ui-server.key","--workers","2","--worker-class","gevent","--worker-connections","1000","--timeout","60","--access-logfile","-","--error-logfile","-"]
+# Cert paths are injected by entrypoint from LOGSTASHUI_DATA_DIR (JSON CMD cannot expand env).
+CMD ["gunicorn","LogstashUI.wsgi:application","--bind","0.0.0.0:8443","--workers","2","--worker-class","gevent","--worker-connections","1000","--timeout","60","--access-logfile","-","--error-logfile","-"]

@@ -67,7 +67,7 @@ For instance **N**:
 
 Embedded Docker remains **9500 / 9560** and does not use these paths.
 
-Managed multi-instance production trees use **9600+N / 9700+N** and `logstash-agent@N` / `logstash-managed@N` — see the [roles guide](/docs/docs/logstashagent/general/roles.md).
+Managed multi-instance production trees use **9550+N / 9700+N** and `logstash-agent@N` / `logstash-managed@N` — see the [roles guide](/docs/docs/logstashagent/general/roles.md).
 
 ## Upgrade from old “host mode”
 

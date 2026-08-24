@@ -54,7 +54,7 @@ State: `/var/lib/logstash-agent/`. Unit: `logstash-agent`.
 ```yaml
 mode: managed
 instance_id: 1
-port: 9601                 # agent FastAPI = 9600 + N
+port: 9551                 # agent FastAPI = 9550 + N
 logstash_api_port: 9701    # 9700 + N
 logstash_settings: /opt/logstash-agent/managed-1/settings
 logstash_log_path: /opt/logstash-agent/managed-1/logs
@@ -114,7 +114,7 @@ See [VERSION binary lifecycle](/docs/docs/logstashagent/general/roles.md#version
 
 ```yaml
 host: 0.0.0.0
-port: 9500   # embedded; simulate uses 9500+N; managed uses 9600+N
+port: 9500   # embedded; simulate uses 9500+N; managed uses 9550+N; packaged uses 9550
 ```
 
 Notable endpoints:

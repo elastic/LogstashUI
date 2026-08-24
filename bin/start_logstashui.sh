@@ -177,7 +177,9 @@ collect_host_tls_env() {
         name=$(reverse_lookup_ip "$ip")
         [ -n "$name" ] || return 0
         fqdns=$(append_unique_csv "$fqdns" "$name")
-        [ -z "$first_fqdn" ] && first_fqdn="$name"
+        if [ -z "$first_fqdn" ]; then
+            first_fqdn="$name"
+        fi
     }
     if [ -n "${LOGSTASHUI_HOST_IPS:-}" ]; then
         foreach_csv "$LOGSTASHUI_HOST_IPS" _tls_ptr_one
@@ -379,6 +381,39 @@ else
 fi
 
 echo "Using config file: $CONFIG_FILE"
+echo ""
+
+# Bind-mount target: <checkout>/logstashui_data → /var/lib/logstashui
+ensure_host_data_dir() {
+    local dest="$PROJECT_ROOT/logstashui_data"
+    mkdir -p "$dest"
+    if [ ! -f "$dest/db.sqlite3" ] && [ -f "$PROJECT_ROOT/src/logstashui/data/db.sqlite3" ]; then
+        echo "Migrating src/logstashui/data → logstashui_data/"
+        cp -a "$PROJECT_ROOT/src/logstashui/data/." "$dest/"
+    fi
+    if [ ! -f "$dest/db.sqlite3" ]; then
+        local vol
+        for vol in logstashui_logstashui_data logstashui_data LogstashUI_logstashui_data; do
+            if docker volume inspect "$vol" >/dev/null 2>&1; then
+                echo "Copying Docker volume $vol → logstashui_data/"
+                docker run --rm \
+                    -v "$vol":/from \
+                    -v "$dest":/to \
+                    alpine:3.20 sh -c 'cp -a /from/. /to/' || true
+                break
+            fi
+        done
+    fi
+    echo "Host data directory: $dest"
+    echo ""
+}
+ensure_host_data_dir
+
+# Linux Docker bind-mounts keep host UIDs; pass ours so the container can write
+# ./logstashui_data without chowning it to the image's appuser (10001).
+export PUID="${PUID:-$(id -u)}"
+export PGID="${PGID:-$(id -g)}"
+echo "Bind-mount owner: PUID=$PUID PGID=$PGID"
 echo ""
 
 # Parse the simulation mode from config file (under simulation.mode)

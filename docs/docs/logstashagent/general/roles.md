@@ -31,8 +31,8 @@ LogstashAgent and LogstashUI use **policy types** and matching **agent modes** s
 
 | Role | Agent API (HTTPS) | Logstash monitoring API |
 |------|-------------------|-------------------------|
-| **Packaged** | not used by controller | **9600** (package default) |
-| **Managed N** | **9600 + N** | **9700 + N** |
+| **Packaged** | **9550** (as-is) | **9600** (package default) |
+| **Managed N** | **9550 + N** | **9700 + N** |
 | **Simulate N** | **9500 + N** | **9560 + N** |
 | **Embedded** | **9500** | **9560** |
 

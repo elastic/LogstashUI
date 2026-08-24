@@ -196,6 +196,38 @@ if exist "src\logstashui\logstashui.yml" (
 echo Using config file: %CONFIG_FILE%
 echo.
 
+REM Bind-mount target: <checkout>\logstashui_data → /var/lib/logstashui
+if not exist "logstashui_data" mkdir logstashui_data
+if not exist "logstashui_data\db.sqlite3" (
+    if exist "src\logstashui\data\db.sqlite3" (
+        echo Migrating src\logstashui\data → logstashui_data\
+        xcopy /E /I /Y /Q "src\logstashui\data\*" "logstashui_data\" >nul
+    )
+)
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect logstashui_logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume logstashui_logstashui_data → logstashui_data\
+        docker run --rm -v logstashui_logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume logstashui_data → logstashui_data\
+        docker run --rm -v logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect LogstashUI_logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume LogstashUI_logstashui_data → logstashui_data\
+        docker run --rm -v LogstashUI_logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+echo Host data directory: %CD%\logstashui_data
+echo.
+
 REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 

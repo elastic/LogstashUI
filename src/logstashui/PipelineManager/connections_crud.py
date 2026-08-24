@@ -25,8 +25,16 @@ logger = logging.getLogger(__name__)
 def GetConnections(request):
     """Get all connections for dropdown population"""
     try:
-        connections = ConnectionTable.objects.all().values('id', 'name', 'connection_type')
-        return JsonResponse(list(connections), safe=False, status=200)
+        from PipelineManager.agent_modes import is_embedded_connection
+
+        connections = [
+            {'id': conn['id'], 'name': conn['name'], 'connection_type': conn['connection_type']}
+            for conn in ConnectionTable.objects.values(
+                'id', 'name', 'connection_type', 'agent_id', 'policy__policy_type'
+            )
+            if not is_embedded_connection(conn)
+        ]
+        return JsonResponse(connections, safe=False, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 

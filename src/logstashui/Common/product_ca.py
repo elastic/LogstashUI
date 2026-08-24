@@ -5,7 +5,7 @@
 """
 Product CA for LogstashUI.
 
-- Generated once on first use and stored under data/tls/
+- Generated once on first use and stored under DATA_DIR/tls/
 - Serves the public CA cert at /.well-known/logstashui/ca.crt
 - Fingerprint (SHA-256 of DER, lowercase hex) is embedded in enrollment tokens
   when agent.include_ca_fingerprint is true (default)
@@ -39,7 +39,11 @@ WELL_KNOWN_CA_PATH = "/.well-known/logstashui/ca.crt"
 
 
 def tls_data_dir() -> Path:
-    d = Path(settings.BASE_DIR) / "data" / "tls"
+    data = getattr(settings, "DATA_DIR", None)
+    if data:
+        d = Path(data) / "tls"
+    else:
+        d = Path(settings.BASE_DIR) / "data" / "tls"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

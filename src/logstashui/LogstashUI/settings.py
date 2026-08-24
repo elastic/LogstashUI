@@ -19,6 +19,7 @@ import os, platform
 from importlib.metadata import version, PackageNotFoundError
 from Common.encryption import get_django_secret_key
 from .config import CONFIG
+from .paths import resolve_data_dir, resolve_logs_dir
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,11 +32,17 @@ PROJECT_ROOT = BASE_DIR.parent.parent
 # Falls back to DEFAULT_CONFIG if not specified
 LOGSTASHUI_CONFIG = CONFIG
 
+# Runtime state (sqlite, tls, secrets). Outside src/ unless pytest.
+# Env LOGSTASHUI_DATA_DIR / yaml paths.data override the default
+# <project_root>/logstashui_data. Docker sets /var/lib/logstashui.
+DATA_DIR = resolve_data_dir()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Automatically generates and persists a unique key per deployment in data/.django_secret_key
+# Automatically generates and persists a unique key per deployment in DATA_DIR/.django_secret_key
 # Can be overridden with SECRET_KEY environment variable
 SECRET_KEY = get_django_secret_key()
 
@@ -143,7 +150,7 @@ WSGI_APPLICATION = 'LogstashUI.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
+        'NAME': DATA_DIR / 'db.sqlite3',
     }
 }
 
@@ -326,8 +333,8 @@ else:
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/
 
-# Ensure logs directory exists
-LOGS_DIR = BASE_DIR / 'data' / 'logs'
+# Ensure logs directory exists (LOGSTASHUI_LOGS_DIR / yaml paths.logs / DATA_DIR/logs)
+LOGS_DIR = resolve_logs_dir(DATA_DIR)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 LOGGING = {

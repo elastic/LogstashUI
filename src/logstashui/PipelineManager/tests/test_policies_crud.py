@@ -129,6 +129,20 @@ class TestGetPolicies:
         assert data['success'] is True
         assert len(data['policies']) == 0
 
+    def test_get_policies_excludes_embedded(self, authenticated_client):
+        """Embedded Policy is never returned to the Policies UI"""
+        assert Policy.objects.filter(policy_type=Policy.PolicyType.EMBEDDED).exists()
+        assert Policy.objects.filter(policy_type=Policy.PolicyType.SIMULATE).exists()
+
+        response = authenticated_client.get('/ConnectionManager/GetPolicies/')
+        assert response.status_code == 200
+        data = response.json()
+        names = [p['name'] for p in data['policies']]
+        types = [p['policy_type'] for p in data['policies']]
+        assert 'Embedded Policy' not in names
+        assert 'EMBEDDED' not in types
+        assert any(t == Policy.PolicyType.SIMULATE for t in types)
+
 
 # ============================================================================
 # AddPolicy Tests
@@ -183,9 +197,12 @@ class TestAddPolicy:
 
         # Verify policy was created with defaults
         policy = Policy.objects.get(name='Minimal Policy')
+        assert policy.policy_type == Policy.PolicyType.PACKAGED
         assert policy.settings_path == '/etc/logstash/'
         assert policy.logs_path == '/var/log/logstash'
         assert policy.binary_path == '/usr/share/logstash/bin'
+        assert policy.agent_api_port == 9550
+        assert policy.logstash_api_port == 9600
         assert len(policy.logstash_yml) > 0  # Should have default config
         assert len(policy.jvm_options) > 0
         assert len(policy.log4j2_properties) > 0
@@ -240,6 +257,117 @@ class TestAddPolicy:
         assert data['success'] is False
         assert 'Invalid JSON data' in data['error']
 
+    def test_add_policy_explicit_packaged(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'Explicit Packaged',
+                'policy_type': 'packaged',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert data['policy_type'] == 'PACKAGED'
+        policy = Policy.objects.get(name='Explicit Packaged')
+        assert policy.policy_type == Policy.PolicyType.PACKAGED
+        assert policy.settings_path == '/etc/logstash/'
+        assert policy.agent_api_port == 9550
+        assert policy.logstash_api_port == 9600
+
+    def test_add_policy_managed_seeds_templates(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'New Managed',
+                'policy_type': 'MANAGED',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert data['policy_type'] == 'MANAGED'
+        policy = Policy.objects.get(name='New Managed')
+        assert policy.policy_type == Policy.PolicyType.MANAGED
+        assert policy.settings_path == '/opt/logstash-agent/managed-{instance_id}/settings'
+        assert policy.logs_path == '/opt/logstash-agent/managed-{instance_id}/logs'
+        assert policy.data_path == '/opt/logstash-agent/managed-{instance_id}/data'
+        assert policy.keystore_env_file == '/opt/logstash-agent/managed-{instance_id}/env'
+        assert policy.agent_api_port == 9550
+        assert policy.logstash_api_port == 9700
+
+    def test_add_policy_simulate_seeds_templates(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'New Simulate',
+                'policy_type': 'SIMULATE',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert data['policy_type'] == 'SIMULATE'
+        policy = Policy.objects.get(name='New Simulate')
+        assert policy.policy_type == Policy.PolicyType.SIMULATE
+        assert policy.settings_path == '/opt/logstash-agent/simulate-{instance_id}/settings'
+        assert policy.logs_path == '/opt/logstash-agent/simulate-{instance_id}/logs'
+        assert policy.data_path == '/opt/logstash-agent/simulate-{instance_id}/data'
+        assert policy.keystore_env_file == '/opt/logstash-agent/simulate-{instance_id}/env'
+        assert policy.agent_api_port == 9500
+        assert policy.logstash_api_port == 9560
+
+    def test_add_policy_managed_keeps_custom_paths(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'Custom Managed',
+                'policy_type': 'MANAGED',
+                'settings_path': '/opt/custom/settings',
+                'logs_path': '/opt/custom/logs',
+                'data_path': '/opt/custom/data',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        policy = Policy.objects.get(name='Custom Managed')
+        assert policy.settings_path == '/opt/custom/settings'
+        assert policy.logs_path == '/opt/custom/logs'
+        assert policy.data_path == '/opt/custom/data'
+
+    def test_add_policy_rejects_embedded(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'Nope Embedded',
+                'policy_type': 'EMBEDDED',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert data['success'] is False
+        assert 'Embedded' in data['error']
+        assert not Policy.objects.filter(name='Nope Embedded').exists()
+
+    def test_add_policy_rejects_unknown_type(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'Nope Weird',
+                'policy_type': 'WIZARD',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert data['success'] is False
+        assert 'Invalid policy_type' in data['error']
+        assert not Policy.objects.filter(name='Nope Weird').exists()
+
 
 # ============================================================================
 # UpdatePolicy Tests
@@ -289,6 +417,39 @@ class TestUpdatePolicy:
         test_policy.refresh_from_db()
         assert test_policy.settings_path == '/updated/settings'
         assert test_policy.logs_path == original_logs_path  # Unchanged
+
+    def test_update_policy_same_type_allowed(self, authenticated_client, test_policy):
+        response = authenticated_client.post(
+            '/ConnectionManager/UpdatePolicy/',
+            data=json.dumps({
+                'policy_name': 'Test Policy',
+                'policy_type': 'PACKAGED',
+                'settings_path': '/still/packaged',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        test_policy.refresh_from_db()
+        assert test_policy.policy_type == Policy.PolicyType.PACKAGED
+        assert test_policy.settings_path == '/still/packaged'
+
+    def test_update_policy_type_change_forbidden(self, authenticated_client, test_policy):
+        response = authenticated_client.post(
+            '/ConnectionManager/UpdatePolicy/',
+            data=json.dumps({
+                'policy_name': 'Test Policy',
+                'policy_type': 'MANAGED',
+                'settings_path': '/should/not/apply',
+            }),
+            content_type='application/json'
+        )
+        assert response.status_code == 403
+        data = response.json()
+        assert data['success'] is False
+        assert 'Cannot change policy type' in data['error']
+        test_policy.refresh_from_db()
+        assert test_policy.policy_type == Policy.PolicyType.PACKAGED
+        assert test_policy.settings_path == '/etc/logstash/'
 
     def test_update_policy_missing_name(self, authenticated_client):
         """Test updating policy without name"""

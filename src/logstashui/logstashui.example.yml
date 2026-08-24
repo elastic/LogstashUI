@@ -7,6 +7,17 @@
 no_auth:
   enabled: false  # true | false
 
+# Runtime storage (sqlite, TLS, secrets, logs). Env wins over this file:
+#   LOGSTASHUI_DATA_DIR, LOGSTASHUI_LOGS_DIR
+# Relative paths.data is resolved from the git/project root.
+# Docker compose bind-mounts <checkout>/logstashui_data → /var/lib/logstashui
+# and sets LOGSTASHUI_DATA_DIR=/var/lib/logstashui.
+# Linux Docker: start_logstashui.sh exports PUID/PGID so the bind-mount is writable.
+# Native default (no env): <project_root>/logstashui_data
+#paths:
+#  data: /var/lib/logstashui
+#  logs: /var/log/logstashui          # optional; default is ${data}/logs
+
 # Agent / backend channel (may differ from the browser reverse-proxy URL)
 agent:
   # Prefills --logstash-ui-url in generated enrollment commands

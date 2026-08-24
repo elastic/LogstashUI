@@ -22,7 +22,8 @@ def test_ensure_product_ca_generates_and_fingerprints(tmp_path, settings):
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
 
     pem1, fp1 = product_ca.ensure_product_ca()
     assert b"BEGIN CERTIFICATE" in pem1
@@ -46,7 +47,8 @@ def test_build_enrollment_token_payload_includes_fingerprint(tmp_path, settings)
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
     settings.LOGSTASHUI_CONFIG = {
         "agent": {"include_ca_fingerprint": True},
     }
@@ -66,7 +68,8 @@ def test_build_enrollment_token_payload_omits_fingerprint(tmp_path, settings):
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
     settings.LOGSTASHUI_CONFIG = {
         "agent": {"include_ca_fingerprint": False},
     }
@@ -81,7 +84,8 @@ def test_product_ca_endpoint(client, tmp_path, settings):
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
 
     resp = client.get("/.well-known/logstashui/ca.crt")
     assert resp.status_code == 200
@@ -96,7 +100,8 @@ def test_default_ui_server_cert_includes_compose_sans(tmp_path, settings, monkey
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
     monkeypatch.delenv("LOGSTASHUI_TLS_SANS", raising=False)
     monkeypatch.delenv("LOGSTASHUI_HOST_HOSTNAME", raising=False)
     monkeypatch.delenv("LOGSTASHUI_HOST_IPS", raising=False)
@@ -120,7 +125,8 @@ def test_ui_cert_includes_host_ips_and_reissues_on_san_change(tmp_path, settings
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
     settings.LOGSTASHUI_CONFIG = {}
 
     monkeypatch.setenv("LOGSTASHUI_HOST_HOSTNAME", "docker-host.example")
@@ -238,7 +244,8 @@ def test_sign_agent_csr(tmp_path, settings):
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     csr = (
@@ -272,7 +279,8 @@ def test_custom_ui_cert_and_revert(tmp_path, settings):
     product_ca._cached_cert_pem = None
     product_ca._cached_fingerprint = None
     settings.BASE_DIR = tmp_path
-    (tmp_path / "data").mkdir(exist_ok=True)
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
 
     # Self-signed standalone cert (simulates public/custom CA leaf)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

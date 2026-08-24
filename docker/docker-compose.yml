@@ -5,9 +5,10 @@
 name: LogstashUI
 
 # Dual HTTPS (no nginx):
-#   UI gunicorn  :8443  (product CA leaf or custom upload under data/tls/ui-server.*)
+#   UI gunicorn  :8443  (product CA leaf or custom upload under $LOGSTASHUI_DATA_DIR/tls/)
 #   Agent uvicorn :9500 (product-CA-signed agent leaf; CSR issue via enroll/check-in/secret)
 # Agents pull product CA from https://…:8443/.well-known/logstashui/ca.crt (verify=False only for that bootstrap GET).
+# Host checkout bind: <project_root>/logstashui_data → /var/lib/logstashui
 
 services:
   logstashui:
@@ -19,11 +20,16 @@ services:
     ports:
       - "8443:8443"
     volumes:
-      - logstashui_data:/app/src/logstashui/data
+      - ../logstashui_data:/var/lib/logstashui
       - ../src/logstashui/logstashui.yml:/app/src/logstashui/logstashui.yml:ro
     environment:
       - DEBUG=False
-      # SECRET_KEY: Optional - will auto-generate and persist in data/.django_secret_key if not set
+      - LOGSTASHUI_DATA_DIR=/var/lib/logstashui
+      # Linux bind-mount: start_logstashui.sh sets these to the host uid/gid so
+      # ./logstashui_data stays owned by the operator. Empty → image appuser (10001).
+      - PUID=${PUID:-}
+      - PGID=${PGID:-}
+      # SECRET_KEY: Optional - will auto-generate and persist in DATA_DIR/.django_secret_key if not set
       # - SECRET_KEY=${SECRET_KEY}
       # ALLOWED_HOSTS: Set to your domain(s) in production (comma-separated)
       # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com,192.168.1.100
@@ -82,9 +88,6 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - logstashui_network
-
-volumes:
-  logstashui_data:
 
 networks:
   logstashui_network:
