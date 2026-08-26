@@ -16,17 +16,39 @@ import os
 import json
 
 
+def _ai_template_connections():
+    """
+    Centralized ES connections for the Generate Template UI.
+
+    ``suggested_kibana_url`` is the host rewritten to a Kibana origin so URL
+    connections can prefill the Kibana URL field instead of waiting for the
+    user to paste (often) the Elasticsearch endpoint.
+    """
+    from PipelineManager.models import Connection
+    from Common.elastic_utils import normalize_kibana_url
+
+    rows = list(Connection.objects.filter(
+        connection_type=Connection.ConnectionType.CENTRALIZED
+    ).values('id', 'name', 'cloud_id', 'host', 'port'))
+    for row in rows:
+        raw = row.get('host') or ''
+        port = row.get('port')
+        if raw and port:
+            host_part = raw.split('://', 1)[-1]
+            if ':' not in host_part:
+                raw = f"{raw}:{port}"
+        row['suggested_kibana_url'] = normalize_kibana_url(raw) if raw else ''
+    return rows
+
+
 # Create your views here.
 def Networks(request):
-    from PipelineManager.models import Connection
     networks = Network.objects.select_related('connection').all()
     form = ConnectionForm()
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     credentials = Credential.objects.all().order_by('name')
-    connections = Connection.objects.filter(
-        connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name', 'cloud_id')
+    connections = _ai_template_connections()
     return render(request, 'Networks.html', {
         'networks': networks,
         'form': form,
@@ -37,10 +59,7 @@ def Networks(request):
     })
 
 def Onboarding(request):
-    from PipelineManager.models import Connection
-    connections   = Connection.objects.filter(
-        connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name', 'cloud_id')
+    connections   = _ai_template_connections()
     credentials   = Credential.objects.all().order_by('name')
     networks      = Network.objects.all().order_by('name')
     templates     = DeviceTemplate.objects.exclude(name='default').order_by('-official', 'name')
@@ -206,19 +225,15 @@ def _snmp_get_sys_descr(host, port, credential):
     return result[0]
 
 def Devices(request):
-    from PipelineManager.models import Connection
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     credentials = Credential.objects.all().order_by('name')
     form = ConnectionForm()
-    connections = Connection.objects.filter(
-        connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name', 'cloud_id')
+    connections = _ai_template_connections()
     return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'credentials': credentials, 'form': form, 'connections': connections})
 
 def DeviceTemplates(request):
     from django.db.models import Count
-    from PipelineManager.models import Connection
     
     # Load all device templates from database (includes synced official templates)
     device_templates = []
@@ -306,10 +321,7 @@ def DeviceTemplates(request):
     all_profiles = official_profiles + user_profiles
     all_profiles.sort(key=lambda x: x['display_name'])
     
-    connections = Connection.objects.filter(
-        connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name', 'cloud_id')
-
+    connections = _ai_template_connections()
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     snmp_test_templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     snmp_test_credentials = Credential.objects.all().order_by('name')
@@ -324,13 +336,10 @@ def DeviceTemplates(request):
 
 def Credentials(request):
     from django.db.models import Count
-    from PipelineManager.models import Connection
     credentials = Credential.objects.annotate(device_count=Count('devices')).order_by('name')
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
-    connections = Connection.objects.filter(
-        connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name', 'cloud_id')
+    connections = _ai_template_connections()
     return render(request, 'Credentials.html', {
         'credentials': credentials,
         'devices': devices,

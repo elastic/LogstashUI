@@ -154,6 +154,8 @@
 
       if (hasCloudId) {
         checkAgentBuilderResources(connId, null);
+      } else {
+        _prefillAndCheckKibanaUrl(selected, connId);
       }
     }
   }
@@ -181,6 +183,7 @@
     hideResourceStatus();
     _connectionId = null;
     _kibanaUrl    = null;
+    _generationInFlight = false;
   }
 
   // ── Kibana URL visibility ──────────────────────────────────────────────────────
@@ -204,6 +207,10 @@
 
   // ── Resource status panel ─────────────────────────────────────────────────────
 
+  let _hasMissingResources = false;
+  let _checkInFlight = false;
+  let _generationInFlight = false;
+
   function hideResourceStatus() {
     const panel = document.getElementById('aiTemplateResourceStatus');
     if (panel) panel.classList.add('hidden');
@@ -215,7 +222,9 @@
     if (unavailable) unavailable.classList.add('hidden');
 
     setInstallBtnVisible(false);
-    setGenerateBtnBlocked(false);
+    _checkInFlight = false;
+    _hasMissingResources = false;
+    _updateGenerateBtnState();
   }
 
   function setLoading(visible) {
@@ -226,11 +235,14 @@
     if (panel) panel.classList.remove('hidden');
   }
 
-  let _hasMissingResources = false;
-
   function setGenerateBtnBlocked(blocked) {
     _hasMissingResources = blocked;
     _updateGenerateBtnState();
+  }
+
+  function _kibanaUrlRequired() {
+    const kibanaContainer = document.getElementById('aiTemplateKibanaUrlContainer');
+    return !!(kibanaContainer && !kibanaContainer.classList.contains('hidden'));
   }
 
   function _updateGenerateBtnState() {
@@ -239,15 +251,23 @@
     const modelSelect = document.getElementById('aiTemplateModelSelect');
     if (!btn) return;
 
-    const walkEmpty  = !walkInput  || !walkInput.value.trim();
-    const noModel    = !modelSelect || !modelSelect.value;
-    const blocked    = _hasMissingResources || walkEmpty || noModel;
+    const walkEmpty    = !walkInput  || !walkInput.value.trim();
+    const noModel      = !modelSelect || !modelSelect.value;
+    const kibanaInput  = document.getElementById('aiTemplateKibanaUrl');
+    const noKibanaUrl  = _kibanaUrlRequired() && (!kibanaInput || !kibanaInput.value.trim());
+    const blocked      = _hasMissingResources || _checkInFlight || _generationInFlight || walkEmpty || noModel || noKibanaUrl;
 
     btn.disabled = blocked;
     if (blocked) {
       btn.classList.add('opacity-50', 'cursor-not-allowed');
-      if (_hasMissingResources) {
+      if (_checkInFlight) {
+        btn.title = 'Waiting for Elastic Agent Builder resource check';
+      } else if (_generationInFlight) {
+        btn.title = 'Generation in progress';
+      } else if (_hasMissingResources) {
         btn.title = 'Install all required Elastic Agent Builder resources before generating';
+      } else if (noKibanaUrl) {
+        btn.title = 'Provide a Kibana URL before generating';
       } else if (noModel) {
         btn.title = 'Select an inference model before generating';
       } else {
@@ -299,7 +319,7 @@
       if (unavailableMsg) unavailableMsg.textContent =
         results.error || 'Elastic Agent Builder API is not available (requires Kibana ≥ 9.2).';
       setInstallBtnVisible(false);
-      setGenerateBtnBlocked(false);
+      setGenerateBtnBlocked(true);
       return;
     }
 
@@ -314,28 +334,33 @@
     if (allResources.length === 0) {
       list.innerHTML = '<p class="px-4 py-3 text-xs text-gray-500 italic">No resources defined yet.</p>';
       setInstallBtnVisible(false);
+      setGenerateBtnBlocked(true);
       return;
     }
 
     let hasMissing = false;
     let hasDiffers = false;
+    let hasError   = false;
 
     allResources.forEach(resource => {
       if (resource.status === 'missing') hasMissing = true;
       if (resource.status === 'differs') hasDiffers = true;
+      if (resource.status === 'error')   hasError   = true;
 
       const typeLabel  = resource.type.charAt(0).toUpperCase() + resource.type.slice(1);
-      const diffHint   = resource.differences && resource.differences.length
-        ? `<span class="text-xs text-gray-500 ml-1">(${resource.differences.join(', ')})</span>`
-        : '';
+      const extraHint  = resource.status === 'error' && resource.error
+        ? `<span class="text-xs text-gray-500 ml-1 truncate max-w-xs" title="${escapeHtml(resource.error)}">${escapeHtml(resource.error)}</span>`
+        : (resource.differences && resource.differences.length
+          ? `<span class="text-xs text-gray-500 ml-1">(${resource.differences.join(', ')})</span>`
+          : '');
 
       const row = document.createElement('div');
       row.className = 'flex items-center justify-between px-4 py-2.5 gap-4';
       row.innerHTML = `
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-xs text-gray-500 uppercase tracking-wide w-10 flex-shrink-0">${typeLabel}</span>
-          <span class="text-sm text-white truncate">${resource.display_name}</span>
-          ${diffHint}
+          <span class="text-sm text-white truncate">${escapeHtml(resource.display_name)}</span>
+          ${extraHint}
         </div>
         <div class="flex-shrink-0">
           ${statusBadge(resource.status)}
@@ -344,9 +369,9 @@
       list.appendChild(row);
     });
 
-    const needsAction = hasMissing || hasDiffers;
-    setInstallBtnVisible(needsAction, !hasMissing && hasDiffers);
-    setGenerateBtnBlocked(hasMissing);
+    const needsAction = hasMissing || hasDiffers || hasError;
+    setInstallBtnVisible(needsAction, !hasMissing && !hasError && hasDiffers);
+    setGenerateBtnBlocked(hasMissing || hasError);
   }
 
   // ── Check resources API call ───────────────────────────────────────────────────
@@ -357,6 +382,8 @@
     _connectionId = connectionId;
     _kibanaUrl    = kibanaUrl || null;
 
+    _checkInFlight = true;
+    _updateGenerateBtnState();
     setLoading(true);
     setInstallBtnVisible(false);
 
@@ -370,10 +397,12 @@
     })
       .then(r => r.json())
       .then(results => {
+        _checkInFlight = false;
         setLoading(false);
         renderResourceStatus(results);
       })
       .catch(err => {
+        _checkInFlight = false;
         setLoading(false);
         renderResourceStatus({
           api_available: false,
@@ -381,6 +410,20 @@
           tools: [], skills: [], agents: [],
         });
       });
+  }
+
+  function _prefillAndCheckKibanaUrl(selected, connectionId) {
+    const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
+    const suggested = (selected && selected.dataset.suggestedKibanaUrl) || '';
+    if (kibanaUrlInput && suggested && !kibanaUrlInput.value.trim()) {
+      kibanaUrlInput.value = suggested;
+    }
+    const kibanaUrl = kibanaUrlInput && kibanaUrlInput.value.trim();
+    if (kibanaUrl) {
+      checkAgentBuilderResources(connectionId, kibanaUrl);
+    } else {
+      _updateGenerateBtnState();
+    }
   }
 
   // ── Install / update entire package ───────────────────────────────────────────
@@ -393,6 +436,8 @@
 
     if (btn) btn.disabled = true;
     if (label) label.textContent = 'Installing…';
+    _checkInFlight = true;
+    _updateGenerateBtnState();
     setLoading(true);
 
     const body = { connection_id: _connectionId };
@@ -417,7 +462,9 @@
       })
       .catch(err => {
         if (btn) btn.disabled = false;
+        _checkInFlight = false;
         setLoading(false);
+        _updateGenerateBtnState();
         showToast(`Install failed: ${err.message}`, 'error');
       });
   }
@@ -449,6 +496,10 @@
           fetchAndPopulateModels(parseInt(selected.value, 10));
           if (hasCloudId) {
             checkAgentBuilderResources(parseInt(selected.value, 10), null);
+          } else {
+            const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
+            if (kibanaUrlInput) kibanaUrlInput.value = '';
+            _prefillAndCheckKibanaUrl(selected, parseInt(selected.value, 10));
           }
         }
       });
@@ -465,7 +516,10 @@
         }
       }, 600);
 
-      kibanaUrlInput.addEventListener('input', debouncedCheck);
+      kibanaUrlInput.addEventListener('input', function () {
+        _updateGenerateBtnState();
+        debouncedCheck();
+      });
     }
 
     const installBtn = document.getElementById('aiTemplateInstallBtn');
@@ -480,6 +534,8 @@
     if (generateBtn) {
       generateBtn.addEventListener('click', startGeneration);
     }
+
+    _updateGenerateBtnState();
   });
 
   // ── Generation pipeline ───────────────────────────────────────────────────────
@@ -861,11 +917,8 @@
     if (profilesAccordion) profilesAccordion.innerHTML = '';
     if (templateCard)      templateCard.innerHTML = '';
 
-    const generateBtn = document.getElementById('aiTemplateGenerateBtn');
-    if (generateBtn) {
-      generateBtn.disabled = true;
-      generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
-    }
+    _generationInFlight = true;
+    _updateGenerateBtnState();
 
     // ── Step helpers ──────────────────────────────────────────────────────────
 
@@ -987,10 +1040,8 @@
             _streamingStep = null;
           }
 
-          if (generateBtn) {
-            generateBtn.disabled = false;
-            generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-          }
+          _generationInFlight = false;
+          _updateGenerateBtnState();
 
           if (accumulatedResponse) {
             const parsed = _extractJSON(accumulatedResponse);
@@ -1015,10 +1066,8 @@
             _resolveStep(_streamingStep, false);
             _streamingStep = null;
           }
-          if (generateBtn) {
-            generateBtn.disabled = false;
-            generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-          }
+          _generationInFlight = false;
+          _updateGenerateBtnState();
           break;
         }
       }
@@ -1066,10 +1115,8 @@
           errRow.innerHTML = `<span class="flex-shrink-0">${ICON.xmark}</span><span>Request failed: ${escapeHtml(err.message)}</span>`;
           stepsEl.appendChild(errRow);
         }
-        if (generateBtn) {
-          generateBtn.disabled = false;
-          generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
+        _generationInFlight = false;
+        _updateGenerateBtnState();
       });
   }
 

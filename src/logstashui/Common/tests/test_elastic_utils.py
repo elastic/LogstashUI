@@ -14,7 +14,8 @@ from Common.elastic_utils import (
     get_elasticsearch_indices,
     get_elasticsearch_field_mappings,
     _extract_field_names,
-    query_elasticsearch_documents
+    query_elasticsearch_documents,
+    normalize_kibana_url,
 )
 from PipelineManager.models import Connection
 
@@ -606,3 +607,48 @@ class TestTestElasticConnectivity:
         result = es_test_connectivity(mock_connection)
         parsed = json.loads(result)
         assert parsed == {}
+
+
+class TestNormalizeKibanaUrl:
+    """URL-based connections often store the ES endpoint; Agent Builder needs Kibana."""
+
+    def test_rewrites_es_infix_to_kb(self):
+        assert normalize_kibana_url(
+            'https://proj.es.us-east-1.aws.elastic.cloud'
+        ) == 'https://proj.kb.us-east-1.aws.elastic.cloud'
+
+    def test_inserts_kb_for_alias_without_es_or_kb(self):
+        assert normalize_kibana_url(
+            'https://logstashuiserverless-ae1d5d3b.us-east-1.aws.elastic.cloud'
+        ) == 'https://logstashuiserverless-ae1d5d3b.kb.us-east-1.aws.elastic.cloud'
+
+    def test_leaves_kibana_host_unchanged(self):
+        url = 'https://proj.kb.us-east-1.aws.elastic.cloud'
+        assert normalize_kibana_url(url) == url
+
+    def test_strips_kibana_app_path(self):
+        assert normalize_kibana_url(
+            'https://proj.kb.us-east-1.aws.elastic.cloud/app/home'
+        ) == 'https://proj.kb.us-east-1.aws.elastic.cloud'
+
+    def test_drops_es_port_when_rewriting_elastic_cloud(self):
+        assert normalize_kibana_url(
+            'https://proj.es.us-east-1.aws.elastic.cloud:9243'
+        ) == 'https://proj.kb.us-east-1.aws.elastic.cloud'
+
+    def test_preserves_self_managed_kibana_port(self):
+        assert normalize_kibana_url('https://localhost:5601') == 'https://localhost:5601'
+
+    def test_adds_https_when_scheme_missing(self):
+        assert normalize_kibana_url(
+            'proj.es.eu-west-1.gcp.elastic.cloud'
+        ) == 'https://proj.kb.eu-west-1.gcp.elastic.cloud'
+
+    def test_cloud_id_found_io_host_passthrough(self):
+        url = 'https://abc123.us-east-1.aws.found.io'
+        assert normalize_kibana_url(url) == url
+
+    def test_empty_and_none(self):
+        assert normalize_kibana_url('') == ''
+        assert normalize_kibana_url(None) is None
+

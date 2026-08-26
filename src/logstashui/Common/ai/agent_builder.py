@@ -172,16 +172,25 @@ class AgentBuilder:
     ─────────────
     - ``connection_id``: LogstashUI DB Connection pk.  The Kibana URL and
       auth credentials are derived automatically from the Connection record.
-    - ``kibana_url_override``: Always wins over the auto-derived Kibana URL.
-      Required for URL-based connections where the auto-derive heuristic
-      (replacing ``.es.`` with ``.kb.``) does not apply.
+    - ``kibana_url_override``: Used as the Kibana origin after
+      ``normalize_kibana_url`` (``.es.`` hosts become ``.kb.``, paths stripped).
+      If omitted, the origin is derived from the Connection via
+      ``get_kibana_url``.
 
     At least one of ``connection_id`` or ``kibana_url_override`` must be
     provided.
     """
 
+    # Connect timeout is short so a wrong host (ES instead of Kibana) fails
+    # fast. Read timeout is longer because the SNMP catalog skill payload is
+    # ~100 KB. Streaming converse uses a separate 300s read timeout.
+    _CONNECT_TIMEOUT = 5
+    _READ_TIMEOUT = 20
+    _PROBE_READ_TIMEOUT = 8
+    _INVOKE_READ_TIMEOUT = 300
+
     def __init__(self, connection_id=None, kibana_url_override=None):
-        from Common.elastic_utils import _get_creds, get_kibana_url
+        from Common.elastic_utils import _get_creds, get_kibana_url, normalize_kibana_url
 
         if connection_id is None and kibana_url_override is None:
             raise ValueError(
@@ -191,10 +200,11 @@ class AgentBuilder:
         self._creds = _get_creds(connection_id) if connection_id else {}
         self._connection_id = connection_id
 
-        if kibana_url_override:
-            self._kibana_url = kibana_url_override.rstrip('/')
-        else:
-            self._kibana_url = get_kibana_url(connection_id).rstrip('/')
+        raw_url = (kibana_url_override or '').strip()
+        if not raw_url:
+            raw_url = get_kibana_url(connection_id)
+        self._kibana_url = normalize_kibana_url(raw_url).rstrip('/')
+        logger.info("AgentBuilder Kibana origin: %s", self._kibana_url)
 
         # Build reusable headers.  Writes also need kbn-xsrf (added per-call).
         self._read_headers = {
@@ -206,27 +216,85 @@ class AgentBuilder:
         self._write_headers = {**self._read_headers, 'kbn-xsrf': 'true'}
         self._auth = self._creds.get('http_auth')  # (username, password) or None
 
+        self._session = requests.Session()
+        self._session.verify = False
+        self._session.auth = self._auth
+        self._session.headers.update(self._read_headers)
+
     # ── Private HTTP helpers ───────────────────────────────────────────────────
 
-    def _get(self, path):
-        url = f"{self._kibana_url}{path}"
-        return requests.get(url, headers=self._read_headers, auth=self._auth,
-                            verify=False, timeout=15)
+    def _timeout(self, read=None):
+        return (self._CONNECT_TIMEOUT, self._READ_TIMEOUT if read is None else read)
 
-    def _post(self, path, body):
+    def _request(self, method, path, **kwargs):
         url = f"{self._kibana_url}{path}"
-        return requests.post(url, json=body, headers=self._write_headers,
-                             auth=self._auth, verify=False, timeout=15)
+        timeout = kwargs.pop('timeout', None) or self._timeout()
+        headers = kwargs.pop('headers', None)
+        req_kwargs = dict(timeout=timeout, allow_redirects=False, **kwargs)
+        if headers is not None:
+            req_kwargs['headers'] = headers
+        return self._session.request(method, url, **req_kwargs)
 
-    def _put(self, path, body):
-        url = f"{self._kibana_url}{path}"
-        return requests.put(url, json=body, headers=self._write_headers,
-                            auth=self._auth, verify=False, timeout=15)
+    def _get(self, path, timeout=None):
+        return self._request('GET', path, timeout=timeout)
 
-    def _delete(self, path):
-        url = f"{self._kibana_url}{path}"
-        return requests.delete(url, headers=self._write_headers, auth=self._auth,
-                               verify=False, timeout=15)
+    def _post(self, path, body, timeout=None):
+        return self._request('POST', path, json=body, headers=self._write_headers,
+                             timeout=timeout)
+
+    def _put(self, path, body, timeout=None):
+        return self._request('PUT', path, json=body, headers=self._write_headers,
+                             timeout=timeout)
+
+    def _delete(self, path, timeout=None):
+        return self._request('DELETE', path, headers=self._write_headers,
+                             timeout=timeout)
+
+    def _unreachable_message(self, exc):
+        hint = (
+            f"Could not reach Agent Builder at {self._kibana_url}. "
+            "Confirm this is a Kibana URL (*.kb.*), not the Elasticsearch endpoint."
+        )
+        return f"{hint} ({exc})"
+
+    def _probe_api(self):
+        """
+        Cheap reachability check against the skills collection.
+
+        Hitting Elasticsearch (or a dead host) returns quickly with
+        api_available=False instead of waiting on per-resource GET timeouts
+        for the large SNMP catalog skill.
+        """
+        try:
+            resp = self._get(
+                _PATHS[RESOURCE_SKILL],
+                timeout=self._timeout(self._PROBE_READ_TIMEOUT),
+            )
+        except requests.exceptions.RequestException as exc:
+            return False, self._unreachable_message(exc)
+
+        if resp.status_code == 404:
+            return False, (
+                "Elastic Agent Builder API not available. "
+                "Ensure Kibana ≥ 9.2 and Agent Builder is enabled."
+            )
+        if resp.status_code in (401, 403):
+            return False, (
+                f"Authentication failed against {self._kibana_url} "
+                f"(HTTP {resp.status_code}). Check the connection API key."
+            )
+        if resp.status_code >= 400:
+            snippet = (resp.text or '')[:300]
+            return False, (
+                f"Agent Builder probe failed against {self._kibana_url} "
+                f"(HTTP {resp.status_code}): {snippet}"
+            )
+        if 300 <= resp.status_code < 400:
+            return False, (
+                f"Unexpected redirect from {self._kibana_url} "
+                f"(HTTP {resp.status_code}). Is this a Kibana URL?"
+            )
+        return True, None
 
     # ── Private: fetch by ID ───────────────────────────────────────────────────
 
@@ -240,15 +308,26 @@ class AgentBuilder:
         (None, None)            – 404, resource simply doesn't exist
         (None, error_str)       – unexpected HTTP error
         """
-        resp = self._get(f"{_PATHS[resource_type]}/{resource_id}")
+        path = f"{_PATHS[resource_type]}/{resource_id}"
+        try:
+            resp = self._get(path)
+        except requests.exceptions.RequestException as exc:
+            return None, self._unreachable_message(exc)
 
         if resp.status_code == 404:
             return None, None
 
-        if not resp.ok:
-            return None, f"HTTP {resp.status_code}: {resp.text[:300]}"
+        if not (200 <= resp.status_code < 300):
+            snippet = (resp.text or '')[:300]
+            return None, f"HTTP {resp.status_code}: {snippet}"
 
-        return resp.json(), None
+        try:
+            return resp.json(), None
+        except ValueError:
+            return None, (
+                f"HTTP {resp.status_code}: non-JSON response from "
+                f"{self._kibana_url}{path}"
+            )
 
     # ── Private: comparison ────────────────────────────────────────────────────
 
@@ -307,6 +386,12 @@ class AgentBuilder:
             'agents': [],
         }
 
+        available, probe_err = self._probe_api()
+        if not available:
+            results['api_available'] = False
+            results['error'] = probe_err
+            return results
+
         resource_groups = [
             (RESOURCE_TOOL,  tools  or []),
             (RESOURCE_SKILL, skills or []),
@@ -323,15 +408,6 @@ class AgentBuilder:
                 current, err = self._fetch_one(resource_type, rid)
 
                 if err:
-                    # A 404 on the base path means Agent Builder is not installed
-                    if '404' in err:
-                        results['api_available'] = False
-                        results['error'] = (
-                            "Elastic Agent Builder API not available. "
-                            "Ensure Kibana ≥ 9.2 and Agent Builder is enabled."
-                        )
-                        return results
-
                     results[plural_key].append({
                         'id': rid,
                         'display_name': display,
@@ -371,8 +447,11 @@ class AgentBuilder:
         """
         strip = _POST_STRIP_KEYS.get(resource_type, set())
         body  = {k: v for k, v in definition.items() if k not in strip}
-        resp  = self._post(_PATHS[resource_type], body)
-        if resp.ok:
+        try:
+            resp  = self._post(_PATHS[resource_type], body)
+        except requests.exceptions.RequestException as exc:
+            return False, self._unreachable_message(exc)
+        if 200 <= resp.status_code < 300:
             return True, resp.json()
         return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
@@ -388,8 +467,11 @@ class AgentBuilder:
         path      = f"{_PATHS[resource_type]}/{resource_id}"
         strip     = _PUT_STRIP_KEYS.get(resource_type, {'id'})
         body      = {k: v for k, v in definition.items() if k not in strip}
-        resp = self._put(path, body)
-        if resp.ok:
+        try:
+            resp = self._put(path, body)
+        except requests.exceptions.RequestException as exc:
+            return False, self._unreachable_message(exc)
+        if 200 <= resp.status_code < 300:
             return True, resp.json()
         return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
@@ -400,8 +482,11 @@ class AgentBuilder:
         Returns (True, {}) on success, (False, error_str) on failure.
         """
         path = f"{_PATHS[resource_type]}/{resource_id}"
-        resp = self._delete(path)
-        if resp.ok:
+        try:
+            resp = self._delete(path)
+        except requests.exceptions.RequestException as exc:
+            return False, self._unreachable_message(exc)
+        if 200 <= resp.status_code < 300:
             try:
                 return True, resp.json()
             except Exception:
@@ -453,11 +538,12 @@ class AgentBuilder:
         if stream:
             headers['Accept'] = 'text/event-stream'
             try:
-                resp = requests.post(
-                    url, json=body, headers=headers, auth=self._auth,
-                    verify=False, timeout=300, stream=True,
+                resp = self._session.post(
+                    url, json=body, headers=headers,
+                    timeout=self._timeout(self._INVOKE_READ_TIMEOUT),
+                    allow_redirects=False, stream=True,
                 )
-                if not resp.ok:
+                if not (200 <= resp.status_code < 300):
                     logger.error("invoke_agent %s → HTTP %s: %s", url, resp.status_code, resp.text[:500])
                     yield {'error': f"HTTP {resp.status_code} — URL: {url} — {resp.text[:300]}"}
                     return
@@ -485,11 +571,12 @@ class AgentBuilder:
             except Exception as exc:
                 yield {'error': str(exc)}
         else:
-            resp = requests.post(
-                url, json=body, headers=headers, auth=self._auth,
-                verify=False, timeout=300,
+            resp = self._session.post(
+                url, json=body, headers=headers,
+                timeout=self._timeout(self._INVOKE_READ_TIMEOUT),
+                allow_redirects=False,
             )
-            if resp.ok:
+            if 200 <= resp.status_code < 300:
                 return True, resp.json()
             return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
@@ -518,6 +605,10 @@ class AgentBuilder:
             ],
         }
         """
+        available, probe_err = self._probe_api()
+        if not available:
+            return {'success': False, 'results': [], 'error': probe_err}
+
         results = []
         all_ok  = True
 
