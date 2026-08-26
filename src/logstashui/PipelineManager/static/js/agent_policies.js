@@ -238,36 +238,33 @@ function checkPathPermissionNotifications() {
     const logsPathField = document.getElementById('logsPath');
     const binaryPathField = document.getElementById('binaryPath');
     const settingsPathNotification = document.getElementById('settingsPathNotification');
-    const settingsPathNotificationText = document.getElementById('settingsPathNotificationText');
     const logsPathNotification = document.getElementById('logsPathNotification');
-    const logsPathNotificationText = document.getElementById('logsPathNotificationText');
     const binaryPathNotification = document.getElementById('binaryPathNotification');
-    const binaryPathNotificationText = document.getElementById('binaryPathNotificationText');
-    
-    if (settingsPathField && settingsPathNotification && settingsPathNotificationText) {
+
+    if (settingsPathField && settingsPathNotification) {
         const settingsPath = settingsPathField.value.trim();
         if (settingsPath && settingsPath !== '/etc/logstash' && settingsPath !== '/etc/logstash/') {
-            settingsPathNotificationText.textContent = `${settingsPath} will need to allow read and write access to the 'logstash' user`;
+            settingsPathNotification.dataset.tip = `${settingsPath} will need to allow read and write access to the 'logstash' user`;
             settingsPathNotification.classList.remove('hidden');
         } else {
             settingsPathNotification.classList.add('hidden');
         }
     }
-    
-    if (logsPathField && logsPathNotification && logsPathNotificationText) {
+
+    if (logsPathField && logsPathNotification) {
         const logsPath = logsPathField.value.trim();
         if (logsPath && logsPath !== '/var/log/logstash' && logsPath !== '/var/log/logstash/') {
-            logsPathNotificationText.textContent = `${logsPath} will need to allow read access to the 'logstash' user`;
+            logsPathNotification.dataset.tip = `${logsPath} will need to allow read access to the 'logstash' user`;
             logsPathNotification.classList.remove('hidden');
         } else {
             logsPathNotification.classList.add('hidden');
         }
     }
-    
-    if (binaryPathField && binaryPathNotification && binaryPathNotificationText) {
+
+    if (binaryPathField && binaryPathNotification) {
         const binaryPath = binaryPathField.value.trim();
         if (binaryPath && binaryPath !== '/usr/share/logstash/bin' && binaryPath !== '/usr/share/logstash/bin/') {
-            binaryPathNotificationText.textContent = `${binaryPath} will need to allow the 'logstash' user to execute its binaries`;
+            binaryPathNotification.dataset.tip = `${binaryPath} will need to allow the 'logstash' user to execute its binaries`;
             binaryPathNotification.classList.remove('hidden');
         } else {
             binaryPathNotification.classList.add('hidden');
@@ -1477,6 +1474,8 @@ document.addEventListener('DOMContentLoaded', function() {
             typeBadge.textContent = policyType;
             typeBadge.className = 'policy-role-badge ' + policyRoleClassName(policyType);
         }
+        const typeSelect = document.getElementById('policyTypeSelect');
+        if (typeSelect) typeSelect.value = policyType;
         syncPolicyTypeControl(isDraft);
         syncPolicyTypeInfo(policyType);
         if (systemBadge) {
@@ -1647,6 +1646,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!opt) return;
         opt.dataset.policyType = ptype;
         opt.textContent = `${opt.dataset.policyName} (${ptype})`;
+        const typeSelect = document.getElementById('policyTypeSelect');
+        if (typeSelect) typeSelect.value = ptype;
 
         if (ptype === 'MANAGED') {
             setPolicyFieldValue('settingsPath', '/opt/logstash-agent/managed-{instance_id}/settings');
@@ -1698,11 +1699,6 @@ document.addEventListener('DOMContentLoaded', function() {
         window._policyDraftUnsaved = false;
     }
 
-    function closePolicyTypeMenu() {
-        document.getElementById('policyTypeMenu')?.classList.add('hidden');
-        document.getElementById('policyTypeBtn')?.setAttribute('aria-expanded', 'false');
-    }
-
     function closePolicyTypeInfo() {
         document.getElementById('policyTypeInfoPop')?.classList.add('hidden');
         document.getElementById('policyTypeInfoBtn')?.setAttribute('aria-expanded', 'false');
@@ -1713,6 +1709,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function currentPolicyTypeFromSelect() {
+        const typeSelect = document.getElementById('policyTypeSelect');
+        if (typeSelect && !typeSelect.disabled) {
+            let t = (typeSelect.value || 'PACKAGED').toUpperCase();
+            if (t === 'DEFAULT') t = 'PACKAGED';
+            return t;
+        }
         const select = document.getElementById('policySelect');
         const opt = select?.options[select.selectedIndex];
         let t = (opt?.dataset.policyType || 'PACKAGED').toUpperCase();
@@ -1736,13 +1738,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function syncPolicyTypeControl(isDraft) {
-        const btn = document.getElementById('policyTypeBtn');
-        const chevronBtn = document.getElementById('policyTypeChevronBtn');
-        if (btn) {
-            btn.classList.toggle('is-draft', !!isDraft);
+        const typeSelect = document.getElementById('policyTypeSelect');
+        if (typeSelect) {
+            typeSelect.disabled = !isDraft;
+            if (isDraft) {
+                typeSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                typeSelect.classList.add('opacity-50', 'cursor-not-allowed');
+            }
         }
-        chevronBtn?.classList.toggle('hidden', !isDraft);
-        if (!isDraft) closePolicyTypeMenu();
         syncPolicyTypeInfo(currentPolicyTypeFromSelect());
     }
 
@@ -1813,27 +1817,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function togglePolicyTypeMenu(e) {
-        e.stopPropagation();
+    document.getElementById('policyTypeSelect')?.addEventListener('change', function () {
         const opt = document.getElementById('policySelect')?.options[
             document.getElementById('policySelect').selectedIndex
         ];
         if (!isDraftPolicyOption(opt)) return;
-        closePolicyTypeInfo();
-        const menu = document.getElementById('policyTypeMenu');
-        const btn = document.getElementById('policyTypeBtn');
-        const isOpen = !menu?.classList.contains('hidden');
-        menu?.classList.toggle('hidden', isOpen);
-        btn?.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-    }
-    document.getElementById('policyTypeBtn')?.addEventListener('click', togglePolicyTypeMenu);
-    document.getElementById('policyTypeChevronBtn')?.addEventListener('click', togglePolicyTypeMenu);
-    document.getElementById('policyTypeMenu')?.querySelectorAll('.policy-type-option').forEach((el) => {
-        el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            applyDraftPolicyType(el.dataset.type);
-            closePolicyTypeMenu();
-        });
+        applyDraftPolicyType(this.value);
     });
 
     const infoBtn = document.getElementById('policyTypeInfoBtn');
@@ -1848,7 +1837,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     infoBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
-        closePolicyTypeMenu();
         infoHover?.classList.add('hidden');
         const open = infoPop && !infoPop.classList.contains('hidden');
         infoPop?.classList.toggle('hidden', open);
@@ -1857,13 +1845,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', (e) => {
         const control = document.getElementById('policyTypeControl');
         if (control && !control.contains(e.target)) {
-            closePolicyTypeMenu();
             closePolicyTypeInfo();
         }
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            closePolicyTypeMenu();
             closePolicyTypeInfo();
         }
     });

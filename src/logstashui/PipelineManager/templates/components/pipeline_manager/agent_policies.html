@@ -422,24 +422,6 @@
     align-items: center;
     gap: 0.5rem;
   }
-  .policy-type-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    background: transparent;
-    border: none;
-    padding: 0;
-    cursor: default;
-  }
-  .policy-type-btn.is-draft {
-    cursor: pointer;
-  }
-  .policy-type-btn.is-draft:hover {
-    opacity: 0.9;
-  }
-  .policy-type-btn .policy-role-badge {
-    margin-left: 0;
-  }
   .policy-type-info-btn {
     display: inline-flex;
     align-items: center;
@@ -500,46 +482,6 @@
     line-height: 1.45;
     color: #d1d5db;
   }
-  .policy-type-chevron-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-  }
-  .policy-type-chevron {
-    width: 0.75rem;
-    height: 0.75rem;
-    color: #9ca3af;
-    flex-shrink: 0;
-  }
-  .policy-type-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    min-width: 10rem;
-    background: #1a1f2e;
-    border: 1px solid rgba(139, 92, 246, 0.2);
-    border-radius: 0.5rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    z-index: 100;
-    overflow: hidden;
-  }
-  .policy-type-option {
-    display: flex;
-    align-items: center;
-    padding: 0.45rem 0.75rem;
-    cursor: pointer;
-  }
-  .policy-type-option:hover {
-    background: rgba(139, 92, 246, 0.1);
-  }
-  .policy-type-option .policy-role-badge {
-    margin-left: 0;
-  }
-
   .policy-switcher-filters {
     display: flex;
     flex-wrap: wrap;
@@ -803,32 +745,18 @@
         Policy Config
       </button>
       <div id="policyTypeControl" class="policy-type-control">
-        <button type="button" id="policyTypeBtn" class="policy-type-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Policy type">
-          <span id="policyTypeBadge" class="policy-role-badge role-packaged">PACKAGED</span>
-        </button>
+        <select id="policyTypeSelect" class="select select-xs select-bordered bg-gray-700 text-white border-gray-600 opacity-50 cursor-not-allowed" disabled aria-label="Policy type">
+          <option value="PACKAGED" selected>Packaged</option>
+          <option value="MANAGED">Managed</option>
+          <option value="SIMULATE">Simulate</option>
+        </select>
         <button type="button" id="policyTypeInfoBtn" class="policy-type-info-btn" aria-label="About this policy type" aria-expanded="false" aria-describedby="policyTypeInfoHover">
           <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
           </svg>
           <span id="policyTypeInfoHover" class="policy-type-info-hover hidden" role="tooltip">Distro Logstash as a system service.</span>
         </button>
-        <button type="button" id="policyTypeChevronBtn" class="policy-type-chevron-btn hidden" aria-label="Change policy type">
-          <svg id="policyTypeChevron" class="policy-type-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
-          </svg>
-        </button>
         <span id="policySystemBadge" class="hidden px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-900/50 text-blue-300 border border-blue-500/40">System</span>
-        <div id="policyTypeMenu" class="policy-type-menu hidden" role="listbox">
-          <div class="policy-type-option" data-type="PACKAGED" role="option">
-            <span class="policy-role-badge role-packaged">PACKAGED</span>
-          </div>
-          <div class="policy-type-option" data-type="MANAGED" role="option">
-            <span class="policy-role-badge role-managed">MANAGED</span>
-          </div>
-          <div class="policy-type-option" data-type="SIMULATE" role="option">
-            <span class="policy-role-badge role-simulate">SIMULATE</span>
-          </div>
-        </div>
         <div id="policyTypeInfoPop" class="policy-type-info-pop hidden" role="dialog" aria-label="Policy type details">
           <span id="policyTypeInfoPopBadge" class="policy-role-badge role-packaged">PACKAGED</span>
           <p id="policyTypeInfoPopBody" class="policy-type-info-pop-body"></p>
@@ -839,34 +767,37 @@
     <div id="globalConfigContent" class="mt-3 space-y-3">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1">Settings Path:</label>
+          <label class="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            Settings Path:
+            <span id="settingsPathNotification" class="hidden tooltip tooltip-bottom" data-tip="">
+              <svg class="w-3.5 h-3.5 text-gray-400 cursor-default" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+            </span>
+          </label>
           <input type="text" id="settingsPath" value="/etc/logstash/" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
-          <div id="settingsPathNotification" class="hidden mt-1 text-xs text-yellow-400 flex items-start gap-1">
-            <svg class="w-3 h-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-            <span id="settingsPathNotificationText"></span>
-          </div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1">Logs Path:</label>
+          <label class="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            Logs Path:
+            <span id="logsPathNotification" class="hidden tooltip tooltip-bottom" data-tip="">
+              <svg class="w-3.5 h-3.5 text-gray-400 cursor-default" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+            </span>
+          </label>
           <input type="text" id="logsPath" value="/var/log/logstash" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
-          <div id="logsPathNotification" class="hidden mt-1 text-xs text-yellow-400 flex items-start gap-1">
-            <svg class="w-3 h-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-            <span id="logsPathNotificationText"></span>
-          </div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1">Binary Path:</label>
+          <label class="block text-sm font-medium text-gray-300 mb-1 flex items-center gap-1">
+            Binary Path:
+            <span id="binaryPathNotification" class="hidden tooltip tooltip-bottom" data-tip="">
+              <svg class="w-3.5 h-3.5 text-gray-400 cursor-default" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+            </span>
+          </label>
           <input type="text" id="binaryPath" value="/usr/share/logstash/bin" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
-          <div id="binaryPathNotification" class="hidden mt-1 text-xs text-yellow-400 flex items-start gap-1">
-            <svg class="w-3 h-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-            <span id="binaryPathNotificationText"></span>
-          </div>
         </div>
       </div>
 
