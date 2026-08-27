@@ -27,10 +27,13 @@ from SNMP.snmp_pipeline_generator import (
     es_connection_keystore_key_names,
     _ruby_table_nested_entry,
     _ruby_row_rename_statements,
+    _ruby_row_value_expr,
+    _ruby_keep_when_statements,
     _avg_var_name,
     _ruby_avg_pre_loop,
     _ruby_avg_in_loop,
     _ruby_avg_post_loop,
+    _generate_table_split_filters,
     _generate_snmp_error_cleanup_filter,
 )
 
@@ -586,9 +589,15 @@ class TestRubyAvgLoops:
     def test_in_loop_generates_accumulation_statements(self):
         n = self._avg_normalizer('interface.avg_in_octets', 'interface.in_octets')
         result = _ruby_avg_in_loop([n], 'interface')
-        assert '_sum +=' in result
+        assert 'Float(_avg_v)' in result
         assert '_count +=' in result
         assert 'row["in_octets"]' in result
+        assert 'is_a?(Numeric)' not in result
+
+    def test_in_loop_strips_dotted_table_prefix(self):
+        n = self._avg_normalizer('system.cpu.total.norm.pct', 'component.cpu.load_pct')
+        result = _ruby_avg_in_loop([n], 'component.cpu')
+        assert 'row["load_pct"]' in result
 
     def test_post_loop_empty_returns_empty_string(self):
         assert _ruby_avg_post_loop([]) == ''
@@ -608,6 +617,152 @@ class TestRubyAvgLoops:
         n['params']['multiply_value'] = 8
         result = _ruby_avg_post_loop([n])
         assert '* 8' in result
+
+
+class TestRubyRowValueExpr:
+
+    def test_single_level_column(self):
+        assert _ruby_row_value_expr('component.cpu', 'component.cpu.load_pct') == 'row["load_pct"]'
+
+    def test_nested_column(self):
+        assert _ruby_row_value_expr(
+            'system.filesystem', 'system.filesystem.total.bytes'
+        ) == 'row.dig("total", "bytes")'
+
+
+class TestHostSystemMetricsSplit:
+
+    def test_cpu_average_writes_ecs_field_on_metrics_doc(self):
+        oid_mappings = {
+            'table': {
+                'component.cpu': {
+                    'columns': {'load_pct': '1.3.6.1.2.1.25.3.3.1.2'}
+                },
+            }
+        }
+        averages = [{
+            'operation': 'average',
+            'target': {
+                'scope': 'table',
+                'table': 'component.cpu',
+                'field': 'component.cpu.load_pct',
+            },
+            'params': {
+                'output_field': 'system.cpu.total.norm.pct',
+                'multiply_value': 0.01,
+            },
+        }]
+        filters = _generate_table_split_filters(oid_mappings, averages)
+        cpu = filters[0]['config']['code']
+        assert '[system][cpu][total][norm][pct]' in cpu
+        assert 'Float(_avg_v)' in cpu
+        assert '* 0.01' in cpu
+
+    def test_official_profile_averages_cores_to_ecs_cpu_field(self):
+        import json
+        from pathlib import Path
+
+        path = (
+            Path(__file__).resolve().parents[1]
+            / 'data' / 'official_profiles' / 'generic_host_system_metrics.json'
+        )
+        profile = json.loads(path.read_text(encoding='utf-8'))
+        average = next(n for n in profile['normalizers'] if n['operation'] == 'average')
+        assert average['params']['output_field'] == 'system.cpu.total.norm.pct'
+        assert average['params']['multiply_value'] == 0.01
+        assert 'promote_output_field' not in average.get('params', {})
+        ratio = next(n for n in profile['normalizers'] if n['operation'] == 'ratio')
+        assert 'promote_output_field' not in ratio['params']
+        assert 'promote_when_type' not in ratio['params']
+
+
+class TestRubyKeepWhenStatements:
+
+    def test_empty_table_returns_empty_string(self):
+        assert _ruby_keep_when_statements({}) == ''
+        assert _ruby_keep_when_statements(None) == ''
+
+    def test_emits_delete_and_include_check(self):
+        result = _ruby_keep_when_statements({
+            'keep_when': {'column': 'type', 'equals': ['10']},
+        })
+        assert 'row.delete("type")' in result
+        assert '["10"].include?(_keep_v.to_s)' in result
+
+    def test_rejects_unsafe_column_names(self):
+        result = _ruby_keep_when_statements({
+            'keep_when': {'column': 'type"; exit', 'equals': ['10']},
+        })
+        assert result == ''
+
+    def test_table_split_injects_keep_when_before_event_emit(self):
+        oid_mappings = {
+            'table': {
+                'component.fan': {
+                    'columns': {
+                        'description': '1.3.6.1.2.1.47.1.1.1.1.2',
+                        'type': '1.3.6.1.2.1.99.1.1.1.1',
+                    },
+                    'keep_when': {'column': 'type', 'equals': ['10']},
+                }
+            }
+        }
+        filters = _generate_table_split_filters(oid_mappings)
+        code = filters[0]['config']['code']
+        assert 'row.delete("type")' in code
+        assert '["10"].include?(_keep_v.to_s)' in code
+        assert code.index('row.delete("type")') < code.index('LogStash::Event.new')
+
+    def test_tables_without_keep_when_are_unchanged(self):
+        oid_mappings = {
+            'table': {
+                'component.cpu': {
+                    'columns': {'load_pct': '1.3.6.1.2.1.25.3.3.1.2'}
+                }
+            }
+        }
+        filters = _generate_table_split_filters(oid_mappings)
+        code = filters[0]['config']['code']
+        assert 'row.delete("type")' not in code
+        assert '_keep_v' not in code
+
+
+class TestPaloaltoComponentsProfile:
+
+    def _profile(self):
+        import json
+        from pathlib import Path
+        path = (
+            Path(__file__).resolve().parents[1]
+            / 'data' / 'official_profiles' / 'paloalto_components.json'
+        )
+        return json.loads(path.read_text(encoding='utf-8'))
+
+    def test_maps_entity_sensor_onto_cisco_schema(self):
+        profile = self._profile()
+        fans = profile['table']['component.fan']
+        sensors = profile['table']['component.sensor']
+        assert fans['columns']['description'] == '1.3.6.1.2.1.47.1.1.1.1.2'
+        assert fans['columns']['state'] == '1.3.6.1.2.1.99.1.1.1.5'
+        assert fans['columns']['rpm'] == '1.3.6.1.2.1.99.1.1.1.4'
+        assert fans['keep_when'] == {'column': 'type', 'equals': ['10']}
+        assert sensors['columns']['description'] == '1.3.6.1.2.1.47.1.1.1.1.2'
+        assert sensors['columns']['temp.celsius'] == '1.3.6.1.2.1.99.1.1.1.4'
+        assert sensors['columns']['state'] == '1.3.6.1.2.1.99.1.1.1.5'
+        assert sensors['keep_when'] == {'column': 'type', 'equals': ['8']}
+        assert 'temp.threshold' not in sensors['columns']
+        assert 'temp.last_shutdown' not in sensors['columns']
+
+    def test_firewall_template_uses_components_not_generic_entity_sensor(self):
+        import json
+        from pathlib import Path
+        path = (
+            Path(__file__).resolve().parents[1]
+            / 'data' / 'official_device_templates' / 'paloalto_firewall.json'
+        )
+        template = json.loads(path.read_text(encoding='utf-8'))
+        assert 'paloalto_components' in template['profiles']
+        assert 'generic_entity_sensor' not in template['profiles']
 
 
 # ===========================================================================

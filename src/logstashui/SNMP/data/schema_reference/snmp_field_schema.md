@@ -21,6 +21,7 @@ GET scalar fields have no table prefix. Table fields are written as `<table>.<fi
 - [Server Hardware — CPU](#server-hardware--cpu)
 - [Server Hardware — Memory](#server-hardware--memory)
 - [Server Hardware — Fans](#server-hardware--fans)
+- [Server Hardware — Temperature](#server-hardware--temperature)
 - [Server Hardware — Power Supply](#server-hardware--power-supply)
 - [Server Hardware — RAID Controller](#server-hardware--raid-controller)
 - [UPS / Power](#ups--power)
@@ -362,6 +363,38 @@ Cisco equivalent (state only, no RPM):
 |---|---|---|---|
 | `component.fan.description` | `1.3.6.1.4.1.9.9.13.1.4.1.2` | CISCO-ENVMON-MIB | Fan tray label |
 | `component.fan.state` | `1.3.6.1.4.1.9.9.13.1.4.1.3` | CISCO-ENVMON-MIB | Fan state: 1=normal, 2=warning, 3=critical, 4=shutdown, 5=notPresent |
+
+Palo Alto equivalent (ENTITY-SENSOR rpm rows, `entPhySensorType` 10). `oper_status` 1=ok maps onto Cisco `state` 1=normal:
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `component.fan.description` | `1.3.6.1.2.1.47.1.1.1.1.2` | ENTITY-MIB | Fan label (`entPhysicalDescr`) |
+| `component.fan.state` | `1.3.6.1.2.1.99.1.1.1.5` | ENTITY-SENSOR-MIB | `entPhySensorOperStatus`: 1=ok, 2=unavailable, 3=nonoperational |
+| `component.fan.rpm` | `1.3.6.1.2.1.99.1.1.1.4` | ENTITY-SENSOR-MIB | Fan speed in RPM (`entPhySensorValue`, scale=units) |
+
+---
+
+## Server Hardware — Temperature
+
+Temperature readings for the device-overview sensor widgets. Table: `component.sensor`. Cisco uses CISCO-ENVMON-MIB; Palo Alto remaps ENTITY-SENSOR celsius rows (`entPhySensorType` 8) onto the same fields. PAN-OS does not expose shutdown threshold OIDs.
+
+Cisco:
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `component.sensor.description` | `1.3.6.1.4.1.9.9.13.1.3.1.2` | CISCO-ENVMON-MIB | Sensor label |
+| `component.sensor.temp.celsius` | `1.3.6.1.4.1.9.9.13.1.3.1.3` | CISCO-ENVMON-MIB | Current temperature in Celsius |
+| `component.sensor.temp.threshold` | `1.3.6.1.4.1.9.9.13.1.3.1.4` | CISCO-ENVMON-MIB | Shutdown threshold in Celsius |
+| `component.sensor.temp.last_shutdown` | `1.3.6.1.4.1.9.9.13.1.3.1.5` | CISCO-ENVMON-MIB | Temperature at last shutdown |
+| `component.sensor.state` | `1.3.6.1.4.1.9.9.13.1.3.1.6` | CISCO-ENVMON-MIB | Sensor state: 1=normal, 2=warning, 3=critical, 4=shutdown, 5=notPresent |
+
+Palo Alto:
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `component.sensor.description` | `1.3.6.1.2.1.47.1.1.1.1.2` | ENTITY-MIB | Sensor label (`entPhysicalDescr`) |
+| `component.sensor.temp.celsius` | `1.3.6.1.2.1.99.1.1.1.4` | ENTITY-SENSOR-MIB | Temperature in Celsius (`entPhySensorValue`) |
+| `component.sensor.state` | `1.3.6.1.2.1.99.1.1.1.5` | ENTITY-SENSOR-MIB | `entPhySensorOperStatus`: 1=ok, 2=unavailable, 3=nonoperational |
 
 ---
 

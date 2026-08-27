@@ -3757,7 +3757,7 @@ def _get_device_fans(device, es_connection):
                     "top_fan_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["component.fan.state", "component.fan.description"]
+                            "_source": ["component.fan.state", "component.fan.description", "component.fan.rpm"]
                         }
                     }
                 }
