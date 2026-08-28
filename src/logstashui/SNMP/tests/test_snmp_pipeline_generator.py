@@ -758,7 +758,7 @@ class TestPaloaltoComponentsProfile:
         from pathlib import Path
         path = (
             Path(__file__).resolve().parents[1]
-            / 'data' / 'official_device_templates' / 'paloalto_firewall.json'
+            / 'data' / 'official_device_templates' / 'palo_alto_firewall.json'
         )
         template = json.loads(path.read_text(encoding='utf-8'))
         assert 'paloalto_components' in template['profiles']

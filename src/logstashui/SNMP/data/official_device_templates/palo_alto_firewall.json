@@ -1,6 +1,6 @@
 {
   "official_key": "paloalto_firewall",
-  "name": "paloalto_firewall",
+  "name": "palo_alto_firewall",
   "type": "Firewall",
   "description": "Palo Alto firewalls: HOST-RESOURCES CPU and memory, interfaces, chassis identity, and Cisco-schema fans and temperature sensors.",
   "vendor": "Palo Alto",
