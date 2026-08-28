@@ -22,7 +22,7 @@
       <select id="aiTemplateConnectionSelect" class="select select-sm select-bordered w-full bg-gray-700 text-white border-gray-600">
         <option value="" disabled selected>Select a connection...</option>
         {% for connection in connections %}
-          <option value="{{ connection.id }}" data-has-cloud-id="{% if connection.cloud_id %}true{% else %}false{% endif %}">{{ connection.name }}</option>
+          <option value="{{ connection.id }}" data-has-cloud-id="{% if connection.cloud_id %}true{% else %}false{% endif %}" data-suggested-kibana-url="{{ connection.suggested_kibana_url }}">{{ connection.name }}</option>
         {% endfor %}
       </select>
       {% if not connections %}
@@ -122,7 +122,8 @@
     <button
       id="aiTemplateGenerateBtn"
       type="button"
-      class="btn border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-x-2"
+      disabled
+      class="btn border border-purple-400 text-purple-300 hover:bg-purple-400/10 flex items-center gap-x-2 opacity-50 cursor-not-allowed"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />

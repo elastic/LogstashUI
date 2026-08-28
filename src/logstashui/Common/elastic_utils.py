@@ -8,7 +8,9 @@ from elasticsearch import Elasticsearch
 
 import json
 import logging
+import re
 import requests
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -605,6 +607,80 @@ def bulk_index_documents(connection_id, index_name, documents):
         raise
 
 
+# Elastic Cloud hostname: {id}[.{es|kb}].{region}.{provider}.elastic.cloud
+_ELASTIC_CLOUD_HOST = re.compile(
+    r'^(?P<name>[^.]+)'
+    r'(?:\.(?P<svc>es|kb))?'
+    r'\.(?P<region>[a-z0-9-]+)'
+    r'\.(?P<provider>aws|gcp|azure)'
+    r'\.elastic\.cloud$',
+    re.IGNORECASE,
+)
+
+# Ports that belong to Elasticsearch, not the Kibana pretty-URL origin.
+_ES_ONLY_PORTS = {9200, 9243}
+
+
+def normalize_kibana_url(url):
+    """
+    Return a Kibana origin (scheme://host[:port]) from a user-supplied or
+    connection-derived URL.
+
+    Cloud ID extraction already produces a Kibana host. URL-based connections
+    often store the Elasticsearch endpoint instead; this rewrites Elastic Cloud
+    ES hosts (``.es.`` infix, or a project alias with neither ``.es.`` nor
+    ``.kb.``) to the matching Kibana host so Agent Builder calls do not sit on
+    Elasticsearch until the HTTP timeout.
+    """
+    if not url:
+        return url
+
+    url = str(url).strip()
+    if not url:
+        return url
+
+    if '://' not in url:
+        url = 'https://' + url
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or '').rstrip('.')
+    if not host:
+        return url.rstrip('/')
+
+    scheme = (parsed.scheme or 'https').lower()
+    if scheme not in ('http', 'https'):
+        scheme = 'https'
+
+    port = parsed.port
+    match = _ELASTIC_CLOUD_HOST.match(host)
+    rewritten = False
+
+    if match and (match.group('svc') or '').lower() != 'kb':
+        host = (
+            f"{match.group('name')}.kb.{match.group('region')}."
+            f"{match.group('provider')}.elastic.cloud"
+        )
+        rewritten = True
+    else:
+        lowered = host.lower()
+        idx = lowered.find('.es.')
+        if idx != -1:
+            host = host[:idx] + '.kb.' + host[idx + 4:]
+            rewritten = True
+
+    if rewritten and port in _ES_ONLY_PORTS:
+        port = None
+
+    netloc = f"{host}:{port}" if port else host
+    if parsed.username:
+        auth = parsed.username
+        if parsed.password is not None:
+            auth += f":{parsed.password}"
+        netloc = f"{auth}@{netloc}"
+
+    return urlunparse((scheme, netloc, '', '', '', ''))
+
+
 def get_kibana_url(connection_id):
     """
     Get Kibana URL from Elasticsearch connection
@@ -635,14 +711,12 @@ def get_kibana_url(connection_id):
                 domain = parts[0]
                 # Construct Kibana URL
                 kibana_url = f"https://{parts[2]}.{domain}" if len(parts) > 2 else f"https://{domain}"
-                return kibana_url
+                return normalize_kibana_url(kibana_url)
     
     # Check for hosts (URL-based connection)
     if 'hosts' in creds and creds['hosts']:
         es_url = creds['hosts'][0] if isinstance(creds['hosts'], list) else creds['hosts']
-        # Replace .es. with .kb.
-        kibana_url = es_url.replace('.es.', '.kb.')
-        return kibana_url
+        return normalize_kibana_url(es_url)
     
     raise ValueError("Could not determine Kibana URL from connection")
 

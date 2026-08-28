@@ -336,7 +336,7 @@ function refreshNetworks() {
   loadNetworksForDevice(currentValue);
 }
 
-// Map vendor name to logo filename (mirrors DeviceTemplates.html logic)
+// Map vendor to logo filename (mirrors DeviceTemplates.html logic)
 function getVendorLogoFilename(vendor) {
   if (!vendor) return 'unknown.png';
   const v = vendor.toLowerCase();
@@ -348,6 +348,7 @@ function getVendorLogoFilename(vendor) {
   if (v === 'ubiquiti') return 'ubiquiti.png';
   if (v === 'hp') return 'hp.png';
   if (v === 'mellanox') return 'mellanox.png';
+  if (v === 'palo alto') return 'paloalto.png';
   return 'unknown.png';
 }
 

@@ -1,0 +1,36 @@
+{
+  "official_key": "paloalto_components",
+  "name": "paloalto_components",
+  "description": "Palo Alto chassis fans and temperature sensors, mapped onto the Cisco component.fan / component.sensor schema from ENTITY-SENSOR-MIB.",
+  "vendor": "Palo Alto",
+  "product": "PAN-OS",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.fan": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "state": "1.3.6.1.2.1.99.1.1.1.5",
+        "rpm": "1.3.6.1.2.1.99.1.1.1.4",
+        "type": "1.3.6.1.2.1.99.1.1.1.1"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": ["10"]
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "temp.celsius": "1.3.6.1.2.1.99.1.1.1.4",
+        "state": "1.3.6.1.2.1.99.1.1.1.5",
+        "type": "1.3.6.1.2.1.99.1.1.1.1"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": ["8"]
+      }
+    }
+  }
+}

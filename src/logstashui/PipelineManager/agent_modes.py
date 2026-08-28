@@ -442,13 +442,18 @@ def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
         return False
 
 
-def ensure_embedded_connection() -> Connection | None:
+def ensure_embedded_connection(*, probe: bool = True) -> Connection | None:
     """
     Ensure a pseudo Connection exists for the system Embedded Policy so the
     editor picker can list docker/local embedded agent without enrollment.
 
     Host/port derived from settings.LOGSTASH_AGENT_URL when possible.
-    Probes the agent and updates last_check_in so Connection Manager shows online.
+
+    When probe=True (default), performs a live HTTP probe and updates
+    last_check_in/status_blob so Connection Manager and is_embedded_discovered
+    reflect current online state. Page-render paths that only need the sticky
+    row to exist should pass probe=False; the background thread started by
+    refresh_embedded_connection_async keeps the DB warm.
     """
     try:
         from datetime import datetime, timezone
@@ -469,7 +474,7 @@ def ensure_embedded_connection() -> Connection | None:
         parsed = urlparse(agent_url)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or EMBEDDED_AGENT_API_PORT
-        online = probe_embedded_agent_online()
+        online = probe_embedded_agent_online() if probe else False
         now = datetime.now(timezone.utc)
 
         conn = Connection.objects.filter(
@@ -495,9 +500,9 @@ def ensure_embedded_connection() -> Connection | None:
                 "probed_at": now.isoformat(),
                 "online": True,
             }
-        else:
-            # Keep sticky row; do not wipe last_check_in on transient probe fail.
-            # Mark offline so the Sim picker can hide undiscovered embedded.
+        elif probe:
+            # Probe ran but failed — mark offline so the Sim picker can hide
+            # undiscovered embedded. Don't wipe last_check_in on transient fail.
             update_fields["status_blob"] = {
                 "embedded": True,
                 "mode": "embedded",
@@ -505,6 +510,8 @@ def ensure_embedded_connection() -> Connection | None:
                 "probed_at": now.isoformat(),
                 "online": False,
             }
+        # else probe=False: don't touch status_blob or last_check_in at all;
+        # leave whatever the last async probe wrote.
 
         if conn:
             Connection.objects.filter(pk=conn.pk).update(**update_fields)
@@ -532,6 +539,16 @@ def ensure_embedded_connection() -> Connection | None:
             "Could not ensure embedded simulation connection: %s", exc
         )
         return None
+
+
+def refresh_embedded_connection_async() -> None:
+    """Probe the embedded agent and update last_check_in without blocking the caller."""
+    try:
+        import threading
+
+        threading.Thread(target=ensure_embedded_connection, daemon=True).start()
+    except Exception:
+        pass
 
 
 def is_embedded_discovered(conn) -> bool:
@@ -579,7 +596,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
     Return list of dicts describing simulate-capable connections for the editor.
     """
     if ensure_embedded:
-        ensure_embedded_connection()
+        ensure_embedded_connection(probe=False)
 
     qs = Connection.objects.filter(
         connection_type=Connection.ConnectionType.AGENT,

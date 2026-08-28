@@ -1286,6 +1286,60 @@ def _ruby_row_rename_statements(columns):
     return '\n'.join(statements)
 
 
+def _ruby_row_value_expr(table_name, field):
+    """Ruby expression that reads a (possibly nested) column from a renamed row.
+
+    ``table_name='component.cpu', field='component.cpu.load_pct'`` → ``row["load_pct"]``
+    """
+    prefix = table_name + '.'
+    col_path = field[len(prefix):] if field.startswith(prefix) else field
+    parts = [p for p in col_path.split('.') if p]
+    if not parts:
+        return 'nil'
+    if len(parts) == 1:
+        return f'row["{parts[0]}"]'
+    keys = ', '.join(f'"{p}"' for p in parts)
+    return f'row.dig({keys})'
+
+
+_KEEP_WHEN_COLUMN_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+_KEEP_WHEN_VALUE_RE = re.compile(r'^[0-9A-Za-z._-]+$')
+
+
+def _ruby_keep_when_statements(table_data):
+    """Ruby that keeps only table rows whose discriminator column matches.
+
+    ENTITY-SENSOR-MIB (and similar) mix sensor kinds in one table. Cisco-schema
+    profiles split those rows onto ``component.fan`` vs ``component.sensor`` by
+    ``entPhySensorType`` (10=rpm, 8=celsius). The discriminator column is polled
+    so the filter can run, then removed so emitted docs match the target schema.
+
+    ``table_data['keep_when']`` shape: ``{"column": "type", "equals": ["10"]}``.
+    Invalid column/value tokens are ignored so profile JSON cannot inject Ruby.
+    """
+    if not isinstance(table_data, dict):
+        return ''
+    keep_when = table_data.get('keep_when')
+    if not isinstance(keep_when, dict):
+        return ''
+    column = keep_when.get('column')
+    if not column or not _KEEP_WHEN_COLUMN_RE.match(str(column)):
+        return ''
+    equals = keep_when.get('equals')
+    if equals is None:
+        return ''
+    if not isinstance(equals, list):
+        equals = [equals]
+    values = [str(v) for v in equals if _KEEP_WHEN_VALUE_RE.match(str(v))]
+    if not values:
+        return ''
+    quoted = ', '.join(f'"{v}"' for v in values)
+    return (
+        f'    _keep_v = row.delete("{column}")\n'
+        f'    next unless [{quoted}].include?(_keep_v.to_s)'
+    )
+
+
 def _generate_table_split_filters(oid_mappings, average_normalizers=None):
     """
     Generate Ruby filter components that split SNMP table data into per-row events.
@@ -1295,6 +1349,9 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
     their human-readable column names (expanding dotted names into nested hashes),
     creates a new LogStash::Event per row carrying the original event metadata,
     and removes the raw table field from the original event.
+
+    Optional ``keep_when`` on a table keeps only rows whose discriminator column
+    matches (then drops that column from the emitted row).
 
     If average_normalizers are provided, their accumulation logic is injected
     directly into each table's Ruby block. Accumulators are declared before the
@@ -1355,6 +1412,7 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                 # Build post-loop event.set calls (written after event.remove so the
                 # raw table array is gone and the namespace is free for scalar fields).
                 avg_post_loop = _ruby_avg_post_loop(table_averages)
+                keep_when_statements = _ruby_keep_when_statements(table_data)
 
                 # Build the Ruby code for this table
                 ruby_code = (
@@ -1375,6 +1433,7 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                     + f"  rows.each do |row|\n"
                     f"    next unless row.is_a?(Hash)\n"
                     f"{rename_statements}\n"
+                    + (f"{keep_when_statements}\n" if keep_when_statements else "")
                     + (f"{avg_in_loop}\n" if avg_in_loop else "")
                     + f"    new_event = LogStash::Event.new({{\n"
                     f"      \"@timestamp\" => timestamp,\n"
@@ -1458,17 +1517,20 @@ def _ruby_avg_in_loop(table_averages, table_name):
     if not table_averages:
         return ""
     lines = []
-    prefix = table_name + '.'
     for normalizer in table_averages:
         target_field = normalizer.get('target', {}).get('field', '')
-        col_path = target_field[len(prefix):] if target_field.startswith(prefix) else target_field
-        col_parts = col_path.split('.') if col_path else [target_field]
-        row_accessor = ''.join(f'["{p}"]' for p in col_parts)
+        row_expr = _ruby_row_value_expr(table_name, target_field)
         var = _avg_var_name(normalizer)
-        lines.append(f"    _avg_v = row{row_accessor}")
-        lines.append(f"    if _avg_v.is_a?(Numeric)")
-        lines.append(f"      {var}_sum += _avg_v.to_f")
+        # Float() accepts Integer 0 and numeric strings ("0") that the SNMP plugin
+        # sometimes emits. is_a?(Numeric) skipped those, so the metrics doc never
+        # received system.cpu.total.norm.pct even when per-core rows existed.
+        # nil / non-numeric still raise and are ignored, so missing columns
+        # are not counted as zero.
+        lines.append(f"    _avg_v = {row_expr}")
+        lines.append(f"    begin")
+        lines.append(f"      {var}_sum += Float(_avg_v)")
         lines.append(f"      {var}_count += 1")
+        lines.append(f"    rescue ArgumentError, TypeError")
         lines.append(f"    end")
     return "\n".join(lines)
 
