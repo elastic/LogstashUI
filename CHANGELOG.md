@@ -17,6 +17,9 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 - Pre-simulation keystore clone with compare-and-skip; keystore password clear over check-in.
 - Policy UI filters/badges for roles; VERSION lifecycle hint (binary pin applies on agent check-in).
 - Enroll UI: Embedded excluded from enroll list; Install Logstash hidden for Embedded and VERSION; install snippet is full-deploy (no trailing enable/start noise).
+- **Embedded** policy type is now hidden from the operator UI, policy type picker, and external data directory settings to reduce confusion for non-simulate workflows.
+- Simulate target slots are now **pre-warmed** before use; multi-doc session slots and allocation reliability are improved.
+- Sim slots are **isolated per agent**; slow simulate-forward is tolerated more gracefully rather than causing slot exhaustion.
 
 ### Dual HTTPS and product CA
 
@@ -33,7 +36,8 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 
 - End-to-end SNMP app: discovery, onboarding, templates/profiles, monitoring cards, and deploy through Logstash.
 - Device Wizard onboarding (manual, discovery, and AI-assisted) with MIB-grounded authoring.
-- Official device templates/profiles (including Ubiquiti APs and a generic Default catchall), images, and type classification.
+- Official device templates/profiles (including Ubiquiti APs, Palo Alto firewalls, and a generic Default catchall), images, and type classification.
+- **Palo Alto firewall** official device template added, including a "keep when" Ruby normalizer to extract a specific row type from mixed-type SNMP tables (this normalizer primitive is restricted to official profiles).
 - Profile normalizers (rename, multiply/divide, ratios, averages, translate) through onboarding and pipeline generation.
 - Time Series Data Streams for SNMP metrics, namespaces, and index-template install on deploy.
 - SNMP deploy/check-in coordination with agent multi-source apply (policy + SNMP in one cycle).
@@ -46,6 +50,23 @@ This release is the next step after **0.4.x**: full SNMP network management, fir
 - Operator guide: [Agent roles, ports, coexistence, and VERSION](docs/docs/logstashagent/general/roles.md).
 - E2E smoke: `bin/smoke_agent_modes.sh` (HTTPS, Django enroll, sibling agent offline tests).
 - Migrations through **0027** (Packaged/Managed default ports). Compose entrypoint migrates on start.
+
+### Bug fixes and polish
+
+- Fixed an agent modes regression that caused page loading to block when resuming certain async agent workflows.
+- Fixed template generation when the connection uses an Elasticsearch + Kibana URL pair instead of a Cloud ID; multiple edge cases related to URL-based connections are now handled correctly.
+- Fixed a bug where simulation pipelines would not warm up after a pipeline change, requiring a manual refresh before re-simulating.
+- Fixed a bug where the connection probe toward the embedded simulation node was blocking, causing every pipeline in the list to take ~3 seconds to load; the probe is now async and non-blocking.
+- Fixed a bug in SNMP device testing where hostname-only devices were never tested (only IPs were attempted). Hostname resolution is now tried first, with a fallback to IP, and a clear notification is shown when DNS resolution fails.
+- Fixed a bug where the SNMP data stream template install prompt was only triggered for CPM-based connections; it now correctly triggers for agent-managed connections as well.
+- Fixed a bug where the SNMP device panel showed no CPU/memory metrics and displayed all interfaces as grey.
+- Fixed a bug where temperature sensor and fan metrics were not appearing in the device panel.
+- Fixed a bug where the SNMP CRUD modals displayed an incorrect page header on the Devices page when "Add Credential" or "Add Network" was opened.
+- Added front-end and back-end validation for the namespace input field to prevent namespaces that Elastic would reject at ingest.
+- Improved SNMP deploy messaging when an agent is not assigned to the network being deployed.
+- SQLite WAL (Write-Ahead Logging) mode is now enabled, improving concurrency under simultaneous requests.
+- Document-waiting popups now use `popup.html` (the app's themed popup) instead of the native browser dialog.
+- Updated `start_logstashui.bat` (Windows startup script) to mirror the behavior of `start_logstashui.sh`.
 
 ### Upgrade notes
 
