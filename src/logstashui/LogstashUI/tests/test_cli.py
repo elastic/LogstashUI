@@ -62,6 +62,9 @@ def test_serve_snmp_commanderror_does_not_abort(monkeypatch):
     from LogstashUI import cli
 
     monkeypatch.setattr(cli, "_manage", lambda argv: None)
+    monkeypatch.setattr(
+        "LogstashUI.database.check_server_version", lambda conn: None
+    )
     monkeypatch.setenv("LOGSTASHUI_TLS", "false")
 
     def fake_call(name, *args, **kwargs):
