@@ -482,9 +482,8 @@ class TestUpdatePolicy:
         assert data['success'] is False
         assert 'not found' in data['error']
 
-    def test_update_policy_default_policy_forbidden(self, authenticated_client):
-        """Test that Default Policy cannot be updated"""
-        # Create Default Policy
+    def test_update_policy_named_default_policy_allowed(self, authenticated_client):
+        """A policy named Default Policy is not special; protection is is_system / EMBEDDED."""
         Policy.objects.create(
             name='Default Policy',
             settings_path='/etc/logstash/',
@@ -501,10 +500,11 @@ class TestUpdatePolicy:
             content_type='application/json'
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 200
         data = response.json()
-        assert data['success'] is False
-        assert 'Cannot update Default Policy' in data['error']
+        assert data['success'] is True
+        policy = Policy.objects.get(name='Default Policy')
+        assert policy.settings_path == '/new/settings'
 
     def test_update_policy_wrong_method(self, authenticated_client):
         """Test that GET requests are rejected"""
@@ -582,11 +582,11 @@ class TestDeletePolicy:
         assert data['success'] is False
         assert 'not found' in data['error']
 
-    def test_delete_policy_default_policy_forbidden(self, authenticated_client):
-        """Test that Default Policy cannot be deleted"""
-        # Create Default Policy
+    def test_delete_policy_system_policy_forbidden(self, authenticated_client):
+        """System-seeded policies cannot be deleted (name is not the guard)."""
         Policy.objects.create(
             name='Default Policy',
+            is_system=True,
             settings_path='/etc/logstash/',
             logs_path='/var/log/logstash',
             binary_path='/usr/share/logstash/bin'
@@ -603,7 +603,8 @@ class TestDeletePolicy:
         assert response.status_code == 403
         data = response.json()
         assert data['success'] is False
-        assert 'Cannot delete Default Policy' in data['error']
+        assert 'Cannot delete system policy' in data['error']
+        assert Policy.objects.filter(name='Default Policy').exists()
 
     def test_delete_policy_in_use(self, authenticated_client, test_policy):
         """Test that policy in use cannot be deleted"""
@@ -681,9 +682,11 @@ class TestClonePolicy:
         assert 'policy_id' in data
         assert data['policy_name'] == 'Cloned Policy'
 
-        # Verify new policy was created
+        # Verify new policy was created. Packaged source clones become MANAGED
+        # with the managed-{instance_id} path scheme.
         cloned_policy = Policy.objects.get(name='Cloned Policy')
-        assert cloned_policy.settings_path == test_policy_with_pipelines.settings_path
+        assert cloned_policy.policy_type == Policy.PolicyType.MANAGED
+        assert cloned_policy.settings_path == '/opt/logstash-agent/managed-{instance_id}/settings'
         assert cloned_policy.logstash_yml == test_policy_with_pipelines.logstash_yml
 
         # Verify pipelines were cloned
