@@ -966,7 +966,7 @@ function copyTooltipData() {
             }
         }).catch(err => {
             console.error('Failed to copy to clipboard:', err);
-            alert('Failed to copy to clipboard. Please try again.');
+            ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
         });
     } catch (e) {
         // If parsing fails, just copy the raw string
@@ -981,7 +981,7 @@ function copyTooltipData() {
             }
         }).catch(err => {
             console.error('Failed to copy to clipboard:', err);
-            alert('Failed to copy to clipboard. Please try again.');
+            ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
         });
     }
 }
@@ -1741,7 +1741,13 @@ function switchToDocument(index) {
     if (!window.simulationRunIds || !window.simulationRunIds[index]) {
         console.error('No run_id available for document', index);
         console.error('Available run_ids:', window.simulationRunIds);
-        alert('Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.');
+        ConfirmationModal.show(
+            'Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.',
+            'Please Wait',
+            'OK',
+            null,
+            true
+        );
         return;
     }
 
@@ -2539,14 +2545,14 @@ window.viewSimulationLogs = function() {
     const overlay = document.getElementById('simulation-overlay');
     if (!overlay) {
         console.error('Simulation overlay not found');
-        alert('Unable to fetch logs - simulation overlay not found');
+        ConfirmationModal.show('Unable to fetch logs — simulation overlay not found.', 'Error', 'OK', null, true);
         return;
     }
     
     const slotId = overlay.getAttribute('data-slot-id');
     if (!slotId) {
         console.error('Slot ID not found in overlay');
-        alert('Unable to fetch logs - slot information not available');
+        ConfirmationModal.show('Unable to fetch logs — slot information not available.', 'Error', 'OK', null, true);
         return;
     }
     

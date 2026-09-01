@@ -14,6 +14,7 @@ def test_build_databases_sqlite_default(tmp_path, monkeypatch):
     db = build_databases(tmp_path)
     assert db["default"]["ENGINE"] == "django.db.backends.sqlite3"
     assert db["default"]["NAME"] == tmp_path / "db.sqlite3"
+    assert db["default"]["OPTIONS"]["timeout"] == 20
 
 
 def test_build_databases_rejects_unimplemented_engine(tmp_path, monkeypatch):

@@ -275,7 +275,7 @@ const index = document.getElementById('esIndexInput').value;
 const queryMethod = document.querySelector('input[name="esQueryMethod"]:checked').value;
 
 if (!connectionId || !index) {
-  alert('Please select a connection and index first');
+  ConfirmationModal.show('Please select a connection and index first.', 'Validation', 'OK', null, true);
   return;
 }
 
@@ -410,7 +410,7 @@ if (!pipelineComponents.filter || pipelineComponents.filter.length === 0) {
   if (typeof showToast === 'function') {
     showToast("There aren't any filters in your pipeline. Please add at least one filter and try again.", 'error');
   } else {
-    alert("There aren't any filters in your pipeline. Please add at least one filter and try again.");
+    await ConfirmationModal.show("There aren't any filters in your pipeline. Please add at least one filter and try again.", 'No Filters', 'OK', null, true);
   }
   return;
 }
@@ -456,7 +456,7 @@ if (inputSource === 'text') {
   const query_method = document.querySelector('input[name="esQueryMethod"]:checked').value;
 
   if (!connection_id || !index) {
-    alert('Please select a connection and index');
+    await ConfirmationModal.show('Please select a connection and index.', 'Validation', 'OK', null, true);
     return;
   }
 
@@ -470,7 +470,7 @@ if (inputSource === 'text') {
     const size = document.getElementById('esSize').value;
     const query = document.getElementById('esQuery').value;
     if (!field) {
-      alert('Please select a field');
+      await ConfirmationModal.show('Please select a field.', 'Validation', 'OK', null, true);
       return;
     }
     formData.append('field', field);
@@ -484,7 +484,7 @@ if (inputSource === 'text') {
   } else if (query_method === 'docid') {
     const doc_ids = document.getElementById('esDocIds').value;
     if (!doc_ids.trim()) {
-      alert('Please enter at least one document ID');
+      await ConfirmationModal.show('Please enter at least one document ID.', 'Validation', 'OK', null, true);
       return;
     }
     formData.append('doc_ids', doc_ids);
@@ -501,17 +501,17 @@ if (inputSource === 'text') {
 
     const data = await response.json();
     if (data.error) {
-      alert('Error fetching documents: ' + escapeHtml(data.error));
+      await ConfirmationModal.show('Error fetching documents: ' + escapeHtml(data.error), 'Fetch Error', 'OK', null, true);
       return;
     }
 
     documents = data.documents || [];
     if (documents.length === 0) {
-      alert('No documents found matching your criteria in index ' + escapeHtml(index));
+      await ConfirmationModal.show('No documents found matching your criteria in index ' + escapeHtml(index) + '.', 'No Documents', 'OK', null, true);
       return;
     }
   } catch (error) {
-    alert('Error fetching documents: ' + escapeHtml(error.message));
+    await ConfirmationModal.show('Error fetching documents: ' + escapeHtml(error.message), 'Fetch Error', 'OK', null, true);
     return;
   }
 }

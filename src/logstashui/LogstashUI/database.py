@@ -21,6 +21,15 @@ def build_databases(data_dir: Path) -> dict:
             "default": {
                 "ENGINE": "django.db.backends.sqlite3",
                 "NAME": Path(data_dir) / "db.sqlite3",
+                "OPTIONS": {
+                    # busy_timeout before journal_mode so the busy handler is
+                    # armed before WAL mode is asserted on the connection.
+                    "init_command": (
+                        "PRAGMA busy_timeout=20000;"
+                        "PRAGMA journal_mode=WAL;"
+                    ),
+                    "timeout": 20,
+                },
             }
         }
     raise RuntimeError(
