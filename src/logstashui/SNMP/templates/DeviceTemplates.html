@@ -185,6 +185,8 @@
                   <img src="{% static 'images/hp.png' %}" alt="HP" class="w-full h-full object-contain">
                 {% elif template.vendor|lower == 'mellanox' %}
                   <img src="{% static 'images/mellanox.png' %}" alt="Mellanox" class="w-full h-full object-contain">
+                {% elif template.vendor|lower == 'palo alto' %}
+                  <img src="{% static 'images/paloalto.png' %}" alt="Palo Alto" class="w-full h-full object-contain">
                 {% else %}
                   <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
                 {% endif %}
@@ -374,6 +376,8 @@
                   <img src="{% static 'images/hp.png' %}" alt="HP" class="w-full h-full object-contain">
                 {% elif profile.vendor|lower == 'mellanox' %}
                   <img src="{% static 'images/mellanox.png' %}" alt="Mellanox" class="w-full h-full object-contain">
+                {% elif profile.vendor|lower == 'palo alto' %}
+                  <img src="{% static 'images/paloalto.png' %}" alt="Palo Alto" class="w-full h-full object-contain">
                 {% else %}
                   <img src="{% static 'images/unknown.png' %}" alt="Unknown Vendor" class="w-full h-full object-contain">
                 {% endif %}

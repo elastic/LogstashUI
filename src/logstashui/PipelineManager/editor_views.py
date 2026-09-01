@@ -55,10 +55,53 @@ def _parse_queue_max_bytes(queue_max_bytes_str):
 
 def PipelineEditor(request):
     from django.conf import settings
-    
+    from PipelineManager.agent_modes import (
+        list_simulation_targets,
+        refresh_embedded_connection_async,
+    )
+
+    # Keep last_check_in fresh without blocking HTML on the live HTTP probe.
+    refresh_embedded_connection_async()
+    sim_targets = list_simulation_targets(ensure_embedded=True)
+    selected_sim = request.session.get("sim_connection_id")
+    if selected_sim is not None and not any(
+        t["connection_id"] == selected_sim for t in sim_targets
+    ):
+        selected_sim = None
+    if selected_sim is None and len(sim_targets) == 1:
+        selected_sim = sim_targets[0]["connection_id"]
+        request.session["sim_connection_id"] = selected_sim
+
+    # Always warm a slot on page open/refresh when any sim target exists so
+    # "Run simulate" is document-feed only (allocate is the slow path).
+    has_simulate_agent = any(t.get("policy_type") == "SIMULATE" for t in sim_targets)
+    sim_prealloc_on_load = bool(sim_targets)
+
+    # Effective mode for modal/JS: prefer selected Sim target.
+    # SIMULATE enrolled agents are host-side instances (not Docker embedded).
+    selected_target = next(
+        (t for t in sim_targets if t.get("connection_id") == selected_sim),
+        None,
+    )
+    if selected_target:
+        pt = (selected_target.get("policy_type") or "").upper()
+        if pt == "SIMULATE":
+            effective_sim_mode = "simulate"
+        elif pt == "EMBEDDED":
+            effective_sim_mode = "embedded"
+        else:
+            effective_sim_mode = "embedded"
+    elif has_simulate_agent:
+        effective_sim_mode = "simulate"
+    else:
+        effective_sim_mode = "embedded"
+
     context = {
         "plugin_data": _load_plugin_data(),
-        "simulation_mode": settings.LOGSTASHUI_CONFIG.get('simulation', {}).get('mode', 'embedded')
+        "simulation_mode": effective_sim_mode,
+        "sim_targets": sim_targets,
+        "selected_sim_connection_id": selected_sim,
+        "sim_prealloc_on_load": sim_prealloc_on_load,
     }
 
     if request.method == "GET":

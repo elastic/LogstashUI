@@ -1,3 +1,82 @@
+## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
+
+Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.1**.
+
+This release is the next step after **0.4.x**: full SNMP network management, first-class agent roles (Packaged / Managed / Simulate / Embedded), multi-instance simulation, and mutual TLS between UI and agents.
+
+### Agent roles and multi-instance simulation
+
+- Policy types **PACKAGED**, **MANAGED**, **SIMULATE**, **EMBEDDED** (DEFAULT remains a legacy alias of PACKAGED). System seeds: Packaged, Managed, Simulate, and Embedded policies.
+- Clone **Packaged → Managed** auto-applies isolated `managed-N` path schemes. Simulate policies stay cloneable with SYSTEM vs VERSION Logstash source.
+- Enroll allocates instance **N** with role-specific ports and units:
+  - **Packaged:** `logstash-agent` + distro `logstash` (enable-only at install)
+  - **Packaged:** agent FastAPI **9550**, distro Logstash API **9600** (not both 9600)
+  - **Managed N:** `logstash-agent@N` / `logstash-managed@N`, paths under `/opt/logstash-agent/managed-N/`, ports **9550+N** / **9700+N**
+  - **Simulate N:** `lsagent-simulate@N` / `ls-simulate@N`, paths under `/opt/logstash-agent/simulate-N/`, ports **9500+N** / **9560+N**
+- Pipeline editor **Sim target** picker (sticky selection); embedded Docker agent appears without enroll.
+- Pre-simulation keystore clone with compare-and-skip; keystore password clear over check-in.
+- Policy UI filters/badges for roles; VERSION lifecycle hint (binary pin applies on agent check-in).
+- Enroll UI: Embedded excluded from enroll list; Install Logstash hidden for Embedded and VERSION; install snippet is full-deploy (no trailing enable/start noise).
+- **Embedded** policy type is now hidden from the operator UI, policy type picker, and external data directory settings to reduce confusion for non-simulate workflows.
+- Simulate target slots are now **pre-warmed** before use; multi-doc session slots and allocation reliability are improved.
+- Sim slots are **isolated per agent**; slow simulate-forward is tolerated more gracefully rather than causing slot exhaustion.
+
+### Dual HTTPS and product CA
+
+- UI serves HTTPS on **:8443** (gunicorn); embedded agent on **:9500**. Compose no longer uses nginx.
+- Auto product CA under `$LOGSTASHUI_DATA_DIR/tls/` (git checkout bind: `<project_root>/logstashui_data`); public `/.well-known/logstashui/ca.crt`; optional enrollment-token CA fingerprint.
+- Product-CA-signed **agent server certs** (enroll, check-in re-issue, or compose CSR secret).
+- Settings: agent callback URL and custom UI certificate upload / revert to product default.
+- Host hostname and LAN IPs injected for product cert SANs so browsers can use `https://<host-ip>:8443`.
+- **Container-aware agent callback host:** when LogstashUI runs in a container (or `LOGSTASHUI_IN_CONTAINER=1`), check-in/enroll prefer the agent’s `callback_ip` / IP-literal `host` for `Connection.host` so sim health and editor traffic do not depend on host DNS.
+- Check-in / GetConfigChanges expand multi-instance path templates (`{instance_id}`) using `Connection.instance_id` so simulate/managed agents do not get literal `simulate-{instance_id}` paths.
+- Materialize nested `api.http.port` (and `{instance_id}` in paths) for simulate/managed enroll and GetConfigChanges so Logstash listens on **9560+N** / **9700+N** instead of leaving the template port **9560**.
+
+### SNMP network management (NMS)
+
+- End-to-end SNMP app: discovery, onboarding, templates/profiles, monitoring cards, and deploy through Logstash.
+- Device Wizard onboarding (manual, discovery, and AI-assisted) with MIB-grounded authoring.
+- Official device templates/profiles (including Ubiquiti APs, Palo Alto firewalls, and a generic Default catchall), images, and type classification.
+- **Palo Alto firewall** official device template added, including a "keep when" Ruby normalizer to extract a specific row type from mixed-type SNMP tables (this normalizer primitive is restricted to official profiles).
+- Profile normalizers (rename, multiply/divide, ratios, averages, translate) through onboarding and pipeline generation.
+- Time Series Data Streams for SNMP metrics, namespaces, and index-template install on deploy.
+- SNMP deploy/check-in coordination with agent multi-source apply (policy + SNMP in one cycle).
+
+### Operations and docs
+
+- Runtime state (sqlite, TLS, secrets, logs) is configurable via `LOGSTASHUI_DATA_DIR` / `paths.data` and lives outside `src/`. Git-checkout Compose bind-mounts `<project_root>/logstashui_data` → `/var/lib/logstashui`.
+- Linux Docker bind-mount: entrypoint starts as root, chowns **only** the data dir if needed, drops to `PUID`/`PGID` (`start_logstashui.sh` uses the operator uid) or `appuser` **10001**. Does not rotate the product CA. K8s: PVC + `runAsUser`/`fsGroup` 10001.
+- Installable sdist/wheel with `logstashui` console script (`serve` / `manage` / `systemd`). Config is environment-only; `logstashui.yml` is not read. systemd unit generator writes `/etc/default/logstashui` (manual).
+- Operator guide: [Agent roles, ports, coexistence, and VERSION](docs/docs/logstashagent/general/roles.md).
+- E2E smoke: `bin/smoke_agent_modes.sh` (HTTPS, Django enroll, sibling agent offline tests).
+- Migrations through **0027** (Packaged/Managed default ports). Compose entrypoint migrates on start.
+
+### Bug fixes and polish
+
+- Fixed an agent modes regression that caused page loading to block when resuming certain async agent workflows.
+- Fixed template generation when the connection uses an Elasticsearch + Kibana URL pair instead of a Cloud ID; multiple edge cases related to URL-based connections are now handled correctly.
+- Fixed a bug where simulation pipelines would not warm up after a pipeline change, requiring a manual refresh before re-simulating.
+- Fixed a bug where the connection probe toward the embedded simulation node was blocking, causing every pipeline in the list to take ~3 seconds to load; the probe is now async and non-blocking.
+- Fixed a bug in SNMP device testing where hostname-only devices were never tested (only IPs were attempted). Hostname resolution is now tried first, with a fallback to IP, and a clear notification is shown when DNS resolution fails.
+- Fixed a bug where the SNMP data stream template install prompt was only triggered for CPM-based connections; it now correctly triggers for agent-managed connections as well.
+- Fixed a bug where the SNMP device panel showed no CPU/memory metrics and displayed all interfaces as grey.
+- Fixed a bug where temperature sensor and fan metrics were not appearing in the device panel.
+- Fixed a bug where the SNMP CRUD modals displayed an incorrect page header on the Devices page when "Add Credential" or "Add Network" was opened.
+- Added front-end and back-end validation for the namespace input field to prevent namespaces that Elastic would reject at ingest.
+- Improved SNMP deploy messaging when an agent is not assigned to the network being deployed.
+- SQLite WAL (Write-Ahead Logging) mode is now enabled, improving concurrency under simultaneous requests.
+- Document-waiting popups now use `popup.html` (the app's themed popup) instead of the native browser dialog.
+- Updated `start_logstashui.bat` (Windows startup script) to mirror the behavior of `start_logstashui.sh`.
+
+### Upgrade notes
+
+- Pair with **LogstashAgent 0.5.1**.
+- Run migrations (compose does this automatically).
+- Existing production agents on Default/Packaged **do not need to re-enroll**; restart after agent package upgrade.
+- Prefer enrolled **Simulate** agents for pipeline simulation; leave Packaged for production. Use **Managed** for multi-instance production trees on the same host.
+- See the roles guide for coexistence (isolated state/config per instance) and VERSION pins.
+
+
 ## [0.5.0] - NMS release - 07/21/2026
 
 ### Added
@@ -549,10 +628,3 @@ Fixed minor visual line bugs in the graph
 ### Fixed
 - Missing grok-patterns file, preventing autocomplete in grok debugger from working
 - Fixed user CRUD tests to work with new changes
-
-
-
-
-
-
-

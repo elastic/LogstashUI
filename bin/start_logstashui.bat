@@ -1,13 +1,13 @@
 @echo off
 REM LogstashUI Startup Script
-REM Detects mode from LogstashAgent/logstashagent.yml and starts accordingly
-REM - Host mode: Starts native Python agent on Windows, then containers (without agent container)
-REM - Embedded mode: Starts all containers including agent
+REM Default: Docker Compose --profile embedded (UI + embedded agent).
+REM --legacy-host-agent: native agent on :9501 + UI only — not enrolled simulate@N
 REM
 REM Usage:
-REM   start_logstashui.bat          - Start with existing images
-REM   start_logstashui.bat --rebuild - Rebuild images before starting
-REM   start_logstashui.bat --update  - Pull latest code and images, then start
+REM   start_logstashui.bat
+REM   start_logstashui.bat --rebuild
+REM   start_logstashui.bat --update
+REM   start_logstashui.bat --legacy-host-agent
 
 REM IMPORTANT: Don't enable delayed expansion yet - it breaks paths with exclamation marks
 setlocal disabledelayedexpansion
@@ -66,11 +66,42 @@ if %errorlevel% equ 0 (
 echo Using Docker Compose command: %DOCKER_COMPOSE%
 echo.
 
+REM ---------------------------------------------------------------------------
+REM Host identity for product UI TLS SANs (containers cannot see Docker host IPs)
+REM Uses PowerShell to collect hostname / non-loopback IPs / reverse-DNS FQDN.
+REM Operator can pre-set any of these vars to override auto-detection.
+REM ---------------------------------------------------------------------------
+set "_TLS_TMP=%TEMP%\logstashui_tls_%RANDOM%.txt"
+powershell -NoProfile -NonInteractive -Command "$ErrorActionPreference='SilentlyContinue'; $hn=[System.Net.Dns]::GetHostName(); try{$ips=(Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object{$_.IPAddress -notmatch '^127\.' -and $_.IPAddress -ne '0.0.0.0'} | Select-Object -ExpandProperty IPAddress) -join ','}catch{$ips=''}; $fqdn=$hn; try{$e=[System.Net.Dns]::GetHostEntry($hn); if($e.HostName -match '\.'){$fqdn=$e.HostName}}catch{}; $sans=if($ips){$fqdn+','+$ips}else{$fqdn}; $csrf='https://localhost:8443,https://127.0.0.1:8443'; if($fqdn){$csrf+=',https://'+$fqdn+':8443'}; ($ips -split ',' | Where-Object{$_})|ForEach-Object{$csrf+=',https://'+$_+':8443'}; Write-Output ('LOGSTASHUI_HOST_HOSTNAME='+$fqdn); Write-Output ('LOGSTASHUI_HOST_IPS='+$ips); Write-Output ('LOGSTASHUI_TLS_SANS='+$sans); Write-Output ('CSRF_TRUSTED_ORIGINS='+$csrf)" > "%_TLS_TMP%" 2>nul
+if exist "%_TLS_TMP%" (
+    for /f "usebackq tokens=1* delims==" %%K in ("%_TLS_TMP%") do (
+        if /i "%%K"=="LOGSTASHUI_HOST_HOSTNAME" if not defined LOGSTASHUI_HOST_HOSTNAME set "LOGSTASHUI_HOST_HOSTNAME=%%L"
+        if /i "%%K"=="LOGSTASHUI_HOST_IPS" if not defined LOGSTASHUI_HOST_IPS set "LOGSTASHUI_HOST_IPS=%%L"
+        if /i "%%K"=="LOGSTASHUI_TLS_SANS" if not defined LOGSTASHUI_TLS_SANS set "LOGSTASHUI_TLS_SANS=%%L"
+        if /i "%%K"=="CSRF_TRUSTED_ORIGINS" if not defined CSRF_TRUSTED_ORIGINS set "CSRF_TRUSTED_ORIGINS=%%L"
+    )
+    del "%_TLS_TMP%" >nul 2>&1
+)
+set _TLS_TMP=
+echo Host TLS SAN injection for UI product cert:
+echo   LOGSTASHUI_HOST_HOSTNAME=%LOGSTASHUI_HOST_HOSTNAME%
+echo   LOGSTASHUI_HOST_IPS=%LOGSTASHUI_HOST_IPS%
+echo   LOGSTASHUI_TLS_SANS=%LOGSTASHUI_TLS_SANS%
+echo.
+
 REM Parse command line arguments
 set REBUILD_FLAG=
 set UPDATE_MODE=0
+set LEGACY_HOST_AGENT=0
 if "%1"=="--rebuild" set REBUILD_FLAG=--build
 if "%1"=="--update" set UPDATE_MODE=1
+if "%1"=="--legacy-host-agent" set LEGACY_HOST_AGENT=1
+if "%2"=="--rebuild" set REBUILD_FLAG=--build
+if "%2"=="--update" set UPDATE_MODE=1
+if "%2"=="--legacy-host-agent" set LEGACY_HOST_AGENT=1
+if "%3"=="--rebuild" set REBUILD_FLAG=--build
+if "%3"=="--update" set UPDATE_MODE=1
+if "%3"=="--legacy-host-agent" set LEGACY_HOST_AGENT=1
 
 echo ========================================
 echo LogstashUI Startup
@@ -141,54 +172,54 @@ REM Debug: Show current directory
 echo Current directory: %CD%
 echo.
 
-REM Ensure logstashui.yml exists (required for Docker volume mount)
-REM If it doesn't exist, create a copy from logstashui.example.yml
-if not exist "src\logstashui\logstashui.yml" (
-    if exist "src\logstashui\logstashui.example.yml" (
-        echo Creating logstashui.yml copy from logstashui.example.yml
-        copy src\logstashui\logstashui.example.yml src\logstashui\logstashui.yml >nul
-    ) else (
-        echo ERROR: src\logstashui\logstashui.example.yml not found!
-        echo Current directory: %CD%
-        exit /b 1
+REM Bind-mount target: <checkout>\logstashui_data → /var/lib/logstashui
+if not exist "logstashui_data" mkdir logstashui_data
+if not exist "logstashui_data\db.sqlite3" (
+    if exist "src\logstashui\data\db.sqlite3" (
+        echo Migrating src\logstashui\data → logstashui_data\
+        xcopy /E /I /Y /Q "src\logstashui\data\*" "logstashui_data\" >nul
     )
 )
-
-REM Check for config file (logstashui.yml first, fallback to logstashui.example.yml)
-if exist "src\logstashui\logstashui.yml" (
-    set CONFIG_FILE=src\logstashui\logstashui.yml
-) else if exist "src\logstashui\logstashui.example.yml" (
-    set CONFIG_FILE=src\logstashui\logstashui.example.yml
-) else (
-    echo ERROR: No config file found!
-    echo Expected logstashui.yml or logstashui.example.yml in src\logstashui\
-    echo Current directory: %CD%
-    echo.
-    echo Directory contents:
-    dir /b
-    exit /b 1
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect logstashui_logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume logstashui_logstashui_data → logstashui_data\
+        docker run --rm -v logstashui_logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
 )
-
-echo Using config file: %CONFIG_FILE%
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume logstashui_data → logstashui_data\
+        docker run --rm -v logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+if not exist "logstashui_data\db.sqlite3" (
+    docker volume inspect LogstashUI_logstashui_data >nul 2>&1
+    if not errorlevel 1 (
+        echo Copying Docker volume LogstashUI_logstashui_data → logstashui_data\
+        docker run --rm -v LogstashUI_logstashui_data:/from -v "%CD%\logstashui_data":/to alpine:3.20 sh -c "cp -a /from/. /to/"
+    )
+)
+echo Host data directory: %CD%\logstashui_data
 echo.
 
 REM Now enable delayed expansion for variable parsing
 setlocal enabledelayedexpansion
 
-REM Parse the simulation mode from config file (under simulation.mode)
-REM Search for the line with "# embedded | host" comment to identify the right mode line
 set MODE=embedded
-for /f "tokens=2 delims=: " %%a in ('findstr /C:"# embedded | host" !CONFIG_FILE!') do (
-    set MODE=%%a
-)
-
-REM Remove any trailing comments or whitespace
-set MODE=!MODE: =!
-for /f "tokens=1 delims=#" %%a in ("!MODE!") do set MODE=%%a
-set MODE=!MODE: =!
-
-echo Detected mode: !MODE!
+if "!LEGACY_HOST_AGENT!"=="1" set MODE=host
+echo Start path: !MODE!
 echo.
+
+REM Compose file set: smoke override tags local images and enables build:.
+REM Used whenever REBUILD_FLAG is set so --rebuild actually compiles this tree.
+set "COMPOSE_FILES="
+if not "!REBUILD_FLAG!"=="" (
+    if exist "docker\docker-compose.smoke.yml" (
+        set "COMPOSE_FILES=-f docker-compose.yml -f docker-compose.smoke.yml"
+    )
+)
 
 if /i "!MODE!"=="host" (
     goto HOST_MODE
@@ -198,10 +229,13 @@ if /i "!MODE!"=="host" (
 
 :HOST_MODE
 echo ========================================
-echo HOST MODE DETECTED
+echo LEGACY HOST MODE DETECTED
 echo ========================================
-echo Starting LogstashAgent natively on Windows
-echo This allows the agent to control your host Logstash instance.
+echo Starting a native LogstashAgent (FastAPI + supervisor) on Windows.
+echo.
+echo NOTE: This is a LEGACY local sim path (--legacy-host-agent).
+echo It is NOT an enrolled mode:simulate / lsagent-simulate@N instance.
+echo Prefer enrolling a Simulate policy agent for multi-instance sim.
 echo.
 
 REM Check if uv is available
@@ -233,7 +267,7 @@ if not exist "LogstashAgent" (
 
 echo.
 echo Preparing LogstashAgent configuration
-REM Copy logstash_agent config from logstashui.yml to LogstashAgent/src/logstashagent/logstashagent.yml
+REM Copy legacy agent config into LogstashAgent\src\logstashagent\logstashagent.yml
 python bin\sync_config.py
 if errorlevel 1 (
     echo WARNING: Could not update agent config automatically
@@ -250,33 +284,37 @@ if errorlevel 1 (
     exit /b 1
 )
 echo Dependencies installed successfully
-
-echo Starting LogstashAgent on port 9501 (localhost only)
-cd LogstashAgent
-REM Start uvicorn using uv run
-start "LogstashAgent" cmd /K "uv run uvicorn logstashagent.main:app --host 127.0.0.1 --port 9501"
 cd ..
 
-echo Waiting 5 seconds for agent to initialize
-ping 127.0.0.1 -n 6 >nul
-
 echo.
 echo ========================================
-echo Starting Docker containers (UI + Nginx only)
+echo Starting Docker UI first (HTTPS :8443), then legacy native agent
 echo ========================================
-echo Note: LogstashAgent container will NOT start (running natively instead)
-echo Note: Native agent runs on port 9501, nginx proxies from 9500 to 9501
+echo Note: LogstashAgent container will NOT start (legacy native agent instead)
+echo Note: Native agent HTTPS on port 9501; UI uses LOGSTASH_AGENT_URL=https://host.docker.internal:9501
 echo.
 
-REM Ensure agent container is stopped in host mode
+REM Ensure agent container is stopped for legacy host path
 echo Stopping any existing containers
 cd docker
 %DOCKER_COMPOSE% stop logstashagent 2>nul
 %DOCKER_COMPOSE% rm -f logstashagent 2>nul
 
-REM Start only logstashui and nginx in detached mode
-REM Nginx will detect host mode and proxy to host.docker.internal:9501
-%DOCKER_COMPOSE% up -d %REBUILD_FLAG% logstashui nginx
+REM UI must start before the agent so TLS material is issued first
+if not defined LOGSTASH_AGENT_URL set "LOGSTASH_AGENT_URL=https://host.docker.internal:9501"
+if not defined LOGSTASHUI_AGENT_CSR_SECRET set "LOGSTASHUI_AGENT_CSR_SECRET=logstashui-compose-dev"
+%DOCKER_COMPOSE% !COMPOSE_FILES! up -d !REBUILD_FLAG! logstashui
+cd ..
+
+echo Waiting 8 seconds for UI TLS material...
+ping 127.0.0.1 -n 9 >nul
+
+echo Starting LogstashAgent on port 9501 (HTTPS when cert issued)
+cd LogstashAgent
+if not defined LOGSTASH_UI_URL set "LOGSTASH_UI_URL=https://localhost:8443"
+if not defined LOGSTASHUI_AGENT_CSR_SECRET set "LOGSTASHUI_AGENT_CSR_SECRET=logstashui-compose-dev"
+set "LOGSTASH_AGENT_PORT=9501"
+start "LogstashAgent" cmd /K "uv run python -m logstashagent.main --mode embedded"
 cd ..
 goto END_MODE_SELECTION
 
@@ -290,7 +328,7 @@ echo.
 
 REM Start all containers in detached mode with embedded profile
 cd docker
-%DOCKER_COMPOSE% --profile embedded up -d %REBUILD_FLAG%
+%DOCKER_COMPOSE% !COMPOSE_FILES! --profile embedded up -d !REBUILD_FLAG!
 cd ..
 goto END_MODE_SELECTION
 
@@ -304,7 +342,7 @@ echo.
 echo Containers are running in the background.
 echo To stop LogstashUI, run: stop_logstashui.bat
 echo.
-echo Access LogstashUI at: https://your_ip_or_hostname_here
+echo Access LogstashUI at: https://your_ip_or_hostname_here:8443
 echo.
 
 REM Restore original directory

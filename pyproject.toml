@@ -1,8 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "LogstashUI"
-version = "0.5.0"
+version = "0.5.1"
 description = "A control plane and UI for Logstash!"
 readme = "README.md"
+license = { file = "LICENSE.txt" }
 requires-python = ">=3.12"
 dependencies = [
     "cryptography>=46.0.6",
@@ -24,6 +29,58 @@ dependencies = [
     "whitenoise>=6.12.0",
 ]
 
+[project.scripts]
+logstashui = "LogstashUI.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/elastic/LogstashUI"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/logstashui",
+  "docs/docs",
+  "docs/images",
+  "CHANGELOG.md",
+  "README.md",
+  "LICENSE.txt",
+  "NOTICE.txt",
+  "pyproject.toml",
+]
+exclude = [
+  "**/node_modules/**",
+  "**/__pycache__/**",
+  "**/htmlcov/**",
+  "**/graphify-out/**",
+  "**/*.pyc",
+]
+
+[tool.hatch.build.targets.sdist.force-include]
+"src/logstashui/theme/static/css/dist/styles.css" = "src/logstashui/theme/static/css/dist/styles.css"
+
+[tool.hatch.build.targets.wheel]
+exclude = [
+  "**/node_modules/**",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/logstashui/LogstashUI" = "LogstashUI"
+"src/logstashui/PipelineManager" = "PipelineManager"
+"src/logstashui/Management" = "Management"
+"src/logstashui/Utilities" = "Utilities"
+"src/logstashui/SNMP" = "SNMP"
+"src/logstashui/Monitoring" = "Monitoring"
+"src/logstashui/Site" = "Site"
+"src/logstashui/Documentation" = "Documentation"
+"src/logstashui/AI" = "AI"
+"src/logstashui/theme" = "theme"
+"src/logstashui/Common" = "Common"
+"docs/docs" = "Documentation/content/docs"
+"docs/images" = "Documentation/content/images"
+"CHANGELOG.md" = "Documentation/content/CHANGELOG.md"
+
 [dependency-groups]
 dev = [
     "pre-commit>=4.5.1",
@@ -35,8 +92,8 @@ dev = [
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "LogstashUI.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
-pythonpath = "."
-testpaths = ["*/tests/"]
+pythonpath = ["src/logstashui"]
+testpaths = ["src/logstashui"]
 addopts = [
   "--import-mode=importlib",
   "--cov",

@@ -430,6 +430,13 @@ class TestOnboardingView:
         for key in ('connections', 'credentials', 'networks', 'templates', 'devices', 'device_count', 'form'):
             assert key in response.context, f"Missing context key: {key}"
 
+    def test_onboarding_connections_include_suggested_kibana_url(self, authenticated_client, test_connection):
+        response = authenticated_client.get('/SNMP/Onboarding/')
+        assert response.status_code == 200
+        connections = list(response.context['connections'])
+        assert connections, 'expected at least the test_connection'
+        assert 'suggested_kibana_url' in connections[0]
+
     def test_onboarding_device_count_matches_db(self, authenticated_client, test_device):
         from SNMP.models import Device as _Device
         response = authenticated_client.get('/SNMP/Onboarding/')

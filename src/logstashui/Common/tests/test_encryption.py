@@ -18,25 +18,12 @@ from Common.encryption import (
 
 
 @pytest.fixture
-def temp_data_dir(tmp_path):
-    """Create a temporary data directory for testing"""
+def temp_data_dir(tmp_path, monkeypatch):
+    """Isolated data directory (LOGSTASHUI_DATA_DIR)."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
+    monkeypatch.setenv("LOGSTASHUI_DATA_DIR", str(data_dir))
     return data_dir
-
-
-@pytest.fixture
-def mock_base_dir(temp_data_dir, monkeypatch):
-    """Mock the base directory to use temp directory"""
-    def mock_resolve():
-        class MockPath:
-            def __init__(self):
-                self.parent = temp_data_dir.parent
-        return MockPath()
-    
-    with patch('Common.encryption.Path') as mock_path:
-        mock_path.return_value.resolve.return_value.parent.parent = temp_data_dir.parent
-        yield temp_data_dir
 
 
 class TestGetEncryptionKey:

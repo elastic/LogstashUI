@@ -23,7 +23,15 @@ LogstashUI's primary focus is compatibility with **Logstash version 9**. We stro
 
 ## Logstash Agent Compatibility
 
-Logstash Agent is versioned alongside LogstashUI. When updating LogstashUI, update any enrolled Logstash Agents at the same time — a newer LogstashUI managing an older agent (or vice versa) is not tested. See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for the differences between Centralized Pipeline Management and Logstash Agent deployment modes.
+Logstash Agent is versioned alongside LogstashUI. When updating LogstashUI, update any enrolled Logstash Agents at the same time — a newer LogstashUI managing an older agent (or vice versa) is not tested.
+
+| LogstashUI | Preferred LogstashAgent |
+|------------|-------------------------|
+| 0.5.1      | 0.5.1 (Packaged/Managed/Simulate, multi-instance, install registry, VERSION, dual HTTPS, NMS) |
+| 0.5.0      | 0.5.0 |
+
+See **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/general/roles.md)** for current agent layout.  
+See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for Centralized Pipeline Management vs agent deployment.
 
 
 

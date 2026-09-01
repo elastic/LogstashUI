@@ -155,10 +155,10 @@ function renderDevicePreview(deviceId, device, visualizations) {
 
     // Render CPU chart
     const cpuChartCanvas = contentDiv.querySelector('.metric-cpu-chart');
-    if (metrics.CPU && metrics.Time && metrics.CPU.length > 0) {
+    if (metrics.CPU && metrics.CPUTime && metrics.CPU.length > 0) {
       renderMetricChart(
         cpuChartCanvas,
-        metrics.Time,
+        metrics.CPUTime,
         metrics.CPU,
         'CPU Usage (%)',
         'rgba(59, 130, 246, 1)', // Blue
@@ -167,24 +167,29 @@ function renderDevicePreview(deviceId, device, visualizations) {
     } else if (cpuChartCanvas) {
       // Show message when CPU data is not available
       const chartContainer = cpuChartCanvas.parentElement;
-      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">Could not find system.cpu.total.norm.pct</div>';
+      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">No CPU usage data collected for this device</div>';
     }
 
     // Render Memory chart
     const memoryChartCanvas = contentDiv.querySelector('.metric-memory-chart');
-    if (metrics.Memory && metrics.Time && metrics.Memory.length > 0) {
+    if (metrics.Memory && metrics.MemoryTime && metrics.Memory.length > 0) {
+      // hrStorageRam counts reclaimable cache/buffers, so it reads higher than the
+      // normalizer-derived field. Label it rather than passing it off as the same.
+      const memoryLabel = metrics.MemorySource === 'hrStorageRam'
+        ? 'Memory Usage (%) — incl. cache/buffers'
+        : 'Memory Usage (%)';
       renderMetricChart(
         memoryChartCanvas,
-        metrics.Time,
+        metrics.MemoryTime,
         metrics.Memory,
-        'Memory Usage (%)',
+        memoryLabel,
         'rgba(16, 185, 129, 1)', // Green
         'rgba(16, 185, 129, 0.1)'
       );
     } else if (memoryChartCanvas) {
       // Show message when Memory data is not available
       const chartContainer = memoryChartCanvas.parentElement;
-      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">Could not find system.memory.actual.used.pct</div>';
+      chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm italic">No memory usage data collected for this device</div>';
     }
   }
 
@@ -700,17 +705,24 @@ function renderMetricChart(chartDiv, timeData, metricData, label, borderColor, b
 function createSensorCard(sensor) {
   const card = document.createElement('div');
 
-  // Convert Celsius to Fahrenheit
-  const tempF = (sensor.temp_celsius * 9 / 5) + 32;
+  const tempC = Number(sensor.temp_celsius);
+  const hasTemp = sensor.temp_celsius != null && sensor.temp_celsius !== '' && !Number.isNaN(tempC);
+  const threshold = Number(sensor.temp_threshold);
+  const hasThreshold = sensor.temp_threshold != null && sensor.temp_threshold !== '' && !Number.isNaN(threshold) && threshold > 0;
 
-  // Determine state color and label
+  const tempF = hasTemp ? (tempC * 9 / 5) + 32 : null;
+  const thresholdF = hasThreshold ? (threshold * 9 / 5) + 32 : null;
   const stateInfo = getSensorStateInfo(sensor.state);
-
-  // Calculate percentage for gauge (0 to threshold)
-  const percentage = Math.min((sensor.temp_celsius / sensor.temp_threshold) * 100, 100);
-
-  // Calculate Fahrenheit threshold
-  const thresholdF = (sensor.temp_threshold * 9 / 5) + 32;
+  const gaugeMax = hasThreshold ? threshold : 100;
+  const percentage = hasTemp ? Math.min((tempC / gaugeMax) * 100, 100) : 0;
+  const tempDisplay = hasTemp ? `${tempF.toFixed(1)}°F` : '—';
+  const tempCDisplay = hasTemp ? `${tempC}°C` : '—';
+  const thresholdTop = hasThreshold
+    ? `<div class="text-xs text-gray-400">Threshold: ${thresholdF.toFixed(1)}°F</div>`
+    : `<div class="text-xs text-gray-400"></div>`;
+  const thresholdBottom = hasThreshold
+    ? `<div class="text-xs text-gray-400">Threshold: ${threshold}°C</div>`
+    : `<div class="text-xs text-gray-400"></div>`;
 
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
   card.innerHTML = `
@@ -721,8 +733,8 @@ function createSensorCard(sensor) {
     
     <!-- Temperature values above gauge -->
     <div class="flex items-center justify-between mb-1">
-      <div class="text-2xl font-bold ${stateInfo.textClass}">${tempF.toFixed(1)}°F</div>
-      <div class="text-xs text-gray-400">Threshold: ${thresholdF.toFixed(1)}°F</div>
+      <div class="text-2xl font-bold ${stateInfo.textClass}">${tempDisplay}</div>
+      ${thresholdTop}
     </div>
     
     <!-- Temperature Gauge -->
@@ -733,8 +745,8 @@ function createSensorCard(sensor) {
     
     <!-- Temperature values below gauge -->
     <div class="flex items-center justify-between">
-      <div class="text-sm text-gray-400">${sensor.temp_celsius}°C</div>
-      <div class="text-xs text-gray-400">Threshold: ${sensor.temp_threshold}°C</div>
+      <div class="text-sm text-gray-400">${tempCDisplay}</div>
+      ${thresholdBottom}
     </div>
   `;
 
@@ -750,6 +762,7 @@ function createFanCard(fan) {
 
   // Determine if fan should be spinning (normal or warning states)
   const isOperational = parseInt(fan.state) === 1 || parseInt(fan.state) === 2;
+  const hasRpm = fan.rpm != null && fan.rpm !== '';
 
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-h-[160px] flex flex-col ' + stateInfo.borderClass;
   card.innerHTML = `
@@ -763,6 +776,7 @@ function createFanCard(fan) {
       <svg class="w-12 h-12 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       </svg>
+      ${hasRpm ? `<div class="text-lg font-bold ${stateInfo.textClass} mt-2">${escapeHtml(String(fan.rpm))} RPM</div>` : ''}
       <div class="text-xs text-gray-400 mt-2 text-center">
         ${isOperational ? 'Operational' : 'Not Running'}
       </div>

@@ -12,6 +12,7 @@ from Common.elastic_utils import get_elastic_connection
 from Common.logstash_config_parse import ComponentToPipeline
 from Common.decorators import require_admin_role
 from Common.formatters import _sanitize_pipeline_name_component, format_display_name
+from Common.validators import validate_namespace
 
 from .snmp_pipeline_generator import (
     _generate_input, 
@@ -1211,6 +1212,11 @@ def AddNetwork(request):
         deployment_mode = request.POST.get('deployment_mode', 'CENTRALIZED')
         credential_mode = request.POST.get('credential_mode', 'KEYSTORE')
 
+        if not namespace_from_device_template:
+            ns_valid, ns_error = validate_namespace(namespace)
+            if not ns_valid:
+                return HttpResponse(ns_error, status=400)
+
         # Create network object
         network = Network(
             name=name,
@@ -1282,6 +1288,12 @@ def UpdateNetwork(request, network_id):
             pass  # Invalid CIDR will be caught by model validation below
         network.namespace = request.POST.get('namespace', network.namespace)
         network.namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
+
+        if not network.namespace_from_device_template:
+            ns_valid, ns_error = validate_namespace(network.namespace)
+            if not ns_valid:
+                return HttpResponse(ns_error, status=400)
+
         network.discovery_enabled = request.POST.get('discovery_enabled', 'true') == 'true'
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         network.deployment_mode = request.POST.get('deployment_mode', network.deployment_mode)
@@ -1521,6 +1533,13 @@ def GetDeployDiff(request):
         network_pipeline_map = {}
 
         for network in networks:
+            # Agent-mode pipelines live in Django, but they still write metrics
+            # to Elasticsearch. The index-template panel is keyed off this map,
+            # so Agent networks must contribute their ES connection or a
+            # fresh Agent-only install never prompts to install the template.
+            if network.connection:
+                connection_name_map[network.connection.id] = network.connection.name
+
             # Agent-mode networks are reconciled against Django Pipeline records,
             # not Elasticsearch CPM. Handled in a dedicated section below.
             if network.deployment_mode == 'AGENT':
@@ -1529,7 +1548,6 @@ def GetDeployDiff(request):
                 conn_id = network.connection.id
                 if conn_id not in pipeline_names_by_connection:
                     pipeline_names_by_connection[conn_id] = []
-                connection_name_map[conn_id] = network.connection.name
 
                 # Get unique templates for this network
                 devices = network.devices.all()
@@ -1944,8 +1962,8 @@ def GetDeployDiff(request):
                 policy = network.agent_connection.policy if network.agent_connection else None
                 if not policy:
                     _add_block(
-                        f"Network '{network.name}' is in Agent mode but is not assigned to an "
-                        f"agent policy. Please assign an agent before deploying."
+                        f"Network '{network.name}' is in Agent mode but does not have an agent "
+                        f"assigned to it. Please go to Networks and assign an agent to this policy."
                     )
                 elif not policy.keystore_password:
                     _add_block(
@@ -3141,6 +3159,11 @@ def GetAllProfiles(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
+# hrStorageRam — the HOST-RESOURCES-MIB storage type identifying a physical
+# memory row, as carried in system.filesystem.type.
+HR_STORAGE_RAM_OID = "1.3.6.1.2.1.25.2.1.2"
+
+
 def _device_host_filter(device):
     """Return an ES filter matching a device by its SNMP poll address.
 
@@ -3519,18 +3542,47 @@ def _get_device_interfaces(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_if_doc']['hits']['hits']:
-            visualization_data['interfaces'].append(doc['_source']['interface'])
+            visualization_data['interfaces'].append(
+                _flatten_interface(doc['_source']['interface'])
+            )
 
     return visualization_data
 
 
+def _flatten_interface(interface):
+    """Flatten an OpenConfig-shaped interface doc to what the frontend reads.
+
+    SNMP-polled interfaces arrive flat (``interface.oper_status``), but
+    OpenConfig/gNMI-shaped ones nest the same values under ``state``, with the
+    traffic counters nested one level deeper again under ``state.counters``.
+    The UI reads every one of these off the interface object directly
+    (``iface.oper_status``, ``iface.in_octets``), so lift both levels.
+
+    Existing top-level keys win: the SNMP pipeline's translate normalizers have
+    already decoded those (2 -> "DOWN"), whereas a raw ``state`` value may still
+    be the undecoded integer, which the UI would render as "Unknown".
+    """
+    iface = dict(interface)
+    state = iface.pop('state', None)
+    if not state:
+        return iface
+
+    flattened = dict(state)
+    # Counters sit at state.counters.* but are read as iface.in_octets etc.
+    counters = flattened.pop('counters', None)
+    if isinstance(counters, dict):
+        flattened.update(counters)
+
+    flattened.update(iface)
+    return flattened
+
+
 def _get_device_metrics(device, es_connection):
-    results = es_connection.search(
+    cpu_results = es_connection.search(
         size=1000,
         index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query={
-
             "bool": {
                 "filter": [
                     {
@@ -3554,25 +3606,117 @@ def _get_device_metrics(device, es_connection):
     visualization_data = {
         "Uptime": 0,
         "CPU": [],
+        "CPUTime": [],
         "Memory": [],
-        "Time": []
+        "MemoryTime": [],
+        "MemorySource": None
     }
 
-    for result in results['hits']['hits']:
+    for result in cpu_results['hits']['hits']:
         try:
             cpu = result['_source']['system']['cpu']['total']['norm']['pct']
-            memory = result['_source']['system']['memory']['actual']['used']['pct']
-            timestamp = result['_source']['@timestamp']
-
             visualization_data['CPU'].append(cpu)
-            visualization_data['Memory'].append(memory)
-            visualization_data['Time'].append(timestamp)
+            visualization_data['CPUTime'].append(result['_source']['@timestamp'])
         except (KeyError, TypeError):
-            # Skip documents that don't have the required CPU/Memory fields
+            # Skip documents that don't have the required CPU field
             continue
 
+    # Memory is normally the canonical system.memory.actual.used.pct, derived by a
+    # profile normalizer, and it rides the same metrics doc as CPU.
+    for result in cpu_results['hits']['hits']:
+        try:
+            memory = result['_source']['system']['memory']['actual']['used']['pct']
+            visualization_data['Memory'].append(memory)
+            visualization_data['MemoryTime'].append(result['_source']['@timestamp'])
+        except (KeyError, TypeError):
+            # Skip documents that don't have the required memory field
+            continue
+
+    if visualization_data['Memory']:
+        visualization_data['MemorySource'] = 'system.memory.actual.used.pct'
+    else:
+        # Profiles built only on HOST-RESOURCES-MIB derive no memory percentage.
+        # There, RAM is reported as a row of the same storage table as filesystem
+        # mounts, so fall back to it. Note hrStorageUsed counts reclaimable cache
+        # and buffers, so this reads higher than the normalizer-derived field —
+        # MemorySource lets the UI label which quantity is being shown.
+        # A device typically exposes several hrStorageRam rows (physical, buffers,
+        # cache, unavailable) that all report the SAME total, so bucket per poll and
+        # take the lowest hrStorageIndex — physical memory is the first RAM entry
+        # ("RAM" on EOS, "Physical memory" on net-snmp, both index 1). Aggregating
+        # rather than paging avoids a size cap that would silently truncate the
+        # series once multiplied by the number of RAM rows.
+        memory_results = es_connection.search(
+            size=0,
+            index="metrics-snmp*",
+            query={
+                "bool": {
+                    "filter": [
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "gte": "now-6h"
+                                }
+                            }
+                        },
+                        _device_host_filter(device),
+                        {
+                            "term": {
+                                "event.category": "system.filesystem"
+                            }
+                        },
+                        # Select RAM rows by hrStorageType, not by the free-text
+                        # description, which is agent- and locale-specific. Matched
+                        # against both the bare field and its .keyword subfield
+                        # because the mapping differs between the shipped index
+                        # template (keyword) and ES dynamic defaults (text+keyword).
+                        {
+                            "bool": {
+                                "should": [
+                                    {"term": {"system.filesystem.type": HR_STORAGE_RAM_OID}},
+                                    {"term": {"system.filesystem.type.keyword": HR_STORAGE_RAM_OID}}
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        }
+                    ]
+                }
+            },
+            aggregations={
+                "by_poll": {
+                    "terms": {
+                        "field": "@timestamp",
+                        "size": 1000,
+                        "order": {"_key": "desc"}
+                    },
+                    "aggregations": {
+                        "physical": {
+                            "top_hits": {
+                                "size": 1,
+                                "sort": [{"system.filesystem.index": {"order": "asc"}}],
+                                "_source": ["@timestamp", "system.filesystem.used.pct"]
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        buckets = memory_results.get('aggregations', {}).get('by_poll', {}).get('buckets', [])
+        for bucket in buckets:
+            for doc in bucket['physical']['hits']['hits']:
+                try:
+                    pct = doc['_source']['system']['filesystem']['used']['pct']
+                except (KeyError, TypeError):
+                    continue
+                visualization_data['Memory'].append(pct)
+                visualization_data['MemoryTime'].append(doc['_source']['@timestamp'])
+
+        if visualization_data['Memory']:
+            visualization_data['MemorySource'] = 'hrStorageRam'
+
     try:
-        visualization_data['Uptime'] = results['hits']['hits'][0]['_source']['host']['uptime']
+        visualization_data['Uptime'] = cpu_results['hits']['hits'][0]['_source']['host']['uptime']
     except (KeyError, TypeError, IndexError):
         visualization_data['Uptime'] = 0
 
@@ -3597,7 +3741,7 @@ def _get_device_fans(device, es_connection):
                     _device_host_filter(device),
                     {
                         "term": {
-                            "event.category": "fans"
+                            "event.category": "component.fan"
                         }
                     }
                 ]
@@ -3606,14 +3750,14 @@ def _get_device_fans(device, es_connection):
         aggregations={
             "fans": {
                 "terms": {
-                    "field": "fans.description",
+                    "field": "component.fan.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_fan_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["fans.state", "fans.description"]
+                            "_source": ["component.fan.state", "component.fan.description", "component.fan.rpm"]
                         }
                     }
                 }
@@ -3627,7 +3771,8 @@ def _get_device_fans(device, es_connection):
 
     for fan in results['aggregations']['fans']['buckets']:
         for doc in fan['top_fan_doc']['hits']['hits']:
-            visualization_data['fans'].append(doc['_source']['fans'])
+            fan_data = doc['_source'].get('component', {}).get('fan', {})
+            visualization_data['fans'].append(fan_data)
 
     return visualization_data
 
@@ -3651,7 +3796,7 @@ def _get_device_sensors(device, es_connection):
                     _device_host_filter(device),
                     {
                         "term": {
-                            "event.category": "sensors"
+                            "event.category": "component.sensor"
                         }
                     }
                 ]
@@ -3660,15 +3805,15 @@ def _get_device_sensors(device, es_connection):
         aggregations={
             "sensors": {
                 "terms": {
-                    "field": "sensors.description",
+                    "field": "component.sensor.description",
                     "size": 1000
                 },
                 "aggregations": {
                     "top_sensor_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["sensors.state", "sensors.description", "sensors.temp_celsius",
-                                        "sensors.temp_threshold"]
+                            "_source": ["component.sensor.state", "component.sensor.description",
+                                        "component.sensor.temp.celsius", "component.sensor.temp.threshold"]
                         }
                     }
                 }
@@ -3682,7 +3827,14 @@ def _get_device_sensors(device, es_connection):
 
     for sensor in results['aggregations']['sensors']['buckets']:
         for doc in sensor['top_sensor_doc']['hits']['hits']:
-            visualization_data['sensors'].append(doc['_source']['sensors'])
+            sensor_raw = doc['_source'].get('component', {}).get('sensor', {})
+            temp = sensor_raw.get('temp', {})
+            visualization_data['sensors'].append({
+                'description': sensor_raw.get('description'),
+                'state': sensor_raw.get('state'),
+                'temp_celsius': temp.get('celsius'),
+                'temp_threshold': temp.get('threshold'),
+            })
 
     return visualization_data
 
@@ -4042,9 +4194,9 @@ def generate_visualizations(visualizations, device, es_connection):
     visualization_data = {}
     if "metrics" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
-    if "sensors" in visualizations:
+    if "component.sensor" in visualizations:
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)
-    if "fans" in visualizations:
+    if "component.fan" in visualizations:
         visualization_data['fans'] = _get_device_fans(device, es_connection)
     if "interface" in visualizations:
         visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)
@@ -4093,17 +4245,23 @@ def get_devices_online_batch(devices):
         try:
             es = get_elastic_connection(connection_id)
 
-            # Each device is polled by hostname (if set) or IP - that value is
-            # stored verbatim in host.polled_address
+            # Each device is polled by hostname (if set) or IP — that value is
+            # stored verbatim in host.polled_address (a keyword TSDS dimension).
             poll_addresses = [d.hostname or d.ip_address for d in device_list if d.hostname or d.ip_address]
-            addr_to_device = {(d.hostname or d.ip_address): d for d in device_list if d.hostname or d.ip_address}
 
             if not poll_addresses:
                 for device in device_list:
                     results[device.id] = False
                 continue
 
+            # Must target metrics-snmp* only: TSDS backing indices cannot be
+            # searched together with regular indices (the default _search).
+            # Aggregate on host.polled_address itself — it is already keyword
+            # (and a TSDS dimension). The .keyword multi-field is not present
+            # unless our custom template was applied, so using it fails on a
+            # fresh cluster and the exception was previously swallowed as "offline".
             search_results = es.search(
+                index="metrics-snmp*",
                 size=0,
                 query={
                     "bool": {
@@ -4126,7 +4284,7 @@ def get_devices_online_batch(devices):
                 aggregations={
                     "online_devices": {
                         "terms": {
-                            "field": "host.polled_address.keyword",
+                            "field": "host.polled_address",
                             "size": len(poll_addresses)
                         }
                     }
@@ -4143,6 +4301,10 @@ def get_devices_online_batch(devices):
                 results[device.id] = addr in online_addresses if addr else False
 
         except Exception as e:
+            logger.warning(
+                "Device online-status query failed for connection %s: %s",
+                connection_id, e,
+            )
             # If query fails, mark all devices on this connection as offline
             for device in device_list:
                 results[device.id] = False

@@ -10,14 +10,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _data_dir() -> Path:
+    from LogstashUI.paths import resolve_data_dir
+    return resolve_data_dir()
+
+
 def get_encryption_key():
     """
     Get or generate the encryption key for credential storage.
     
     Priority:
     1. Environment variable CREDENTIAL_KEY
-    2. Key file in data/.secret_key
-    3. Generate new key and save to data/.secret_key
+    2. Key file in DATA_DIR/.secret_key
+    3. Generate new key and save to DATA_DIR/.secret_key
     
     Returns:
         bytes: The encryption key
@@ -37,9 +43,8 @@ def get_encryption_key():
                 logger.error(f"Invalid CREDENTIAL_KEY in environment: {e}")
                 raise RuntimeError(f"Invalid CREDENTIAL_KEY format: {e}")
         
-        # Check for key file in data directory
-        base_dir = Path(__file__).resolve().parent.parent
-        key_file = base_dir / 'data' / '.secret_key'
+        # Check for key file in the configured data directory
+        key_file = _data_dir() / '.secret_key'
         
         if key_file.exists():
             try:
@@ -173,8 +178,8 @@ def get_django_secret_key():
     
     Uses the same persistence pattern as credential encryption key:
     1. Environment variable SECRET_KEY
-    2. Key file in data/.django_secret_key
-    3. Generate new key and save to data/.django_secret_key
+    2. Key file in DATA_DIR/.django_secret_key
+    3. Generate new key and save to DATA_DIR/.django_secret_key
     
     This ensures each deployment has a unique SECRET_KEY that persists
     across container restarts (via volume mount).
@@ -193,9 +198,8 @@ def get_django_secret_key():
                 logger.warning(f"SECRET_KEY from environment is short ({len(env_key)} chars), recommended minimum is 50")
             return env_key
         
-        # Check for key file in data directory
-        base_dir = Path(__file__).resolve().parent.parent
-        key_file = base_dir / 'data' / '.django_secret_key'
+        # Check for key file in the configured data directory
+        key_file = _data_dir() / '.django_secret_key'
         
         if key_file.exists():
             try:

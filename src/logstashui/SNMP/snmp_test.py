@@ -10,6 +10,7 @@ from Common.formatters import format_display_name
 import json
 import logging
 import os
+import socket
 import traceback
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,46 @@ from pysnmp.hlapi.v3arch.asyncio import (
     usmAesCfb256Protocol,
 )
 import asyncio
+
+
+def _device_poll_address(device):
+    """Return the address used by generated SNMP polling pipelines."""
+    return device.hostname or device.ip_address
+
+
+def _resolve_device_poll_address(device):
+    """Resolve a hostname locally, falling back to the stored IP when possible."""
+    if not device.hostname:
+        return device.ip_address, None
+
+    try:
+        socket.getaddrinfo(device.hostname, device.port, type=socket.SOCK_DGRAM)
+        return device.hostname, None
+    except socket.gaierror:
+        warning = (
+            f"The machine running LogstashUI cannot resolve hostname "
+            f"'{device.hostname}'."
+        )
+        if device.ip_address:
+            return (
+                device.ip_address,
+                f"{warning} Falling back to IP address {device.ip_address}.",
+            )
+        raise ValueError(
+            f"{warning} No fallback IP address is configured for this device."
+        )
+
+
+def _device_response_data(device, poll_address=None):
+    """Serialize device addressing consistently for SNMP test responses."""
+    return {
+        'id': device.id,
+        'name': device.name,
+        'address': poll_address or _device_poll_address(device),
+        'hostname': device.hostname,
+        'ip_address': device.ip_address,
+        'port': device.port,
+    }
 
 
 def _format_snmp_value(value):
@@ -187,7 +228,7 @@ def _create_auth_data(credential):
     raise ValueError(f"Unknown SNMP version: {credential.version}")
 
 
-async def _perform_snmp_get_async(device, credential, oids):
+async def _perform_snmp_get_async(device, credential, oids, poll_address=None):
     """Perform SNMP GET operations (async)"""
     results = {}
     
@@ -199,7 +240,9 @@ async def _perform_snmp_get_async(device, credential, oids):
     except Exception as e:
         return {'error': f'Failed to create authentication data: {str(e)}'}
     
-    transport = await UdpTransportTarget.create((device.ip_address, device.port))
+    transport = await UdpTransportTarget.create(
+        (poll_address or _device_poll_address(device), device.port)
+    )
     snmp_engine = SnmpEngine()  # Reuse the same engine
     
     for field_name, oid_string in oids.items():
@@ -224,7 +267,7 @@ async def _perform_snmp_get_async(device, credential, oids):
     
     return results
 
-def _perform_snmp_get(device, credential, oids):
+def _perform_snmp_get(device, credential, oids, poll_address=None):
     """Synchronous wrapper - runs async code in a thread"""
     import threading
     result = [None]  # Use list to allow modification in nested function
@@ -234,7 +277,9 @@ def _perform_snmp_get(device, credential, oids):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            result[0] = loop.run_until_complete(_perform_snmp_get_async(device, credential, oids))
+            result[0] = loop.run_until_complete(
+                _perform_snmp_get_async(device, credential, oids, poll_address)
+            )
             # Cancel all pending tasks before closing
             pending = asyncio.all_tasks(loop)
             for task in pending:
@@ -259,7 +304,7 @@ def _perform_snmp_get(device, credential, oids):
     return result[0] if result[0] is not None else {'error': 'No response from device'}
 
 
-async def _perform_snmp_walk_async(device, credential, oids):
+async def _perform_snmp_walk_async(device, credential, oids, poll_address=None):
     """Perform SNMP WALK operations (async)"""
     results = {}
     
@@ -271,7 +316,9 @@ async def _perform_snmp_walk_async(device, credential, oids):
     except Exception as e:
         return {'error': f'Failed to create authentication data: {str(e)}'}
     
-    transport = await UdpTransportTarget.create((device.ip_address, device.port))
+    transport = await UdpTransportTarget.create(
+        (poll_address or _device_poll_address(device), device.port)
+    )
     snmp_engine = SnmpEngine()  # Reuse the same engine
     
     for field_name, oid_string in oids.items():
@@ -323,7 +370,7 @@ async def _perform_snmp_walk_async(device, credential, oids):
     
     return results
 
-def _perform_snmp_walk(device, credential, oids):
+def _perform_snmp_walk(device, credential, oids, poll_address=None):
     """Synchronous wrapper - runs async code in a thread"""
     import threading
     result = [None]
@@ -333,7 +380,9 @@ def _perform_snmp_walk(device, credential, oids):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            result[0] = loop.run_until_complete(_perform_snmp_walk_async(device, credential, oids))
+            result[0] = loop.run_until_complete(
+                _perform_snmp_walk_async(device, credential, oids, poll_address)
+            )
             # Cancel all pending tasks before closing
             pending = asyncio.all_tasks(loop)
             for task in pending:
@@ -356,7 +405,7 @@ def _perform_snmp_walk(device, credential, oids):
     
     return result[0] if result[0] is not None else {'error': 'No response from device'}
 
-async def _perform_snmp_table_async(device, credential, tables):
+async def _perform_snmp_table_async(device, credential, tables, poll_address=None):
     """Perform SNMP table operations (async)"""
     results = {}
     
@@ -368,7 +417,9 @@ async def _perform_snmp_table_async(device, credential, tables):
     except Exception as e:
         return {'error': f'Failed to create authentication data: {str(e)}'}
     
-    transport = await UdpTransportTarget.create((device.ip_address, device.port))
+    transport = await UdpTransportTarget.create(
+        (poll_address or _device_poll_address(device), device.port)
+    )
     snmp_engine = SnmpEngine()  # Reuse the same engine
     
     for table_name, table_config in tables.items():
@@ -423,7 +474,7 @@ async def _perform_snmp_table_async(device, credential, tables):
     
     return results
 
-def _perform_snmp_table(device, credential, tables):
+def _perform_snmp_table(device, credential, tables, poll_address=None):
     """Synchronous wrapper - runs async code in a thread"""
     import threading
     result = [None]
@@ -433,7 +484,9 @@ def _perform_snmp_table(device, credential, tables):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            result[0] = loop.run_until_complete(_perform_snmp_table_async(device, credential, tables))
+            result[0] = loop.run_until_complete(
+                _perform_snmp_table_async(device, credential, tables, poll_address)
+            )
             # Cancel all pending tasks before closing
             pending = asyncio.all_tasks(loop)
             for task in pending:
@@ -504,6 +557,15 @@ def RunSNMPTest(request):
         logger.debug("Merging profile OIDs...")
         merged_oids = _merge_profile_oids(profiles)
         logger.debug(f"Merged OIDs - GET: {len(merged_oids['get'])}, WALK: {len(merged_oids['walk'])}, TABLE: {len(merged_oids['table'])}")
+
+        try:
+            poll_address, address_warning = _resolve_device_poll_address(device)
+        except ValueError as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e),
+                'device': _device_response_data(device),
+            }, status=400)
         
         logger.debug("Performing SNMP operations...")
         
@@ -515,9 +577,15 @@ def RunSNMPTest(request):
         def perform_all_operations():
             try:
                 results_container[0] = {
-                    'get': _perform_snmp_get(device, device.credential, merged_oids['get']),
-                    'walk': _perform_snmp_walk(device, device.credential, merged_oids['walk']),
-                    'table': _perform_snmp_table(device, device.credential, merged_oids['table'])
+                    'get': _perform_snmp_get(
+                        device, device.credential, merged_oids['get'], poll_address
+                    ),
+                    'walk': _perform_snmp_walk(
+                        device, device.credential, merged_oids['walk'], poll_address
+                    ),
+                    'table': _perform_snmp_table(
+                        device, device.credential, merged_oids['table'], poll_address
+                    )
                 }
             except Exception as e:
                 exception_container[0] = e
@@ -533,12 +601,8 @@ def RunSNMPTest(request):
                 'success': False,
                 'error': 'Test timed out after 60 seconds - device may be unreachable or too slow to respond',
                 'execution_time': 60.0,
-                'device': {
-                    'id': device.id,
-                    'name': device.name,
-                    'ip_address': device.ip_address,
-                    'port': device.port
-                },
+                'device': _device_response_data(device, poll_address),
+                'address_warning': address_warning,
                 'template': {
                     'id': template.id,
                     'name': template.name,
@@ -633,12 +697,8 @@ def RunSNMPTest(request):
                 'success': False,
                 'error': error_text,
                 'execution_time': round(execution_time, 2),
-                'device': {
-                    'id': device.id,
-                    'name': device.name,
-                    'ip_address': device.ip_address,
-                    'port': device.port
-                },
+                'device': _device_response_data(device, poll_address),
+                'address_warning': address_warning,
                 'template': {
                     'id': template.id,
                     'name': template.name,
@@ -658,12 +718,8 @@ def RunSNMPTest(request):
                 'success': False,
                 'error': error_text,
                 'execution_time': round(execution_time, 2),
-                'device': {
-                    'id': device.id,
-                    'name': device.name,
-                    'ip_address': device.ip_address,
-                    'port': device.port
-                },
+                'device': _device_response_data(device, poll_address),
+                'address_warning': address_warning,
                 'template': {
                     'id': template.id,
                     'name': template.name,
@@ -681,12 +737,8 @@ def RunSNMPTest(request):
             'has_errors': has_errors,
             'error_summary': '; '.join(list(dict.fromkeys(all_errors))) if all_errors else None,
             'execution_time': round(execution_time, 2),
-            'device': {
-                'id': device.id,
-                'name': device.name,
-                'ip_address': device.ip_address,
-                'port': device.port
-            },
+            'device': _device_response_data(device, poll_address),
+            'address_warning': address_warning,
             'template': {
                 'id': template.id,
                 'name': template.name,

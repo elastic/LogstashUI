@@ -22,6 +22,7 @@ Including another URLconf
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from Site import product_ca_views
 
 
 # Custom error handlers
@@ -34,6 +35,12 @@ def crash(request):
     raise Exception("Test Exception")
 
 urlpatterns = [
+    # Must be public and at site root for agents: {ui_url}/.well-known/logstashui/ca.crt
+    path(
+        '.well-known/logstashui/ca.crt',
+        product_ca_views.product_ca_crt,
+        name='product_ca_crt_root',
+    ),
     path('ConnectionManager/', include('PipelineManager.urls')),
     path('Management/', include('Management.urls')),
     path('Utilities/', include('Utilities.urls')),

@@ -1,48 +1,59 @@
 # Configuration
 
-LogstashUI is configured through the `logstashui.yml` file in the project root. This section covers the main configuration options and setup guides.
+LogstashUI is configured with **environment variables** (shell, systemd `/etc/default/logstashui`, Docker, or a Kubernetes ConfigMap). There is no required YAML file.
 
 ---
 
-## Configuration Files
+## Configuration
 
-### **[logstashui.yml](/docs/docs/logstashui/configuration/logstashui.yml.md)**
+### **[Environment variables](/docs/docs/logstashui/configuration/environment.md)**
 
-The main configuration file for LogstashUI. Controls authentication, simulation mode, and Logstash agent settings.
+Data dir, TLS, bind address, `LOGSTASHUI_NO_AUTH`, agent URL, systemd, and Kubernetes.
 
-**Key settings:**
-- Authentication (`no_auth`)
-- Simulation mode (embedded vs host)
-- Logstash agent paths and configuration
+**📖 [View environment configuration →](/docs/docs/logstashui/configuration/environment.md)**
 
-**📖 [View full logstashui.yml documentation →](/docs/docs/logstashui/configuration/logstashui.yml.md)**
+`logstashui.yml` is [removed](/docs/docs/logstashui/configuration/logstashui.yml.md).
 
 ---
 
 ## Simulation Configuration
 
-### **[Simulation Modes](/docs/docs/logstashui/configuration/simulation.md)**
+### **[Simulation](/docs/docs/logstashui/configuration/simulation.md)**
 
-LogstashUI supports two simulation modes for testing pipelines:
+Pipeline simulation uses **LogstashAgent** targets:
 
-- **Embedded Mode** - Runs Logstash in a Docker container (simple setup, slower performance)
-- **Host Mode** - Runs Logstash natively on your host machine (requires setup, high performance)
+- **Simulate agents** (enrolled) — isolated instances, multi-version capable (recommended)
+- **Embedded** — Docker agent for quick start
+- **Default agents** — production only (not sim targets)
 
-**📖 [View simulation configuration guide →](/docs/docs/logstashui/configuration/simulation.md)**
+**📖 [View simulation guide →](/docs/docs/logstashui/configuration/simulation.md)**
 
 ---
 
-### **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)**
+### **[Simulate agents (formerly host mode)](/docs/docs/logstashui/configuration/host_mode.md)**
 
-Complete guide for setting up host mode for high-performance pipeline simulations.
+Enroll and run dedicated simulate instances (`lsagent-simulate@N` / `ls-simulate@N`).
 
 **Covers:**
-- Prerequisites and system requirements
-- Logstash installation (Windows & Linux)
-- Configuration and startup
-- Troubleshooting common issues
+- Prerequisites
+- Install + enroll against Simulate Policy
+- Ports, paths, multi-version notes
+- Upgrade from old host mode
 
-**📖 [View host mode setup guide →](/docs/docs/logstashui/configuration/host_mode.md)**
+**📖 [View simulate agent setup →](/docs/docs/logstashui/configuration/host_mode.md)**
+
+---
+
+### **[Agent roles, ports, coexistence, VERSION](/docs/docs/logstashagent/general/roles.md)**
+
+Operator reference for all agent roles on a host:
+
+- Packaged / Managed / Simulate / Embedded
+- Port map, path layout, install registry
+- Host coexistence and day-2 commands
+- VERSION download CLI
+
+**📖 [View roles guide →](/docs/docs/logstashagent/general/roles.md)**
 
 ---
 

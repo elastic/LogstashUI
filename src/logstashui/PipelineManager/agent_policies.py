@@ -367,7 +367,13 @@ def get_keystore_entries(request):
 @require_admin_role
 def set_keystore_password(request):
     """
-    Set or update the keystore password for a policy.
+    Set, update, or clear the keystore password for a policy.
+
+    Body:
+      - policy_id (required)
+      - password (required unless clear=true) — non-empty string to set/rotate
+      - clear (optional bool) — if true, remove the policy password so agents
+        migrate back to unauthenticated keystores on next check-in
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -376,16 +382,30 @@ def set_keystore_password(request):
         data = json.loads(request.body)
         policy_id = data.get('policy_id')
         password = data.get('password')
+        clear = bool(data.get('clear'))
 
         if not policy_id:
             return JsonResponse({"success": False, "error": "Policy ID is required"}, status=400)
-        if not password:
-            return JsonResponse({"success": False, "error": "Password cannot be empty"}, status=400)
 
         try:
             policy = Policy.objects.get(id=policy_id)
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": "Policy not found"}, status=404)
+
+        if clear:
+            policy.keystore_password = ''
+            policy.has_undeployed_changes = True
+            policy.save()  # save() clears keystore_password_hash when password empty
+            logger.info(
+                f"User '{request.user.username}' cleared keystore password for policy '{policy.name}'"
+            )
+            return JsonResponse({
+                "success": True,
+                "message": "Keystore password cleared; agents will switch to unauthenticated mode on next check-in",
+            })
+
+        if not password:
+            return JsonResponse({"success": False, "error": "Password cannot be empty"}, status=400)
 
         policy.keystore_password = password  # save() will encrypt and hash it
         policy.has_undeployed_changes = True

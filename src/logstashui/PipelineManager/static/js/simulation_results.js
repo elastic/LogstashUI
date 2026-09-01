@@ -966,7 +966,7 @@ function copyTooltipData() {
             }
         }).catch(err => {
             console.error('Failed to copy to clipboard:', err);
-            alert('Failed to copy to clipboard. Please try again.');
+            ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
         });
     } catch (e) {
         // If parsing fails, just copy the raw string
@@ -981,7 +981,7 @@ function copyTooltipData() {
             }
         }).catch(err => {
             console.error('Failed to copy to clipboard:', err);
-            alert('Failed to copy to clipboard. Please try again.');
+            ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
         });
     }
 }
@@ -1741,7 +1741,13 @@ function switchToDocument(index) {
     if (!window.simulationRunIds || !window.simulationRunIds[index]) {
         console.error('No run_id available for document', index);
         console.error('Available run_ids:', window.simulationRunIds);
-        alert('Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.');
+        ConfirmationModal.show(
+            'Document ' + (index + 1) + ' is still being submitted. Please wait a moment and try again.',
+            'Please Wait',
+            'OK',
+            null,
+            true
+        );
         return;
     }
 
@@ -1967,6 +1973,10 @@ function initSimulationResults(runId) {
     const pollInterval = 250; // Poll every 250ms for faster updates
     let receivedFinal = false; // Track if we've received the final event
     let originalEvent = null; // Store the original event for baseline comparison
+    // If we see a final with no snapshots, hold briefly in case a better event arrives
+    // (GetSimulationResults already consumed the empty final from the queue).
+    let emptyFinalGracePolls = 0;
+    const EMPTY_FINAL_GRACE = 8; // ~2s at 250ms
 
 
     // Add a 10-second timeout to show a warning message
@@ -2061,16 +2071,32 @@ function initSimulationResults(runId) {
                 if (data.results && data.results.length > 0) {
 
                     data.results.forEach(event => {
+                        const simMeta = event.simulation || {};
+                        const snapCount = event.snapshots && typeof event.snapshots === 'object'
+                            ? Object.keys(event.snapshots).length
+                            : 0;
                         // Check if this is the original event
-                        if (event.simulation.id === 'original') {
+                        if (simMeta.id === 'original') {
                             originalEvent = event;
                         }
-                        // Check if this is the final event (either id='final' or final='true' for drop plugins)
-                        else if (event.simulation.id === 'final' || event.simulation.final === 'true') {
-                                receivedFinal = true;
+                        // Final event: id='final', drop final flag, OR any non-original
+                        // event that already carries plugin snapshots (defensive).
+                        else if (
+                            simMeta.id === 'final' ||
+                            simMeta.final === 'true' ||
+                            (snapCount > 0 && simMeta.id !== 'original')
+                        ) {
+                                const hasSnapshots = snapCount > 0;
 
-                                // Check if no plugins were executed (empty or missing snapshots)
-                                const hasSnapshots = event.snapshots && Object.keys(event.snapshots).length > 0;
+                                // Empty final: wait a short grace for a later event with
+                                // snapshots (same run_id). Drop-plugin terminal is immediate.
+                                if (!hasSnapshots && simMeta.final !== 'true') {
+                                    emptyFinalGracePolls = EMPTY_FINAL_GRACE;
+                                    return;
+                                }
+
+                                receivedFinal = true;
+                                emptyFinalGracePolls = 0;
 
                                 if (!hasSnapshots) {
                                     // This document had no plugins executed
@@ -2444,6 +2470,59 @@ function initSimulationResults(runId) {
                     }
                     return;
                 }
+
+                // Grace after empty final: no better event arrived → treat as no plugins
+                if (emptyFinalGracePolls > 0) {
+                    emptyFinalGracePolls -= 1;
+                    if (emptyFinalGracePolls === 0) {
+                        receivedFinal = true;
+                        const isMultiDocument = window.simulationDocuments && window.simulationDocuments.length > 1;
+                        if (!window.simulationResultsCache) {
+                            window.simulationResultsCache = {};
+                        }
+                        window.simulationResultsCache[runId] = {
+                            nodes: [],
+                            links: [],
+                            originalEvent: originalEvent,
+                            totalExecutionTimeMs: '0',
+                            noPluginsExecuted: true
+                        };
+                        const loadingIndicator = document.getElementById('simulation-loading-indicator');
+                        if (loadingIndicator) {
+                            loadingIndicator.style.display = 'none';
+                        }
+                        if (loadingTimeout) {
+                            clearTimeout(loadingTimeout);
+                        }
+                        if (window.activePollers) {
+                            window.activePollers.delete(runId);
+                        }
+                        if (!window.activePollers || window.activePollers.size === 0) {
+                            hideOverlayLoadingBlock();
+                        }
+                        if (!isMultiDocument) {
+                            const resultsContainer = document.getElementById('results-container');
+                            if (resultsContainer) {
+                                resultsContainer.innerHTML = `
+                                    <div class="w-full p-4 bg-yellow-900/30 border-y border-yellow-600">
+                                        <div class="flex items-center gap-3">
+                                            <svg class="w-6 h-6 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                            </svg>
+                                            <div>
+                                                <h3 class="text-base font-semibold text-yellow-400">No Plugins Executed</h3>
+                                                <p class="text-sm text-yellow-200">
+                                                    No plugins were triggered during this execution.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }
+                        return;
+                    }
+                }
                 
                 pollCount++;
                 setTimeout(pollResults, pollInterval);
@@ -2466,14 +2545,14 @@ window.viewSimulationLogs = function() {
     const overlay = document.getElementById('simulation-overlay');
     if (!overlay) {
         console.error('Simulation overlay not found');
-        alert('Unable to fetch logs - simulation overlay not found');
+        ConfirmationModal.show('Unable to fetch logs — simulation overlay not found.', 'Error', 'OK', null, true);
         return;
     }
     
     const slotId = overlay.getAttribute('data-slot-id');
     if (!slotId) {
         console.error('Slot ID not found in overlay');
-        alert('Unable to fetch logs - slot information not available');
+        ConfirmationModal.show('Unable to fetch logs — slot information not available.', 'Error', 'OK', null, true);
         return;
     }
     
@@ -2505,14 +2584,23 @@ window.viewSimulationLogs = function() {
     
     document.body.appendChild(modal);
     
-    // Fetch logs from Django API endpoint
-    fetch(`/ConnectionManager/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`)
+    // Fetch logs from Django API endpoint (include sim target for multi-agent)
+    let logsUrl = `/ConnectionManager/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`;
+    if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
+        logsUrl += `&sim_connection_id=${encodeURIComponent(window.getSimConnectionId())}`;
+    }
+    fetch(logsUrl)
         .then(response => response.json())
         .then(data => {
             const logsContent = document.getElementById('logs-content');
+
+            if (data.error) {
+                logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${data.error}</div>`;
+                return;
+            }
             
             if (!data.logs || data.logs.length === 0) {
-                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline.</div>';
+                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline. (Clean runs often produce no INFO-level pipeline logs — try min level DEBUG or re-run after an error.)</div>';
                 return;
             }
             

@@ -712,6 +712,54 @@ class TestDeployConfiguration:
             data = json.loads(response.content)
             assert data['success'] is True
             assert 'networks' in data
+            assert any(c['id'] == test_network.connection.id for c in data['connections'])
+
+    def test_get_deploy_diff_includes_es_connection_for_agent_only_networks(
+        self, authenticated_client, test_network, test_device, test_connection
+    ):
+        """Agent-only setups still need the SNMP index template on their ES connection."""
+        from PipelineManager.models import Policy, Connection as AgentConnection
+
+        policy = Policy.objects.create(
+            name='Simulated SNMP Policy',
+            settings_path='/etc/logstash/',
+            logs_path='/var/log/logstash',
+            binary_path='/usr/share/logstash/bin',
+            logstash_yml='http.host: "0.0.0.0"',
+            jvm_options='-Xms1g',
+            log4j2_properties='logger.logstash.name = logstash',
+            keystore_password='test_password',
+        )
+        agent = AgentConnection.objects.create(
+            name='SimulatedSNMP Agent',
+            connection_type='AGENT',
+            host='agent.example.com',
+            agent_id='sim-snmp-001',
+            is_active=True,
+            policy=policy,
+        )
+        test_network.deployment_mode = 'AGENT'
+        test_network.agent_connection = agent
+        test_network.save(update_fields=['deployment_mode', 'agent_connection'])
+
+        with patch('SNMP.snmp_crud.get_elastic_connection') as mock_es_conn:
+            mock_es = MagicMock()
+            mock_es.logstash.get_pipeline.return_value = {}
+            mock_es_conn.return_value = mock_es
+
+            response = authenticated_client.get('/SNMP/GetDeployDiff/')
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['success'] is True
+        assert data['connections'] == [
+            {'id': test_connection.id, 'name': test_connection.name}
+        ]
+
+        # GetDeployDiff caches a 60s deploy plan; don't leak an Agent-mode plan
+        # into later DeployConfiguration tests in this class.
+        from django.core.cache import cache
+        cache.delete('snmp_deployment_plan')
 
     def test_deploy_configuration_requires_admin(self, readonly_client):
         """Test that deploying configuration requires admin role"""
@@ -768,6 +816,44 @@ class TestDeviceStatusAndVisualization:
         data = json.loads(response.content)
         assert data['success'] is True
         assert 'statuses' in data
+        assert data['statuses'][str(test_device.id)]['is_online'] is True
+
+        search_kwargs = mock_es.search.call_args.kwargs
+        assert search_kwargs['index'] == 'metrics-snmp*'
+        assert search_kwargs['aggregations']['online_devices']['terms']['field'] == 'host.polled_address'
+
+    @patch('SNMP.snmp_crud.get_elastic_connection')
+    def test_get_devices_status_hostname_only_device(
+        self, mock_es_conn, authenticated_client, test_network, test_credential_v2c
+    ):
+        """Hostname-only devices are matched on host.polled_address, not IP."""
+        device = Device.objects.create(
+            name='Linux',
+            hostname='linux_host.lab',
+            ip_address=None,
+            port=1161,
+            credential=test_credential_v2c,
+            network=test_network,
+        )
+        mock_es = MagicMock()
+        mock_es.search.return_value = {
+            'aggregations': {
+                'online_devices': {
+                    'buckets': [
+                        {'key': 'linux_host.lab', 'doc_count': 4}
+                    ]
+                }
+            }
+        }
+        mock_es_conn.return_value = mock_es
+
+        response = authenticated_client.get(f'/SNMP/GetDevicesStatus/?device_ids={device.id}')
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data['statuses'][str(device.id)]['is_online'] is True
+
+        terms_filter = mock_es.search.call_args.kwargs['query']['bool']['filter'][1]
+        assert terms_filter == {'terms': {'host.polled_address': ['linux_host.lab']}}
 
     def test_get_devices_status_invalid_ids(self, authenticated_client):
         """Test getting device status with invalid IDs"""
@@ -2155,3 +2241,245 @@ class TestBuildNetworkPipelineConfigs:
             config = r['config']
             assert 'input {' in config
             assert 'output {' in config
+
+
+@pytest.mark.django_db
+class TestDeviceVisualizationData:
+    """Regression tests for device visualization data shaping.
+
+    Covers the defects that left the device detail panel blank or wrong while the
+    underlying data was present: interface values nested under OpenConfig's
+    ``state``, and memory being sourced from the wrong place.
+    """
+
+    def _search_stub(self, by_category, captured=None):
+        """Build an es.search side_effect that dispatches on event.category."""
+        def search(**kwargs):
+            filters = kwargs['query']['bool']['filter']
+            if captured is not None:
+                captured.append(filters)
+            categories = [f['term']['event.category'] for f in filters
+                          if 'term' in f and 'event.category' in f['term']]
+            for category in categories:
+                if category in by_category:
+                    return {'hits': {'hits': by_category[category]}}
+            return {'hits': {'hits': []}}
+        return search
+
+    # ---- interface shaping ----
+
+    def test_interfaces_flatten_openconfig_state_and_counters(self, test_device):
+        """state.* AND state.counters.* are lifted to where the UI reads them."""
+        from SNMP.snmp_crud import _get_device_interfaces
+
+        mock_es = MagicMock()
+        mock_es.search.return_value = {
+            'aggregations': {'fans': {'buckets': [
+                {'top_if_doc': {'hits': {'hits': [{'_source': {'interface': {
+                    'name': 'Ethernet1',
+                    'index': 1,
+                    'state': {
+                        'admin_status': 'UP',
+                        'oper_status': 'DOWN',
+                        'speed': 1000000000.0,
+                        'counters': {'in_octets': 42, 'out_errors': 7},
+                    },
+                }}}]}}},
+            ]}}
+        }
+
+        iface = _get_device_interfaces(test_device, mock_es)['interfaces'][0]
+
+        assert iface['admin_status'] == 'UP'
+        assert iface['oper_status'] == 'DOWN'
+        assert iface['speed'] == 1000000000.0
+        # Counters must be flat — createInterfaceCard reads iface.in_octets, so
+        # leaving them at iface.counters.in_octets renders 0 B on a busy link.
+        assert iface['in_octets'] == 42
+        assert iface['out_errors'] == 7
+        assert iface['name'] == 'Ethernet1'
+        assert iface['index'] == 1
+        assert 'state' not in iface
+
+    def test_normalized_top_level_status_wins_over_raw_state(self, test_device):
+        """A raw state value must not clobber the pipeline-normalized one."""
+        from SNMP.snmp_crud import _get_device_interfaces
+
+        mock_es = MagicMock()
+        mock_es.search.return_value = {
+            'aggregations': {'fans': {'buckets': [
+                {'top_if_doc': {'hits': {'hits': [{'_source': {'interface': {
+                    'name': 'Ethernet1',
+                    # Translate normalizer already decoded 1 -> UP here.
+                    'oper_status': 'UP',
+                    # ...while the raw enum survives under state.
+                    'state': {'oper_status': 1, 'admin_status': 'UP'},
+                }}}]}}},
+            ]}}
+        }
+
+        iface = _get_device_interfaces(test_device, mock_es)['interfaces'][0]
+
+        # The UI compares strictly against 'UP'; the raw 1 would render "Unknown".
+        assert iface['oper_status'] == 'UP'
+        # Keys only present under state still come through.
+        assert iface['admin_status'] == 'UP'
+
+    def test_interfaces_without_state_are_passed_through(self, test_device):
+        """A device that already reports flat status is left alone."""
+        from SNMP.snmp_crud import _get_device_interfaces
+
+        mock_es = MagicMock()
+        mock_es.search.return_value = {
+            'aggregations': {'fans': {'buckets': [
+                {'top_if_doc': {'hits': {'hits': [{'_source': {'interface': {
+                    'name': 'Ethernet1', 'admin_status': 'UP', 'oper_status': 'UP',
+                }}}]}}},
+            ]}}
+        }
+
+        iface = _get_device_interfaces(test_device, mock_es)['interfaces'][0]
+        assert iface['admin_status'] == 'UP'
+        assert iface['oper_status'] == 'UP'
+
+    # ---- metrics sourcing ----
+
+    def test_canonical_memory_field_is_preferred(self, test_device):
+        """Profiles deriving system.memory.actual.used.pct keep working."""
+        from SNMP.snmp_crud import _get_device_metrics
+
+        captured = []
+        mock_es = MagicMock()
+        mock_es.search.side_effect = self._search_stub({
+            'metrics': [{'_source': {
+                '@timestamp': '2026-08-04T01:00:00Z',
+                'system': {
+                    'cpu': {'total': {'norm': {'pct': 0.25}}},
+                    'memory': {'actual': {'used': {'pct': 0.19}}},
+                },
+                'host': {'uptime': 12345},
+            }}],
+        }, captured)
+
+        metrics = _get_device_metrics(test_device, mock_es)
+
+        assert metrics['CPU'] == [0.25]
+        assert metrics['Memory'] == [0.19]
+        assert metrics['MemorySource'] == 'system.memory.actual.used.pct'
+        assert metrics['Uptime'] == 12345
+        # The storage-table fallback must not be queried when the canonical
+        # field is present — that query is pure overhead here.
+        queried = [f['term']['event.category'] for fl in captured for f in fl
+                   if 'term' in f and 'event.category' in f['term']]
+        assert 'system.filesystem' not in queried
+
+    def test_cpu_returned_when_memory_is_absent(self, test_device):
+        """CPU must survive on its own — it used to be dropped with memory."""
+        from SNMP.snmp_crud import _get_device_metrics
+
+        mock_es = MagicMock()
+        mock_es.search.side_effect = self._search_stub({
+            'metrics': [{'_source': {
+                '@timestamp': '2026-08-04T01:00:00Z',
+                'system': {'cpu': {'total': {'norm': {'pct': 0.25}}}},
+                'host': {'uptime': 12345},
+            }}],
+        })
+
+        metrics = _get_device_metrics(test_device, mock_es)
+
+        assert metrics['CPU'] == [0.25]
+        assert metrics['CPUTime'] == ['2026-08-04T01:00:00Z']
+        assert metrics['Memory'] == []
+        assert metrics['MemorySource'] is None
+
+    def test_memory_falls_back_to_physical_hrstorage_ram_row(self, test_device):
+        """Without the canonical field, use hrStorageRam — physical, not cache."""
+        from SNMP.snmp_crud import _get_device_metrics
+
+        captured = []
+
+        def search(**kwargs):
+            filters = kwargs['query']['bool']['filter']
+            captured.append(filters)
+            categories = [f['term']['event.category'] for f in filters
+                          if 'term' in f and 'event.category' in f['term']]
+            if 'metrics' in categories:
+                return {'hits': {'hits': [{'_source': {
+                    '@timestamp': '2026-08-04T01:00:00Z',
+                    'system': {'cpu': {'total': {'norm': {'pct': 0.25}}}},
+                }}]}}
+            # The aggregation asks for the lowest hrStorageIndex per poll, so the
+            # physical row is what comes back — cache/buffers rows are ranked out
+            # by the sort, which is the behaviour being pinned here.
+            return {'aggregations': {'by_poll': {'buckets': [
+                {'key': 1, 'physical': {'hits': {'hits': [{'_source': {
+                    '@timestamp': '2026-08-04T01:00:00Z',
+                    'system': {'filesystem': {'used': {'pct': 0.98}}},
+                }}]}}},
+            ]}}}
+
+        mock_es = MagicMock()
+        mock_es.search.side_effect = search
+
+        metrics = _get_device_metrics(test_device, mock_es)
+
+        assert metrics['Memory'] == [0.98]
+        assert metrics['MemoryTime'] == ['2026-08-04T01:00:00Z']
+        assert metrics['MemorySource'] == 'hrStorageRam'
+
+        fs_filters = [fl for fl in captured
+                      if any('term' in f and f['term'].get('event.category') == 'system.filesystem'
+                             for f in fl)]
+        assert fs_filters, "expected a system.filesystem query"
+
+        # Rows are selected by hrStorageType, not by a locale-specific description
+        # ("RAM" on EOS vs "Physical memory" on net-snmp), and matched under both
+        # possible mappings of that field.
+        shoulds = [f['bool']['should'] for f in fs_filters[0] if 'bool' in f]
+        assert shoulds, "expected a bool/should type filter"
+        fields = {list(clause['term'].keys())[0] for clause in shoulds[0]}
+        assert fields == {'system.filesystem.type', 'system.filesystem.type.keyword'}
+        assert all(list(c['term'].values())[0] == '1.3.6.1.2.1.25.2.1.2' for c in shoulds[0])
+        assert not any('mount_point' in str(f) for f in fs_filters[0])
+
+        # All RAM rows report the same total, so the row must be disambiguated by
+        # lowest hrStorageIndex — ranking by total silently picks an arbitrary row.
+        agg = mock_es.search.call_args_list[-1].kwargs['aggregations']
+        top_hits = agg['by_poll']['aggregations']['physical']['top_hits']
+        assert top_hits['sort'] == [{'system.filesystem.index': {'order': 'asc'}}]
+        assert top_hits['size'] == 1
+
+    def test_metrics_queries_are_scoped_to_the_device(self, test_device):
+        """Every metrics query must filter to this device, not the whole fleet."""
+        from SNMP.snmp_crud import _get_device_metrics
+
+        captured = []
+        mock_es = MagicMock()
+        mock_es.search.side_effect = self._search_stub({
+            'metrics': [{'_source': {
+                '@timestamp': '2026-08-04T01:00:00Z',
+                'system': {'cpu': {'total': {'norm': {'pct': 0.25}}}},
+            }}],
+            'system.filesystem': [],
+        }, captured)
+
+        _get_device_metrics(test_device, mock_es)
+
+        assert captured, "expected at least one query"
+        for filters in captured:
+            assert {"term": {"host.polled_address": test_device.ip_address}} in filters
+            assert {"range": {"@timestamp": {"gte": "now-6h"}}} in filters
+
+    def test_uptime_defaults_to_zero_without_metrics_docs(self, test_device):
+        """No metrics documents must not raise."""
+        from SNMP.snmp_crud import _get_device_metrics
+
+        mock_es = MagicMock()
+        mock_es.search.side_effect = self._search_stub({})
+
+        metrics = _get_device_metrics(test_device, mock_es)
+
+        assert metrics['Uptime'] == 0
+        assert metrics['CPU'] == []
+        assert metrics['Memory'] == []

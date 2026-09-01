@@ -9,18 +9,136 @@ from datetime import datetime, timezone
 
 import base64
 import hashlib
+import ipaddress
 import json
 import logging
+import os
 import secrets
 
 from cryptography.fernet import Fernet
 
-from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken
+from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken, Policy
+from .agent_modes import (
+    build_policy_config,
+    managed_ports,
+    materialize_simulate_logstash_yml,
+    next_managed_instance_id,
+    next_simulate_instance_id,
+    normalize_policy_type,
+    simulate_ports,
+)
 
 from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
 
 
 logger = logging.getLogger(__name__)
+
+
+def running_in_container() -> bool:
+    """
+    True when LogstashUI appears to run inside a container (Docker/Podman/k8s).
+
+    Inside containers, host DNS is often incomplete, so UI→agent callbacks
+    should use agent IPs rather than short hostnames or private DNS names.
+    Override with LOGSTASHUI_IN_CONTAINER=1/0 when detection is wrong.
+    """
+    forced = (os.environ.get("LOGSTASHUI_IN_CONTAINER") or "").strip().lower()
+    if forced in ("1", "true", "yes", "on"):
+        return True
+    if forced in ("0", "false", "no", "off"):
+        return False
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", encoding="utf-8", errors="ignore") as fh:
+            text = fh.read()
+        for marker in ("docker", "containerd", "kubepods", "libpod", "podman"):
+            if marker in text:
+                return True
+    except OSError:
+        pass
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8", errors="ignore") as fh:
+            text = fh.read()
+        if "/docker/" in text or "/containers/" in text:
+            return True
+    except OSError:
+        pass
+    return False
+
+
+def _is_ip_literal(value: str) -> bool:
+    try:
+        ipaddress.ip_address((value or "").strip())
+        return True
+    except ValueError:
+        return False
+
+
+def resolve_agent_callback_host(data: dict, *, prefer_ip: bool | None = None) -> str | None:
+    """
+    Pick Connection.host from enroll/check-in payload.
+
+    When *prefer_ip* (default: running_in_container()), prefer callback_ip /
+    IP-literal host so Docker LogstashUI can reach the agent without DNS.
+    """
+    if prefer_ip is None:
+        prefer_ip = running_in_container()
+
+    host = (data.get("host") or "").strip()
+    callback_ip = (data.get("callback_ip") or "").strip()
+    blob = data.get("status_blob")
+    if isinstance(blob, dict):
+        if not host:
+            host = (blob.get("callback_host") or "").strip()
+        if not callback_ip:
+            callback_ip = (blob.get("callback_ip") or "").strip()
+
+    if prefer_ip:
+        if _is_ip_literal(callback_ip):
+            return callback_ip
+        if _is_ip_literal(host):
+            return host
+        # DNS names from the agent are unreliable inside containers
+        return None
+
+    if host:
+        return host
+    if _is_ip_literal(callback_ip):
+        return callback_ip
+    return None
+
+
+def expand_instance_path(path: str | None, instance_id) -> str | None:
+    """
+    Expand multi-instance path templates (e.g. simulate-{instance_id}/settings).
+
+    Policy rows may store the template form; Connection.instance_id is the real N.
+    """
+    if path is None:
+        return None
+    if instance_id is None or instance_id == "":
+        return path
+    return str(path).replace("{instance_id}", str(instance_id))
+
+
+def _sign_csr_if_present(data: dict) -> dict | None:
+    """If request includes csr_pem, sign with product CA and return payload fragment."""
+    csr_pem = data.get("csr_pem") or data.get("certificate_signing_request")
+    if not csr_pem:
+        return None
+    try:
+        from Common.product_ca import sign_agent_csr
+
+        signed = sign_agent_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode("utf-8"))
+        return {
+            "server_certificate": signed["certificate_pem"],
+            "ca_certificate": signed["ca_pem"],
+            "certificate_fingerprint": signed["fingerprint_sha256"],
+        }
+    except Exception as exc:
+        logger.error("Failed to sign agent CSR: %s", exc, exc_info=True)
+        raise
 
 
 def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
@@ -230,6 +348,16 @@ def enroll(request):
         except EnrollmentToken.DoesNotExist:
             return JsonResponse({"success": False, "error": "Invalid enrollment token"}, status=401)
 
+        policy = enrollment_token_obj.policy
+        if policy.policy_type == Policy.PolicyType.EMBEDDED:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "Cannot enroll against the Embedded policy; it is reserved for the Docker sim node",
+                },
+                status=400,
+            )
+
         try:
             existing_connection = ConnectionTable.objects.filter(agent_id=agent_id).first()
             if existing_connection:
@@ -241,40 +369,77 @@ def enroll(request):
             logger.warning(f"Error checking for existing agent_id: {exc}")
 
         try:
+            instance_id = None
+            agent_api_port = None
+            logstash_api_port = None
+            ptype = normalize_policy_type(policy.policy_type)
+            if ptype == Policy.PolicyType.SIMULATE:
+                instance_id = next_simulate_instance_id()
+                agent_api_port, logstash_api_port = simulate_ports(instance_id, policy)
+            elif ptype == Policy.PolicyType.MANAGED:
+                instance_id = next_managed_instance_id()
+                agent_api_port, logstash_api_port = managed_ports(instance_id, policy)
+
+            # host = IP (preferred in container) or FQDN for UI→agent callbacks;
+            # host_short for display labels only.
+            callback_host = resolve_agent_callback_host(data) or (host or "").strip()
+            host_short = (data.get("host_short") or "").strip()
+            if not host_short:
+                if _is_ip_literal(callback_host):
+                    host_short = callback_host
+                else:
+                    host_short = (
+                        callback_host.split(".")[0]
+                        if callback_host and "." in callback_host
+                        else callback_host
+                    )
+            if ptype == Policy.PolicyType.SIMULATE:
+                conn_name = f"{host_short}-simulate-{instance_id}"
+            elif ptype == Policy.PolicyType.MANAGED:
+                conn_name = f"{host_short}-managed-{instance_id}"
+            else:
+                conn_name = host_short or callback_host
             connection = ConnectionTable.objects.create(
-                name=host,
+                name=conn_name,
                 connection_type="AGENT",
-                host=host,
+                host=callback_host,
                 agent_id=agent_id,
                 is_active=True,
-                policy=enrollment_token_obj.policy,
+                policy=policy,
+                instance_id=instance_id,
+                agent_api_port=agent_api_port,
+                logstash_api_port=logstash_api_port,
             )
 
             raw_api_key = secrets.token_urlsafe(32)
             ApiKey.objects.create(connection=connection, api_key=raw_api_key)
 
+            policy_config = build_policy_config(policy, instance_id=instance_id)
+
             logger.info(
                 f"Agent enrolled successfully with host '{host}', agent_id '{agent_id}', "
-                f"and policy '{enrollment_token_obj.policy.name}'"
+                f"policy '{policy.name}' type={policy.policy_type}"
+                + (f" instance_id={instance_id}" if instance_id else "")
             )
 
-            policy = enrollment_token_obj.policy
-            return JsonResponse(
-                {
-                    "success": True,
-                    "api_key": raw_api_key,
-                    "policy_id": policy.id,
-                    "connection_id": connection.id,
-                    "policy_config": {
-                        "settings_path": policy.settings_path,
-                        "logs_path": policy.logs_path,
-                        "binary_path": policy.binary_path,
-                        "logstash_yml": policy.logstash_yml,
-                        "jvm_options": policy.jvm_options,
-                        "log4j2_properties": policy.log4j2_properties,
-                    },
-                }
-            )
+            response_body = {
+                "success": True,
+                "api_key": raw_api_key,
+                "policy_id": policy.id,
+                "connection_id": connection.id,
+                "policy_config": policy_config,
+            }
+            try:
+                cert_part = _sign_csr_if_present(data)
+                if cert_part:
+                    response_body.update(cert_part)
+            except Exception as exc:
+                return JsonResponse(
+                    {"success": False, "error": f"Failed to sign agent certificate: {exc}"},
+                    status=400,
+                )
+
+            return JsonResponse(response_body)
         except Exception as exc:
             logger.error(f"Error creating connection during enrollment: {exc}")
             return JsonResponse(
@@ -286,6 +451,74 @@ def enroll(request):
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as exc:
         logger.error(f"Error during enrollment: {exc}")
+        return JsonResponse({"success": False, "error": str(exc)}, status=500)
+
+
+@csrf_exempt
+def issue_server_cert(request):
+    """
+    Issue a product-CA-signed agent server certificate from a CSR.
+
+    Auth (one of):
+      - Authorization: ApiKey <key> + connection_id (enrolled agents)
+      - X-LogstashUI-Agent-Csr-Secret: matches LOGSTASHUI_AGENT_CSR_SECRET
+        (compose/embedded bootstrap without re-enroll)
+    """
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        csr_pem = data.get("csr_pem") or data.get("certificate_signing_request")
+        if not csr_pem:
+            return JsonResponse({"success": False, "error": "Missing csr_pem"}, status=400)
+
+        authorized = False
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("ApiKey "):
+            raw_api_key = auth_header[7:]
+            connection_id = data.get("connection_id")
+            if connection_id and raw_api_key:
+                try:
+                    connection = ConnectionTable.objects.get(id=connection_id)
+                    api_key_obj = connection.api_keys.first()
+                    if api_key_obj and api_key_obj.verify_api_key(raw_api_key):
+                        authorized = True
+                except ConnectionTable.DoesNotExist:
+                    pass
+
+        if not authorized:
+            import os
+
+            expected = (os.environ.get("LOGSTASHUI_AGENT_CSR_SECRET") or "").strip()
+            provided = (
+                request.headers.get("X-LogstashUI-Agent-Csr-Secret")
+                or data.get("agent_csr_secret")
+                or ""
+            ).strip()
+            if expected and provided and secrets.compare_digest(expected, provided):
+                authorized = True
+
+        if not authorized:
+            return JsonResponse({"success": False, "error": "Unauthorized"}, status=401)
+
+        from Common.product_ca import sign_agent_csr
+
+        signed = sign_agent_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode("utf-8"))
+        return JsonResponse(
+            {
+                "success": True,
+                "server_certificate": signed["certificate_pem"],
+                "ca_certificate": signed["ca_pem"],
+                "certificate_fingerprint": signed["fingerprint_sha256"],
+            }
+        )
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
+    except ValueError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error(f"Error issuing server cert: {exc}", exc_info=True)
         return JsonResponse({"success": False, "error": str(exc)}, status=500)
 
 
@@ -329,10 +562,40 @@ def check_in(request):
 
         connection.last_check_in = datetime.now(timezone.utc)
 
+        # Connection.host must be reachable from this UI process. In containers
+        # prefer the agent callback IP (DNS is unpredictable); otherwise accept host.
+        new_host = resolve_agent_callback_host(data)
+        if new_host and new_host != connection.host:
+            old_host = connection.host or ""
+            connection.host = new_host
+            logger.info(
+                "Updated connection %s host %r → %r (callback reachability%s)",
+                connection_id,
+                old_host,
+                new_host,
+                ", container IP preferred" if running_in_container() else "",
+            )
+
         status_blob = data.get("status_blob")
         if status_blob:
             connection.status_blob = status_blob
             logger.debug(f"Updated status_blob: {status_blob}")
+            # Surface resolved Logstash version for sim target dropdown
+            resolved = status_blob.get("logstash_version_resolved") or status_blob.get(
+                "logstash_version"
+            )
+            if resolved:
+                connection.logstash_version_resolved = str(resolved)[:64]
+            if status_blob.get("agent_api_port") is not None:
+                try:
+                    connection.agent_api_port = int(status_blob["agent_api_port"])
+                except (TypeError, ValueError):
+                    pass
+            if status_blob.get("logstash_api_port") is not None:
+                try:
+                    connection.logstash_api_port = int(status_blob["logstash_api_port"])
+                except (TypeError, ValueError):
+                    pass
 
         should_restart = connection.restart_on_next_checkin
         if should_restart:
@@ -357,18 +620,42 @@ def check_in(request):
             "snmp": _snmp_changes_available(connection, policy, managed_state_hashes.get("snmp")),
         }
 
+        iid = connection.instance_id
         response_payload = {
             "success": True,
             "message": "Check-in successful",
             "timestamp": connection.last_check_in.isoformat(),
             "current_revision_number": policy.current_revision_number,
-            "settings_path": policy.settings_path,
-            "logs_path": policy.logs_path,
-            "binary_path": policy.binary_path,
+            "settings_path": expand_instance_path(policy.settings_path, iid),
+            "logs_path": expand_instance_path(policy.logs_path, iid),
+            "binary_path": expand_instance_path(policy.binary_path, iid),
+            # Desired Logstash runtime (agent applies VERSION download when these change)
+            "logstash_source": getattr(policy, "logstash_source", None) or "SYSTEM",
+            "logstash_version": getattr(policy, "logstash_version", None) or "",
+            "logstash_download_dir": expand_instance_path(
+                getattr(policy, "logstash_download_dir", None)
+                or "/opt/logstash-agent/logstash-versions",
+                iid,
+            ),
             "restart": should_restart,
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
         }
+
+        # Upgrade path: agent without server cert sends CSR; re-issue without re-enroll
+        try:
+            cert_part = _sign_csr_if_present(data)
+            if cert_part:
+                response_payload.update(cert_part)
+                logger.info(
+                    "Issued/re-issued agent server cert on check-in connection_id=%s",
+                    connection_id,
+                )
+        except Exception as exc:
+            return JsonResponse(
+                {"success": False, "error": f"Failed to sign agent certificate: {exc}"},
+                status=400,
+            )
 
         return JsonResponse(response_payload)
 
@@ -419,21 +706,84 @@ def get_config_changes(request):
         agent_logs_path = data.get("logs_path", "")
         agent_binary_path = data.get("binary_path", "")
         agent_keystore_password_hash = data.get("keystore_password_hash", "")
+        agent_logstash_source = (data.get("logstash_source") or "SYSTEM").upper()
+        agent_logstash_version = data.get("logstash_version") or ""
+        agent_logstash_download_dir = data.get("logstash_download_dir") or ""
 
         if not connection.policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
 
         policy = connection.policy
         changes = {}
+        iid = connection.instance_id
+        desired_settings = expand_instance_path(policy.settings_path, iid)
+        desired_logs = expand_instance_path(policy.logs_path, iid)
+        desired_binary = expand_instance_path(policy.binary_path, iid)
+        desired_download = expand_instance_path(
+            getattr(policy, "logstash_download_dir", None)
+            or "/opt/logstash-agent/logstash-versions",
+            iid,
+        )
 
-        changes["logstash_yml"] = policy.logstash_yml if agent_logstash_yml_hash != policy.logstash_yml_hash else False
+        # Multi-instance: materialize nested api.http.port + {instance_id} paths
+        # before hash-compare / push so agents never re-apply template port 9560.
+        desired_logstash_yml = policy.logstash_yml or ""
+        if iid is not None:
+            ls_port = connection.logstash_api_port
+            if not ls_port:
+                ptype = normalize_policy_type(policy.policy_type)
+                if ptype == Policy.PolicyType.MANAGED:
+                    _, ls_port = managed_ports(int(iid), policy)
+                else:
+                    _, ls_port = simulate_ports(int(iid), policy)
+            desired_logstash_yml = materialize_simulate_logstash_yml(
+                policy.logstash_yml or "",
+                int(ls_port),
+                instance_id=int(iid),
+            )
+        desired_yml_hash = hashlib.sha256(
+            desired_logstash_yml.encode("utf-8")
+        ).hexdigest()
+        changes["logstash_yml"] = (
+            desired_logstash_yml
+            if agent_logstash_yml_hash != desired_yml_hash
+            else False
+        )
         changes["jvm_options"] = policy.jvm_options if agent_jvm_options_hash != policy.jvm_options_hash else False
         changes["log4j2_properties"] = (
             policy.log4j2_properties if agent_log4j2_properties_hash != policy.log4j2_properties_hash else False
         )
-        changes["settings_path"] = policy.settings_path if agent_settings_path != policy.settings_path else False
-        changes["logs_path"] = policy.logs_path if agent_logs_path != policy.logs_path else False
-        changes["binary_path"] = policy.binary_path if agent_binary_path != policy.binary_path else False
+        changes["settings_path"] = desired_settings if agent_settings_path != desired_settings else False
+        changes["logs_path"] = desired_logs if agent_logs_path != desired_logs else False
+        changes["binary_path"] = desired_binary if agent_binary_path != desired_binary else False
+
+        # Desired Logstash runtime for simulate/managed VERSION/SYSTEM switches
+        policy_source = (getattr(policy, "logstash_source", None) or "SYSTEM").upper()
+        policy_version = getattr(policy, "logstash_version", None) or ""
+        policy_download_dir = desired_download
+        if policy_download_dir.startswith("/opt/LogstashAgent"):
+            policy_download_dir = "/opt/logstash-agent" + policy_download_dir[
+                len("/opt/LogstashAgent") :
+            ]
+        runtime_changed = (
+            agent_logstash_source != policy_source
+            or (policy_source == "VERSION" and agent_logstash_version != policy_version)
+            or (
+                policy_source == "VERSION"
+                and (agent_logstash_download_dir or policy_download_dir)
+                and agent_logstash_download_dir != policy_download_dir
+            )
+            or (policy_source == "SYSTEM" and agent_binary_path != policy.binary_path)
+        )
+        if runtime_changed:
+            changes["logstash_runtime"] = {
+                "source": policy_source,
+                "version": policy_version,
+                "download_dir": policy_download_dir,
+                "binary_path": policy.binary_path,
+            }
+        else:
+            changes["logstash_runtime"] = False
 
         agent_keystore = data.get("keystore", {})
         policy_keystore_entries = policy.keystore_entries.all()
@@ -477,21 +827,44 @@ def get_config_changes(request):
                     policy_key_data["value"],
                 )
 
-        if policy.keystore_password and (agent_keystore_password_hash != policy.keystore_password_hash):
-            plaintext_password = policy.get_keystore_password()
-            changes["keystore_password"] = _encrypt_for_agent(raw_api_key, plaintext_password)
-            forced_set = {
-                policy_key_name: _encrypt_for_agent(raw_api_key, policy_key_data["value"])
-                for policy_key_name, policy_key_data in policy_keystore.items()
-                if policy_key_name in user_key_names
-            }
-            if forced_set or keystore_changes.get("delete"):
-                changes["keystore"] = {"set": forced_set, "delete": keystore_changes.get("delete", [])}
+        # Keystore password protocol for the agent:
+        #   false  → no change
+        #   null   → clear (migrate to unauthenticated; policy has no password)
+        #   string → encrypted password to apply (set/rotate)
+        if policy.keystore_password:
+            if agent_keystore_password_hash != policy.keystore_password_hash:
+                plaintext_password = policy.get_keystore_password()
+                changes["keystore_password"] = _encrypt_for_agent(raw_api_key, plaintext_password)
+                forced_set = {
+                    policy_key_name: _encrypt_for_agent(raw_api_key, policy_key_data["value"])
+                    for policy_key_name, policy_key_data in policy_keystore.items()
+                    if policy_key_name in user_key_names
+                }
+                if forced_set or keystore_changes.get("delete"):
+                    changes["keystore"] = {
+                        "set": forced_set,
+                        "delete": keystore_changes.get("delete", []),
+                    }
+                else:
+                    changes["keystore"] = False
             else:
-                changes["keystore"] = False
+                changes["keystore_password"] = False
+                changes["keystore"] = (
+                    keystore_changes
+                    if (keystore_changes["set"] or keystore_changes["delete"])
+                    else False
+                )
         else:
-            changes["keystore_password"] = False
-            changes["keystore"] = keystore_changes if (keystore_changes["set"] or keystore_changes["delete"]) else False
+            # Policy wants unauthenticated keystore
+            if agent_keystore_password_hash:
+                changes["keystore_password"] = None
+            else:
+                changes["keystore_password"] = False
+            changes["keystore"] = (
+                keystore_changes
+                if (keystore_changes["set"] or keystore_changes["delete"])
+                else False
+            )
 
         agent_pipelines = data.get("pipelines", {})
         policy_pipelines_qs = policy.pipelines.all()
@@ -550,6 +923,7 @@ def get_config_changes(request):
                 f"settings_path={'CHANGED' if changes.get('settings_path') else 'unchanged'}",
                 f"logs_path={'CHANGED' if changes.get('logs_path') else 'unchanged'}",
                 f"binary_path={'CHANGED' if changes.get('binary_path') else 'unchanged'}",
+                f"logstash_runtime={'CHANGED' if changes.get('logstash_runtime') else 'unchanged'}",
             ]
         )
         keystore_summary = (

@@ -1697,6 +1697,283 @@ _Profile definition not found in bundled files._
 }
 ```
 
+### paloalto_firewall
+
+```json
+{
+  "name": "paloalto_firewall",
+  "description": "Palo Alto firewalls: HOST-RESOURCES CPU and memory, interfaces, chassis identity, and Cisco-schema fans and temperature sensors.",
+  "vendor": "Palo Alto",
+  "product": "PAN-OS",
+  "model": "Any",
+  "matching_rules": [
+    "Palo Alto Networks"
+  ]
+}
+```
+
+**Profiles included in `paloalto_firewall`:**
+
+#### `paloalto_system`
+
+```json
+{
+  "name": "paloalto_system",
+  "description": "PAN-OS chassis identity: model, serial number, and software version.",
+  "vendor": "Palo Alto",
+  "product": "PAN-OS",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.25461.2.1.2.1.1.0",
+    "observer.serial_number": "1.3.6.1.4.1.25461.2.1.2.1.3.0",
+    "observer.model": "1.3.6.1.4.1.25461.2.1.2.2.1.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `paloalto_components`
+
+```json
+{
+  "name": "paloalto_components",
+  "description": "Palo Alto chassis fans and temperature sensors, mapped onto the Cisco component.fan / component.sensor schema from ENTITY-SENSOR-MIB.",
+  "vendor": "Palo Alto",
+  "product": "PAN-OS",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.fan": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "state": "1.3.6.1.2.1.99.1.1.1.5",
+        "rpm": "1.3.6.1.2.1.99.1.1.1.4",
+        "type": "1.3.6.1.2.1.99.1.1.1.1"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "10"
+        ]
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "temp.celsius": "1.3.6.1.2.1.99.1.1.1.4",
+        "state": "1.3.6.1.2.1.99.1.1.1.5",
+        "type": "1.3.6.1.2.1.99.1.1.1.1"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "8"
+        ]
+      }
+    }
+  }
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total.bytes",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct"
+      }
+    }
+  ]
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_ip_addr`
+
+```json
+{
+  "name": "generic_ip_addr",
+  "description": "IP address, interface binding, and subnet mask for all addresses assigned to a device.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "ip_addr": {
+      "columns": {
+        "address": "1.3.6.1.2.1.4.20.1.1",
+        "if_index": "1.3.6.1.2.1.4.20.1.2",
+        "netmask": "1.3.6.1.2.1.4.20.1.3"
+      }
+    }
+  }
+}
+```
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
 ### ubiquiti_unifi_ap
 
 ```json
@@ -3400,6 +3677,69 @@ to collect and how to post-process the values (normalizers).
     "observer.firmware_version": "1.3.6.1.4.1.33049.11.1.1.1.1.2.1",
     "observer.system_status": "1.3.6.1.4.1.33049.10.1.1.2.3.0",
     "observer.mac_address": "1.3.6.1.4.1.33049.5.1.1.1.1.1"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+### `paloalto_components`
+
+```json
+{
+  "name": "paloalto_components",
+  "description": "Palo Alto chassis fans and temperature sensors, mapped onto the Cisco component.fan / component.sensor schema from ENTITY-SENSOR-MIB.",
+  "vendor": "Palo Alto",
+  "product": "PAN-OS",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.fan": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "state": "1.3.6.1.2.1.99.1.1.1.5",
+        "rpm": "1.3.6.1.2.1.99.1.1.1.4",
+        "type": "1.3.6.1.2.1.99.1.1.1.1"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "10"
+        ]
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "temp.celsius": "1.3.6.1.2.1.99.1.1.1.4",
+        "state": "1.3.6.1.2.1.99.1.1.1.5",
+        "type": "1.3.6.1.2.1.99.1.1.1.1"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "8"
+        ]
+      }
+    }
+  }
+}
+```
+
+### `paloalto_system`
+
+```json
+{
+  "name": "paloalto_system",
+  "description": "PAN-OS chassis identity: model, serial number, and software version.",
+  "vendor": "Palo Alto",
+  "product": "PAN-OS",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.25461.2.1.2.1.1.0",
+    "observer.serial_number": "1.3.6.1.4.1.25461.2.1.2.1.3.0",
+    "observer.model": "1.3.6.1.4.1.25461.2.1.2.2.1.0"
   },
   "walk": {},
   "table": {}

@@ -8,9 +8,9 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+/build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
@@ -225,5 +225,24 @@ __marimo__/
 /src/logstashui/data/
 /.plans/
 
+# Local config (use logstashui.example.yml)
+/src/logstashui/logstashui.yml
+
+# Local runtime / docker bind-mount data
+/logstashui_data/
+/docker/logstashui_data/
+
+# Agentic / local tooling scratch (not product docs)
+.grokignore
+/docs/superpowers/
+.hermes.md
+HERMES.md
+AGENTS.md
+CLAUDE.md
+.cursorrules
+IDEA.md
+graphify-out/
+
 # LogstashAgent (cloned from GitHub in host mode)
 /LogstashAgent/
+/src/logstashui/logstashui_data/

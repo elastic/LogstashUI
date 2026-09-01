@@ -254,12 +254,13 @@
                 <div id="linuxCommandsSection" class="mb-4 hidden">
                   <label class="form-label mb-2 block">Linux</label>
                   
-                  <!-- Install Logstash Checkbox -->
-                  <div class="mb-3">
+                  <!-- Install Logstash Checkbox (DEFAULT / SIMULATE+SYSTEM only; hidden for EMBEDDED and SIMULATE+VERSION) -->
+                  <div id="installLogstashRow" class="mb-3">
                     <label class="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" id="installLogstashCheckbox" class="checkbox checkbox-sm">
                       <span class="text-sm text-gray-300">Install Logstash</span>
                     </label>
+                    <p id="installLogstashHint" class="hidden text-xs text-gray-500 mt-1 ml-6"></p>
                   </div>
                   
                   <!-- Package Manager Selection (shown when Install Logstash is checked) -->
@@ -517,7 +518,8 @@ sudo systemctl start logstash-agent</code></pre>
   // Load policies from server and populate dropdown
   async function loadAgentPolicies() {
     try {
-      const response = await fetch('/ConnectionManager/GetPolicies/', {
+      // for_enroll=1 excludes Embedded (compose/auto; not token-enrolled)
+      const response = await fetch('/ConnectionManager/GetPolicies/?for_enroll=1', {
         method: 'GET',
         headers: {
           'X-CSRFToken': getCsrfToken()
@@ -544,6 +546,8 @@ sudo systemctl start logstash-agent</code></pre>
             option.value = policy.name.toLowerCase();
             option.textContent = policy.name;
             option.dataset.policyId = policy.id;
+            option.dataset.policyType = policy.policy_type || 'DEFAULT';
+            option.dataset.logstashSource = policy.logstash_source || 'SYSTEM';
             
             // Insert before "+ Add Agent Policy" option
             agentPolicySelect.insertBefore(option, addNewOption);
@@ -552,6 +556,8 @@ sudo systemctl start logstash-agent</code></pre>
           // Select first policy if available and load enrollment tokens
           if (data.policies.length > 0) {
             agentPolicySelect.value = data.policies[0].name.toLowerCase();
+            syncInstallLogstashVisibility();
+            syncEmbeddedEnrollUi();
             
             // Load enrollment tokens for the selected policy
             // Always load tokens even if agent fields are hidden - they'll be ready when user switches to Agent type
@@ -637,9 +643,19 @@ sudo systemctl start logstash-agent</code></pre>
         // Load enrollment tokens for selected policy
         const selectedOption = this.options[this.selectedIndex];
         const policyId = selectedOption.dataset.policyId;
+        syncInstallLogstashVisibility();
+        syncEmbeddedEnrollUi();
         
         if (policyId) {
           await loadEnrollmentTokens(policyId);
+        }
+        // Refresh command snippet if a token is already selected
+        const enrollmentTokenSelect = document.getElementById('enrollmentToken');
+        if (enrollmentTokenSelect && enrollmentTokenSelect.selectedIndex >= 0) {
+          const tok = enrollmentTokenSelect.options[enrollmentTokenSelect.selectedIndex];
+          if (tok && tok.dataset.encodedToken) {
+            updateLinuxCommands(tok.dataset.encodedToken);
+          }
         }
       } else {
         // Clear enrollment token dropdown and hide Linux commands when no policy is selected
@@ -817,6 +833,86 @@ sudo systemctl start logstash-agent</code></pre>
     });
   }
   
+  function selectedAgentPolicyMeta() {
+    const agentPolicySelect = document.getElementById('agentPolicy');
+    if (!agentPolicySelect || agentPolicySelect.selectedIndex < 0) {
+      return { policyType: 'DEFAULT', logstashSource: 'SYSTEM' };
+    }
+    const opt = agentPolicySelect.options[agentPolicySelect.selectedIndex];
+    return {
+      policyType: (opt.dataset.policyType || 'DEFAULT').toUpperCase(),
+      logstashSource: (opt.dataset.logstashSource || 'SYSTEM').toUpperCase(),
+    };
+  }
+
+  /** Whether "Install Logstash" belongs in the enroll snippet for the selected policy. */
+  function shouldOfferInstallLogstash() {
+    const { policyType, logstashSource } = selectedAgentPolicyMeta();
+    const pt = policyType === 'DEFAULT' ? 'PACKAGED' : policyType;
+    if (pt === 'EMBEDDED') {
+      return false;
+    }
+    // VERSION source downloads Logstash; OS package install is not used
+    if ((pt === 'SIMULATE' || pt === 'MANAGED') && logstashSource === 'VERSION') {
+      return false;
+    }
+    return true;
+  }
+
+  /** Embedded is never enrolled via this modal (filtered from dropdown); keep helpers defensive. */
+  function syncEmbeddedEnrollUi() {
+    const { policyType } = selectedAgentPolicyMeta();
+    const isEmbedded = policyType === 'EMBEDDED';
+    const enrollmentTokenSection = document.getElementById('enrollmentTokenSection');
+    const linuxCommandsSection = document.getElementById('linuxCommandsSection');
+    if (enrollmentTokenSection) {
+      if (isEmbedded) {
+        enrollmentTokenSection.classList.add('hidden');
+      } else {
+        enrollmentTokenSection.classList.remove('hidden');
+      }
+    }
+    if (linuxCommandsSection && isEmbedded) {
+      linuxCommandsSection.classList.add('hidden');
+    }
+  }
+
+  function syncInstallLogstashVisibility() {
+    const row = document.getElementById('installLogstashRow');
+    const checkbox = document.getElementById('installLogstashCheckbox');
+    const pkgSection = document.getElementById('packageManagerSection');
+    const hint = document.getElementById('installLogstashHint');
+    const offer = shouldOfferInstallLogstash();
+    if (row) {
+      if (offer) {
+        row.classList.remove('hidden');
+      } else {
+        row.classList.add('hidden');
+        if (checkbox) checkbox.checked = false;
+        if (pkgSection) pkgSection.classList.add('hidden');
+      }
+    }
+    if (hint) {
+      if (!offer) {
+        const agentPolicySelect = document.getElementById('agentPolicy');
+        const opt = agentPolicySelect && agentPolicySelect.options[agentPolicySelect.selectedIndex];
+        const policyType = (opt && opt.dataset.policyType || '').toUpperCase();
+        const logstashSource = (opt && opt.dataset.logstashSource || '').toUpperCase();
+        if (policyType === 'EMBEDDED') {
+          hint.textContent = 'Embedded agents use the container Logstash; package install is not used.';
+        } else if (policyType === 'SIMULATE' && logstashSource === 'VERSION') {
+          hint.textContent = 'This Simulate policy uses a VERSION Logstash binary (agent download), not the OS package.';
+        } else {
+          hint.textContent = '';
+        }
+        // Keep hint only if we show something when row is hidden — optional, leave hidden with row
+        hint.classList.add('hidden');
+      } else {
+        hint.classList.add('hidden');
+      }
+    }
+  }
+
   // Function to update Linux commands with enrollment token
   function updateLinuxCommands(encodedToken) {
     const linuxCommandsElement = document.getElementById('linuxCommands');
@@ -824,6 +920,8 @@ sudo systemctl start logstash-agent</code></pre>
     const installLogstashCheckbox = document.getElementById('installLogstashCheckbox');
     const packageManagerRadio = document.querySelector('input[name="package_manager"]:checked');
     const customUrlInput = document.getElementById('customLogstashUIUrl');
+
+    syncInstallLogstashVisibility();
     
     if (linuxCommandsElement) {
       // Get the URL to use - custom input takes precedence over browser URL
@@ -846,8 +944,12 @@ sudo systemctl start logstash-agent</code></pre>
       // Build the commands
       let commands = '';
       
-      // Add Logstash installation commands if checkbox is checked
-      if (installLogstashCheckbox && installLogstashCheckbox.checked) {
+      // Add Logstash installation commands if checkbox is checked and policy allows it
+      if (
+        shouldOfferInstallLogstash() &&
+        installLogstashCheckbox &&
+        installLogstashCheckbox.checked
+      ) {
         const packageManager = packageManagerRadio ? packageManagerRadio.value : 'apt';
         
         if (packageManager === 'apt') {
@@ -877,13 +979,52 @@ sudo systemctl enable logstash
         }
       }
       
-      // Add LogstashAgent installation commands
+      // Install is a full deploy: agent unit is enabled+started by install.
+      // Distro Logstash is enabled only (never bounced) for Packaged/live hosts.
+      const { policyType, logstashSource } = selectedAgentPolicyMeta();
+      const pt = policyType === 'DEFAULT' ? 'PACKAGED' : policyType;
+      let day2 = `# After install the packaged agent service is already running.
+# Day-2 (packaged only — does not stop managed/simulate instances):
+#   sudo systemctl status logstash-agent
+#   sudo systemctl stop logstash-agent
+#   sudo systemctl start logstash-agent
+#   sudo journalctl -u logstash-agent -f
+# Host map (all roles): logstash-agent list-instances
+# State: /var/lib/logstash-agent   Config: /etc/logstash-agent/logstash-agent.yml`;
+      if (pt === 'SIMULATE') {
+        day2 = `# After install the simulate agent unit is enabled and started
+# (instance number N is shown in install output / UI connection).
+# Coexists with packaged logstash-agent.service on the same host.
+# Day-2 (this instance only — replace N):
+#   sudo systemctl status lsagent-simulate@N
+#   sudo systemctl stop lsagent-simulate@N
+#   sudo systemctl start lsagent-simulate@N
+#   sudo journalctl -u lsagent-simulate@N -f
+#   sudo systemctl status ls-simulate@N
+# State/config: /opt/logstash-agent/simulate-N/{state,logstash-agent.yml}
+# Host map: logstash-agent list-instances`;
+      } else if (pt === 'MANAGED') {
+        day2 = `# After install the managed agent unit is enabled and started
+# (instance number N is shown in install output / UI connection).
+# Coexists with packaged logstash-agent.service on the same host.
+# Day-2 (this instance only — replace N):
+#   sudo systemctl status logstash-agent@N
+#   sudo systemctl stop logstash-agent@N
+#   sudo systemctl start logstash-agent@N
+#   sudo journalctl -u logstash-agent@N -f
+#   # or: sudo logstash-agent-ctl status logstash-agent@N
+#   sudo systemctl status logstash-managed@N
+# State/config: /opt/logstash-agent/managed-N/{state,logstash-agent.yml}
+# Host map: logstash-agent list-instances
+# Drop only this instance: sudo logstash-agent uninstall --instance managed-N`;
+      }
+
       commands += `# Install LogstashAgent
 curl -LO https://github.com/elastic/LogstashAgent/releases/download/v{{ preferred_agent_version }}/logstash-agent-linux-amd64.tar.gz
 tar -xzf logstash-agent-linux-amd64.tar.gz
 sudo ./logstash-agent/logstash-agent install --enroll ${encodedToken} --logstash-ui-url ${currentUrl} --yes
-sudo systemctl enable logstash-agent
-sudo systemctl start logstash-agent`;
+
+${day2}`;
       
       // Update the commands
       linuxCommandsElement.innerHTML = `<code>${commands}</code>`;

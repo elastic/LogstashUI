@@ -3,6 +3,8 @@
 > A control plane and visual editor for Logstash, built for managing Logstash nodes and authoring, simulating, and deploying pipelines.
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
+>
+> **Current package version: 0.5.1** — see [CHANGELOG.md](CHANGELOG.md). Pair with **LogstashAgent 0.5.1**. Operator guide: [agent roles / ports / coexistence / VERSION](docs/docs/logstashagent/general/roles.md).
 
 <img src="docs/images/simulate.png" width="100%">
 
@@ -79,7 +81,7 @@ If you have internet access and can use Docker and GitHub, the standard install 
 
 ## Quick Start - Embedded Mode
 > [!TIP]
-> If you plan on doing a lot of simulations, consider using [host mode](docs/docs/logstashui/configuration/host_mode.md). It's more performant.
+> For heavy simulation, prefer [enrolled simulate agents](docs/docs/logstashui/configuration/host_mode.md) (isolated `simulate-N` instances). `start_logstashui.sh --legacy-host-agent` is a **legacy** local path.
 ### Download LogstashUI
 ```bash
 git clone https://github.com/elastic/LogstashUI.git

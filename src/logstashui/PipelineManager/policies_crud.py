@@ -21,13 +21,20 @@ def get_policies(request):
     """
     try:
         from django.db.models import Count, Q
-        policies = list(Policy.objects.annotate(
+        qs = Policy.objects.annotate(
             connection_count=Count(
                 'connections',
                 filter=Q(connections__connection_type='AGENT', connections__is_active=True)
             )
-        ).values(
-            'id', 'name', 'settings_path', 'logs_path', 'binary_path',
+        )
+        # Embedded is docker/auto — never listed in Policies or enroll dropdowns
+        qs = qs.exclude(policy_type=Policy.PolicyType.EMBEDDED)
+
+        policies = list(qs.values(
+            'id', 'name', 'policy_type', 'is_system', 'cloned_from_id',
+            'settings_path', 'logs_path', 'binary_path', 'data_path',
+            'agent_api_port', 'logstash_api_port', 'keystore_env_file',
+            'logstash_source', 'logstash_version', 'logstash_download_dir',
             'logstash_yml', 'jvm_options', 'log4j2_properties',
             'current_revision_number', 'last_deployed_at',
             'connection_count', 'created_at', 'updated_at'
@@ -80,16 +87,78 @@ def add_policy(request):
         if Policy.objects.filter(name=name).exists():
             return JsonResponse({"success": False, "error": f"Policy '{name}' already exists"}, status=400)
 
+        from PipelineManager.agent_modes import (
+            MANAGED_AGENT_API_BASE,
+            MANAGED_LOGSTASH_API_BASE,
+            PACKAGED_AGENT_API_PORT,
+            PACKAGED_LOGSTASH_API_PORT,
+            SIMULATE_AGENT_API_BASE,
+            SIMULATE_LOGSTASH_API_BASE,
+            apply_managed_path_bundle,
+            apply_simulate_path_bundle,
+            normalize_agent_opt_path,
+            parse_creatable_policy_type,
+            uses_packaged_default_paths,
+        )
+
+        policy_type, type_error = parse_creatable_policy_type(data.get('policy_type'))
+        if type_error:
+            return JsonResponse({"success": False, "error": type_error}, status=400)
+
+        def _optional_int(key, default):
+            raw = data.get(key, default)
+            if raw is None or raw == '':
+                return default
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return default
+
+        if policy_type == Policy.PolicyType.MANAGED:
+            agent_port_default, ls_port_default = (
+                MANAGED_AGENT_API_BASE,
+                MANAGED_LOGSTASH_API_BASE,
+            )
+        elif policy_type == Policy.PolicyType.SIMULATE:
+            agent_port_default, ls_port_default = (
+                SIMULATE_AGENT_API_BASE,
+                SIMULATE_LOGSTASH_API_BASE,
+            )
+        else:
+            agent_port_default, ls_port_default = (
+                PACKAGED_AGENT_API_PORT,
+                PACKAGED_LOGSTASH_API_PORT,
+            )
+
         # Create the policy
         policy = Policy.objects.create(
             name=name,
-            settings_path=settings_path,
-            logs_path=logs_path,
-            binary_path=binary_path,
+            policy_type=policy_type,
+            settings_path=normalize_agent_opt_path(settings_path) or settings_path,
+            logs_path=normalize_agent_opt_path(logs_path) or logs_path,
+            binary_path=normalize_agent_opt_path(binary_path) or binary_path,
+            data_path=normalize_agent_opt_path(data.get('data_path', '')),
+            keystore_env_file=normalize_agent_opt_path(
+                data.get('keystore_env_file') or '/etc/default/logstash'
+            ) or (data.get('keystore_env_file') or '/etc/default/logstash'),
+            logstash_source=data.get('logstash_source') or Policy.LogstashSource.SYSTEM,
+            logstash_version=data.get('logstash_version') or '',
+            logstash_download_dir=normalize_agent_opt_path(
+                data.get('logstash_download_dir') or '/opt/logstash-agent/logstash-versions'
+            ) or '/opt/logstash-agent/logstash-versions',
+            agent_api_port=_optional_int('agent_api_port', agent_port_default),
+            logstash_api_port=_optional_int('logstash_api_port', ls_port_default),
             logstash_yml=logstash_yml,
             jvm_options=jvm_options,
             log4j2_properties=log4j2_properties
         )
+
+        if policy_type == Policy.PolicyType.MANAGED and uses_packaged_default_paths(policy):
+            apply_managed_path_bundle(policy)
+            policy.save()
+        elif policy_type == Policy.PolicyType.SIMULATE and uses_packaged_default_paths(policy):
+            apply_simulate_path_bundle(policy)
+            policy.save()
 
         # Generate enrollment token for the new policy
         enrollment_token = secrets.token_urlsafe(32)
@@ -101,13 +170,17 @@ def add_policy(request):
             token=enrollment_token
         )
 
-        logger.info(f"User '{request.user.username}' created policy '{name}' with enrollment token")
+        logger.info(
+            f"User '{request.user.username}' created policy '{name}' "
+            f"({policy.policy_type}) with enrollment token"
+        )
 
         return JsonResponse({
             "success": True,
             "message": f"Policy '{name}' created successfully",
             "policy_id": policy.id,
-            "policy_name": policy.name
+            "policy_name": policy.name,
+            "policy_type": policy.policy_type,
         })
 
     except json.JSONDecodeError:
@@ -133,28 +206,106 @@ def update_policy(request):
         if not policy_name:
             return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
 
-        # Don't allow updating Default policy
-        if policy_name.lower() == 'default policy':
-            return JsonResponse({"success": False, "error": "Cannot update Default Policy"}, status=403)
-
         try:
             policy = Policy.objects.get(name=policy_name)
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": f"Policy '{policy_name}' not found"}, status=404)
 
-        # Update fields if provided
-        if 'settings_path' in data:
-            policy.settings_path = data['settings_path']
-        if 'logs_path' in data:
-            policy.logs_path = data['logs_path']
-        if 'binary_path' in data:
-            policy.binary_path = data['binary_path']
-        if 'logstash_yml' in data:
-            policy.logstash_yml = data['logstash_yml']
-        if 'jvm_options' in data:
-            policy.jvm_options = data['jvm_options']
-        if 'log4j2_properties' in data:
-            policy.log4j2_properties = data['log4j2_properties']
+        if policy.policy_type == Policy.PolicyType.EMBEDDED:
+            return JsonResponse(
+                {"success": False, "error": "Cannot update Embedded Policy (immutable)"},
+                status=403,
+            )
+
+        from PipelineManager.agent_modes import normalize_policy_type
+
+        if 'policy_type' in data and data['policy_type'] is not None and str(data['policy_type']).strip() != '':
+            incoming = normalize_policy_type(data['policy_type'])
+            stored = normalize_policy_type(policy.policy_type)
+            if incoming != stored:
+                return JsonResponse(
+                    {"success": False, "error": "Cannot change policy type"},
+                    status=403,
+                )
+
+        # System Packaged/Default: allow path/config edits (production). Name/type locked by not exposing them.
+        # System Simulate/Managed: allow jvm/binary/source; block path scheme (instance formula at enroll).
+        # User clones: broader edits.
+        is_system_simulate = (
+            policy.is_system and policy.policy_type == Policy.PolicyType.SIMULATE
+        )
+        is_system_managed = (
+            policy.is_system and policy.policy_type == Policy.PolicyType.MANAGED
+        )
+        is_system_path_locked = is_system_simulate or is_system_managed
+
+        from PipelineManager.agent_modes import normalize_agent_opt_path
+
+        if is_system_path_locked:
+            # Allowlisted fields for system Simulate / Managed policies
+            if 'jvm_options' in data:
+                policy.jvm_options = data['jvm_options']
+            if 'logstash_source' in data:
+                policy.logstash_source = data['logstash_source']
+            if 'logstash_version' in data:
+                policy.logstash_version = data['logstash_version']
+            if 'logstash_download_dir' in data:
+                policy.logstash_download_dir = normalize_agent_opt_path(
+                    data['logstash_download_dir']
+                ) or data['logstash_download_dir']
+            if 'binary_path' in data:
+                policy.binary_path = normalize_agent_opt_path(data['binary_path']) or data[
+                    'binary_path'
+                ]
+            if 'logstash_yml' in data:
+                policy.logstash_yml = data['logstash_yml']
+            if 'log4j2_properties' in data:
+                policy.log4j2_properties = data['log4j2_properties']
+            # Force-correct legacy opt root on locked system path fields
+            policy.settings_path = normalize_agent_opt_path(policy.settings_path) or policy.settings_path
+            policy.logs_path = normalize_agent_opt_path(policy.logs_path) or policy.logs_path
+            policy.data_path = normalize_agent_opt_path(policy.data_path)
+            policy.keystore_env_file = normalize_agent_opt_path(policy.keystore_env_file)
+            # Intentionally ignore settings_path / logs_path / data_path / ports structural changes from client
+        else:
+            if 'settings_path' in data:
+                policy.settings_path = normalize_agent_opt_path(data['settings_path']) or data[
+                    'settings_path'
+                ]
+            if 'logs_path' in data:
+                policy.logs_path = normalize_agent_opt_path(data['logs_path']) or data['logs_path']
+            if 'binary_path' in data:
+                policy.binary_path = normalize_agent_opt_path(data['binary_path']) or data[
+                    'binary_path'
+                ]
+            if 'data_path' in data:
+                policy.data_path = normalize_agent_opt_path(data['data_path'])
+            if 'keystore_env_file' in data:
+                policy.keystore_env_file = normalize_agent_opt_path(data['keystore_env_file'])
+            if 'logstash_source' in data:
+                policy.logstash_source = data['logstash_source']
+            if 'logstash_version' in data:
+                policy.logstash_version = data['logstash_version']
+            if 'logstash_download_dir' in data:
+                policy.logstash_download_dir = normalize_agent_opt_path(
+                    data['logstash_download_dir']
+                ) or data['logstash_download_dir']
+            if 'agent_api_port' in data and data['agent_api_port'] is not None:
+                try:
+                    policy.agent_api_port = int(data['agent_api_port'])
+                except (TypeError, ValueError):
+                    pass
+            if 'logstash_api_port' in data and data['logstash_api_port'] is not None:
+                try:
+                    policy.logstash_api_port = int(data['logstash_api_port'])
+                except (TypeError, ValueError):
+                    pass
+            if 'logstash_yml' in data:
+                policy.logstash_yml = data['logstash_yml']
+            if 'jvm_options' in data:
+                policy.jvm_options = data['jvm_options']
+            if 'log4j2_properties' in data:
+                policy.log4j2_properties = data['log4j2_properties']
 
         policy.save()
 
@@ -188,14 +339,19 @@ def delete_policy(request):
         if not policy_name:
             return JsonResponse({"success": False, "error": "Policy name is required"}, status=400)
 
-        # Don't allow deleting Default policy
-        if policy_name.lower() == 'default policy':
-            return JsonResponse({"success": False, "error": "Cannot delete Default Policy"}, status=403)
-
         try:
             policy = Policy.objects.get(name=policy_name)
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": f"Policy '{policy_name}' not found"}, status=404)
+
+        if policy.is_system:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Cannot delete system policy '{policy_name}'",
+                },
+                status=403,
+            )
 
         # Check if policy is in use
         connections_count = policy.connections.count()
@@ -251,18 +407,65 @@ def clone_policy(request):
         except Policy.DoesNotExist:
             return JsonResponse({"success": False, "error": f"Source policy not found"}, status=404)
 
-        # Create new policy with same configuration as source
+        if source_policy.policy_type == Policy.PolicyType.EMBEDDED:
+            return JsonResponse(
+                {"success": False, "error": "Cannot clone Embedded Policy"},
+                status=403,
+            )
+
+        from PipelineManager.agent_modes import (
+            apply_managed_path_bundle,
+            normalize_agent_opt_path,
+            normalize_policy_type,
+        )
+
+        source_type = normalize_policy_type(source_policy.policy_type)
+        # Clone matrix:
+        #   PACKAGED/DEFAULT → MANAGED (auto managed-{instance_id} path scheme)
+        #   MANAGED → MANAGED
+        #   SIMULATE → SIMULATE
+        if source_type in (Policy.PolicyType.PACKAGED, Policy.PolicyType.DEFAULT, "DEFAULT"):
+            cloned_type = Policy.PolicyType.MANAGED
+        elif source_type == Policy.PolicyType.MANAGED:
+            cloned_type = Policy.PolicyType.MANAGED
+        elif source_type == Policy.PolicyType.SIMULATE:
+            cloned_type = Policy.PolicyType.SIMULATE
+        else:
+            cloned_type = Policy.PolicyType.MANAGED
+
+        # Create new policy with same configuration as source (rewrite legacy opt root)
         new_policy = Policy.objects.create(
             name=new_policy_name,
-            settings_path=source_policy.settings_path,
-            logs_path=source_policy.logs_path,
-            binary_path=source_policy.binary_path,
+            policy_type=cloned_type,
+            is_system=False,
+            cloned_from=source_policy,
+            settings_path=normalize_agent_opt_path(source_policy.settings_path),
+            logs_path=normalize_agent_opt_path(source_policy.logs_path),
+            binary_path=normalize_agent_opt_path(source_policy.binary_path)
+            or source_policy.binary_path,
+            data_path=normalize_agent_opt_path(source_policy.data_path),
+            agent_api_port=source_policy.agent_api_port,
+            logstash_api_port=source_policy.logstash_api_port,
+            keystore_env_file=normalize_agent_opt_path(source_policy.keystore_env_file),
+            logstash_source=source_policy.logstash_source,
+            logstash_version=source_policy.logstash_version,
+            logstash_download_dir=normalize_agent_opt_path(source_policy.logstash_download_dir)
+            or source_policy.logstash_download_dir,
             logstash_yml=source_policy.logstash_yml,
             jvm_options=source_policy.jvm_options,
             log4j2_properties=source_policy.log4j2_properties,
             keystore_password=source_policy.keystore_password,
             keystore_password_hash=source_policy.keystore_password_hash
         )
+
+        # Packaged → Managed: rewrite path scheme to managed-{instance_id} templates
+        if cloned_type == Policy.PolicyType.MANAGED and source_type in (
+            Policy.PolicyType.PACKAGED,
+            Policy.PolicyType.DEFAULT,
+            "DEFAULT",
+        ):
+            apply_managed_path_bundle(new_policy)
+            new_policy.save()
 
         # Generate default enrollment token for new policy (same as add_policy)
         enrollment_token = secrets.token_urlsafe(32)
@@ -338,28 +541,44 @@ def get_enrollment_tokens(request):
         # Get all enrollment tokens for this policy
         tokens = EnrollmentToken.objects.filter(policy=policy)
 
-        # Serialize tokens with encoded payload
-        tokens_data = []
-        for token in tokens:
-            # Create token payload (same as generate_enrollment_token)
-            token_payload = {
-                "enrollment_token": token.token
-            }
+        from Common.product_ca import (
+            build_enrollment_token_payload,
+            get_agent_ui_url_default,
+        )
 
-            # Encode as base64
-            json_string = json.dumps(token_payload)
+        # Serialize tokens with encoded payload (v2: optional CA fingerprint)
+        tokens_data = []
+        agent_ui_url = get_agent_ui_url_default()
+        for token in tokens:
+            token_payload = build_enrollment_token_payload(token.token)
+            json_string = json.dumps(token_payload, separators=(',', ':'))
             encoded_token = base64.b64encode(json_string.encode('utf-8')).decode('utf-8')
+
+            # Generated install/enroll command uses global agent.ui_url when set
+            if agent_ui_url:
+                enroll_command = (
+                    f"sudo logstash-agent install --enroll={encoded_token} "
+                    f"--logstash-ui-url={agent_ui_url}"
+                )
+            else:
+                enroll_command = (
+                    f"sudo logstash-agent install --enroll={encoded_token} "
+                    f"--logstash-ui-url=<UI_URL>"
+                )
 
             tokens_data.append({
                 "id": token.id,
                 "name": token.name,
                 "raw_token": token.token,
-                "encoded_token": encoded_token
+                "encoded_token": encoded_token,
+                "enroll_command": enroll_command,
+                "agent_ui_url": agent_ui_url or "",
             })
 
         return JsonResponse({
             "success": True,
-            "tokens": tokens_data
+            "tokens": tokens_data,
+            "agent_ui_url": agent_ui_url or "",
         })
 
     except Exception as e:
