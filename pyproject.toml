@@ -35,6 +35,18 @@ logstashui = "LogstashUI.cli:main"
 [project.urls]
 Homepage = "https://github.com/elastic/LogstashUI"
 
+[project.optional-dependencies]
+postgres = [
+    "psycopg[binary]>=3.2.0",
+]
+mysql = [
+    "PyMySQL>=1.1.1",
+]
+databases = [
+    "psycopg[binary]>=3.2.0",
+    "PyMySQL>=1.1.1",
+]
+
 [tool.uv]
 package = true
 

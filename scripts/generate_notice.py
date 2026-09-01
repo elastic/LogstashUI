@@ -34,7 +34,9 @@ CUSTOM_DEPENDENCIES = {
     "d3": "https://github.com/d3/d3/blob/main/LICENSE",
     "codemirror": "https://github.com/codemirror/dev/blob/main/LICENSE",
     "js-yaml": "https://github.com/nodeca/js-yaml/blob/master/LICENSE",
-    "markedjs": "https://github.com/markedjs/marked/blob/master/LICENSE"
+    "markedjs": "https://github.com/markedjs/marked/blob/master/LICENSE",
+    "psycopg": "https://github.com/psycopg/psycopg/blob/master/LICENSE.txt",
+    "PyMySQL": "https://github.com/PyMySQL/PyMySQL/blob/main/LICENSE",
 }
 
 # Repository mappings for dependencies (fallback when automatic lookup fails)
@@ -81,6 +83,9 @@ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.""",
+    "psycopg": "https://github.com/psycopg/psycopg/blob/master/LICENSE.txt",
+    "psycopg-binary": "https://github.com/psycopg/psycopg/blob/master/LICENSE.txt",
+    "PyMySQL": "https://github.com/PyMySQL/PyMySQL/blob/main/LICENSE",
     "greenlet": "https://github.com/python-greenlet/greenlet/blob/master/LICENSE",
     "portalocker": "https://github.com/wolph/portalocker/blob/develop/LICENSE",
     "zope-event": "https://github.com/zopefoundation/zope.event/blob/master/LICENSE.txt",
