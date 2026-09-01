@@ -242,6 +242,7 @@ CLAUDE.md
 .cursorrules
 IDEA.md
 graphify-out/
+.github/copilot-instructions.md
 
 # LogstashAgent (cloned from GitHub in host mode)
 /LogstashAgent/
