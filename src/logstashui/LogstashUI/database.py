@@ -115,6 +115,9 @@ def build_databases(data_dir: Path) -> dict:
 
     pymysql = _import_or_raise("pymysql", "mysql")
     if pymysql is not None:
+        # Django 6 MySQL backend requires Database.version_info >= (2, 2, 1)
+        # (mysqlclient). PyMySQL reports ~1.1.1, so spoof before the shim.
+        pymysql.version_info = (2, 2, 1, "final", 0)
         pymysql.install_as_MySQLdb()
     _require(["LOGSTASHUI_DB_HOST", "LOGSTASHUI_DB_USER"])
     options = {

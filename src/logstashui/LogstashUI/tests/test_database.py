@@ -3,6 +3,7 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -114,6 +115,22 @@ def test_build_databases_mysql_mariadb_alias(tmp_path, monkeypatch):
     assert "utf8mb4_bin" in db["OPTIONS"]["init_command"]
     assert db["TEST"]["CHARSET"] == "utf8mb4"
     assert db["TEST"]["COLLATION"] == "utf8mb4_bin"
+
+
+def test_mysql_spoofs_pymysql_version_info(tmp_path, monkeypatch):
+    _clear_db_env(monkeypatch)
+    monkeypatch.setenv("LOGSTASHUI_DB_ENGINE", "mysql")
+    monkeypatch.setenv("LOGSTASHUI_DB_HOST", "127.0.0.1")
+    monkeypatch.setenv("LOGSTASHUI_DB_USER", "lsui")
+    installed = []
+    fake = SimpleNamespace(
+        version_info=(1, 1, 1, "final", 0),
+        install_as_MySQLdb=lambda: installed.append(True),
+    )
+    monkeypatch.setattr("LogstashUI.database._import_or_raise", lambda *a, **k: fake)
+    build_databases(tmp_path)
+    assert fake.version_info == (2, 2, 1, "final", 0)
+    assert installed
 
 
 def test_postgresql_missing_driver(tmp_path, monkeypatch):
