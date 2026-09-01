@@ -19,7 +19,10 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'LogstashUI.settings')
 
+# gunicorn --worker-class gevent monkey-patches select before this module loads.
+# psycopg 3.1.14+ detects that and waits cooperatively; do not use psycogreen.
 application = get_wsgi_application()
+
 
 # Quiet gevent/gunicorn spam: clients that reject the product CA (browser
 # probes, scanners, default-trust Python) abort the handshake with

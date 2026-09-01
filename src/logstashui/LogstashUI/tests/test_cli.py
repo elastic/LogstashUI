@@ -85,3 +85,40 @@ def test_serve_snmp_commanderror_does_not_abort(monkeypatch):
     except SystemExit as exc:
         assert exc.code == 0
     assert exec_called.get("file") == "gunicorn"
+
+
+def test_parser_migrate_engine_requires_backup_flag():
+    parser = build_parser()
+    ns = parser.parse_args(["migrate-engine", "--to", "postgresql"])
+    assert ns.command == "migrate-engine"
+    assert ns.to == "postgresql"
+    assert ns.i_have_a_backup is False
+
+
+def test_serve_adds_pidfile_and_warns_sqlite(monkeypatch, tmp_path, capsys):
+    from LogstashUI import cli
+
+    monkeypatch.setattr(cli, "_manage", lambda argv: None)
+    monkeypatch.setenv("LOGSTASHUI_TLS", "false")
+    monkeypatch.setenv("LOGSTASHUI_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("LOGSTASHUI_DB_ENGINE", raising=False)
+
+    captured = {}
+
+    def fake_execvp(file, args):
+        captured["file"] = file
+        captured["args"] = list(args)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvp", fake_execvp)
+    ns = Namespace(skip_migrate=True, no_tls=True, bind="127.0.0.1:8443", workers=2)
+    try:
+        cmd_serve(ns)
+    except SystemExit:
+        pass
+    assert "--pid" in captured["args"]
+    pid_idx = captured["args"].index("--pid")
+    assert captured["args"][pid_idx + 1].endswith("gunicorn.pid")
+    err = capsys.readouterr().err
+    assert "SQLite is the small-install default" in err
+

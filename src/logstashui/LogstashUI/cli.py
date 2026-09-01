@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import shutil
 import sys
 from importlib.resources import files
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,6 +49,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     manage = sub.add_parser("manage", help="Django management command passthrough")
     manage.add_argument("manage_args", nargs=argparse.REMAINDER)
+
+    migrate = sub.add_parser(
+        "migrate-engine",
+        help="BETA: copy SQLite data to PostgreSQL or MySQL (stops gunicorn)",
+    )
+    migrate.add_argument("--to", required=True, choices=("postgresql", "mysql"))
+    migrate.add_argument(
+        "--i-have-a-backup",
+        dest="i_have_a_backup",
+        action="store_true",
+        help="Required. Confirms db.sqlite3 was copied aside.",
+    )
+    migrate.add_argument("--pid", type=Path, default=None, help="gunicorn pidfile to signal")
+    migrate.add_argument(
+        "--write-env",
+        type=Path,
+        default=None,
+        help="Append LOGSTASHUI_DB_* to this EnvironmentFile",
+    )
 
     systemd = sub.add_parser(
         "systemd",
@@ -300,14 +322,33 @@ def _best_effort_call(name: str, **kwargs) -> None:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    from LogstashUI.database import canonical_engine, check_server_version
+    from LogstashUI.paths import resolve_data_dir
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
     tls_env = os.environ.get("LOGSTASHUI_TLS", "true")
     tls_on = not args.no_tls and tls_env.strip().lower() not in ("0", "false", "no", "off")
 
+    engine = canonical_engine(os.environ.get("LOGSTASHUI_DB_ENGINE"))
+    if engine == "sqlite" and args.workers > 1:
+        msg = (
+            "SQLite is the small-install default; use PostgreSQL or MySQL/MariaDB "
+            "for concurrent agents (LOGSTASHUI_WORKERS>1)."
+        )
+        logger.warning(msg)
+        print(msg, file=sys.stderr)
+
     if not args.skip_migrate:
         _manage(["migrate", "--noinput"])
+        _django_setup()
+        from django.db import connection
+
+        check_server_version(connection)
         _best_effort_call("sync_snmp_official_data", cleanup=True)
         _best_effort_call("collectstatic", interactive=False)
+
+    data_dir = resolve_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     gunicorn_cmd = [
         "gunicorn",
@@ -326,6 +367,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         "-",
         "--error-logfile",
         "-",
+        "--pid",
+        str(data_dir / "gunicorn.pid"),
     ]
     if tls_on:
         _django_setup()
