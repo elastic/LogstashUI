@@ -1,4 +1,4 @@
-## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - TBD
+## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
 
 Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.1**.
 
