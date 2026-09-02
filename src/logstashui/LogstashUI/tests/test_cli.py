@@ -6,7 +6,7 @@ from argparse import Namespace
 
 from django.core.management.base import CommandError
 
-from LogstashUI.cli import build_parser, cmd_serve, install_systemd
+from LogstashUI.cli import _exec_gunicorn, build_parser, cmd_serve, install_systemd
 
 
 def test_parser_defaults_to_serve():
@@ -208,4 +208,23 @@ def test_serve_adds_pidfile_and_warns_sqlite(monkeypatch, tmp_path, capsys):
     assert captured["args"][pid_idx + 1].endswith("gunicorn.pid")
     err = capsys.readouterr().err
     assert "SQLite is the small-install default" in err
+
+
+def test_exec_gunicorn_frozen_runs_in_process(monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    seen = {}
+
+    def fake_run():
+        seen["argv"] = list(sys.argv)
+        return 0
+
+    monkeypatch.setattr("gunicorn.app.wsgiapp.run", fake_run)
+    rc = _exec_gunicorn(
+        ["gunicorn", "LogstashUI.wsgi:application", "--bind", "0.0.0.0:8443"]
+    )
+    assert rc == 0
+    assert seen["argv"][0] == "gunicorn"
+    assert "LogstashUI.wsgi:application" in seen["argv"]
 

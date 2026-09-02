@@ -13,9 +13,18 @@ All the ways to deploy LogstashUI.
 - Host-backed simulation
 - pip / uv + systemd
 - Kubernetes (see also the [Kubernetes](/docs/docs/logstashui/kubernetes/index.md) subsection)
+- Air-gapped freeze (optional offline zips)
 - Source development setup
 
 **📖 [View deployment guide →](/docs/docs/logstashui/general/deploy.md)**
+
+---
+
+## **[Air-gapped freeze](/docs/docs/logstashui/general/offline.md)**
+
+Optional connected-builder script that freezes LogstashUI plus `[databases]` into zips for hosts with no PyPI or registry. Default `uv build` is unchanged.
+
+**📖 [View air-gapped freeze →](/docs/docs/logstashui/general/offline.md)**
 
 ---
 

@@ -19,6 +19,7 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 ### Packaging and Docker
 
 - Native extras: `LogstashUI[postgres]`, `LogstashUI[mysql]`, `LogstashUI[databases]`. Default wheel stays SQLite-only.
+- Optional air-gapped freeze: `bin/freeze_logstashui.sh` (`--wheels` / `--docker` / `--standalone`). Default `uv build` unchanged. Linux x86_64, CPython 3.12, `[databases]` included, no Agent. Wheelhouse prefers manylinux2014 then manylinux_2_28; pure-Python sdists are wheeled on the builder. Standalone PyInstaller is experimental. See [Air-gapped freeze](docs/docs/logstashui/general/offline.md).
 - Container image installs `LogstashUI[databases]` so Kubernetes only sets env.
 - systemd generator prompts for engine/host/port/name/user; sample `/etc/default/logstashui` documents all `LOGSTASHUI_DB_*` keys. Set the password in the EnvironmentFile or a Secret (`chmod 640`).
 - gunicorn writes `$LOGSTASHUI_DATA_DIR/gunicorn.pid`.

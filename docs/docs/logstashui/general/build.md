@@ -84,6 +84,8 @@ uv build
 
 The wheel includes systemd templates (`LogstashUI/packaging/`) and the `logstashui` console script.
 
+Air-gapped hosts that cannot reach PyPI or a registry: optional `bin/freeze_logstashui.sh` (not default packaging). See [Air-gapped freeze](/docs/docs/logstashui/general/offline.md).
+
 ---
 
 ## Building the Docker Image Locally

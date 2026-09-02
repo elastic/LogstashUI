@@ -38,7 +38,7 @@ A maintainer with internet builds zip files that an air-gapped operator can copy
 | Isolated run | Each zip has `README.md` + helper (`install.sh` / `load.sh` / `run.sh`). |
 | Config | Same env as today. No YAML. `LOGSTASHUI_DATA_DIR` default `$(pwd)/logstashui_data`. |
 | Standalone tool | PyInstaller. **Experimental** until smoke covers migrate + SNMP sync + TLS serve. |
-| Wheel policy | **Binary wheels only** (`pip download --only-binary :all:`). Sdist-only dep → freeze **fails**. |
+| Wheel policy | Zip contains **only `.whl`**. Prefer manylinux2014 then manylinux_2_28. Pure-Python sdists are wheeled on the builder; native sdist-only → freeze **fails**. |
 | Pins | Resolve from `uv.lock` (`uv export --frozen`). |
 | PyInstaller in deps | **No.** Freeze script uses `uvx pyinstaller` (or a throwaway venv). Do not add to `[project]` or default `dev`. |
 | CI | Optional `workflow_dispatch` only. Not on every PR. |
@@ -68,10 +68,9 @@ Output stays under gitignored `/dist/`.
 1. Ensure Tailwind CSS exists (`src/logstashui/theme/static/css/dist/styles.css`); build it the same way `uv build` / Dockerfile does if missing.
 2. `uv build` (reuse the normal wheel; do not invent a second hatch target).
 3. `uv export --frozen --no-dev --extra databases --no-emit-project -o dist/offline/requirements-offline.txt` (keep hashes).
-4. Copy the local LogstashUI wheel into `wheels/`. Download deps with **pip** (uv 0.12 has no `uv pip download`):
-   `uv run --python 3.12 --with pip python -m pip download -r requirements-offline.txt -d wheels/ --python-version 3.12 --platform manylinux2014_x86_64 --implementation cp --abi cp312 --only-binary :all:`
+4. Copy the local LogstashUI wheel into `wheels/`. Download deps with `packaging/offline/download_wheels.py` (uv 0.12 has no `uv pip download`): try `manylinux2014_x86_64` then `manylinux_2_28_x86_64` `--only-binary :all:`. Pure-Python sdists (e.g. `django-login-required-middleware==0.9.0`) are wheeled on the **builder** to `py3-none-any`. Native packages with no manylinux wheel fail the freeze.
 5. Copy `LICENSE.txt`, `NOTICE.txt`, generated `install.sh`, `README.md`, `MANIFEST.txt`, `SHA256SUMS.txt`.
-6. Zip. Fail if any `.tar.gz` sdist landed in `wheels/`.
+6. Zip. Fail if any `.tar.gz` sdist landed in `wheels/`. Isolated host needs glibc 2.28+.
 
 **MANIFEST.txt** must list: LogstashUI version, git sha (or `unknown` if not a git checkout), CPython 3.12, platform `linux-x86_64`, extra `databases`, package list with versions.
 

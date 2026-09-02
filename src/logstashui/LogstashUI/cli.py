@@ -380,6 +380,22 @@ def _check_db_floor() -> None:
     check_server_version(connection)
 
 
+def _exec_gunicorn(gunicorn_cmd: list[str]) -> int:
+    """Replace this process with gunicorn, or run it in-process when frozen.
+
+    PyInstaller onedir has no ``gunicorn`` console script on PATH. Calling
+    gunicorn's WSGI app in-process keeps ``--worker-class gevent``.
+    """
+    if getattr(sys, "frozen", False):
+        from gunicorn.app.wsgiapp import run as gunicorn_run
+
+        sys.argv = list(gunicorn_cmd)
+        result = gunicorn_run()
+        return int(result or 0)
+    os.execvp("gunicorn", gunicorn_cmd)
+    return 1
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from LogstashUI.database import canonical_engine
     from LogstashUI.paths import resolve_data_dir
@@ -447,8 +463,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             fullchain.write_bytes(cert.read_bytes())
         gunicorn_cmd += ["--certfile", str(fullchain), "--keyfile", str(key)]
 
-    os.execvp("gunicorn", gunicorn_cmd)
-    return 1
+    return _exec_gunicorn(gunicorn_cmd)
 
 
 def cmd_systemd(args: argparse.Namespace) -> int:

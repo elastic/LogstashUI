@@ -10,6 +10,7 @@ The ways to deploy LogstashUI, from the standard Docker install to running from 
 - [Option 3: pip / uv + systemd](#option-3-pip--uv--systemd)
 - [Option 4: Source Development Setup](#option-4-source-development-setup)
 - [Option 5: Kubernetes](#option-5-kubernetes)
+- [Option 6: Air-gapped freeze (optional)](#option-6-air-gapped-freeze-optional)
 
 ---
 
@@ -99,11 +100,20 @@ One-replica StatefulSet, PVC at `/var/lib/logstashui`, image `codyjackson032/log
 
 ---
 
+## Option 6: Air-gapped freeze (optional)
+
+Not the default packaging path. When the install host has **no PyPI and no registry**, a connected maintainer runs `bin/freeze_logstashui.sh` and copies a zip. Isolated host: CPython **3.12** x86_64 (wheels), Docker (image zip), or experimental PyInstaller (Linux x86_64). `[databases]` is included; LogstashAgent is not.
+
+**📖 Full instructions: [Air-gapped freeze](/docs/docs/logstashui/general/offline.md)**
+
+---
+
 ## Related Documentation
 
 - **[Getting Started](/docs/docs/getting_started.md)** - Step-by-step standard install
 - **[Kubernetes](/docs/docs/logstashui/kubernetes/index.md)** - StatefulSet, PVC, Ingress, Envoy Gateway, CNPG
 - **[Database](/docs/docs/logstashui/database/index.md)** - SQLite, PostgreSQL, MySQL/MariaDB
+- **[Air-gapped freeze](/docs/docs/logstashui/general/offline.md)** - Optional offline zip (wheels / Docker / experimental standalone)
 - **[Building LogstashUI from Source](/docs/docs/logstashui/general/build.md)** - Source builds and local development
 - **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - High-performance simulation setup
 - **[Updating LogstashUI](/docs/docs/logstashui/general/updating.md)** - Keeping your deployment current
