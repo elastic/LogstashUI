@@ -33,11 +33,11 @@ Then browse to `https://<your_server_ip_or_hostname>:8443`.
 
 This is **embedded mode** — two containers: **LogstashUI** (gunicorn HTTPS on **8443**) and **LogstashAgent** (uvicorn HTTPS on **9500**). There is **no nginx**. Configuration is [environment variables](/docs/docs/logstashui/configuration/environment.md).
 
-**Data directory:** Runtime state (sqlite, TLS, secrets, logs) lives **outside** `src/`. From a git checkout, Docker Compose bind-mounts `<project_root>/logstashui_data` to `/var/lib/logstashui` and sets `LOGSTASHUI_DATA_DIR`. Native CLI default (no env) is `$(pwd)/logstashui_data`. Do not store this under `src/logstashui/data`.
+**Data directory:** Runtime state (sqlite, TLS, secrets, logs) lives **outside** `src/`. From a git checkout, Docker Compose bind-mounts `<project_root>/logstashui_data` to `/var/lib/logstashui` and sets `LOGSTASHUI_DATA_DIR`. Native CLI default (no env) is `$(pwd)/logstashui_data`. Do not store this under `src/logstashui/data`. The database may be external Postgres/MySQL; the PVC/bind-mount is still required for TLS and secrets.
 
 On **Linux Docker**, that bind-mount keeps host file ownership. The image entrypoint starts as root, chowns **only** the data directory if it is not writable, then drops to `PUID`/`PGID` (from `start_logstashui.sh`: your uid/gid) or image user **appuser (10001)**. Gunicorn never stays root. Docker Desktop (macOS/Windows) usually maps UIDs already; the same path is a no-op chown. If the directory is still unwritable, startup exits before migrate so sqlite/TLS are not created as the wrong user.
 
-**Kubernetes:** use a PVC at `/var/lib/logstashui`, `runAsUser: 10001`, `runAsNonRoot: true`, and `fsGroup: 10001`. The entrypoint skips chown when it is not root.
+**Kubernetes:** use a PVC at `/var/lib/logstashui`, `runAsUser: 10001`, `runAsNonRoot: true`, and `fsGroup: 10001`. The entrypoint skips chown when it is not root. ConfigMap `LOGSTASHUI_DB_ENGINE` / `LOGSTASHUI_DB_HOST` / `LOGSTASHUI_DB_NAME` / `LOGSTASHUI_DB_USER`; Secret `LOGSTASHUI_DB_PASSWORD`. The PVC is still required when the database is external.
 
 **HTTPS / product CA:** On first start, LogstashUI writes a product CA and a UI server certificate under `$LOGSTASHUI_DATA_DIR/tls/` (`ui-server.crt` / `ui-server.key`). Gunicorn presents that cert on port **8443** (ports under 1000 would need root). The product leaf SANs include `localhost`, `logstashui`, **all non-loopback host IPs**, and **PTR reverse-DNS FQDNs** for those IPs when available (injected by `start_logstashui.sh` as `LOGSTASHUI_HOST_*` / `LOGSTASHUI_TLS_SANS`, because the container cannot see the host LAN addresses by itself). Bare short hostnames (common on macOS) are replaced by reverse-lookup FQDNs when PTR records exist. Changing the Agent callback URL or those env SANs **re-issues** the product leaf on next startup (or Settings save); restart the UI container so gunicorn reloads the file. Agents:
 
@@ -72,7 +72,7 @@ sudo systemctl enable --now logstashui
 
 Set `LOGSTASHUI_DATA_DIR=/var/lib/logstashui` in `/etc/default/logstashui` (the generator does this). See [environment configuration](/docs/docs/logstashui/configuration/environment.md).
 
-Kubernetes: same image as Option 1, env/ConfigMap only, PVC at `/var/lib/logstashui`. No YAML mount.
+Kubernetes: same image as Option 1, env/ConfigMap (`LOGSTASHUI_DB_ENGINE` / `HOST` / `NAME` / `USER`) plus Secret (`LOGSTASHUI_DB_PASSWORD`), PVC at `/var/lib/logstashui` (still required when the database is external). No YAML mount.
 
 ---
 

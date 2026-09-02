@@ -1,3 +1,14 @@
+## [0.5.2] - Multi-database
+
+Package version remains **0.5.1** until release tagging; this documents the 0.5.2 database work.
+
+- `LOGSTASHUI_DB_ENGINE=sqlite|postgresql|mysql` (MariaDB uses `mysql`). Discrete `LOGSTASHUI_DB_HOST/PORT/NAME/USER/PASSWORD` plus SSL and `CONN_MAX_AGE`. No YAML, no `DATABASE_URL`.
+- Default is still SQLite. `logstashui serve` warns when `LOGSTASHUI_WORKERS>1` on SQLite.
+- Native extras: `LogstashUI[postgres]`, `[mysql]`, `[databases]`. Container image installs `[databases]`.
+- BETA `logstashui migrate-engine --to postgresql|mysql --i-have-a-backup` copies SQLite → server (stops gunicorn; does not restart).
+- `bin/test_databases.sh` runs the suite and dump/load against local Docker Postgres, MariaDB, and MySQL.
+
+
 ## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
 
 Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.1**.

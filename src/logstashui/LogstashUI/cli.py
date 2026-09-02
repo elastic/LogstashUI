@@ -111,6 +111,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="false",
         choices=("true", "false"),
     )
+    systemd.add_argument("--db-engine", default="")
+    systemd.add_argument("--db-host", default="")
+    systemd.add_argument("--db-name", default="")
+    systemd.add_argument("--db-user", default="")
+    systemd.add_argument("--db-port", default="")
     parser.set_defaults(
         command="serve",
         bind=os.environ.get("LOGSTASHUI_BIND", "0.0.0.0:8443"),
@@ -148,6 +153,11 @@ def render_default_env(
     tls_sans: str,
     agent_ui_url: str,
     no_auth: str,
+    db_engine: str = "",
+    db_host: str = "",
+    db_name: str = "",
+    db_user: str = "",
+    db_port: str = "",
 ) -> str:
     sample = _packaging_file("logstashui.default")
     replacements = {
@@ -173,6 +183,18 @@ def render_default_env(
         extras.append(f"LOGSTASHUI_TLS_SANS={tls_sans}")
     if agent_ui_url:
         extras.append(f"LOGSTASHUI_AGENT_UI_URL={agent_ui_url}")
+    from LogstashUI.database import canonical_engine
+
+    if db_engine and canonical_engine(db_engine) != "sqlite":
+        extras.append(f"LOGSTASHUI_DB_ENGINE={canonical_engine(db_engine)}")
+        if db_host:
+            extras.append(f"LOGSTASHUI_DB_HOST={db_host}")
+        if db_port:
+            extras.append(f"LOGSTASHUI_DB_PORT={db_port}")
+        if db_name:
+            extras.append(f"LOGSTASHUI_DB_NAME={db_name}")
+        if db_user:
+            extras.append(f"LOGSTASHUI_DB_USER={db_user}")
     if extras:
         text = text.rstrip() + "\n\n# Values from logstashui systemd\n" + "\n".join(extras) + "\n"
     return text
@@ -204,11 +226,18 @@ def install_systemd(
     tls_sans: str = "",
     agent_ui_url: str = "",
     no_auth: str = "false",
+    db_engine: str = "",
+    db_host: str = "",
+    db_name: str = "",
+    db_user: str = "",
+    db_port: str = "",
     dry_run: bool = False,
     print_only: bool = False,
     interactive: bool = False,
 ) -> dict:
     if interactive and not dry_run and output_dir is None:
+        from LogstashUI.database import canonical_engine
+
         exec_start = _prompt(
             "Path to logstashui executable",
             exec_start or _default_exec_start(),
@@ -226,6 +255,15 @@ def install_systemd(
         tls_sans = _prompt("LOGSTASHUI_TLS_SANS", tls_sans)
         agent_ui_url = _prompt("LOGSTASHUI_AGENT_UI_URL", agent_ui_url)
         no_auth = _prompt("LOGSTASHUI_NO_AUTH (true/false)", no_auth)
+        db_engine = _prompt(
+            "LOGSTASHUI_DB_ENGINE (sqlite/postgresql/mysql)",
+            db_engine or "sqlite",
+        )
+        if canonical_engine(db_engine) != "sqlite":
+            db_host = _prompt("LOGSTASHUI_DB_HOST", db_host)
+            db_port = _prompt("LOGSTASHUI_DB_PORT", db_port)
+            db_name = _prompt("LOGSTASHUI_DB_NAME", db_name or "logstashui")
+            db_user = _prompt("LOGSTASHUI_DB_USER", db_user)
 
     if not exec_start:
         exec_start = _default_exec_start()
@@ -248,6 +286,11 @@ def install_systemd(
         tls_sans=tls_sans,
         agent_ui_url=agent_ui_url,
         no_auth=no_auth,
+        db_engine=db_engine,
+        db_host=db_host,
+        db_name=db_name,
+        db_user=db_user,
+        db_port=db_port,
     )
 
     if print_only:
@@ -414,6 +457,11 @@ def cmd_systemd(args: argparse.Namespace) -> int:
         tls_sans=args.tls_sans,
         agent_ui_url=args.agent_ui_url,
         no_auth=args.no_auth,
+        db_engine=args.db_engine,
+        db_host=args.db_host,
+        db_name=args.db_name,
+        db_user=args.db_user,
+        db_port=args.db_port,
         dry_run=dry_run,
         print_only=args.print_only,
         interactive=interactive,

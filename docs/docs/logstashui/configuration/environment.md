@@ -59,13 +59,55 @@ Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 
 ---
 
-## Database (sqlite only)
+## Database
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LOGSTASHUI_DB_ENGINE` | `sqlite` | **Only `sqlite` is implemented** |
+| `LOGSTASHUI_DB_ENGINE` | `sqlite` | `sqlite`, `postgresql`, or `mysql` (MariaDB uses `mysql`). Aliases: `sqlite3`, `postgres`, `mariadb`, `my` |
+| `LOGSTASHUI_DB_NAME` | sqlite: `$LOGSTASHUI_DATA_DIR/db.sqlite3`; else `logstashui` | Database name / sqlite path |
+| `LOGSTASHUI_DB_HOST` | empty | **Required** for postgresql/mysql |
+| `LOGSTASHUI_DB_PORT` | `5432` / `3306` | |
+| `LOGSTASHUI_DB_USER` | empty | **Required** for postgresql/mysql |
+| `LOGSTASHUI_DB_PASSWORD` | empty | Put in a Secret / `chmod 640` EnvironmentFile |
+| `LOGSTASHUI_DB_SSLMODE` | postgres: `prefer` | `disable` `allow` `prefer` `require` `verify-ca` `verify-full` |
+| `LOGSTASHUI_DB_SSL_CA` | empty | CA file for mysql TLS and postgres `verify-*` |
+| `LOGSTASHUI_DB_CONN_MAX_AGE` | `60` | Persistent connections (seconds); `0` closes per request |
+| `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` | `true` | Django `CONN_HEALTH_CHECKS` |
 
-`postgresql` and `mysql` are reserved names: setting them **fails at startup** until those backends land. Keep a PVC on `LOGSTASHUI_DATA_DIR` even after that work (TLS material and secrets still live there).
+Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity.
+
+**Install extras (native pip/uv):** `uv pip install 'LogstashUI[postgres]'`, `'LogstashUI[mysql]'`, or `'LogstashUI[databases]'`. The Docker/K8s image already installs `[databases]`. Missing driver fails at startup with that extra name.
+
+`LOGSTASHUI_DATA_DIR` is still required when the database is remote (TLS, `.django_secret_key`, logs, staticfiles).
+
+**SQLite scale:** `logstashui serve` logs a warning when engine is sqlite and `LOGSTASHUI_WORKERS` > 1. Use PostgreSQL or MySQL/MariaDB for concurrent agents. Startup still succeeds.
+
+**Connections:** gunicorn remains gevent (`--worker-connections 1000`). Keep `LOGSTASHUI_WORKERS` × in-flight requests under the server `max_connections`. PgBouncer (or equivalent) is optional, not required.
+
+No `DATABASE_URL`. No YAML.
+
+### Offline migration (supported)
+
+1. `systemctl stop logstashui` (or stop the container).
+2. Copy `$LOGSTASHUI_DATA_DIR/db.sqlite3` somewhere safe. Keep the rest of `DATA_DIR` (same Django secret key).
+3. Create the server database (`utf8mb4_bin` on MySQL/MariaDB).
+4. Set `LOGSTASHUI_DB_*` for the target. Native installs need the matching extra.
+5. `logstashui manage dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission -e sessions -o dump.json` while still on sqlite, **or** use the BETA CLI below.
+6. `logstashui manage migrate --noinput && logstashui manage loaddata dump.json`
+7. Postgres: `logstashui manage sqlsequencereset PipelineManager Management SNMP AI auth admin | logstashui manage dbshell`
+8. Start LogstashUI. Log in again (sessions were not copied).
+
+### BETA CLI
+
+```bash
+# env already points at the empty target server; sqlite file still in DATA_DIR
+sudo systemctl stop logstashui    # avoid Restart= racing SIGTERM
+logstashui migrate-engine --to postgresql --i-have-a-backup
+# optional: --write-env /etc/default/logstashui
+sudo systemctl start logstashui
+```
+
+`--to mysql` covers MariaDB and MySQL. The command SIGTERMs gunicorn if `$LOGSTASHUI_DATA_DIR/gunicorn.pid` is live, checkpoints WAL, dump/load, and **does not** restart serve.
 
 ---
 
@@ -73,8 +115,8 @@ Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 
 Minimum:
 
-1. Deployment env from a ConfigMap + Secret
-2. PVC mounted at `/var/lib/logstashui`
+1. Deployment env from a ConfigMap (`LOGSTASHUI_DB_ENGINE` / `HOST` / `NAME` / `USER`) + Secret (`SECRET_KEY`, `LOGSTASHUI_DB_PASSWORD`)
+2. PVC mounted at `/var/lib/logstashui` (still required when the database is external)
 3. Container image `CMD` is `logstashui serve` (already the Docker default)
 4. Optional ingress: `LOGSTASHUI_TLS=false` and `CSRF_TRUSTED_ORIGINS=https://<host>`
 

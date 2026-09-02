@@ -55,6 +55,41 @@ def test_systemd_dry_run_writes_unit_and_default(tmp_path):
     assert "LOGSTASHUI_NO_AUTH=false" in env_text
     assert result["unit"] == unit
     assert result["default"] == envf
+    assert "LOGSTASHUI_DB_ENGINE=postgresql" not in env_text
+    assert "# LOGSTASHUI_DB_ENGINE=sqlite" in env_text
+
+
+def test_systemd_env_includes_postgres_when_passed(tmp_path):
+    result = install_systemd(
+        output_dir=tmp_path,
+        exec_start="/usr/bin/logstashui serve",
+        user="logstashui",
+        group="logstashui",
+        data_dir="/var/lib/logstashui",
+        bind="0.0.0.0:8443",
+        workers=2,
+        allowed_hosts="*",
+        csrf_trusted_origins="",
+        tls="true",
+        host_hostname="",
+        host_ips="",
+        tls_sans="",
+        agent_ui_url="",
+        no_auth="false",
+        dry_run=True,
+        db_engine="postgresql",
+        db_host="db.example",
+        db_port="5432",
+        db_name="logstashui",
+        db_user="lsui",
+    )
+    text = (tmp_path / "logstashui.default").read_text()
+    assert "LOGSTASHUI_DB_ENGINE=postgresql" in text
+    assert "LOGSTASHUI_DB_HOST=db.example" in text
+    assert "LOGSTASHUI_DB_PORT=5432" in text
+    assert "LOGSTASHUI_DB_NAME=logstashui" in text
+    assert "LOGSTASHUI_DB_USER=lsui" in text
+    assert result["default"] == tmp_path / "logstashui.default"
 
 
 def test_serve_snmp_commanderror_does_not_abort(monkeypatch):

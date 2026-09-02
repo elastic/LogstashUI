@@ -43,10 +43,21 @@ LOGSTASHUI_INCLUDE_CA_FINGERPRINT=true
 # In-app markdown docs (wheel ships a copy; checkout uses the git tree)
 # LOGSTASHUI_DOCS_DIR=
 
-# Future database backends (not implemented — sqlite only for now)
+# Database. Unset engine = sqlite at $LOGSTASHUI_DATA_DIR/db.sqlite3.
+# DATA_DIR is still required for TLS, secrets, logs, staticfiles.
 # LOGSTASHUI_DB_ENGINE=sqlite
 # LOGSTASHUI_DB_NAME=logstashui
 # LOGSTASHUI_DB_HOST=
 # LOGSTASHUI_DB_PORT=
 # LOGSTASHUI_DB_USER=
 # LOGSTASHUI_DB_PASSWORD=
+# LOGSTASHUI_DB_SSLMODE=prefer
+# LOGSTASHUI_DB_SSL_CA=
+# LOGSTASHUI_DB_CONN_MAX_AGE=60
+# LOGSTASHUI_DB_CONN_HEALTH_CHECKS=true
+#
+# Native extras: uv pip install 'LogstashUI[postgres]' or 'LogstashUI[mysql]'
+# or 'LogstashUI[databases]'. The container image already includes both drivers.
+#
+# Create MySQL/MariaDB with utf8mb4_bin:
+#   CREATE DATABASE logstashui CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;

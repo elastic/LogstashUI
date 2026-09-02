@@ -26,7 +26,7 @@ WORKDIR /app/src/logstashui/theme/static_src
 RUN rm -rf node_modules && npm install && npm run build && rm -rf node_modules
 
 WORKDIR /app
-RUN uv pip install --system --no-cache /app
+RUN uv pip install --system --no-cache "/app[databases]"
 
 # Pinned uid so K8s runAsUser/fsGroup is stable. Entrypoint starts as root,
 # chowns only LOGSTASHUI_DATA_DIR when needed, then drops to this user (or PUID).
