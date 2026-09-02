@@ -1,0 +1,50 @@
+# Local/CI database matrix for LogstashUI. Not used by smoke compose.
+# Host ports avoid clashing with a developer’s own 5432/3306.
+name: logstashui-db-test
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: logstashui
+      POSTGRES_PASSWORD: logstashui
+      POSTGRES_DB: logstashui
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logstashui -d logstashui"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: logstashui
+      MARIADB_DATABASE: logstashui
+      MARIADB_USER: logstashui
+      MARIADB_PASSWORD: logstashui
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_bin
+    ports:
+      - "53306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: logstashui
+      MYSQL_DATABASE: logstashui
+      MYSQL_USER: logstashui
+      MYSQL_PASSWORD: logstashui
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_bin
+    ports:
+      - "53307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ulogstashui", "-plogstashui"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
