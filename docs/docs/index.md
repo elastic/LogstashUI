@@ -63,6 +63,17 @@ New to LogstashUI? Start here:
   - **[Simulation Modes](/docs/docs/logstashui/configuration/simulation.md)** - Embedded vs Host mode
   - **[Host Mode Setup](/docs/docs/logstashui/configuration/host_mode.md)** - High-performance simulation setup
 
+#### Database
+- **[Database](/docs/docs/logstashui/database/index.md)** - SQLite default, PostgreSQL, MySQL/MariaDB
+  - **[Migration](/docs/docs/logstashui/database/migration.md)** - Offline dump/load and BETA `migrate-engine`
+  - **[SQL examples](/docs/docs/logstashui/database/examples/README.md)** - CREATE DATABASE and schema snapshots
+
+#### Kubernetes
+- **[Kubernetes](/docs/docs/logstashui/kubernetes/index.md)** - StatefulSet, PVC, TLS on :8443
+  - **[Envoy Gateway](/docs/docs/logstashui/kubernetes/envoy-gateway.md)** - Enable Backend API, skip backend cert verify
+  - **[CloudNativePG](/docs/docs/logstashui/kubernetes/cnpg.md)** - Cluster in the app namespace
+  - **[Example manifests](/docs/docs/logstashui/kubernetes/examples/README.md)** - SQLite, PostgreSQL, MySQL/MariaDB
+
 #### SNMP Monitoring
 - **[SNMP Overview](/docs/docs/logstashui/SNMP/index.md)** - Network monitoring introduction
   - **[Quickstart Guide](/docs/docs/logstashui/SNMP/Quickstart.md)** - From zero to metrics

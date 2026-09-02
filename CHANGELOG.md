@@ -35,6 +35,13 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - `bin/test_databases.sh` / `bin/test_databases.bat` start local Docker Postgres 16, MariaDB 11, and MySQL 8.0, run the suite on each engine, and run live dump/load tests. CI workflow `.github/workflows/test-databases.yml` calls the same script.
 - Smoke compose is still SQLite (product CA / PUID unchanged).
 
+### Kubernetes and database docs
+
+- Kubernetes subsection: StatefulSet + one PVC at `/var/lib/logstashui`, TLS kept on `:8443`, Ingress-nginx skip backend verify, Envoy Gateway `Backend` `insecureSkipVerify` (enable Backend API), CloudNativePG Cluster in the app namespace.
+- K8s probes send `Host: logstashui` (kubelet otherwise uses the pod IP and Django returns 400). Downward API `status.podIP` → `LOGSTASHUI_HOST_IPS` for the product leaf; those IPs are appended to `ALLOWED_HOSTS` unless the list is `*`.
+- Example manifests under `docs/docs/logstashui/kubernetes/examples/{sqlite,postgresql,mysql}/`.
+- Database subsection: engines, every `LOGSTASHUI_DB_*` default, offline dump/load, BETA `migrate-engine`, CREATE DATABASE scripts (`utf8mb4_bin` for MySQL/MariaDB), schema snapshots from 0.5.2 `migrate`.
+
 
 ## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
 

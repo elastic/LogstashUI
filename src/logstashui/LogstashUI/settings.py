@@ -18,7 +18,7 @@ from pathlib import Path
 import os, platform
 from importlib.metadata import version, PackageNotFoundError
 from Common.encryption import get_django_secret_key
-from .config import CONFIG
+from .config import CONFIG, merge_allowed_hosts
 from .database import build_databases
 from .logging_config import resolve_django_log_levels, resolve_log_level
 from .paths import resolve_data_dir, resolve_docs_dir, resolve_logs_dir
@@ -52,7 +52,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
 # SECURITY WARNING: Set ALLOWED_HOSTS to your domain(s) in production
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = merge_allowed_hosts()
 
 def _get_version():
     """Get version from installed package metadata or pyproject.toml"""

@@ -12,6 +12,8 @@ Data dir, TLS, bind address, `LOGSTASHUI_NO_AUTH`, agent URL, systemd, and Kuber
 
 **📖 [View environment configuration →](/docs/docs/logstashui/configuration/environment.md)**
 
+Database engines and `LOGSTASHUI_DB_*`: **[Database](/docs/docs/logstashui/database/index.md)**. Kubernetes manifests: **[Kubernetes](/docs/docs/logstashui/kubernetes/index.md)**.
+
 `logstashui.yml` is [removed](/docs/docs/logstashui/configuration/logstashui.yml.md).
 
 ---

@@ -11,6 +11,8 @@ All the ways to deploy LogstashUI.
 **Covers:**
 - Standard Docker deployment (recommended)
 - Host-backed simulation
+- pip / uv + systemd
+- Kubernetes (see also the [Kubernetes](/docs/docs/logstashui/kubernetes/index.md) subsection)
 - Source development setup
 
 **📖 [View deployment guide →](/docs/docs/logstashui/general/deploy.md)**

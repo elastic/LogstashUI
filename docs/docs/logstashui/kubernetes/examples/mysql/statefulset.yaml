@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstashui
+  namespace: logstashui
+  labels:
+    app: logstashui
+spec:
+  selector:
+    app: logstashui
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: logstashui
+  namespace: logstashui
+spec:
+  serviceName: logstashui
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstashui
+  template:
+    metadata:
+      labels:
+        app: logstashui
+    spec:
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: logstashui
+          image: codyjackson032/logstashui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: https
+              containerPort: 8443
+          envFrom:
+            - configMapRef:
+                name: logstashui
+            - secretRef:
+                name: logstashui
+          env:
+            - name: LOGSTASHUI_HOST_IPS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/logstashui
+          startupProbe:
+            httpGet:
+              path: /
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: logstashui
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: logstashui
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: logstashui
+            periodSeconds: 30
+            failureThreshold: 6
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

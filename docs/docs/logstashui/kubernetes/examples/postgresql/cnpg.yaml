@@ -1,0 +1,21 @@
+# Optional. Requires the CloudNativePG operator (often in cnpg-system).
+# See ../../cnpg.md. After Ready, point LogstashUI at Secret logstashui-pg-app
+# instead of the HOST/USER/PASSWORD in configmap.yaml / secret.yaml.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: logstashui-pg
+  namespace: logstashui
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  bootstrap:
+    initdb:
+      database: logstashui
+      owner: logstashui
+      encoding: UTF8
+  storage:
+    size: 10Gi
+  postgresql:
+    parameters:
+      max_connections: "200"

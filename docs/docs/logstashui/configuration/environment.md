@@ -39,7 +39,7 @@ Relative values resolve from the process working directory.
 | `CSRF_TRUSTED_ORIGINS` | (dev localhost defaults) | comma-separated origins |
 | `SECRET_KEY` | auto in data dir | Django secret |
 
-Set `LOGSTASHUI_TLS=false` when an ingress terminates TLS and the pod should speak HTTP.
+Keep `LOGSTASHUI_TLS=true` (the default) in Kubernetes. Ingress/HTTPRoute should originate HTTPS to `:8443` and skip backend cert verify. See [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
 
 ---
 
@@ -51,7 +51,7 @@ Set `LOGSTASHUI_TLS=false` when an ingress terminates TLS and the pod should spe
 | `LOGSTASHUI_AGENT_UI_URL` | empty | Prefill `--logstash-ui-url` (DB Settings wins if set) |
 | `LOGSTASHUI_INCLUDE_CA_FINGERPRINT` | `true` | Embed product CA fingerprint in enrollment tokens |
 | `LOGSTASH_AGENT_URL` | debug: `http://127.0.0.1:9500`; else `https://logstashagent:9500` | Embedded/compose agent API |
-| `LOGSTASHUI_HOST_HOSTNAME` / `LOGSTASHUI_HOST_IPS` / `LOGSTASHUI_TLS_SANS` | empty | Extra SANs on the product UI cert |
+| `LOGSTASHUI_HOST_HOSTNAME` / `LOGSTASHUI_HOST_IPS` / `LOGSTASHUI_TLS_SANS` | empty | Extra SANs on the product UI cert. Kubernetes: set `LOGSTASHUI_HOST_IPS` from `status.podIP` (Downward API). IPs are also appended to `ALLOWED_HOSTS` unless that list is `*`. |
 | `LOGSTASHUI_AGENT_CSR_SECRET` | empty | Compose/embedded agent CSR without enroll |
 | `LOGSTASHUI_DOCS_DIR` | checkout `docs/` or packaged copy | In-app documentation root |
 
@@ -74,7 +74,7 @@ Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 | `LOGSTASHUI_DB_CONN_MAX_AGE` | `60` | Persistent connections (seconds); `0` closes per request |
 | `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` | `true` | Django `CONN_HEALTH_CHECKS` |
 
-Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity.
+Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Full engine docs, env defaults, and SQL examples: [Database](/docs/docs/logstashui/database/index.md). Migration (offline + BETA CLI): [Migration](/docs/docs/logstashui/database/migration.md).
 
 **Install extras (native pip/uv):** `uv pip install 'LogstashUI[postgres]'`, `'LogstashUI[mysql]'`, or `'LogstashUI[databases]'`. The Docker/K8s image already installs `[databases]`. Missing driver fails at startup with that extra name.
 
@@ -115,12 +115,12 @@ sudo systemctl start logstashui
 
 Minimum:
 
-1. Deployment env from a ConfigMap (`LOGSTASHUI_DB_ENGINE` / `HOST` / `NAME` / `USER`) + Secret (`SECRET_KEY`, `LOGSTASHUI_DB_PASSWORD`)
+1. StatefulSet `replicas: 1`, env from a ConfigMap (`LOGSTASHUI_DB_ENGINE` / `HOST` / `NAME` / `USER`) + Secret (`SECRET_KEY`, `LOGSTASHUI_DB_PASSWORD`)
 2. PVC mounted at `/var/lib/logstashui` (still required when the database is external)
 3. Container image `CMD` is `logstashui serve` (already the Docker default)
-4. Optional ingress: `LOGSTASHUI_TLS=false` and `CSRF_TRUSTED_ORIGINS=https://<host>`
+4. Ingress or HTTPRoute: keep `LOGSTASHUI_TLS=true`, originate HTTPS to `:8443`, skip backend cert verify, set `CSRF_TRUSTED_ORIGINS=https://<host>`
 
-No ConfigMap file mount is required.
+No ConfigMap file mount is required. Manifests and CloudNativePG: [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
 
 ---
 

@@ -2,7 +2,27 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from LogstashUI.config import load_config
+from LogstashUI.config import load_config, merge_allowed_hosts
+
+
+def test_merge_allowed_hosts_wildcard_unchanged():
+    assert merge_allowed_hosts(allowed="*", host_ips="10.11.3.107") == ["*"]
+
+
+def test_merge_allowed_hosts_appends_pod_ip():
+    hosts = merge_allowed_hosts(
+        allowed="logstashui.example.com,logstashui",
+        host_ips="10.11.3.107",
+        pod_ip="",
+    )
+    assert hosts == ["logstashui.example.com", "logstashui", "10.11.3.107"]
+
+
+def test_merge_allowed_hosts_pod_ip_env_and_no_dupes(monkeypatch):
+    monkeypatch.setenv("ALLOWED_HOSTS", "logstashui")
+    monkeypatch.setenv("LOGSTASHUI_HOST_IPS", "10.11.3.107")
+    monkeypatch.setenv("POD_IP", "10.11.3.107")
+    assert merge_allowed_hosts() == ["logstashui", "10.11.3.107"]
 
 
 def test_load_config_defaults(monkeypatch):
