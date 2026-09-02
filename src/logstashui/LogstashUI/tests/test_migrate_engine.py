@@ -67,3 +67,44 @@ def test_write_env_appends(tmp_path, monkeypatch):
     assert "LOGSTASHUI_DB_ENGINE=postgresql" in text
     assert "LOGSTASHUI_DB_HOST=db.example" in text
     assert "PASSWORD" not in text
+
+
+def test_run_manage_sets_package_pythonpath(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, env=None, check=False):
+        captured["env"] = env
+        class Result:
+            returncode = 0
+        return Result()
+
+    monkeypatch.setattr(me.subprocess, "run", fake_run)
+    me.run_manage(["migrate", "--noinput"], {"LOGSTASHUI_DB_ENGINE": "sqlite"})
+    pythonpath = captured["env"]["PYTHONPATH"]
+    pkg_root = str(Path(me.__file__).resolve().parent.parent)
+    assert pythonpath.split(me.os.pathsep)[0] == pkg_root
+
+
+def test_reset_postgres_sequences_does_not_require_psql(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, env=None, check=False, capture_output=False, text=False):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return Result()
+
+    monkeypatch.setattr(me.subprocess, "run", fake_run)
+    me._reset_postgres_sequences({"LOGSTASHUI_DB_ENGINE": "postgresql"})
+    assert captured["cmd"][0] == me.sys.executable
+    assert captured["cmd"][1] == "-c"
+    code = captured["cmd"][2]
+    assert "dbshell" not in code
+    assert "psql" not in code
+    assert "sequence_reset_sql" in code
+    assert "cursor.execute" in code
+    pkg_root = str(Path(me.__file__).resolve().parent.parent)
+    assert captured["env"]["PYTHONPATH"].split(me.os.pathsep)[0] == pkg_root

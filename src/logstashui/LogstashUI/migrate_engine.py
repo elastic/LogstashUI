@@ -23,10 +23,19 @@ _TARGET_ENGINES = frozenset({"postgresql", "mysql"})
 _DUMPDATA_EXCLUDES = ("contenttypes", "auth.permission", "sessions")
 
 
+def _with_package_pythonpath(env: dict[str, str]) -> dict[str, str]:
+    """Subprocesses must import this tree, not a stale site-packages copy."""
+    pkg_root = str(Path(__file__).resolve().parent.parent)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = pkg_root if not existing else os.pathsep.join([pkg_root, existing])
+    return env
+
+
 def run_manage(argv: list[str], extra_env: dict[str, str]) -> None:
     env = os.environ.copy()
     env.update(extra_env)
     env.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
+    _with_package_pythonpath(env)
     code = (
         "import sys; from django.core.management import execute_from_command_line; "
         "execute_from_command_line(['logstashui'] + sys.argv[1:])"
@@ -90,40 +99,34 @@ def write_env_file(path: Path, engine: str) -> None:
         fh.write(prefix + "\n".join(lines) + "\n")
 
 
-def _sqlsequencereset_to_dbshell(extra_env: dict[str, str]) -> None:
+def _reset_postgres_sequences(extra_env: dict[str, str]) -> None:
+    """Apply sqlsequencereset via the Django connection (no psql CLI)."""
     env = os.environ.copy()
     env.update(extra_env)
     env.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
+    _with_package_pythonpath(env)
     reset_code = (
         "import os, django\n"
         "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'LogstashUI.settings')\n"
         "django.setup()\n"
         "from django.apps import apps\n"
-        "from django.core.management import call_command\n"
-        "labels = [c.label for c in apps.get_app_configs() if c.models_module]\n"
-        "call_command('sqlsequencereset', *labels)\n"
+        "from django.core.management.color import no_style\n"
+        "from django.db import connection\n"
+        "models = [\n"
+        "    m for c in apps.get_app_configs() if c.models_module\n"
+        "    for m in c.get_models(include_auto_created=True)\n"
+        "]\n"
+        "sql_list = connection.ops.sequence_reset_sql(no_style(), models)\n"
+        "with connection.cursor() as cursor:\n"
+        "    for sql in sql_list:\n"
+        "        cursor.execute(sql)\n"
     )
-    reset = subprocess.run(
+    proc = subprocess.run(
         [sys.executable, "-c", reset_code],
         env=env,
         check=False,
         capture_output=True,
         text=True,
-    )
-    if reset.returncode != 0:
-        sys.stderr.write(reset.stderr or "")
-        raise SystemExit(reset.returncode)
-    dbshell_code = (
-        "import sys; from django.core.management import execute_from_command_line; "
-        "execute_from_command_line(['logstashui'] + sys.argv[1:])"
-    )
-    proc = subprocess.run(
-        [sys.executable, "-c", dbshell_code, "dbshell"],
-        env=env,
-        input=reset.stdout,
-        check=False,
-        text=True,
-        capture_output=True,
     )
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr or "")
@@ -194,7 +197,7 @@ def cmd_migrate_engine(args: Namespace) -> int:
         run_manage(["migrate", "--noinput"], target_env)
         run_manage(["loaddata", str(dump_path)], target_env)
         if engine == "postgresql":
-            _sqlsequencereset_to_dbshell(target_env)
+            _reset_postgres_sequences(target_env)
     finally:
         dump_path.unlink(missing_ok=True)
 

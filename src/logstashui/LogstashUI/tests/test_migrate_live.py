@@ -66,6 +66,7 @@ def _run_python(code: str, extra_env: dict[str, str]) -> str:
     env = os.environ.copy()
     env.update(extra_env)
     env.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
+    me._with_package_pythonpath(env)
     proc = subprocess.run(
         [sys.executable, "-c", code],
         env=env,
