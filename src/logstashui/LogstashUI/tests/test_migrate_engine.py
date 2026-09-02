@@ -53,6 +53,7 @@ def test_stop_pid_sends_sigterm(tmp_path, monkeypatch):
     me.stop_gunicorn(pidfile)
     assert sent["pid"] == 4242
     assert sent["sig"] == me.signal.SIGTERM
+    assert not pidfile.exists()
 
 
 def test_write_env_appends(tmp_path, monkeypatch):

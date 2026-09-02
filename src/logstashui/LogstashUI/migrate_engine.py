@@ -46,10 +46,18 @@ def wal_checkpoint(db_path: Path) -> None:
 
 
 def stop_gunicorn(pidfile: Path) -> None:
-    pid = int(pidfile.read_text(encoding="utf-8").strip())
+    raw = pidfile.read_text(encoding="utf-8").strip()
+    try:
+        pid = int(raw)
+    except ValueError:
+        pid = 0
+    if pid <= 0:
+        print(f"invalid gunicorn pid {raw!r} in {pidfile}", file=sys.stderr)
+        raise SystemExit(1)
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
+        pidfile.unlink(missing_ok=True)
         return
     deadline = time.monotonic() + 30
     while True:
@@ -57,6 +65,7 @@ def stop_gunicorn(pidfile: Path) -> None:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
+            pidfile.unlink(missing_ok=True)
             return
         if time.monotonic() >= deadline:
             print(
