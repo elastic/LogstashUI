@@ -90,9 +90,9 @@ No `DATABASE_URL`. No YAML.
 
 1. `systemctl stop logstashui` (or stop the container).
 2. Copy `$LOGSTASHUI_DATA_DIR/db.sqlite3` somewhere safe. Keep the rest of `DATA_DIR` (same Django secret key).
-3. Create the server database (`utf8mb4_bin` on MySQL/MariaDB).
-4. Set `LOGSTASHUI_DB_*` for the target. Native installs need the matching extra.
-5. `logstashui manage dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission -e sessions -o dump.json` while still on sqlite, **or** use the BETA CLI below.
+3. Dump **from sqlite** while `LOGSTASHUI_DB_ENGINE` is still sqlite (or unset): `logstashui manage dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission -e sessions -o dump.json`. Do not set target `LOGSTASHUI_DB_*` yet, or dumpdata will dump the empty server database.
+4. Create the server database (`utf8mb4_bin` on MySQL/MariaDB).
+5. **Then** set `LOGSTASHUI_DB_*` for the target. Native installs need the matching extra.
 6. `logstashui manage migrate --noinput && logstashui manage loaddata dump.json`
 7. Postgres: `logstashui manage sqlsequencereset PipelineManager Management SNMP AI auth admin | logstashui manage dbshell`
 8. Start LogstashUI. Log in again (sessions were not copied).
@@ -107,7 +107,7 @@ logstashui migrate-engine --to postgresql --i-have-a-backup
 sudo systemctl start logstashui
 ```
 
-`--to mysql` covers MariaDB and MySQL. The command SIGTERMs gunicorn if `$LOGSTASHUI_DATA_DIR/gunicorn.pid` is live, checkpoints WAL, dump/load, and **does not** restart serve.
+`--to mysql` covers MariaDB and MySQL. The command SIGTERMs gunicorn if `$LOGSTASHUI_DATA_DIR/gunicorn.pid` is live, checkpoints WAL, dump/load from the sqlite file in `DATA_DIR` (regardless of target `LOGSTASHUI_DB_*`), and **does not** restart serve.
 
 ---
 
