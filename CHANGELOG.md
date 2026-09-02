@@ -27,6 +27,7 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 
 - **Supported offline path:** stop UI → back up `db.sqlite3` → `dumpdata` while still on SQLite → create the server database → set `LOGSTASHUI_DB_*` → `migrate` + `loaddata`. Keep `DATA_DIR` (same secret key) or encrypted keystore rows will not decrypt. Sessions are not copied; log in again.
 - **BETA** `logstashui migrate-engine --to postgresql|mysql --i-have-a-backup` dumps the SQLite file, loads the target, and does **not** restart serve. It SIGTERMs gunicorn if a pidfile is live. Prefer `systemctl stop` first so `Restart=` does not race. Optional `--write-env` appends engine/host/name/user (never the password).
+- BETA `migrate-engine` is **not atomic** on the target: `dumpdata` → `migrate` → `loaddata` is three steps. If `loaddata` fails, the target may be partially populated. Drop or recreate the target database (SQLite is only WAL-checkpointed) and re-run. A later production migrator could wrap `loaddata` and Postgres `sequence_reset_sql` in `transaction.atomic()` after `migrate`; `migrate` itself applies DDL and cannot be one atomic unit on MySQL/MariaDB.
 
 ### Testing
 
