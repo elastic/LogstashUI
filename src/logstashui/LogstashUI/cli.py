@@ -430,6 +430,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if command == "systemd":
         return cmd_systemd(args)
+    if command == "migrate-engine":
+        from LogstashUI.migrate_engine import cmd_migrate_engine
+        return cmd_migrate_engine(args)
     if command == "serve":
         if not hasattr(args, "bind"):
             args = parser.parse_args(["serve"])
