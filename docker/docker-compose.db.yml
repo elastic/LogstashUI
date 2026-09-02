@@ -11,6 +11,8 @@ services:
       POSTGRES_DB: logstashui
     ports:
       - "55432:5432"
+    volumes:
+      - ./db-init/postgres-extra.sql:/docker-entrypoint-initdb.d/02-migrate.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U logstashui -d logstashui"]
       interval: 2s
@@ -27,6 +29,8 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_bin
     ports:
       - "53306:3306"
+    volumes:
+      - ./db-init/mysql-extra.sql:/docker-entrypoint-initdb.d/02-migrate.sql:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 3s
@@ -43,6 +47,8 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_bin
     ports:
       - "53307:3306"
+    volumes:
+      - ./db-init/mysql-extra.sql:/docker-entrypoint-initdb.d/02-migrate.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ulogstashui", "-plogstashui"]
       interval: 3s
