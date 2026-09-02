@@ -23,14 +23,21 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
 django.setup()
 from django.contrib.auth import get_user_model
-from PipelineManager.models import Policy
+from PipelineManager.models import Connection, Policy
 User = get_user_model()
 User.objects.create_user(username="migrate-user", password="migrate-pass")
-Policy.objects.create(
+policy = Policy.objects.create(
     name="Migrate Policy",
     logstash_yml="http.host: 0.0.0.0",
     jvm_options="-Xms1g",
     log4j2_properties="status = error",
+)
+Connection.objects.create(
+    name="Migrate Conn",
+    connection_type=Connection.ConnectionType.AGENT,
+    host="127.0.0.1",
+    policy=policy,
+    status_blob={"health": "green", "n": 1},
 )
 """
 
@@ -41,13 +48,15 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
 django.setup()
 from django.contrib.auth import get_user_model
-from PipelineManager.models import Policy
+from PipelineManager.models import Connection, Policy
 User = get_user_model()
+conn = Connection.objects.filter(name="Migrate Conn").first()
 print(json.dumps({
     "users": User.objects.count(),
     "policies": Policy.objects.count(),
     "migrate_user": User.objects.filter(username="migrate-user").count(),
     "migrate_policy": Policy.objects.filter(name="Migrate Policy").count(),
+    "status_blob": conn.status_blob if conn else None,
 }))
 """
 
@@ -126,6 +135,7 @@ def _run_to(tmp_path, engine: str, *, port: str, user: str) -> None:
     assert counts["policies"] >= 1
     assert counts["migrate_user"] == 1
     assert counts["migrate_policy"] == 1
+    assert counts["status_blob"] == {"health": "green", "n": 1}
 
 
 def test_live_postgres(tmp_path):

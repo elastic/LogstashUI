@@ -165,6 +165,52 @@ def test_check_server_version_postgres_too_old():
         check_server_version(Conn())
 
 
+def test_check_server_version_postgres_zero_is_too_old():
+    class Conn:
+        vendor = "postgresql"
+        pg_version = 0
+
+    with pytest.raises(RuntimeError, match="PostgreSQL 14"):
+        check_server_version(Conn())
+
+
+def test_conn_max_age_invalid_raises_runtimeerror(tmp_path, monkeypatch):
+    _clear_db_env(monkeypatch)
+    monkeypatch.setenv("LOGSTASHUI_DB_CONN_MAX_AGE", "nope")
+    with pytest.raises(RuntimeError, match="LOGSTASHUI_DB_CONN_MAX_AGE"):
+        build_databases(tmp_path)
+
+
+def test_password_is_stripped(tmp_path, monkeypatch):
+    _clear_db_env(monkeypatch)
+    monkeypatch.setenv("LOGSTASHUI_DB_ENGINE", "postgresql")
+    monkeypatch.setenv("LOGSTASHUI_DB_HOST", "db.example")
+    monkeypatch.setenv("LOGSTASHUI_DB_USER", "lsui")
+    monkeypatch.setenv("LOGSTASHUI_DB_PASSWORD", " secret\n")
+    monkeypatch.setattr("LogstashUI.database._import_or_raise", lambda *a, **k: None)
+    db = build_databases(tmp_path)["default"]
+    assert db["PASSWORD"] == "secret"
+
+
+def test_ensure_psycopg_gevent_assigns_wait_select():
+    from types import SimpleNamespace
+
+    from LogstashUI.database import ensure_psycopg_gevent
+
+    def wait_select(*args, **kwargs):
+        return "select"
+
+    waiting = SimpleNamespace(wait_select=wait_select, wait=None)
+    ensure_psycopg_gevent(waiting)
+    assert waiting.wait is wait_select
+
+
+def test_ensure_psycopg_gevent_does_not_raise():
+    from LogstashUI.database import ensure_psycopg_gevent
+
+    ensure_psycopg_gevent()
+
+
 def test_check_server_version_mysql_and_mariadb():
     class Mysql:
         vendor = "mysql"

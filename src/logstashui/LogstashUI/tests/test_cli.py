@@ -97,9 +97,7 @@ def test_serve_snmp_commanderror_does_not_abort(monkeypatch):
     from LogstashUI import cli
 
     monkeypatch.setattr(cli, "_manage", lambda argv: None)
-    monkeypatch.setattr(
-        "LogstashUI.database.check_server_version", lambda conn: None
-    )
+    monkeypatch.setattr(cli, "_check_db_floor", lambda: None)
     monkeypatch.setenv("LOGSTASHUI_TLS", "false")
 
     def fake_call(name, *args, **kwargs):
@@ -133,10 +131,61 @@ def test_parser_migrate_engine_requires_backup_flag():
     assert ns.i_have_a_backup is False
 
 
+def test_parser_migrate_engine_accepts_mariadb_alias():
+    parser = build_parser()
+    ns = parser.parse_args(["migrate-engine", "--to", "mariadb", "--i-have-a-backup"])
+    assert ns.to == "mariadb"
+    assert ns.i_have_a_backup is True
+
+
+def test_serve_checks_version_before_migrate(monkeypatch):
+    from LogstashUI import cli
+
+    order = []
+    monkeypatch.setattr(cli, "_check_db_floor", lambda: order.append("check"))
+    monkeypatch.setattr(cli, "_manage", lambda argv: order.append(argv[0]))
+    monkeypatch.setattr(cli, "_best_effort_call", lambda *a, **k: None)
+    monkeypatch.setenv("LOGSTASHUI_TLS", "false")
+
+    def fake_execvp(file, args):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvp", fake_execvp)
+    ns = Namespace(skip_migrate=False, no_tls=True, bind="127.0.0.1:8443", workers=1)
+    try:
+        cmd_serve(ns)
+    except SystemExit:
+        pass
+    assert order[0] == "check"
+    assert "migrate" in order
+
+
+def test_serve_checks_version_when_skip_migrate(monkeypatch, tmp_path):
+    from LogstashUI import cli
+
+    called = []
+    monkeypatch.setattr(cli, "_check_db_floor", lambda: called.append(True))
+    monkeypatch.setattr(cli, "_manage", lambda argv: None)
+    monkeypatch.setenv("LOGSTASHUI_TLS", "false")
+    monkeypatch.setenv("LOGSTASHUI_DATA_DIR", str(tmp_path))
+
+    def fake_execvp(file, args):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvp", fake_execvp)
+    ns = Namespace(skip_migrate=True, no_tls=True, bind="127.0.0.1:8443", workers=1)
+    try:
+        cmd_serve(ns)
+    except SystemExit:
+        pass
+    assert called == [True]
+
+
 def test_serve_adds_pidfile_and_warns_sqlite(monkeypatch, tmp_path, capsys):
     from LogstashUI import cli
 
     monkeypatch.setattr(cli, "_manage", lambda argv: None)
+    monkeypatch.setattr(cli, "_check_db_floor", lambda: None)
     monkeypatch.setenv("LOGSTASHUI_TLS", "false")
     monkeypatch.setenv("LOGSTASHUI_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("LOGSTASHUI_DB_ENGINE", raising=False)

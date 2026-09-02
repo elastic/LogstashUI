@@ -63,8 +63,9 @@ def test_write_env_appends(tmp_path, monkeypatch):
     monkeypatch.setenv("LOGSTASHUI_DB_USER", "lsui")
     monkeypatch.setenv("LOGSTASHUI_DB_NAME", "logstashui")
     me.write_env_file(envf, "postgresql")
+    me.write_env_file(envf, "postgresql")
     text = envf.read_text()
-    assert "LOGSTASHUI_DB_ENGINE=postgresql" in text
+    assert text.count("LOGSTASHUI_DB_ENGINE=postgresql") == 1
     assert "LOGSTASHUI_DB_HOST=db.example" in text
     assert "PASSWORD" not in text
 

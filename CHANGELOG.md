@@ -10,7 +10,8 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - Discrete env only: `LOGSTASHUI_DB_HOST`, `PORT`, `NAME`, `USER`, `PASSWORD`, plus `LOGSTASHUI_DB_SSLMODE` / `LOGSTASHUI_DB_SSL_CA`, `LOGSTASHUI_DB_CONN_MAX_AGE` (default 60), `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` (default true). No YAML. No `DATABASE_URL`.
 - Unset engine is still SQLite at `$LOGSTASHUI_DATA_DIR/db.sqlite3` (WAL + `busy_timeout` unchanged).
 - `logstashui serve` logs a warning when engine is SQLite and `LOGSTASHUI_WORKERS>1`; it does not refuse to start.
-- Fail-fast on unknown engine, missing driver extra, missing HOST/USER, or server below version floors.
+- Fail-fast on unknown engine, missing driver extra, missing HOST/USER, or server below version floors. `logstashui serve` checks the server version **before** `migrate` and still checks when `--skip-migrate` is set.
+- `logstashui migrate-engine --to` accepts `postgresql`, `mysql`, and `mariadb` (`mariadb` is an alias of `mysql`).
 - MySQL/MariaDB use `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Create the database with that collation.
 - `LOGSTASHUI_DATA_DIR` is still required when the database is remote (TLS, Django secret, logs, staticfiles).
 - gunicorn stays `--worker-class gevent`. PostgreSQL uses `psycopg[binary]`; MySQL/MariaDB use PyMySQL (not mysqlclient). Optional PgBouncer is documented, not required.

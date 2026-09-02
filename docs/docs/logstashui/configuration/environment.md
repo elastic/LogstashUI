@@ -94,7 +94,7 @@ No `DATABASE_URL`. No YAML.
 4. Create the server database (`utf8mb4_bin` on MySQL/MariaDB).
 5. **Then** set `LOGSTASHUI_DB_*` for the target. Native installs need the matching extra.
 6. `logstashui manage migrate --noinput && logstashui manage loaddata dump.json`
-7. Postgres: `logstashui manage sqlsequencereset PipelineManager Management SNMP AI auth admin | logstashui manage dbshell`
+7. Postgres sequences: the BETA CLI (`logstashui migrate-engine`) resets them through Django (no `psql`). The dump/load path above does not; use `migrate-engine` when you need sequence reset without a Postgres client.
 8. Start LogstashUI. Log in again (sessions were not copied).
 
 ### BETA CLI

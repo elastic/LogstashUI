@@ -56,7 +56,10 @@ def _env_int(name: str, default: int) -> int:
     raw = _env(name, "")
     if raw == "":
         return default
-    return int(raw)
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer, not {raw!r}.") from exc
 
 
 def _require(names: list[str]) -> None:
@@ -104,7 +107,7 @@ def build_databases(data_dir: Path) -> dict:
                 "ENGINE": "django.db.backends.postgresql",
                 "NAME": _env("LOGSTASHUI_DB_NAME", "logstashui") or "logstashui",
                 "USER": _env("LOGSTASHUI_DB_USER"),
-                "PASSWORD": os.environ.get("LOGSTASHUI_DB_PASSWORD") or "",
+                "PASSWORD": _env("LOGSTASHUI_DB_PASSWORD"),
                 "HOST": _env("LOGSTASHUI_DB_HOST"),
                 "PORT": _env("LOGSTASHUI_DB_PORT", "5432") or "5432",
                 "CONN_MAX_AGE": conn_max_age,
@@ -135,7 +138,7 @@ def build_databases(data_dir: Path) -> dict:
             "ENGINE": "django.db.backends.mysql",
             "NAME": _env("LOGSTASHUI_DB_NAME", "logstashui") or "logstashui",
             "USER": _env("LOGSTASHUI_DB_USER"),
-            "PASSWORD": os.environ.get("LOGSTASHUI_DB_PASSWORD") or "",
+            "PASSWORD": _env("LOGSTASHUI_DB_PASSWORD"),
             "HOST": _env("LOGSTASHUI_DB_HOST"),
             "PORT": _env("LOGSTASHUI_DB_PORT", "3306") or "3306",
             "CONN_MAX_AGE": conn_max_age,
@@ -154,7 +157,7 @@ def check_server_version(connection) -> None:
     vendor = getattr(connection, "vendor", "")
     if vendor == "postgresql":
         pg_version = int(getattr(connection, "pg_version", 0) or 0)
-        if pg_version and pg_version < 140000:
+        if pg_version < 140000:
             raise RuntimeError(
                 f"PostgreSQL 14+ is required (server_version_num={pg_version})."
             )
@@ -178,3 +181,21 @@ def check_server_version(connection) -> None:
         raise RuntimeError(
             f"MySQL 8.0+ is required (server={getattr(connection, 'mysql_server_info', tup)})."
         )
+
+
+def ensure_psycopg_gevent(waiting_module=None):
+    """Use psycopg wait_select so gunicorn gevent's patched select is cooperative.
+
+    gunicorn --worker-class gevent monkey-patches select before loading WSGI.
+    psycopg 3.1.14+ also auto-detects that; assigning wait_select makes it explicit.
+    """
+    waiting = waiting_module
+    if waiting is None:
+        try:
+            from psycopg import waiting as waiting
+        except ImportError:
+            return None
+    wait_select = getattr(waiting, "wait_select", None)
+    if wait_select is not None:
+        waiting.wait = wait_select
+    return waiting

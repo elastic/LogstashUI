@@ -54,7 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
         "migrate-engine",
         help="BETA: copy SQLite data to PostgreSQL or MySQL (stops gunicorn)",
     )
-    migrate.add_argument("--to", required=True, choices=("postgresql", "mysql"))
+    migrate.add_argument(
+        "--to",
+        required=True,
+        choices=("postgresql", "mysql", "mariadb"),
+        help="Target engine (mariadb is an alias of mysql)",
+    )
     migrate.add_argument(
         "--i-have-a-backup",
         dest="i_have_a_backup",
@@ -364,8 +369,19 @@ def _best_effort_call(name: str, **kwargs) -> None:
         print(f"Warning: {name} failed: {exc}", file=sys.stderr)
 
 
+def _check_db_floor() -> None:
+    """Connect and enforce engine version floors before migrate or gunicorn bind."""
+    _django_setup()
+    from django.db import connection
+
+    from LogstashUI.database import check_server_version
+
+    connection.ensure_connection()
+    check_server_version(connection)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
-    from LogstashUI.database import canonical_engine, check_server_version
+    from LogstashUI.database import canonical_engine
     from LogstashUI.paths import resolve_data_dir
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
@@ -381,12 +397,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
         logger.warning(msg)
         print(msg, file=sys.stderr)
 
+    _check_db_floor()
     if not args.skip_migrate:
         _manage(["migrate", "--noinput"])
-        _django_setup()
-        from django.db import connection
-
-        check_server_version(connection)
         _best_effort_call("sync_snmp_official_data", cleanup=True)
         _best_effort_call("collectstatic", interactive=False)
 

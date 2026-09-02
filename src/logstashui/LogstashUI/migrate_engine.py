@@ -85,18 +85,26 @@ def stop_gunicorn(pidfile: Path) -> None:
 
 
 def write_env_file(path: Path, engine: str) -> None:
-    pairs = [
-        ("LOGSTASHUI_DB_ENGINE", engine),
-        ("LOGSTASHUI_DB_NAME", os.environ.get("LOGSTASHUI_DB_NAME")),
-        ("LOGSTASHUI_DB_HOST", os.environ.get("LOGSTASHUI_DB_HOST")),
-        ("LOGSTASHUI_DB_PORT", os.environ.get("LOGSTASHUI_DB_PORT")),
-        ("LOGSTASHUI_DB_USER", os.environ.get("LOGSTASHUI_DB_USER")),
-    ]
-    lines = [f"{key}={value}" for key, value in pairs if value]
+    """Upsert LOGSTASHUI_DB_* keys (never password). Second run does not duplicate."""
+    assignments = {
+        "LOGSTASHUI_DB_ENGINE": engine,
+        "LOGSTASHUI_DB_NAME": os.environ.get("LOGSTASHUI_DB_NAME") or "",
+        "LOGSTASHUI_DB_HOST": os.environ.get("LOGSTASHUI_DB_HOST") or "",
+        "LOGSTASHUI_DB_PORT": os.environ.get("LOGSTASHUI_DB_PORT") or "",
+        "LOGSTASHUI_DB_USER": os.environ.get("LOGSTASHUI_DB_USER") or "",
+    }
+    assignments = {key: value for key, value in assignments.items() if value}
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    prefix = "" if not existing or existing.endswith("\n") else "\n"
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(prefix + "\n".join(lines) + "\n")
+    kept = []
+    for line in existing.splitlines():
+        key = line.split("=", 1)[0] if "=" in line else ""
+        if key in assignments:
+            continue
+        kept.append(line)
+    while kept and kept[-1] == "":
+        kept.pop()
+    kept.extend(f"{key}={value}" for key, value in assignments.items())
+    path.write_text("\n".join(kept) + "\n", encoding="utf-8")
 
 
 def _reset_postgres_sequences(extra_env: dict[str, str]) -> None:
