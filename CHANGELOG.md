@@ -1,12 +1,37 @@
-## [0.5.2] - Multi-database
+## [0.5.2] - Multi-database - 09/01/2026
 
-Package version remains **0.5.1** until release tagging; this documents the 0.5.2 database work.
+Package version in `pyproject.toml` remains **0.5.1** until release tagging. This documents the 0.5.2 database work.
 
-- `LOGSTASHUI_DB_ENGINE=sqlite|postgresql|mysql` (MariaDB uses `mysql`). Discrete `LOGSTASHUI_DB_HOST/PORT/NAME/USER/PASSWORD` plus SSL and `CONN_MAX_AGE`. No YAML, no `DATABASE_URL`.
-- Default is still SQLite. `logstashui serve` warns when `LOGSTASHUI_WORKERS>1` on SQLite.
-- Native extras: `LogstashUI[postgres]`, `[mysql]`, `[databases]`. Container image installs `[databases]`.
-- BETA `logstashui migrate-engine --to postgresql|mysql --i-have-a-backup` copies SQLite → server (stops gunicorn; does not restart).
-- `bin/test_databases.sh` runs the suite and dump/load against local Docker Postgres, MariaDB, and MySQL.
+SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on **SQLite** (default), **PostgreSQL 14+**, or **MariaDB 10.6+ / MySQL 8.0+** without changing the Django ORM data model.
+
+### Database engines
+
+- `LOGSTASHUI_DB_ENGINE=sqlite|postgresql|mysql` (MariaDB uses `mysql`). Aliases: `sqlite3`, `postgres`, `mariadb`, `my`.
+- Discrete env only: `LOGSTASHUI_DB_HOST`, `PORT`, `NAME`, `USER`, `PASSWORD`, plus `LOGSTASHUI_DB_SSLMODE` / `LOGSTASHUI_DB_SSL_CA`, `LOGSTASHUI_DB_CONN_MAX_AGE` (default 60), `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` (default true). No YAML. No `DATABASE_URL`.
+- Unset engine is still SQLite at `$LOGSTASHUI_DATA_DIR/db.sqlite3` (WAL + `busy_timeout` unchanged).
+- `logstashui serve` logs a warning when engine is SQLite and `LOGSTASHUI_WORKERS>1`; it does not refuse to start.
+- Fail-fast on unknown engine, missing driver extra, missing HOST/USER, or server below version floors.
+- MySQL/MariaDB use `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Create the database with that collation.
+- `LOGSTASHUI_DATA_DIR` is still required when the database is remote (TLS, Django secret, logs, staticfiles).
+- gunicorn stays `--worker-class gevent`. PostgreSQL uses `psycopg[binary]`; MySQL/MariaDB use PyMySQL (not mysqlclient). Optional PgBouncer is documented, not required.
+
+### Packaging and Docker
+
+- Native extras: `LogstashUI[postgres]`, `LogstashUI[mysql]`, `LogstashUI[databases]`. Default wheel stays SQLite-only.
+- Container image installs `LogstashUI[databases]` so Kubernetes only sets env.
+- systemd generator prompts for engine/host/port/name/user; sample `/etc/default/logstashui` documents all `LOGSTASHUI_DB_*` keys. Set the password in the EnvironmentFile or a Secret (`chmod 640`).
+- gunicorn writes `$LOGSTASHUI_DATA_DIR/gunicorn.pid`.
+
+### Migration off SQLite
+
+- **Supported offline path:** stop UI → back up `db.sqlite3` → `dumpdata` while still on SQLite → create the server database → set `LOGSTASHUI_DB_*` → `migrate` + `loaddata`. Keep `DATA_DIR` (same secret key) or encrypted keystore rows will not decrypt. Sessions are not copied; log in again.
+- **BETA** `logstashui migrate-engine --to postgresql|mysql --i-have-a-backup` dumps the SQLite file, loads the target, and does **not** restart serve. It SIGTERMs gunicorn if a pidfile is live. Prefer `systemctl stop` first so `Restart=` does not race. Optional `--write-env` appends engine/host/name/user (never the password).
+
+### Testing
+
+- Default `pytest` stays SQLite (no Docker, no extras).
+- `bin/test_databases.sh` / `bin/test_databases.bat` start local Docker Postgres 16, MariaDB 11, and MySQL 8.0, run the suite on each engine, and run live dump/load tests. CI workflow `.github/workflows/test-databases.yml` calls the same script.
+- Smoke compose is still SQLite (product CA / PUID unchanged).
 
 
 ## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
