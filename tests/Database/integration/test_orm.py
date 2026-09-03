@@ -294,18 +294,34 @@ _CASE_SENSITIVE_UNIQUE = """
 import json, os, django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
 django.setup()
-from django.db import IntegrityError
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from SNMP.models import Network
 Network.objects.filter(name__in=["CaseNet", "casenet"]).delete()
-Network.objects.create(name="CaseNet", network_range="10.1.0.0/24")
-# Different case must succeed
-Network.objects.create(name="casenet", network_range="10.2.0.0/24")
-# Exact duplicate must fail
 try:
-    Network.objects.create(name="CaseNet", network_range="10.3.0.0/24")
-    raise AssertionError("Expected IntegrityError for duplicate Network.name")
-except IntegrityError:
-    pass
+    Network.objects.create(name="CaseNet", network_range="10.1.0.0/24")
+    # Different case must succeed. This is the actual collation assertion:
+    # Network.save() -> full_clean() -> validate_unique() runs
+    # SELECT ... WHERE name = 'casenet', which matches 'CaseNet' under a
+    # case-insensitive collation and raises ValidationError.
+    Network.objects.create(name="casenet", network_range="10.2.0.0/24")
+    # Exact duplicate via the ORM: full_clean() rejects it before the INSERT.
+    try:
+        Network.objects.create(name="CaseNet", network_range="10.3.0.0/24")
+        raise AssertionError("Expected ValidationError for duplicate Network.name")
+    except ValidationError:
+        pass
+    # ...and the DB unique index still holds when full_clean() is bypassed.
+    # bulk_create() does not call save(). atomic() so the aborted statement is
+    # rolled back and the cleanup below can still run on PostgreSQL.
+    try:
+        with transaction.atomic():
+            Network.objects.bulk_create(
+                [Network(name="CaseNet", network_range="10.3.0.0/24")]
+            )
+        raise AssertionError("Expected IntegrityError for duplicate Network.name")
+    except IntegrityError:
+        pass
 finally:
     Network.objects.filter(name__in=["CaseNet", "casenet"]).delete()
 print(json.dumps({"ok": True}))
@@ -381,7 +397,11 @@ def test_unique_pipeline_per_policy(engine_env, tmp_path):
 
 def test_case_sensitive_unique(engine_env, tmp_path):
     """Both engines treat unique names as case-sensitive.
+
     On MySQL this validates utf8mb4_bin is active; on PostgreSQL it's the default.
+    The collation check rides on validate_unique(), since Network.save() calls
+    full_clean() and so never reaches the INSERT. The DB-level unique index is
+    verified separately via bulk_create(), which bypasses save().
     """
     engine, env = engine_env
     full_env = {**env, "LOGSTASHUI_DATA_DIR": str(tmp_path)}

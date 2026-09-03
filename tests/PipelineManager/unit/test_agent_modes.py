@@ -624,7 +624,7 @@ def test_list_targets_includes_embedded(system_policies, monkeypatch):
     assert targets[-1]['label'] == 'embedded'
 
 
-def test_list_targets_omits_undiscovered_embedded(system_policies, monkeypatch):
+def test_list_targets_keeps_unprobed_embedded(system_policies, monkeypatch):
     """Listing does not probe; the sticky embedded row is still included."""
     monkeypatch.setattr(
         'PipelineManager.agent_modes.probe_embedded_agent_online',
@@ -633,6 +633,17 @@ def test_list_targets_omits_undiscovered_embedded(system_policies, monkeypatch):
     targets = list_simulation_targets(ensure_embedded=True)
     assert any(t['policy_type'] == 'EMBEDDED' for t in targets)
     assert targets[-1]['label'] == 'embedded'
+
+
+def test_list_targets_hides_embedded_after_failed_probe(system_policies, monkeypatch):
+    """An explicit probe failure removes the sticky row; never-probed does not."""
+    monkeypatch.setattr(
+        'PipelineManager.agent_modes.probe_embedded_agent_online',
+        lambda timeout=2.0: False,
+    )
+    ensure_embedded_connection()  # probe=True -> records online: False
+    targets = list_simulation_targets(ensure_embedded=True)
+    assert not any(t['policy_type'] == 'EMBEDDED' for t in targets)
 
 
 def test_list_targets_embedded_after_simulate(system_policies, monkeypatch):

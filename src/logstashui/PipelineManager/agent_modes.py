@@ -528,7 +528,8 @@ def ensure_embedded_connection(*, probe: bool = True) -> Connection | None:
             agent_api_port=port,
             logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
             last_check_in=now if online else None,
-            status_blob=update_fields.get("status_blob") or {"embedded": True, "online": online},
+            # probe=False leaves online *unknown* rather than asserting offline
+            status_blob=update_fields.get("status_blob") or {"embedded": True},
         )
         conn.save()
         return conn
@@ -572,6 +573,21 @@ def is_embedded_discovered(conn) -> bool:
     if getattr(ts, "tzinfo", None) is None:
         ts = ts.replace(tzinfo=timezone.utc)
     return (now - ts).total_seconds() < 600
+
+
+def embedded_probe_failed(conn) -> bool:
+    """True only when a probe explicitly reported the embedded agent offline.
+
+    A row that has never been probed carries no ``online`` key — that is
+    unknown, not failed, and the sticky picker row stays visible.
+    """
+    if conn is None:
+        return False
+    if isinstance(conn, dict):
+        blob = conn.get("status_blob") or {}
+    else:
+        blob = getattr(conn, "status_blob", None) or {}
+    return blob.get("online") is False
 
 
 def is_embedded_connection(conn) -> bool:
@@ -620,9 +636,12 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             or ("system" if policy.policy_type == Policy.PolicyType.SIMULATE else "")
         )
         if policy.policy_type == Policy.PolicyType.EMBEDDED:
-            # Picker only — and only after a successful live probe
-            if not is_embedded_discovered(conn):
+            # Picker only. This path never probes (see
+            # refresh_embedded_connection_async), so keep the sticky row until
+            # a probe has actually failed — unprobed is unknown, not offline.
+            if embedded_probe_failed(conn):
                 continue
+            discovered = is_embedded_discovered(conn)
             # Closed select: terse; detail on hover / open option list
             label = "embedded"
             ver_label = version or "docker"
@@ -640,6 +659,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             host = conn.host or "127.0.0.1"
             detail = f"embedded · {host} · Logstash {ver_label}"
         else:
+            discovered = True
             n = conn.instance_id or "?"
             ver_label = version or "system"
             host = conn.host or "127.0.0.1"
@@ -664,6 +684,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             "logstash_source": policy.logstash_source,
             "host": host,
             "base_url": base_url,
+            "discovered": discovered,
             "last_selected_at": conn.last_selected_at.isoformat()
             if conn.last_selected_at
             else None,

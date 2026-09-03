@@ -1,6 +1,6 @@
-#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
-#or more contributor license agreements. Licensed under the Elastic License;
-#you may not use this file except in compliance with the Elastic License.
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License;
+# you may not use this file except in compliance with the Elastic License.
 
 """
 Integration tests for database configuration and server version checking.
@@ -16,10 +16,10 @@ import pytest
 
 from LogstashUI.database import build_databases
 
-
 # ---------------------------------------------------------------------------
 # Subprocess helper
 # ---------------------------------------------------------------------------
+
 
 def _run_python(code: str, extra_env: dict[str, str]) -> str:
     from LogstashUI import migrate_engine as me
@@ -75,18 +75,25 @@ print("OK")
 # Tests — build_databases() dict structure (no Docker needed)
 # ---------------------------------------------------------------------------
 
+
 def test_mysql_options_include_utf8mb4(monkeypatch, tmp_path):
     """build_databases() for MySQL must include utf8mb4 charset and utf8mb4_bin collation."""
     for key in (
-        "LOGSTASHUI_DB_ENGINE", "LOGSTASHUI_DB_HOST", "LOGSTASHUI_DB_PORT",
-        "LOGSTASHUI_DB_USER", "LOGSTASHUI_DB_PASSWORD", "LOGSTASHUI_DB_NAME",
+        "LOGSTASHUI_DB_ENGINE",
+        "LOGSTASHUI_DB_HOST",
+        "LOGSTASHUI_DB_PORT",
+        "LOGSTASHUI_DB_USER",
+        "LOGSTASHUI_DB_PASSWORD",
+        "LOGSTASHUI_DB_NAME",
         "LOGSTASHUI_DB_CONN_MAX_AGE",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("LOGSTASHUI_DB_ENGINE", "mysql")
     monkeypatch.setenv("LOGSTASHUI_DB_HOST", "127.0.0.1")
     monkeypatch.setenv("LOGSTASHUI_DB_USER", "root")
-    monkeypatch.setattr("LogstashUI.database._import_or_raise", lambda *a, **k: _fake_pymysql())
+    monkeypatch.setattr(
+        "LogstashUI.database._import_or_raise", lambda *a, **k: _fake_pymysql()
+    )
     db = build_databases(tmp_path)["default"]
     assert db["OPTIONS"]["charset"] == "utf8mb4"
     assert "utf8mb4_bin" in db["OPTIONS"]["init_command"]
@@ -96,6 +103,7 @@ def test_mysql_options_include_utf8mb4(monkeypatch, tmp_path):
 
 def _fake_pymysql():
     from types import SimpleNamespace
+
     fake = SimpleNamespace(
         version_info=(1, 1, 1, "final", 0),
         install_as_MySQLdb=lambda: None,
@@ -106,8 +114,12 @@ def _fake_pymysql():
 def test_conn_max_age_applied(monkeypatch, tmp_path):
     """LOGSTASHUI_DB_CONN_MAX_AGE overrides the default 60s for postgres."""
     for key in (
-        "LOGSTASHUI_DB_ENGINE", "LOGSTASHUI_DB_HOST", "LOGSTASHUI_DB_PORT",
-        "LOGSTASHUI_DB_USER", "LOGSTASHUI_DB_PASSWORD", "LOGSTASHUI_DB_NAME",
+        "LOGSTASHUI_DB_ENGINE",
+        "LOGSTASHUI_DB_HOST",
+        "LOGSTASHUI_DB_PORT",
+        "LOGSTASHUI_DB_USER",
+        "LOGSTASHUI_DB_PASSWORD",
+        "LOGSTASHUI_DB_NAME",
         "LOGSTASHUI_DB_CONN_MAX_AGE",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -144,6 +156,7 @@ def test_build_databases_returns_valid_dict(engine_env, tmp_path, monkeypatch):
 # Tests — real container connections (subprocess)
 # ---------------------------------------------------------------------------
 
+
 def test_real_connection_opens(engine_env, tmp_path):
     """Django can open a connection to the container database."""
     engine, env = engine_env
@@ -160,7 +173,8 @@ def test_check_server_version_passes_on_real_connection(engine_env, tmp_path):
 
 def test_check_server_version_mariadb_branch(mariadb_container, tmp_path):
     """check_server_version() MariaDB detection branch passes on a real MariaDB server."""
-    from tests.integration.conftest import mysql_env
+    from tests.Database.integration.conftest import mysql_env
+
     env = mysql_env(mariadb_container)
     full_env = {**env, "LOGSTASHUI_DATA_DIR": str(tmp_path)}
     _run_python(_CHECK_SERVER_VERSION, full_env)

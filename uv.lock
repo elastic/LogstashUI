@@ -646,8 +646,8 @@ dev = [
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-django", specifier = ">=4.10.0" },
-    { name = "testcontainers", extras = ["mysql"], specifier = ">=4.8.0" },
-    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.8.0" },
+    { name = "testcontainers", extras = ["mysql"], specifier = ">=4.15.0" },
+    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.15.0" },
 ]
 
 [[package]]

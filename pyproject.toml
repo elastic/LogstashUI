@@ -99,8 +99,8 @@ dev = [
     "pytest>=9.0.2",
     "pytest-cov>=7.1.0",
     "pytest-django>=4.10.0",
-    "testcontainers[postgres]>=4.8.0",
-    "testcontainers[mysql]>=4.8.0",
+    "testcontainers[postgres]>=4.15.0",
+    "testcontainers[mysql]>=4.15.0",
 ]
 
 [tool.pytest.ini_options]

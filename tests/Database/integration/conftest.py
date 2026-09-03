@@ -50,7 +50,7 @@ def skip_if_no_docker():
 
 @pytest.fixture(scope="session")
 def postgres_container():
-    from testcontainers.postgres import PostgresContainer
+    from testcontainers.community.postgres import PostgresContainer
 
     with PostgresContainer(
         image="postgres:16",
@@ -63,7 +63,7 @@ def postgres_container():
 
 @pytest.fixture(scope="session")
 def mysql_container():
-    from testcontainers.mysql import MySqlContainer
+    from testcontainers.community.mysql import MySqlContainer
 
     c = MySqlContainer(
         image="mysql:8.0",
@@ -79,7 +79,7 @@ def mysql_container():
 
 @pytest.fixture(scope="session")
 def mariadb_container():
-    from testcontainers.mysql import MySqlContainer
+    from testcontainers.community.mysql import MySqlContainer
 
     c = MySqlContainer(
         image="mariadb:11",

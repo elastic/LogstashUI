@@ -1,6 +1,6 @@
-#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
-#or more contributor license agreements. Licensed under the Elastic License;
-#you may not use this file except in compliance with the Elastic License.
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License;
+# you may not use this file except in compliance with the Elastic License.
 
 """
 Integration tests for cmd_migrate_engine (SQLite → PostgreSQL / MySQL / MariaDB).
@@ -18,7 +18,7 @@ from argparse import Namespace
 import pytest
 
 from LogstashUI import migrate_engine as me
-from tests.integration.conftest import (
+from tests.Database.integration.conftest import (
     create_mysql_db,
     create_pg_db,
     drop_mysql_db,
@@ -28,10 +28,10 @@ from tests.integration.conftest import (
     pg_env,
 )
 
-
 # ---------------------------------------------------------------------------
 # Subprocess helper
 # ---------------------------------------------------------------------------
+
 
 def _run_python(code: str, extra_env: dict[str, str]) -> str:
     env = os.environ.copy()
@@ -128,6 +128,7 @@ _TARGET_KEYS = (
 # Core migration helper
 # ---------------------------------------------------------------------------
 
+
 def _run_to(tmp_path, target_env: dict[str, str]) -> dict:
     """
     Seed a fresh SQLite database, run cmd_migrate_engine to the target,
@@ -156,9 +157,7 @@ def _run_to(tmp_path, target_env: dict[str, str]) -> dict:
         try:
             rc = me.cmd_migrate_engine(ns)
         except SystemExit as exc:
-            raise AssertionError(
-                f"cmd_migrate_engine SystemExit {exc.code}"
-            ) from exc
+            raise AssertionError(f"cmd_migrate_engine SystemExit {exc.code}") from exc
         assert rc == 0
         raw = _run_python(_COUNT, full_target)
     finally:
@@ -180,6 +179,7 @@ def _run_to(tmp_path, target_env: dict[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_migrate_engine_to_postgres(postgres_container, tmp_path):
     dbname = new_dbname()
